@@ -1,0 +1,240 @@
+from datetime import date, timedelta, timezone
+
+from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.missions import MissionRepository
+
+UTC = timezone.utc
+
+
+def _now_utc() -> date:
+    from datetime import datetime
+    return datetime.now(UTC).date()
+
+
+class ToolGateway:
+    """Maps intent IDs to backend queries. Returns plain dicts for LLM formatting."""
+
+    def __init__(
+        self,
+        doctor_repo: DoctorRepository,
+        calendar_repo: CalendarRepository,
+        mission_repo: MissionRepository,
+        availability_repo: AvailabilityRepository,
+    ) -> None:
+        self._doctor_repo = doctor_repo
+        self._calendar_repo = calendar_repo
+        self._mission_repo = mission_repo
+        self._availability_repo = availability_repo
+
+        self._handlers = {
+            "count_medicos_activos": self._tool_count_medicos_activos,
+            "list_medicos_activos": self._tool_list_medicos_activos,
+            "estado_calendario_mes": self._tool_estado_calendario_mes,
+            "get_mission_candidate_ranking": self._tool_get_mission_candidate_ranking,
+            "recommend_mission_candidates": self._tool_recommend_mission_candidates,
+            "historial_medico": self._tool_historial_medico,
+            "pendientes_disponibilidad_mes": self._tool_pendientes_disponibilidad_mes,
+            "confirm_mission_assignment": self._tool_confirm_mission_assignment,
+        }
+
+    def execute(self, intent: str, entities: dict) -> dict:
+        """
+        Dispatch intent to the correct tool method.
+        Returns {"ok": True, "data": ...} or {"ok": False, "error": "..."}
+        Unknown intent → {"ok": False, "error": "out_of_domain"}
+        """
+        handler = self._handlers.get(intent)
+        if handler is None:
+            return {"ok": False, "error": "out_of_domain"}
+        try:
+            return {"ok": True, "data": handler(entities)}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    # ------------------------------------------------------------------
+    # Tool methods
+    # ------------------------------------------------------------------
+
+    def _tool_count_medicos_activos(self, entities: dict) -> dict:
+        """Return count of service-active doctors."""
+        doctors = self._doctor_repo.list_service_active()
+        return {"count": len(doctors)}
+
+    def _tool_list_medicos_activos(self, entities: dict) -> dict:
+        """Return list of up to 20 service-active doctors."""
+        doctors = self._doctor_repo.list_service_active()
+        return {
+            "doctors": [
+                {
+                    "id": d.id,
+                    "name": d.name,
+                    "sex": d.sex,
+                    "availability_mode": d.availability_mode,
+                }
+                for d in doctors[:20]
+            ]
+        }
+
+    def _tool_estado_calendario_mes(self, entities: dict) -> dict:
+        """Return calendar status for a given month/year."""
+        from datetime import datetime
+
+        month: int = int(entities["month"])
+        year: int = int(entities.get("year", datetime.now(UTC).year))
+
+        calendar = self._calendar_repo.get_calendar_by_period(year, month)
+        if calendar is None:
+            return {"found": False}
+
+        version = self._calendar_repo.get_latest_version(calendar.id)
+        if version is None:
+            return {
+                "found": True,
+                "calendar_id": calendar.id,
+                "status": calendar.status,
+                "version_number": None,
+                "version_status": None,
+                "assignments": 0,
+                "gaps": 0,
+            }
+
+        assignments = self._calendar_repo.list_assignments(version.id)
+        gaps = self._calendar_repo.list_gaps(version.id)
+
+        return {
+            "found": True,
+            "calendar_id": calendar.id,
+            "status": calendar.status,
+            "version_number": version.version_number,
+            "version_status": version.status,
+            "assignments": len(assignments),
+            "gaps": len(gaps),
+        }
+
+    def _tool_get_mission_candidate_ranking(self, entities: dict) -> dict:
+        """Return top 10 entries from the mission candidate ranking for a period."""
+        month: int = int(entities["month"])
+        year: int = int(entities["year"])
+
+        ranking = self._mission_repo.get_ranking_by_period(year, month)
+        if ranking is None:
+            return {"found": False}
+
+        entries = self._mission_repo.list_ranking_entries(ranking.id)
+
+        return {
+            "found": True,
+            "month": month,
+            "year": year,
+            "entries": [
+                {
+                    "position": e.ranking_position,
+                    "doctor_id": e.doctor_id,
+                    "total_load_score": e.total_load_score,
+                    "eligible": e.eligible,
+                }
+                for e in entries[:10]
+            ],
+        }
+
+    def _tool_recommend_mission_candidates(self, entities: dict) -> dict:
+        """Return top eligible candidates for a mission date."""
+        mission_date: str = entities.get("mission_date", "")
+        participant_count: int = int(entities.get("participant_count", 1))
+        month: int = int(entities["month"])
+        year: int = int(entities["year"])
+
+        ranking = self._mission_repo.get_ranking_by_period(year, month)
+        if ranking is None:
+            return {"found": False, "reason": "no_ranking"}
+
+        entries = self._mission_repo.list_ranking_entries(ranking.id)
+
+        eligible_entries = [e for e in entries if e.eligible]
+        top_candidates = eligible_entries[:participant_count]
+
+        return {
+            "found": True,
+            "mission_date": mission_date,
+            "participant_count": participant_count,
+            "candidates": [
+                {
+                    "position": e.ranking_position,
+                    "doctor_id": e.doctor_id,
+                    "total_load_score": e.total_load_score,
+                }
+                for e in top_candidates
+            ],
+        }
+
+    def _tool_historial_medico(self, entities: dict) -> dict:
+        """Return assignment history for a doctor over the last 60 days."""
+        doctor_id: str | None = entities.get("doctor_id")
+        doctor_name: str | None = entities.get("doctor_name")
+
+        doctor = None
+
+        if doctor_id:
+            doctor = self._doctor_repo.get_by_id(doctor_id)
+        elif doctor_name:
+            all_doctors = self._doctor_repo.list_all()
+            name_lower = doctor_name.lower()
+            matches = [d for d in all_doctors if name_lower in d.name.lower()]
+            if matches:
+                doctor = matches[0]
+
+        if doctor is None:
+            return {"found": False, "doctor_id": None, "doctor_name": None, "assignments_60d": 0, "load_60d": 0.0}
+
+        end: date = _now_utc()
+        start: date = end - timedelta(days=60)
+
+        all_assignments = self._calendar_repo.list_assignments_in_date_range(start, end)
+        doctor_assignments = [a for a in all_assignments if a.doctor_id == doctor.id]
+
+        from backend.app.domain.calendars.scoring import AREA_WEIGHTS
+        load_60d: float = sum(
+            AREA_WEIGHTS.get(a.service_area_id, 1.0) for a in doctor_assignments
+        )
+
+        return {
+            "found": True,
+            "doctor_id": doctor.id,
+            "doctor_name": doctor.name,
+            "assignments_60d": len(doctor_assignments),
+            "load_60d": load_60d,
+        }
+
+    def _tool_pendientes_disponibilidad_mes(self, entities: dict) -> dict:
+        """Return doctors who have not submitted monthly variable availability for a period."""
+        month: int = int(entities["month"])
+        year: int = int(entities["year"])
+
+        active_doctors = self._doctor_repo.list_service_active()
+        pending = []
+
+        for doctor in active_doctors:
+            records = self._availability_repo.list_monthly_variable_for_period(
+                doctor.id, year, month
+            )
+            if not records:
+                pending.append({"doctor_id": doctor.id, "name": doctor.name})
+
+        return {"pending": pending, "count": len(pending)}
+
+    def _tool_confirm_mission_assignment(self, entities: dict) -> dict:
+        """
+        Write intent — returns a confirmation prompt for the orchestrator's two-step flow.
+        The actual write is handled by the orchestrator after explicit user confirmation.
+        """
+        mission_date: str = entities.get("mission_date", "")
+        doctor_ids: list = entities.get("doctor_ids", [])
+
+        return {
+            "requires_confirmation": True,
+            "mission_date": mission_date,
+            "doctor_ids": doctor_ids,
+            "message": "Confirme la asignación respondiendo 'sí confirmo'.",
+        }

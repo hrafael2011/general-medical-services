@@ -1,0 +1,53 @@
+name: Spec Feature
+description: Propose or update a feature using spec-driven workflow
+title: "[SPEC] "
+labels: ["spec", "planning"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What operational problem are we solving?
+      placeholder: Describe the current pain and expected impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: In-scope and out-of-scope boundaries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: business_rules
+    attributes:
+      label: Business rules
+      description: Domain rules and constraints impacted.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria (Given/When/Then)
+      description: Provide verifiable scenarios.
+    validations:
+      required: true
+
+  - type: textarea
+    id: contracts
+    attributes:
+      label: API/contracts changes
+      description: Endpoints, payloads, and error model changes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: audit
+    attributes:
+      label: Audit and security impact
+      description: What should be logged, permissioned, or protected?
+    validations:
+      required: true

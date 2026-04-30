@@ -1,0 +1,224 @@
+import { Bell, Search, Play } from "lucide-react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  notificationsApi,
+  NotificationEventRead,
+  ProcessNotificationsResponse,
+} from "../../api/notifications";
+
+// ---------------------------------------------------------------------------
+// Label maps
+// ---------------------------------------------------------------------------
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "Pendiente",
+  sent: "Enviado",
+  failed: "Fallido",
+  cancelled: "Cancelado",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  initial_assignment: "Asignación inicial",
+  reminder_12h: "Recordatorio 12h",
+  mission_participant: "Misión participante",
+  mission_summary: "Resumen misión",
+  availability: "Disponibilidad",
+};
+
+const STATUS_OPTIONS = [
+  { value: "", label: "Todos" },
+  { value: "pending", label: "Pendiente" },
+  { value: "sent", label: "Enviado" },
+  { value: "failed", label: "Fallido" },
+  { value: "cancelled", label: "Cancelado" },
+];
+
+const TYPE_OPTIONS = [
+  { value: "", label: "Todos" },
+  { value: "initial_assignment", label: "Asignación inicial" },
+  { value: "reminder_12h", label: "Recordatorio 12h" },
+  { value: "mission_participant", label: "Misión participante" },
+  { value: "mission_summary", label: "Resumen misión" },
+  { value: "availability", label: "Disponibilidad" },
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString("es-DO", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function statusBadgeStyle(status: string): React.CSSProperties {
+  const base: React.CSSProperties = {
+    display: "inline-block",
+    padding: "2px 8px",
+    borderRadius: "4px",
+    fontSize: "0.78rem",
+    fontWeight: 600,
+  };
+  switch (status) {
+    case "pending":
+      return { ...base, background: "#fef3c7", color: "#92400e" };
+    case "sent":
+      return { ...base, background: "#d1fae5", color: "#065f46" };
+    case "failed":
+      return { ...base, background: "#fee2e2", color: "#991b1b" };
+    case "cancelled":
+      return { ...base, background: "#f3f4f6", color: "#6b7280" };
+    default:
+      return { ...base, background: "#f3f4f6", color: "#374151" };
+  }
+}
+
+function messagePreview(item: NotificationEventRead): string {
+  if (!item.payload) return "—";
+  const msg = item.payload["message"];
+  if (typeof msg !== "string" || msg.length === 0) return "—";
+  return msg.length > 80 ? msg.slice(0, 80) + "…" : msg;
+}
+
+function recipient(item: NotificationEventRead): string {
+  if (item.recipient_phone) return item.recipient_phone;
+  if (item.recipient_doctor_id) return item.recipient_doctor_id.slice(0, 8) + "…";
+  return "—";
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function NotificationLog() {
+  const queryClient = useQueryClient();
+
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [appliedStatus, setAppliedStatus] = useState("");
+  const [appliedType, setAppliedType] = useState("");
+  const [processResult, setProcessResult] = useState<ProcessNotificationsResponse | null>(null);
+
+  function applyFilters() {
+    setAppliedStatus(statusFilter);
+    setAppliedType(typeFilter);
+    setProcessResult(null);
+  }
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["notifications", appliedStatus, appliedType],
+    queryFn: () =>
+      notificationsApi.list(
+        appliedStatus || undefined,
+        appliedType || undefined,
+      ),
+  });
+
+  const processMutation = useMutation({
+    mutationFn: () => notificationsApi.process(),
+    onSuccess: (result) => {
+      setProcessResult(result);
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  return (
+    <div className="feature-panel">
+      <div className="feature-header">
+        <div className="feature-title">
+          <Bell size={20} />
+          <h2>Notificaciones</h2>
+          {data && <span className="count-badge">{data.total}</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {processResult && (
+            <span style={{ fontSize: "0.85rem", color: "#374151" }}>
+              Enviados: {processResult.sent} / Fallidos: {processResult.failed} / Omitidos: {processResult.skipped}
+            </span>
+          )}
+          <button
+            className="btn-primary"
+            onClick={() => processMutation.mutate()}
+            disabled={processMutation.isPending}
+          >
+            <Play size={15} />
+            {processMutation.isPending ? "Procesando…" : "Procesar cola"}
+          </button>
+        </div>
+      </div>
+
+      <div className="audit-filters">
+        <label>
+          Estado
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            {STATUS_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Tipo
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            {TYPE_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <button className="btn-primary" onClick={applyFilters}>
+          <Search size={15} /> Filtrar
+        </button>
+      </div>
+
+      {processMutation.isError && (
+        <p className="error-text">Error al procesar la cola de notificaciones.</p>
+      )}
+
+      {isLoading && <p className="loading-text">Cargando notificaciones…</p>}
+      {error && <p className="error-text">Error al cargar notificaciones.</p>}
+
+      {data && data.items.length === 0 && (
+        <p className="empty-text">No hay notificaciones registradas.</p>
+      )}
+
+      {data && data.items.length > 0 && (
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Destinatario</th>
+                <th>Estado</th>
+                <th>Reintentos</th>
+                <th>Fecha</th>
+                <th>Vista previa</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map(item => (
+                <tr key={item.id}>
+                  <td>
+                    {TYPE_LABELS[item.notification_type] ?? item.notification_type}
+                  </td>
+                  <td className="cell-id">{recipient(item)}</td>
+                  <td>
+                    <span style={statusBadgeStyle(item.status)}>
+                      {STATUS_LABELS[item.status] ?? item.status}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "center" }}>{item.retry_count}</td>
+                  <td className="cell-date">{formatDate(item.created_at)}</td>
+                  <td className="cell-detail">
+                    <span className="snapshot-hint">{messagePreview(item)}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

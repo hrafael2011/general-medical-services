@@ -1,0 +1,2 @@
+class AuditError(Exception):
+    pass
