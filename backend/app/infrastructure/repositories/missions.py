@@ -1,11 +1,13 @@
 from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from backend.app.infrastructure.db.models.missions import (
     MissionAssignmentModel,
-    MissionParticipantModel,
-    MissionCandidateRankingModel,
     MissionCandidateRankingEntryModel,
+    MissionCandidateRankingModel,
+    MissionParticipantModel,
 )
 
 

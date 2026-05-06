@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
-from sqlalchemy import DateTime, JSON, String
+
+from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.infrastructure.db.base import Base

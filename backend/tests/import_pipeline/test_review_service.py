@@ -5,9 +5,7 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 """
 
 import uuid
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from backend.app.application.import_pipeline.review_service import ImportReviewService
 from backend.app.infrastructure.db.models.import_staging import (
@@ -15,7 +13,6 @@ from backend.app.infrastructure.db.models.import_staging import (
     ImportStagedRecordModel,
 )
 from backend.app.infrastructure.repositories.import_staging import ImportRepository
-
 
 # ---------------------------------------------------------------------------
 # Service factory
@@ -37,11 +34,11 @@ def _seed_staged_record(db_session, review_status="pending") -> ImportStagedReco
         file_name="test.xlsx",
         file_type="xlsx",
         checksum=str(uuid.uuid4()),  # unique per call
-        imported_at=datetime.now(timezone.utc),
+        imported_at=datetime.now(UTC),
         status="processed",
         record_count=1,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(sf)
     db_session.flush()
@@ -53,8 +50,8 @@ def _seed_staged_record(db_session, review_status="pending") -> ImportStagedReco
         raw_value="Dr. Test",
         confidence=0.8,
         review_status=review_status,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(record)
     db_session.flush()

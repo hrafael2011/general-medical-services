@@ -8,11 +8,8 @@ SimpleNamespace objects to stand in for ORM models.
 import datetime
 from types import SimpleNamespace
 
-import pytest
-
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import AREA_WEIGHTS
-
 
 # ---------------------------------------------------------------------------
 # Constants shared across tests

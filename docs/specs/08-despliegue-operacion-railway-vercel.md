@@ -1,3 +1,11 @@
+---
+spec: 08
+version: 1.1.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 08 - Despliegue y Operacion Railway/Vercel
 
 ## Goal
@@ -15,6 +23,7 @@ Frontend:
 - React + Vite application.
 - Public web panel for operators and approvers.
 - Calls the backend API hosted on Railway.
+- The backend API base URL must be sourced from the `VITE_API_URL` environment variable. Hardcoding a port number or hostname in source code is prohibited. Local development and production deployments must each supply the correct value through their own environment configuration (`.env.local` for development, Vercel environment settings for production).
 
 ### Railway
 
@@ -270,3 +279,12 @@ Rules:
 3. Given a cron-runner execution failure, when the next execution starts, then pending jobs are retried according to status, lock, and attempt policy.
 4. Given automatic monthly generation, when the configured planning date arrives, then a draft or preview calendar is created without making it official.
 5. Given the MVP deployment, when background processing needs grow, then the architecture defines when to add Redis and Celery.
+6. Given the frontend is deployed to any environment, when making API calls, then the base URL is read from `VITE_API_URL` and not from a hardcoded value in source code.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.1.0 | 2026-04-30 | — | Bug | WARN-002 (QA): frontend tenía URL de API hardcodeada al puerto 8000 en source code; el servidor de desarrollo corre en 8002. Se agrega regla: VITE_API_URL debe configurarse por entorno y no hardcodearse. |
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define despliegue Railway/Vercel, estrategia MVP sin Celery/Redis, modelo de tareas programadas y criterios para escalar infraestructura. |

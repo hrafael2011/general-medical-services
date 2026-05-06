@@ -1,5 +1,6 @@
-from typing import Annotated
 from datetime import datetime
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 

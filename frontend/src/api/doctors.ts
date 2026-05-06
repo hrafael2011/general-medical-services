@@ -28,6 +28,7 @@ export interface CreateDoctorPayload {
 }
 
 export interface ServiceAreaRead { id: string; code: string; display_name: string; active: boolean; }
+export interface RankRead { id: string; name: string; abbreviation: string; }
 
 export const doctorsApi = {
   list: (activeOnly = false) =>
@@ -44,4 +45,5 @@ export const doctorsApi = {
   reactivateService: (id: string) =>
     apiFetch<DoctorRead>(`/doctors/${id}/reactivate-service`, { method: "POST" }),
   listServiceAreas: () => apiFetch<ServiceAreaRead[]>("/catalogs/service-areas"),
+  listRanks: () => apiFetch<RankRead[]>("/catalogs/ranks"),
 };

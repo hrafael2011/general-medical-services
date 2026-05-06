@@ -4,6 +4,8 @@ from typing import Protocol
 class LLMProvider(Protocol):
     def complete(self, system: str, user: str, temperature: float = 0.1) -> str: ...
 
+    def chat_complete(self, messages: list[dict], temperature: float = 0.1) -> str: ...
+
     @property
     def name(self) -> str: ...
 
@@ -24,6 +26,14 @@ class FakeLLMProvider:
             if key.lower() in user.lower():
                 return resp
         return '{"intent": "out_of_domain", "entities": {}, "confidence": 0.0}'
+
+    def chat_complete(self, messages: list[dict], temperature: float = 0.1) -> str:
+        full_text = " ".join(m.get("content", "") for m in messages)
+        self.calls.append({"messages": messages})
+        for key, resp in self.responses.items():
+            if key.lower() in full_text.lower():
+                return resp
+        return '{"action": "direct"}'
 
 
 class DeepSeekProvider:
@@ -48,6 +58,17 @@ class DeepSeekProvider:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
+            temperature=temperature,
+        )
+        return resp.choices[0].message.content or ""
+
+    def chat_complete(self, messages: list[dict], temperature: float = 0.1) -> str:
+        from openai import OpenAI  # type: ignore[import]
+
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        resp = client.chat.completions.create(
+            model=self.model,
+            messages=messages,  # type: ignore[arg-type]
             temperature=temperature,
         )
         return resp.choices[0].message.content or ""

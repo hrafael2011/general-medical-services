@@ -22,8 +22,8 @@ router = APIRouter(prefix="/doctors", tags=["doctors"])
 
 
 def get_doctor_service(session: Annotated[Session, Depends(get_db_session)]) -> DoctorService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
     return DoctorService(
         DoctorRepository(session),
         catalog_repo=CatalogRepository(session),

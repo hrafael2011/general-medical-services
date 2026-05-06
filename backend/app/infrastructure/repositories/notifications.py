@@ -1,8 +1,12 @@
 from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from backend.app.infrastructure.db.models.notifications import (
-    NotificationEventModel, ScheduledJobModel, JobExecutionModel,
+    JobExecutionModel,
+    NotificationEventModel,
+    ScheduledJobModel,
 )
 
 MAX_RETRIES = 3
@@ -35,7 +39,7 @@ class NotificationRepository:
             .where(
                 NotificationEventModel.status == "pending",
                 NotificationEventModel.retry_count < MAX_RETRIES,
-                (NotificationEventModel.scheduled_for == None) |
+                (NotificationEventModel.scheduled_for.is_(None)) |
                 (NotificationEventModel.scheduled_for <= now),
             )
             .order_by(NotificationEventModel.created_at)

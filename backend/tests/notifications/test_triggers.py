@@ -10,8 +10,6 @@ import datetime
 import types
 import uuid
 
-import pytest
-
 from backend.app.application.notifications.providers import FakeProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.triggers import NotificationTriggers

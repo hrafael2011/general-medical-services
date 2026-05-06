@@ -3,8 +3,8 @@ Pure-Python normalizers and classifiers for legacy import data.
 No DB dependencies — all functions are stateless transformations.
 """
 
-import unicodedata
 import re
+import unicodedata
 
 # ── Area normalization ──────────────────────────────────────────────────────
 

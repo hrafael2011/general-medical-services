@@ -24,8 +24,8 @@ router = APIRouter(prefix="/availability", tags=["availability"])
 
 
 def get_availability_service(session: Annotated[Session, Depends(get_db_session)]) -> AvailabilityService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
     return AvailabilityService(
         availability_repo=AvailabilityRepository(session),
         doctor_repo=DoctorRepository(session),

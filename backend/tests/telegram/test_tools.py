@@ -5,15 +5,15 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from backend.app.infrastructure.repositories.doctors import DoctorRepository
-from backend.app.infrastructure.repositories.calendars import CalendarRepository
-from backend.app.infrastructure.repositories.missions import MissionRepository
-from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.application.telegram.tools import ToolGateway
+from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.missions import MissionRepository
 
-UTC = timezone.utc
+UTC = UTC
 
 
 # ---------------------------------------------------------------------------

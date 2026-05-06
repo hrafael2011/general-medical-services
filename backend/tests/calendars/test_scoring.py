@@ -6,15 +6,10 @@ No database access needed — all inputs are plain Python dicts and date objects
 
 import datetime
 
-import pytest
-
 from backend.app.domain.calendars.scoring import (
-    MIN_SPACING_DISPONIBLE_AFTER_STRONG,
-    MIN_SPACING_STRONG,
     compute_candidate_score,
 )
 from backend.app.domain.calendars.types import SlotRequest
-
 
 # ---------------------------------------------------------------------------
 # Helpers

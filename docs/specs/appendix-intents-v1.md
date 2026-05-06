@@ -1,3 +1,11 @@
+---
+spec: appendix-intents
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Appendix - Telegram Intent Catalog v1
 
 This is the closed intent set for MVP.
@@ -122,3 +130,10 @@ For each intent define:
 - "confirma esos para la mision"
 
 The exact examples are not exhaustive and must not become the only accepted phrasing.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Catálogo cerrado de 34 intents MVP para el asistente Telegram, contrato de intent y tipos de entidad estándar. |

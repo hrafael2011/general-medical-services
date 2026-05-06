@@ -22,7 +22,6 @@ from backend.app.core.security import (
     verify_password,
 )
 from backend.app.domain.accounts import UserRole
-from backend.app.application.audit.service import AuditService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.users import UserRepository
 

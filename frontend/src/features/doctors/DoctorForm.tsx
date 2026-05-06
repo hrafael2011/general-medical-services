@@ -20,12 +20,18 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [target, setTarget] = useState(String(doctor?.monthly_service_target ?? 3));
   const [max, setMax] = useState(String(doctor?.monthly_service_max ?? 3));
   const [limitMode, setLimitMode] = useState(doctor?.monthly_service_limit_mode ?? "warn_only");
+  const [rankId, setRankId] = useState<string>(doctor?.rank_id ?? "");
   const [allowedAreaIds, setAllowedAreaIds] = useState<string[]>(doctor?.allowed_area_ids ?? []);
   const [error, setError] = useState("");
 
   const { data: serviceAreas } = useQuery({
     queryKey: ["service-areas"],
     queryFn: doctorsApi.listServiceAreas,
+  });
+
+  const { data: ranks } = useQuery({
+    queryKey: ["ranks"],
+    queryFn: doctorsApi.listRanks,
   });
 
   const save = useMutation({
@@ -46,6 +52,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
     if (isNaN(t) || isNaN(m)) { setError("Meta y máximo deben ser números."); return; }
     save.mutate({
       name, sex, phone: phone || null, participa_misiones: participaMisiones,
+      rank_id: rankId || null,
       availability_mode: availabilityMode,
       monthly_service_target: t, monthly_service_max: m,
       monthly_service_limit_mode: limitMode,
@@ -82,10 +89,21 @@ export function DoctorForm({ doctor, onClose }: Props) {
             </label>
           </div>
 
-          <label>
-            Teléfono
-            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Opcional" />
-          </label>
+          <div className="form-row">
+            <label>
+              Rango
+              <select value={rankId} onChange={e => setRankId(e.target.value)}>
+                <option value="">— Sin rango —</option>
+                {(ranks ?? []).map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Teléfono
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Opcional" />
+            </label>
+          </div>
 
           <div className="form-row">
             <label>

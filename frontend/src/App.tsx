@@ -20,7 +20,7 @@ type View = "login" | "change-password" | "dashboard" | "doctors" | "audit" | "c
 export function App() {
   const [view, setView] = useState<View>("login");
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
-  const [email, setEmail] = useState("admin@example.local");
+  const [email, setEmail] = useState("admin@turnos.com");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [message, setMessage] = useState("Ingresa con tu usuario asignado.");
@@ -71,7 +71,7 @@ export function App() {
   function handleLogout() {
     setToken(null);
     setCurrentUser(null);
-    setEmail("admin@example.local");
+    setEmail("admin@turnos.com");
     setPassword("");
     setNewPassword("");
     setMessage("Ingresa con tu usuario asignado.");

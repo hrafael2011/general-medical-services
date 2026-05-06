@@ -1,3 +1,11 @@
+---
+spec: 03
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 03 - Telegram NL Assistant (DeepSeek)
 
 ## Goal
@@ -88,3 +96,10 @@ Internal tool names, logs, and prompt instructions may remain in English, but ra
 4. Given ambiguous query, assistant asks a focused clarification question.
 5. Given an unauthorized or unlinked Telegram user, assistant returns no operational data and logs the event.
 6. Given a recommendation query, assistant explains the result using only backend-provided rationale.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define asistente Telegram con DeepSeek, guardrails anti-alucinación, flujo de tool-calling y política de respuestas. |

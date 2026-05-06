@@ -1,3 +1,11 @@
+---
+spec: 05
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 05 - Reportes y Auditoria
 
 ## Goal
@@ -52,3 +60,10 @@ Internal report identifiers, export job names, and code-level names may be writt
 3. Fairness conflict rationale is traceable from UI/export to audit data.
 4. Audit queries can filter by actor, date range, action type.
 5. Security and assistant access events are available for audit filtering without exposing plaintext secrets.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define reportes institucionales, formatos de exportación y eventos mínimos de auditoría. |

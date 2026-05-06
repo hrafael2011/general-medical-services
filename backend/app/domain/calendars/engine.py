@@ -6,7 +6,7 @@ All data is pre-loaded by the service layer and passed in via GenerationContext.
 """
 
 import calendar as cal_module
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 
 from backend.app.domain.calendars.scoring import compute_candidate_score
@@ -16,7 +16,6 @@ from backend.app.domain.calendars.types import (
     SlotRequest,
     SlotResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # GenerationContext — input to the engine

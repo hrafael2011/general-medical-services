@@ -1,3 +1,11 @@
+---
+spec: 13
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 13 - Implementation Phases
 
 ## Goal
@@ -308,3 +316,10 @@ Exit criteria:
 2. Given each phase completes, when its exit criteria are checked, then the next phase can start without unresolved foundational blockers.
 3. Given a phase introduces critical business behavior, when implementation is complete, then corresponding tests from Spec 12 exist.
 4. Given the MVP reaches Phase 10, then the system supports secure operation, doctor management, scheduling, missions, notifications, Telegram, imports, and reports.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define roadmap de implementación en 14 fases (0-10 + reglas transversales), con tareas, criterios de salida y dependencias entre fases. |

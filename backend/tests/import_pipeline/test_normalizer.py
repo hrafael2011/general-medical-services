@@ -3,7 +3,6 @@ Pure-Python unit tests for import_pipeline/normalizer.py.
 No DB or fixtures needed — all functions are stateless.
 """
 
-import pytest
 
 from backend.app.application.import_pipeline.normalizer import (
     classify_cell,
@@ -11,7 +10,6 @@ from backend.app.application.import_pipeline.normalizer import (
     normalize_name,
     parse_marker,
 )
-
 
 # ---------------------------------------------------------------------------
 # normalize_area

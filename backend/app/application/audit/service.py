@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.app.application.audit.errors import AuditError  # noqa: F401
 from backend.app.infrastructure.db.models.audit import AuditEventModel
@@ -27,7 +27,7 @@ class AuditService:
             action_type=action_type,
             entity_type=entity_type,
             entity_id=entity_id,
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
             request_id=None,
             before_snapshot=before,
             after_snapshot=after,

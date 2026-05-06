@@ -1,9 +1,9 @@
 """
-ReportService — generates Excel and JSON reports.
+ReportService — generates Excel, JSON and PDF reports.
 Reads from existing repos; no writes to DB.
 """
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class ReportService:
@@ -12,10 +12,12 @@ class ReportService:
         calendar_repo,   # CalendarRepository
         notification_repo,  # NotificationRepository
         doctor_repo,     # DoctorRepository
+        mission_repo=None,  # MissionRepository (opcional, para PDF ranking)
     ) -> None:
         self.calendar_repo = calendar_repo
         self.notification_repo = notification_repo
         self.doctor_repo = doctor_repo
+        self.mission_repo = mission_repo
 
     # ------------------------------------------------------------------
     # Excel: calendar assignments
@@ -150,7 +152,7 @@ class ReportService:
             "total": len(period_notifications),
             "by_status": by_status,
             "by_type": by_type,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     # ------------------------------------------------------------------
@@ -184,5 +186,115 @@ class ReportService:
             "calendar_status": calendar_status,
             "total_assignments": total_assignments,
             "unresolved_gaps": unresolved_gaps,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
+
+    # ------------------------------------------------------------------
+    # PDF: calendar report
+    # ------------------------------------------------------------------
+
+    def generate_calendar_pdf(self, calendar_id: str) -> bytes:
+        """Return a PDF report for a specific calendar."""
+        from backend.app.application.reports.pdf_templates import generate_calendar_pdf
+
+        calendar = self.calendar_repo.get_calendar_by_id(calendar_id)
+        if calendar is None:
+            raise ValueError("Calendario no encontrado")
+
+        version = self.calendar_repo.get_latest_version(calendar.id)
+        if version is None:
+            raise ValueError("Calendario no encontrado")
+
+        assignments = self.calendar_repo.list_assignments(version.id)
+        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
+        areas = self.calendar_repo.list_service_areas() if hasattr(self.calendar_repo, "list_service_areas") else {}
+        area_map = {a.id: a.display_name for a in areas} if areas else {}
+
+        rows = []
+        for a in assignments:
+            rows.append({
+                "service_date": str(a.service_date),
+                "service_area_id": area_map.get(a.service_area_id, a.service_area_id),
+                "doctor_id": a.doctor_id,
+                "doctor_name": doctors.get(a.doctor_id, a.doctor_id),
+                "assignment_source": a.assignment_source,
+            })
+
+        return generate_calendar_pdf(rows, calendar.month, calendar.year)
+
+    # ------------------------------------------------------------------
+    # PDF: doctor history
+    # ------------------------------------------------------------------
+
+    def generate_doctor_history_pdf(self, year: int, month: int) -> bytes:
+        """Return a PDF report with per-doctor assignment counts for a period."""
+        from backend.app.application.reports.pdf_templates import generate_doctor_history_pdf
+
+        assignments: list = []
+        calendar = self.calendar_repo.get_calendar_by_period(year, month)
+        if calendar is not None:
+            version = self.calendar_repo.get_latest_version(calendar.id)
+            if version is not None:
+                assignments = self.calendar_repo.list_assignments(version.id)
+
+        agg: dict[str, dict] = {}
+        for a in assignments:
+            entry = agg.setdefault(a.doctor_id, {"count": 0, "areas": set()})
+            entry["count"] += 1
+            entry["areas"].add(str(a.service_area_id))
+
+        doctors = self.doctor_repo.list_all()
+        rows = []
+        for doctor in doctors:
+            entry = agg.get(doctor.id, {"count": 0, "areas": set()})
+            rows.append({
+                "doctor_id": doctor.id,
+                "name": doctor.name,
+                "count": entry["count"],
+                "areas": ", ".join(sorted(entry["areas"])),
+                "load": "",
+            })
+        rows.sort(key=lambda r: (-r["count"], r["name"]))
+
+        return generate_doctor_history_pdf(rows, month, year)
+
+    # ------------------------------------------------------------------
+    # PDF: operational summary
+    # ------------------------------------------------------------------
+
+    def generate_operational_summary_pdf(self, year: int, month: int) -> bytes:
+        """Return a PDF report with the operational summary for a period."""
+        from backend.app.application.reports.pdf_templates import generate_operational_summary_pdf
+
+        summary = self.generate_operational_summary(year, month)
+        return generate_operational_summary_pdf(summary)
+
+    # ------------------------------------------------------------------
+    # PDF: mission ranking
+    # ------------------------------------------------------------------
+
+    def generate_mission_ranking_pdf(self, year: int, month: int) -> bytes:
+        """Return a PDF report with the mission candidate ranking for a period."""
+        from backend.app.application.reports.pdf_templates import generate_mission_ranking_pdf
+
+        if self.mission_repo is None:
+            raise ValueError("MissionRepository no disponible")
+
+        ranking = self.mission_repo.get_ranking_by_period(year, month)
+        if ranking is None:
+            raise ValueError("No hay ranking generado para ese periodo")
+
+        entries = mission_repo.list_ranking_entries(ranking.id)
+        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
+
+        rows = []
+        for e in entries:
+            rows.append({
+                "position": e.ranking_position,
+                "doctor_id": e.doctor_id,
+                "doctor_name": doctors.get(e.doctor_id, e.doctor_id),
+                "total_load_score": e.total_load_score,
+                "eligible": e.eligible,
+            })
+
+        return generate_mission_ranking_pdf(rows, month, year)

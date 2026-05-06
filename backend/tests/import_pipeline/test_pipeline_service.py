@@ -5,16 +5,13 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 """
 
 import uuid
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from backend.app.application.import_pipeline.extractor import compute_checksum
 from backend.app.application.import_pipeline.pipeline_service import ImportPipelineService
 from backend.app.infrastructure.db.models.import_staging import ImportSourceFileModel
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.import_staging import ImportRepository
-
 
 # ---------------------------------------------------------------------------
 # Service factory
@@ -55,11 +52,11 @@ def test_duplicate_checksum_ignored(db_session) -> None:
         file_name="existing.xlsx",
         file_type="xlsx",
         checksum=checksum,
-        imported_at=datetime.now(timezone.utc),
+        imported_at=datetime.now(UTC),
         status="processed",
         record_count=0,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(sf)
     db_session.flush()

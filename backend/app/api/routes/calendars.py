@@ -61,8 +61,8 @@ def _http_exc(exc: CalendarServiceError) -> HTTPException:
 def get_calendar_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
 
     return CalendarService(
         CalendarRepository(session),
@@ -73,10 +73,10 @@ def get_calendar_service(
 def get_generation_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> GenerationService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
-    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
 
     return GenerationService(
         CalendarRepository(session),
@@ -89,10 +89,10 @@ def get_generation_service(
 def get_assignment_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AssignmentService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
-    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
 
     return AssignmentService(
         CalendarRepository(session),

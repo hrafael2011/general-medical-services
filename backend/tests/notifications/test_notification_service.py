@@ -6,8 +6,6 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 
 import uuid
 
-import pytest
-
 from backend.app.application.notifications.providers import FakeProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.templates import (

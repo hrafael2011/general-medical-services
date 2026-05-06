@@ -8,7 +8,6 @@ Creates ORM models directly without going through service layers.
 import datetime
 from uuid import uuid4
 
-import pytest
 from sqlalchemy import select
 
 from backend.app.application.missions.ranking_service import MissionRankingService

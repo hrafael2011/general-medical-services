@@ -25,8 +25,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def get_account_service(session: Annotated[Session, Depends(get_db_session)]) -> AccountService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
     return AccountService(UserRepository(session), audit=AuditService(AuditRepository(session)))
 
 

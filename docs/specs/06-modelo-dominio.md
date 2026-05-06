@@ -1,3 +1,11 @@
+---
+spec: 06
+version: 1.2.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 06 - Modelo de Dominio
 
 ## Goal
@@ -62,6 +70,8 @@ Rules:
 - Service eligibility is controlled by `service_active`, deactivation reasons, availability, and allowed service areas.
 - Monthly service target and maximum are configurable per doctor and override system defaults.
 - Interns and residents are outside MVP service scheduling unless enabled in the future.
+- All free-text fields (`full_name`, `notes`, `service_inactive_reason_detail`, and equivalent fields on related entities) must be stored as plain text. The API must reject or strip HTML tags, JavaScript, and other markup from free-text input before persistence. Accepting raw HTML in these fields constitutes a stored XSS vulnerability.
+- `normalized_name` must be unique across active canonical `Doctor` records. The database must enforce a uniqueness constraint on `normalized_name`. Multiple `Doctor` rows with the same normalized name represent a data integrity defect; duplicate legacy names must be resolved through the `DoctorAlias` identity resolution flow rather than creating separate records.
 
 ### DoctorAlias
 
@@ -684,3 +694,14 @@ The following rule categories must not be disabled:
 3. Given a manual override, when persisted, then the system stores the skipped rule, actor, justification, and audit event.
 4. Given an official calendar, when modified manually, then the system creates a new version instead of mutating history silently.
 5. Given a Telegram operational query, when answered, then the response is derived from services backed by the canonical domain model.
+6. Given a doctor creation or update request with HTML or script content in a free-text field, then the API rejects or strips the markup and does not persist raw HTML.
+7. Given two doctors with the same normalized name, when creating or importing the second record, then the system rejects or routes to identity resolution instead of creating a duplicate canonical doctor.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.2.0 | 2026-04-30 | — | Bug | WARN-001 (QA): sin restricción de unicidad en doctors.normalized_name; 74 clusters de nombres duplicados detectados. Se agrega regla: normalized_name debe ser único; duplicados deben resolverse vía DoctorAlias. |
+| 1.1.0 | 2026-04-30 | — | Bug | BUG-004 (QA): campos de texto libre (full_name, notes, etc.) aceptaban HTML/JS sin sanitización — XSS almacenado. Se agrega regla: campos de texto deben rechazar o eliminar markup antes de persistir. |
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define el modelo de dominio canónico completo: Doctor, Availability, Calendar, Mission, Notification, Audit, User, Telegram. |

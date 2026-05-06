@@ -17,6 +17,13 @@ export function DoctorList({ onAdd, onEdit }: Props) {
     queryFn: () => doctorsApi.list(activeOnly),
   });
 
+  const { data: ranks } = useQuery({
+    queryKey: ["ranks"],
+    queryFn: doctorsApi.listRanks,
+  });
+
+  const rankMap = Object.fromEntries((ranks ?? []).map(r => [r.id, r.name]));
+
   const reactivate = useMutation({
     mutationFn: (id: string) => doctorsApi.reactivateService(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["doctors"] }),
@@ -55,9 +62,10 @@ export function DoctorList({ onAdd, onEdit }: Props) {
             <thead>
               <tr>
                 <th>Nombre</th>
+                <th>Rango</th>
                 <th>Sexo</th>
                 <th>Servicio</th>
-                <th>Areas</th>
+                <th>Áreas</th>
                 <th>Misiones</th>
                 <th>Meta/mes</th>
                 <th></th>
@@ -67,6 +75,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
               {doctors.map(doc => (
                 <tr key={doc.id} className={!doc.service_active ? "row-inactive" : ""}>
                   <td className="cell-name">{doc.name}</td>
+                  <td>{doc.rank_id ? rankMap[doc.rank_id] ?? "—" : "—"}</td>
                   <td>
                     <span className={`sex-badge sex-${doc.sex}`}>
                       {doc.sex === "male" ? "M" : "F"}

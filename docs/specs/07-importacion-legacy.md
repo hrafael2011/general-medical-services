@@ -1,3 +1,11 @@
+---
+spec: 07
+version: 1.3.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 07 - Importacion Legacy
 
 ## Goal
@@ -187,6 +195,7 @@ Rules:
 - `probable_match` and `possible_match` require review before canonical merge.
 - `conflict` must be blocked from automatic application.
 - New candidates should be staged, not immediately promoted to active doctors.
+- When a `new_candidate` would produce a `normalized_name` that already exists in the canonical `Doctor` table, the importer must create a review item for manual resolution instead of creating a duplicate record.
 
 ### Step 6 - Staging
 
@@ -319,6 +328,21 @@ Rules:
 - Missing service area values must create unresolved import warnings.
 - Imported assignments should not overwrite official generated calendars unless explicitly approved.
 
+## Allowed Service Area Import
+
+When importing doctor records, the pipeline must also stage the allowed service areas found in source files for each doctor.
+
+Rules:
+
+- Parsed area eligibility values (`emergencia`, `pista`, `disponible`, or source variants) must be stored as staged service area entries associated with the staged doctor.
+- When a staged doctor record is approved and applied to canonical tables, the pipeline must create corresponding `DoctorServiceArea` entries for each staged area.
+- Doctors imported without any area data must be flagged for operator review. They must be excluded from calendar generation until at least one `DoctorServiceArea` entry is configured.
+- Importing a doctor without area information is not an error but must generate a visible warning in the import quality report.
+
+## Import API Robustness
+
+The import file listing endpoint (`GET /import/files` or equivalent) must return a valid empty list response when no files have been registered. It must not raise a server error (HTTP 500) when the import source table is empty or uninitialized.
+
 ## Import Quality Reports
 
 Each import run must produce a report with:
@@ -360,3 +384,16 @@ Minimum audit events:
 7. Given conflicting Excel and PDF values for the same assignment or doctor data, when staging import results, then Excel is marked as the preferred source and the conflict remains reviewable.
 8. Given the initial legacy import, when historical service files are available from January 2026 onward, then the importer stages the full 2026 history with traceability.
 9. Given a legacy monthly service marker, when parsed, then the staged record preserves whether it maps to target, maximum, or both, and requires review when ambiguous.
+10. Given a doctor imported from a legacy source without area data, when staging is complete, then the record is flagged for review and the doctor is excluded from generation until areas are configured.
+11. Given the import file listing endpoint is called when no files have been registered, then it returns an empty list with HTTP 200 rather than HTTP 500.
+12. Given identity resolution encounters a new candidate whose normalized name already exists in the canonical Doctor table, then the importer creates a review item instead of creating a duplicate doctor record.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.3.0 | 2026-04-30 | — | Bug | WARN-001 (QA): resolución de identidad no prevenía creación de médicos duplicados con el mismo nombre normalizado. Se agrega regla: new_candidate con nombre duplicado debe crear ítem de revisión en lugar de nuevo registro canónico. |
+| 1.2.0 | 2026-04-30 | — | Bug | BUG-003 (QA): GET /import/files retornaba HTTP 500 cuando no había archivos registrados. Se agrega sección "Import API Robustness": el endpoint debe retornar lista vacía con HTTP 200. |
+| 1.1.0 | 2026-04-30 | — | Bug | BUG-002 (QA): pipeline de importación no creaba entradas DoctorServiceArea; 221/223 médicos sin áreas permitidas tras importación inicial. Se agrega sección "Allowed Service Area Import" con reglas de staging y aplicación de áreas. |
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define pipeline de importación legacy en 8 pasos: registro, extracción, clasificación, normalización, resolución de identidad, staging, revisión y aplicación canónica. |

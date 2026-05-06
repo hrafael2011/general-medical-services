@@ -1,11 +1,11 @@
-from datetime import date, timedelta, timezone
+from datetime import UTC, date, timedelta
 
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now_utc() -> date:
@@ -22,11 +22,15 @@ class ToolGateway:
         calendar_repo: CalendarRepository,
         mission_repo: MissionRepository,
         availability_repo: AvailabilityRepository,
+        query_executor=None,  # QueryExecutor (Phase 2)
+        report_service=None,  # ReportService (Phase 3)
     ) -> None:
         self._doctor_repo = doctor_repo
         self._calendar_repo = calendar_repo
         self._mission_repo = mission_repo
         self._availability_repo = availability_repo
+        self._query_executor = query_executor
+        self._report_service = report_service
 
         self._handlers = {
             "count_medicos_activos": self._tool_count_medicos_activos,
@@ -38,6 +42,14 @@ class ToolGateway:
             "pendientes_disponibilidad_mes": self._tool_pendientes_disponibilidad_mes,
             "confirm_mission_assignment": self._tool_confirm_mission_assignment,
         }
+
+        if query_executor is not None:
+            self._handlers["query_database"] = self._tool_query_database
+        if report_service is not None:
+            self._handlers["generate_calendar_report"] = self._tool_generate_calendar_report
+            self._handlers["generate_doctor_history_report"] = self._tool_generate_doctor_history_report
+            self._handlers["generate_operational_summary"] = self._tool_generate_operational_summary
+            self._handlers["generate_mission_ranking_report"] = self._tool_generate_mission_ranking_report
 
     def execute(self, intent: str, entities: dict) -> dict:
         """
@@ -56,6 +68,91 @@ class ToolGateway:
     # ------------------------------------------------------------------
     # Tool methods
     # ------------------------------------------------------------------
+
+    def _tool_query_database(self, entities: dict) -> dict:
+        """Execute a natural-language database query via QueryExecutor."""
+        query = entities.get("query") or entities.get("question", "")
+        if not query:
+            return {"found": False, "error": "consulta_vacia"}
+        result = self._query_executor.execute(query)
+        if not result.get("ok"):
+            return {"found": False, "error": result.get("error", "error_desconocido")}
+        data = result["data"]
+        return {
+            "found": True,
+            "query": query,
+            "columns": data["columns"],
+            "rows": data["rows"],
+            "row_count": data["row_count"],
+            "truncated": data["truncated"],
+            "elapsed_seconds": data["elapsed_seconds"],
+        }
+
+    def _tool_generate_calendar_report(self, entities: dict) -> dict:
+        """Generate a PDF or Excel calendar report."""
+        import io
+
+        month: int = int(entities["month"])
+        year: int = int(entities.get("year", 0))
+        fmt: str = entities.get("format", "pdf")
+
+        calendar = self._calendar_repo.get_calendar_by_period(year, month)
+        if calendar is None:
+            return {"ok": False, "error": "No hay calendario para ese periodo."}
+
+        if fmt == "excel":
+            data = self._report_service.generate_calendar_excel(calendar.id)
+            return {
+                "ok": True, "data": {"message": "Reporte Excel generado."},
+                "document_bytes": data, "document_filename": f"calendario_{year}_{month:02d}.xlsx",
+            }
+
+        data = self._report_service.generate_calendar_pdf(calendar.id)
+        return {
+            "ok": True, "data": {"message": "Reporte PDF generado."},
+            "document_bytes": data, "document_filename": f"calendario_{year}_{month:02d}.pdf",
+        }
+
+    def _tool_generate_doctor_history_report(self, entities: dict) -> dict:
+        """Generate a PDF or Excel doctor history report."""
+        month: int = int(entities["month"])
+        year: int = int(entities.get("year", 0))
+        fmt: str = entities.get("format", "pdf")
+
+        if fmt == "excel":
+            data = self._report_service.generate_doctor_history_excel(year, month)
+            return {
+                "ok": True, "data": {"message": "Reporte Excel generado."},
+                "document_bytes": data, "document_filename": f"historial_{year}_{month:02d}.xlsx",
+            }
+
+        data = self._report_service.generate_doctor_history_pdf(year, month)
+        return {
+            "ok": True, "data": {"message": "Reporte PDF generado."},
+            "document_bytes": data, "document_filename": f"historial_{year}_{month:02d}.pdf",
+        }
+
+    def _tool_generate_operational_summary(self, entities: dict) -> dict:
+        """Generate a PDF operational summary report."""
+        month: int = int(entities["month"])
+        year: int = int(entities.get("year", 0))
+
+        data = self._report_service.generate_operational_summary_pdf(year, month)
+        return {
+            "ok": True, "data": {"message": "Reporte PDF generado."},
+            "document_bytes": data, "document_filename": f"resumen_operativo_{year}_{month:02d}.pdf",
+        }
+
+    def _tool_generate_mission_ranking_report(self, entities: dict) -> dict:
+        """Generate a PDF mission ranking report."""
+        month: int = int(entities["month"])
+        year: int = int(entities.get("year", 0))
+
+        data = self._report_service.generate_mission_ranking_pdf(year, month)
+        return {
+            "ok": True, "data": {"message": "Reporte PDF generado."},
+            "document_bytes": data, "document_filename": f"ranking_misiones_{year}_{month:02d}.pdf",
+        }
 
     def _tool_count_medicos_activos(self, entities: dict) -> dict:
         """Return count of service-active doctors."""

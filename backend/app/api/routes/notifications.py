@@ -1,10 +1,11 @@
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_ready_user
-from backend.app.application.notifications.providers import FakeProvider
+from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
@@ -21,9 +22,10 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 def get_notification_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> NotificationService:
+    provider = TwilioProvider() if os.environ.get("TWILIO_ACCOUNT_SID") else FakeProvider()
     return NotificationService(
         repo=NotificationRepository(session),
-        provider=FakeProvider(),
+        provider=provider,
     )
 
 

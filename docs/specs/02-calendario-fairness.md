@@ -1,3 +1,11 @@
+---
+spec: 02
+version: 1.1.0
+status: accepted
+created: 2026-04-30
+updated: 2026-05-05
+---
+
 # Spec 02 - Calendario y Fairness
 
 ## Goal
@@ -197,6 +205,19 @@ Recommended non-disableable baseline:
 - The encargado approves the calendar and makes it official.
 - Modifying an official calendar creates a new version with justification and audit.
 
+## Service Area Identity in Generation
+
+The generation engine must resolve service area identities as database UUIDs, not as code strings.
+
+Rules:
+
+- `REQUIRED_AREAS` passed to the engine must be a list of `ServiceArea.id` (UUID) values, loaded from the database at generation time.
+- `AREA_WEIGHTS` must be keyed by `ServiceArea.id` (UUID), not by `ServiceArea.code`.
+- `DoctorServiceArea.service_area_id` stores UUIDs; the engine's area eligibility check must compare UUID to UUID.
+- Gaps inserted into `unresolved_gaps.service_area_id` must reference a valid `service_areas.id` UUID; inserting a code string violates the FK constraint and causes a 500 error.
+
+Rationale: the initial implementation hardcoded area codes (`"emergencia"`, `"pista"`, `"disponible"`) directly in `REQUIRED_AREAS` and `AREA_WEIGHTS`. In production the `service_areas` table uses UUID primary keys, causing a foreign key violation on every gap insertion and making all doctors ineligible for every slot (code ≠ UUID in the allowed-area check).
+
 ## Acceptance Criteria
 
 1. Given all required inputs, when generating calendar, then every day has three required area slots or explicit unresolved gaps.
@@ -210,3 +231,11 @@ Recommended non-disableable baseline:
 9. Given multiple valid candidates for an assignment, then the system uses load, recent history, spacing, area rotation, and controlled tie-breakers to choose a candidate.
 10. Given a generated assignment, then structured rationale is stored and can be viewed in the panel.
 11. Given a monthly calendar generation, then a mission candidate ranking is stored for the month.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.1.0 | 2026-04-30 | — | Bug | BUG-001 (QA): el engine usaba códigos de área como IDs causando FK violation en `unresolved_gaps` y falla silenciosa en la elegibilidad. Se agrega sección "Service Area Identity in Generation" que exige UUIDs. |
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define cobertura diaria requerida, estados del calendario, reglas de fairness, pesos por área, espaciado, misiones y criterios de aceptación. |

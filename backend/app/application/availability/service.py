@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.availability.errors import AvailabilityError
@@ -50,7 +50,7 @@ class AvailabilityService:
                 "days_of_week must be a non-empty list of integers between 0 (Monday) and 6 (Sunday).",
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         record = DoctorAvailabilityModel(
             id=str(uuid.uuid4()),
             doctor_id=doctor_id,
@@ -111,7 +111,7 @@ class AvailabilityService:
         for old in existing:
             self.availability.delete_availability(old.id)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         submitted_at = now
         record = DoctorAvailabilityModel(
             id=str(uuid.uuid4()),
@@ -154,7 +154,7 @@ class AvailabilityService:
         if doctor is None:
             raise AvailabilityError("doctor_not_found", f"Doctor {doctor_id} not found")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         record = DoctorRestrictionModel(
             id=str(uuid.uuid4()),
             doctor_id=doctor_id,
@@ -186,7 +186,7 @@ class AvailabilityService:
         if restriction is None:
             raise AvailabilityError("restriction_not_found", f"Restriction {restriction_id} not found")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         restriction.lifted_at = now
         restriction.lifted_by = actor_id
         restriction.updated_at = now

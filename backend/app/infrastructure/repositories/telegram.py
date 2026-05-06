@@ -1,7 +1,12 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from backend.app.infrastructure.db.models.telegram import (
-    TelegramUserLinkModel, TelegramInteractionModel,
+    TelegramInteractionModel,
+    TelegramLinkTokenModel,
+    TelegramUserLinkModel,
 )
 
 
@@ -29,6 +34,43 @@ class TelegramRepository:
             TelegramUserLinkModel.active == True,  # noqa: E712
         )
         return self.session.scalars(stmt).first()
+
+    # --- Link Tokens ---
+
+    def add_link_token(self, token: TelegramLinkTokenModel) -> TelegramLinkTokenModel:
+        self.session.add(token)
+        self.session.flush()
+        return token
+
+    def get_valid_token(self, token_str: str) -> TelegramLinkTokenModel | None:
+        stmt = select(TelegramLinkTokenModel).where(
+            TelegramLinkTokenModel.token == token_str,
+            TelegramLinkTokenModel.active == True,  # noqa: E712
+            TelegramLinkTokenModel.used_at.is_(None),
+            TelegramLinkTokenModel.expires_at > datetime.now(UTC),
+        )
+        return self.session.scalars(stmt).first()
+
+    def mark_token_used(self, token_id: str) -> None:
+        token = self.session.get(TelegramLinkTokenModel, token_id)
+        if token:
+            token.used_at = datetime.now(UTC)
+            self.session.flush()
+
+    def list_link_tokens(self) -> list[TelegramLinkTokenModel]:
+        stmt = select(TelegramLinkTokenModel).order_by(
+            TelegramLinkTokenModel.created_at.desc()
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_pending_tokens_by_user(self, user_id: str) -> list[TelegramLinkTokenModel]:
+        stmt = select(TelegramLinkTokenModel).where(
+            TelegramLinkTokenModel.user_id == user_id,
+            TelegramLinkTokenModel.active == True,  # noqa: E712
+            TelegramLinkTokenModel.used_at.is_(None),
+            TelegramLinkTokenModel.expires_at > datetime.now(UTC),
+        )
+        return list(self.session.scalars(stmt))
 
     def list_links(self) -> list[TelegramUserLinkModel]:
         stmt = select(TelegramUserLinkModel).order_by(TelegramUserLinkModel.linked_at.desc())

@@ -4,10 +4,10 @@ Returns plain dicts — no SQLAlchemy/DB imports here.
 """
 
 from __future__ import annotations
+
 import hashlib
 from pathlib import Path
 from typing import Any
-
 
 # ── Checksum ────────────────────────────────────────────────────────────────
 
@@ -29,15 +29,16 @@ def extract_excel(
     Skips empty cells and lock/temp files.
     Returns a list of raw extraction dicts.
     """
-    import openpyxl  # lazy import — not available in test env without install
     from io import BytesIO
+
+    import openpyxl  # lazy import — not available in test env without install
 
     wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True, read_only=True)
     extractions: list[dict] = []
 
     for sheet_name in wb.sheetnames[:max_sheets]:
         ws = wb[sheet_name]
-        for row_idx, row in enumerate(ws.iter_rows(max_row=max_rows, values_only=False), start=1):
+        for _row_idx, row in enumerate(ws.iter_rows(max_row=max_rows, values_only=False), start=1):
             for cell in row:
                 if cell.value is None:
                     continue
@@ -71,8 +72,9 @@ def extract_pdf(
     Falls back to returning a single 'extraction_failed' record on error.
     """
     try:
-        import pdfplumber  # lazy import
         from io import BytesIO
+
+        import pdfplumber  # lazy import
 
         extractions: list[dict] = []
 

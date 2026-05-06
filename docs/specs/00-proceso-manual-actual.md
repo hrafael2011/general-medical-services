@@ -1,3 +1,11 @@
+---
+spec: 00
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 00 - Proceso Manual Actual
 
 ## Goal
@@ -154,3 +162,10 @@ The coordinator remains the approving authority for official calendars.
 2. Given a weekly service output, when analyzing required coverage, then `EMERGENCIA`, `PISTA`, and `DISPONIBLE` are treated as required daily areas for MVP.
 3. Given free-text restrictions in legacy files, when importing, then they are not applied silently without trace and confidence metadata.
 4. Given a generated calendar, when comparing with the manual process, then the system preserves coordinator review and approval before official publication.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Documenta el proceso manual del coordinador como referencia pre-automatización. |
