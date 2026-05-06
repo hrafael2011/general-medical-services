@@ -36,3 +36,9 @@ frontend/.vite/
 
 # Keep example env file
 !.env.example
+
+# Recovery codes
+*_recovery_code*
+
+# Planning scratch
+spect-extra-improve.md
