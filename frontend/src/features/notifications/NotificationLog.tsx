@@ -6,6 +6,7 @@ import {
   NotificationEventRead,
   ProcessNotificationsResponse,
 } from "../../api/notifications";
+import { useToast } from "../../components/Toast";
 
 // ---------------------------------------------------------------------------
 // Label maps
@@ -95,6 +96,7 @@ function recipient(item: NotificationEventRead): string {
 
 export function NotificationLog() {
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
 
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -122,7 +124,9 @@ export function NotificationLog() {
     onSuccess: (result) => {
       setProcessResult(result);
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      addToast("success", `Cola procesada: ${result.sent} enviados, ${result.failed} fallidos.`);
     },
+    onError: () => addToast("error", "Error al procesar la cola de notificaciones."),
   });
 
   return (
@@ -171,10 +175,6 @@ export function NotificationLog() {
           <Search size={15} /> Filtrar
         </button>
       </div>
-
-      {processMutation.isError && (
-        <p className="error-text">Error al procesar la cola de notificaciones.</p>
-      )}
 
       {isLoading && <p className="loading-text">Cargando notificaciones…</p>}
       {error && <p className="error-text">Error al cargar notificaciones.</p>}

@@ -8,6 +8,7 @@ import {
   LinkTokenRead,
 } from "../../api/telegram";
 import { adminApi, UserRead } from "../../api/admin";
+import { useToast } from "../../components/Toast";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,18 +64,17 @@ function tokenLabel(token: LinkTokenRead): string {
 
 export function TelegramLinks() {
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
 
   // --- Manual-link form state ---
   const [telegramUserId, setTelegramUserId] = useState("");
   const [telegramUsername, setTelegramUsername] = useState("");
   const [userId, setUserId] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
 
   // --- Invite-link state ---
   const [selectedUserId, setSelectedUserId] = useState("");
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [tokenError, setTokenError] = useState<string | null>(null);
   const [showTokenSection, setShowTokenSection] = useState(false);
 
   // --- Queries ---
@@ -105,18 +105,22 @@ export function TelegramLinks() {
       setTelegramUserId("");
       setTelegramUsername("");
       setUserId("");
-      setFormError(null);
+      addToast("success", "Vínculo creado.");
       void queryClient.invalidateQueries({ queryKey: ["telegram-links"] });
     },
     onError: (err: Error) => {
-      setFormError(err.message);
+      addToast("error", err.message);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => telegramApi.deleteLink(id),
     onSuccess: () => {
+      addToast("success", "Vínculo eliminado.");
       void queryClient.invalidateQueries({ queryKey: ["telegram-links"] });
+    },
+    onError: () => {
+      addToast("error", "Error al eliminar el vínculo.");
     },
   });
 
@@ -126,11 +130,10 @@ export function TelegramLinks() {
       setGeneratedLink(data.deep_link_url);
       setSelectedUserId("");
       setCopied(false);
-      setTokenError(null);
       void queryClient.invalidateQueries({ queryKey: ["telegram-link-tokens"] });
     },
     onError: (err: Error) => {
-      setTokenError(err.message);
+      addToast("error", err.message);
     },
   });
 
@@ -138,10 +141,9 @@ export function TelegramLinks() {
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!telegramUserId.trim() || !userId.trim()) {
-      setFormError("Los campos Telegram User ID y User ID son obligatorios.");
+      addToast("error", "Los campos Telegram User ID y User ID son obligatorios.");
       return;
     }
-    setFormError(null);
     createMutation.mutate({
       telegram_user_id: telegramUserId.trim(),
       telegram_username: telegramUsername.trim() || null,
@@ -204,8 +206,6 @@ export function TelegramLinks() {
           <MessageCircle size={16} />
           {generateTokenMutation.isPending ? "Generando…" : "Generar link"}
         </button>
-
-        {tokenError && <p style={{ color: "red", margin: "4px 0" }}>{tokenError}</p>}
 
         {generatedLink && (
           <div
@@ -329,8 +329,6 @@ export function TelegramLinks() {
             />
           </label>
 
-          {formError && <p style={{ color: "red", margin: "4px 0" }}>{formError}</p>}
-
           <button type="submit" disabled={createMutation.isPending}>
             <MessageCircle size={16} />
             {createMutation.isPending ? "Vinculando…" : "Agregar vinculo"}
@@ -343,9 +341,6 @@ export function TelegramLinks() {
       {/* ------------------------------------------------------------------ */}
       {isLoading && <p className="loading-text">Cargando vinculos…</p>}
       {error && <p className="error-text">Error al cargar los vinculos de Telegram.</p>}
-      {deleteMutation.isError && (
-        <p className="error-text">Error al eliminar el vinculo.</p>
-      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Links table                                                          */}
