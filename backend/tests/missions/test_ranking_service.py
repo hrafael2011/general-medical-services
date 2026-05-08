@@ -19,6 +19,7 @@ from backend.app.infrastructure.db.models.calendars import (
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.missions import MissionCandidateRankingModel
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
@@ -41,6 +42,7 @@ def _make_ranking_service(db_session) -> MissionRankingService:
         MissionRepository(db_session),
         DoctorRepository(db_session),
         CalendarRepository(db_session),
+        CatalogRepository(db_session),
     )
 
 

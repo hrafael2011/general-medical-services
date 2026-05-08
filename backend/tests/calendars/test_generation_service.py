@@ -20,7 +20,9 @@ from backend.app.infrastructure.db.models.doctors import (
 )
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.missions import MissionRepository
 
 # ---------------------------------------------------------------------------
 # Fixed area IDs that match the generation engine's required_areas list
@@ -45,6 +47,8 @@ def _make_generation_service(db_session) -> GenerationService:
         CalendarRepository(db_session),
         DoctorRepository(db_session),
         AvailabilityRepository(db_session),
+        MissionRepository(db_session),
+        CatalogRepository(db_session),
     )
 
 
