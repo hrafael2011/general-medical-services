@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarAssignmentRead, calendarsApi, DaySlot } from "../../api/calendars";
 import { ApiError } from "../../api/client";
@@ -8,12 +9,10 @@ const MONTHS = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-interface Props {
-  calendarId: string;
-  onBack: () => void;
-}
-
-export function CalendarGrid({ calendarId, onBack }: Props) {
+export function CalendarGrid() {
+  const { calendarId } = useParams<{ calendarId: string }>();
+  const navigate = useNavigate();
+  const onBack = () => navigate("/calendars");
   const queryClient = useQueryClient();
   const [rationaleDoc, setRationaleDoc] = useState<CalendarAssignmentRead | null>(null);
   const [generateSummary, setGenerateSummary] = useState<string | null>(null);
@@ -21,18 +20,19 @@ export function CalendarGrid({ calendarId, onBack }: Props) {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["calendar-grid", calendarId],
-    queryFn: () => calendarsApi.getGrid(calendarId),
+    queryFn: () => calendarsApi.getGrid(calendarId!),
+    enabled: !!calendarId,
   });
 
   const approveMutation = useMutation({
-    mutationFn: () => calendarsApi.approve(calendarId),
+    mutationFn: () => calendarsApi.approve(calendarId!),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] }),
   });
 
   const newVersionMutation = useMutation({
     mutationFn: () => {
       const reason = window.prompt("Motivo de la nueva versión (opcional):");
-      return calendarsApi.newVersion(calendarId, reason ?? undefined);
+      return calendarsApi.newVersion(calendarId!, reason ?? undefined);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
@@ -44,7 +44,7 @@ export function CalendarGrid({ calendarId, onBack }: Props) {
     mutationFn: ({ date, areaId }: { date: string; areaId: string }) => {
       const doctorId = window.prompt(`Asignar médico — ${date} / ${areaId}\n\nID del médico:`);
       if (!doctorId) return Promise.reject(new Error("cancelled"));
-      return calendarsApi.assignDoctor(calendarId, data!.version.id, {
+      return calendarsApi.assignDoctor(calendarId!, data!.version.id, {
         service_date: date,
         service_area_id: areaId,
         doctor_id: doctorId.trim(),
@@ -59,12 +59,12 @@ export function CalendarGrid({ calendarId, onBack }: Props) {
 
   const removeMutation = useMutation({
     mutationFn: ({ assignmentId }: { assignmentId: string }) =>
-      calendarsApi.removeAssignment(calendarId, data!.version.id, assignmentId),
+      calendarsApi.removeAssignment(calendarId!, data!.version.id, assignmentId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] }),
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => calendarsApi.generate(calendarId),
+    mutationFn: () => calendarsApi.generate(calendarId!),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
       setGenerateError(null);
@@ -76,6 +76,7 @@ export function CalendarGrid({ calendarId, onBack }: Props) {
     },
   });
 
+  if (!calendarId) return null;
   if (isLoading) return <p style={{ padding: "1rem" }}>Cargando grilla…</p>;
   if (error || !data) return <p style={{ padding: "1rem", color: "#c00" }}>Error al cargar el calendario.</p>;
 

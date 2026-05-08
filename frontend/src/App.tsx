@@ -1,251 +1,134 @@
-import { BarChart2, Bell, CalendarDays, ClipboardList, KeyRound, LogIn, MessageCircle, ShieldCheck, Stethoscope, LogOut, Target, Upload } from "lucide-react";
+import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { FormEvent, useState } from "react";
-import { login, changePassword, UserRead } from "./api/auth";
-import { DoctorList } from "./features/doctors/DoctorList";
-import { AuditLog } from "./features/audit/AuditLog";
-import { DoctorForm } from "./features/doctors/DoctorForm";
-import { CalendarList } from "./features/calendars/CalendarList";
+import { KeyRound, LogIn, ShieldCheck } from "lucide-react";
+import { useAuth } from "./context/AuthContext";
+import { changePassword } from "./api/auth";
+import { setToken } from "./api/client";
+import { Sidebar } from "./components/Sidebar";
+import { AuthGuard } from "./components/AuthGuard";
+import { DashboardView } from "./features/dashboard/DashboardView";
+import { DoctorsPage } from "./features/doctors/DoctorsPage";
+import { CalendarsPage } from "./features/calendars/CalendarsPage";
 import { CalendarGrid } from "./features/calendars/CalendarGrid";
 import { MissionView } from "./features/missions/MissionView";
+import { ReportsView } from "./features/reports/ReportsView";
+import { ImportView } from "./features/import/ImportView";
 import { NotificationLog } from "./features/notifications/NotificationLog";
 import { TelegramLinks } from "./features/telegram/TelegramLinks";
-import { ImportView } from "./features/import/ImportView";
-import { ReportsView } from "./features/reports/ReportsView";
-import { DoctorRead } from "./api/doctors";
-import { setToken } from "./api/client";
-import "./styles.css";
-
-type View = "login" | "change-password" | "dashboard" | "doctors" | "audit" | "calendars" | "missions" | "notifications" | "telegram" | "import" | "reports";
+import { AuditLog } from "./features/audit/AuditLog";
 
 export function App() {
-  const [view, setView] = useState<View>("login");
-  const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<AuthGuard />}>
+        <Route element={<AppShell />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardView />} />
+          <Route path="/calendars" element={<CalendarsPage />} />
+          <Route path="/calendars/:calendarId" element={<CalendarGrid />} />
+          <Route path="/doctors" element={<DoctorsPage />} />
+          <Route path="/missions" element={<MissionView />} />
+          <Route path="/reports" element={<ReportsView />} />
+          <Route path="/import" element={<ImportView />} />
+          <Route path="/notifications" element={<NotificationLog />} />
+          <Route path="/telegram" element={<TelegramLinks />} />
+          <Route path="/audit" element={<AuditLog />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+}
+
+function AppShell() {
+  return (
+    <div className="app-layout">
+      <Sidebar />
+      <main className="main-content">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+
+function LoginPage() {
+  const { login, currentUser, setCurrentUser } = useAuth();
+  const navigate = useNavigate();
+  const [step, setStep] = useState<"login" | "change-password">("login");
   const [email, setEmail] = useState("admin@turnos.com");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [message, setMessage] = useState("Ingresa con tu usuario asignado.");
   const [isLoading, setIsLoading] = useState(false);
-  const [editingDoctor, setEditingDoctor] = useState<DoctorRead | undefined>(undefined);
-  const [showDoctorForm, setShowDoctorForm] = useState(false);
-  const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(null);
 
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  if (currentUser && !currentUser.must_change_password && step === "login") {
+    navigate("/dashboard", { replace: true });
+    return null;
+  }
+
+  async function handleLogin(e: FormEvent) {
+    e.preventDefault();
     setIsLoading(true);
     try {
-      const res = await login(email, password);
-      setCurrentUser(res.user);
-      if (res.user.must_change_password) {
-        setMessage("Por seguridad debes cambiar la contrasena temporal.");
-        setView("change-password");
+      const user = await login(email, password);
+      if (user.must_change_password) {
+        setMessage("Por seguridad debes cambiar la contraseña temporal.");
+        setStep("change-password");
       } else {
-        setMessage("Acceso habilitado.");
-        setView("dashboard");
+        navigate("/dashboard", { replace: true });
       }
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Error al iniciar sesion.");
+      setMessage(err instanceof Error ? err.message : "Error al iniciar sesión.");
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handlePasswordChange(e: FormEvent) {
+    e.preventDefault();
     if (newPassword.length < 10) {
-      setMessage("La nueva contrasena debe tener al menos 10 caracteres.");
+      setMessage("La nueva contraseña debe tener al menos 10 caracteres.");
       return;
     }
     setIsLoading(true);
     try {
       const user = await changePassword(password, newPassword);
+      setToken(null);
       setCurrentUser(user);
-      setMessage("Acceso habilitado.");
-      setView("dashboard");
+      navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Error al cambiar contrasena.");
+      setMessage(err instanceof Error ? err.message : "Error al cambiar contraseña.");
     } finally {
       setIsLoading(false);
     }
   }
 
-  function handleLogout() {
-    setToken(null);
-    setCurrentUser(null);
-    setEmail("admin@turnos.com");
-    setPassword("");
-    setNewPassword("");
-    setMessage("Ingresa con tu usuario asignado.");
-    setView("login");
-  }
-
-  const isOperational = view === "dashboard" || view === "doctors" || view === "audit" || view === "calendars" || view === "missions" || view === "notifications" || view === "telegram" || view === "import" || view === "reports";
-
   return (
-    <main className={isOperational ? "app-shell app-wide" : "app-shell"}>
-      <section className={isOperational ? "op-panel" : "auth-panel"} aria-labelledby="app-title">
+    <main className="app-shell">
+      <section className="auth-panel" aria-labelledby="app-title">
         <header className="auth-header">
-          <div className="status-icon">
-            <ShieldCheck size={28} />
-          </div>
-          <div style={{ flex: 1 }}>
+          <div className="status-icon"><ShieldCheck size={28} /></div>
+          <div>
             <p className="eyebrow">Panel operativo</p>
-            <h1 id="app-title">Sistema de turnos medicos</h1>
-            {!isOperational && <p className="summary">{message}</p>}
+            <h1 id="app-title">Sistema de turnos médicos</h1>
+            <p className="summary">{message}</p>
           </div>
-          {isOperational && (
-            <div className="top-nav">
-              <span className="user-name">{currentUser?.name}</span>
-              <button className="btn-ghost" onClick={handleLogout}>
-                <LogOut size={16} /> Salir
-              </button>
-            </div>
-          )}
         </header>
 
-        {isOperational && (
-          <nav className="op-nav">
-            <button
-              className={view === "dashboard" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("dashboard")}
-            >
-              <ShieldCheck size={16} /> Panel
-            </button>
-            <button
-              className={view === "doctors" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("doctors")}
-            >
-              <Stethoscope size={16} /> Medicos
-            </button>
-            <button
-              className={view === "audit" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("audit")}
-            >
-              <ClipboardList size={16} /> Auditoría
-            </button>
-            <button
-              className={view === "calendars" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => { setSelectedCalendarId(null); setView("calendars"); }}
-            >
-              <CalendarDays size={16} /> Calendarios
-            </button>
-            <button
-              className={view === "missions" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("missions")}
-            >
-              <Target size={16} /> Misiones
-            </button>
-            <button
-              className={view === "notifications" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("notifications")}
-            >
-              <Bell size={16} /> Notificaciones
-            </button>
-            <button
-              className={view === "telegram" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("telegram")}
-            >
-              <MessageCircle size={16} /> Telegram
-            </button>
-            <button
-              className={view === "import" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("import")}
-            >
-              <Upload size={16} /> Importar
-            </button>
-            <button
-              className={view === "reports" ? "nav-btn nav-active" : "nav-btn"}
-              onClick={() => setView("reports")}
-            >
-              <BarChart2 size={16} /> Reportes
-            </button>
-          </nav>
-        )}
-
-        {view === "login" && (
+        {step === "login" && (
           <form className="auth-form" onSubmit={handleLogin}>
-            <label>
-              Correo
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" />
-            </label>
-            <label>
-              Contrasena
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
-            </label>
-            <button type="submit" disabled={isLoading}>
-              <LogIn size={18} /> {isLoading ? "Entrando…" : "Entrar"}
-            </button>
+            <label>Correo<input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" /></label>
+            <label>Contraseña<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /></label>
+            <button type="submit" disabled={isLoading}><LogIn size={18} />{isLoading ? "Entrando…" : "Entrar"}</button>
           </form>
         )}
 
-        {view === "change-password" && (
+        {step === "change-password" && (
           <form className="auth-form" onSubmit={handlePasswordChange}>
-            <label>
-              Nueva contrasena
-              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" />
-            </label>
-            <button type="submit" disabled={isLoading}>
-              <KeyRound size={18} /> {isLoading ? "Cambiando…" : "Cambiar contrasena"}
-            </button>
+            <label>Nueva contraseña<input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" /></label>
+            <button type="submit" disabled={isLoading}><KeyRound size={18} />{isLoading ? "Cambiando…" : "Cambiar contraseña"}</button>
           </form>
-        )}
-
-        {view === "dashboard" && (
-          <div className="dashboard-preview">
-            <div className="ready-state">
-              <ShieldCheck size={22} />
-              <span>Usuario listo para operar el panel.</span>
-            </div>
-            <div className="catalog-grid">
-              {[
-                { title: "Areas MVP", value: "Emergencia, Pista, Disponible", detail: "Un medico por area cada dia." },
-                { title: "Causas de bloqueo", value: "8 iniciales", detail: "Incluye licencia, embarazo, no realiza servicio y otro." },
-                { title: "Configuracion", value: "Dia 27", detail: "Generacion mensual configurable." },
-              ].map(card => (
-                <article className="catalog-card" key={card.title}>
-                  <h2>{card.title}</h2>
-                  <strong>{card.value}</strong>
-                  <p>{card.detail}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {view === "doctors" && (
-          <DoctorList
-            onAdd={() => { setEditingDoctor(undefined); setShowDoctorForm(true); }}
-            onEdit={doc => { setEditingDoctor(doc); setShowDoctorForm(true); }}
-          />
-        )}
-
-        {view === "audit" && <AuditLog />}
-
-        {view === "calendars" && !selectedCalendarId && (
-          <CalendarList onSelect={id => setSelectedCalendarId(id)} />
-        )}
-
-        {view === "calendars" && selectedCalendarId && (
-          <CalendarGrid
-            calendarId={selectedCalendarId}
-            onBack={() => setSelectedCalendarId(null)}
-          />
-        )}
-
-        {view === "missions" && <MissionView />}
-
-        {view === "notifications" && <NotificationLog />}
-
-        {view === "telegram" && <TelegramLinks />}
-
-        {view === "import" && <ImportView />}
-
-        {view === "reports" && <ReportsView />}
-
-        {showDoctorForm && (
-          <DoctorForm
-            doctor={editingDoctor}
-            onClose={() => { setShowDoctorForm(false); setEditingDoctor(undefined); }}
-          />
         )}
       </section>
     </main>
