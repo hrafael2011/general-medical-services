@@ -251,6 +251,10 @@ _EXPORT_FILENAME_MAP = {
     "count_doctors_total": "TOTAL_MEDICOS.pdf",
     "doctor_history_60d": "HISTORIAL_MEDICO.pdf",
     "count_doctors_by_department": "MEDICOS_POR_DEPARTAMENTO.pdf",
+    "count_by_specific_sex": "MEDICOS_POR_SEXO.pdf",
+    "doctor_history_by_name": "HISTORIAL_MEDICO.pdf",
+    "assignments_by_area": "SERVICIOS_POR_AREA.pdf",
+    "unresolved_gaps_month": "HUECOS_POR_MES.pdf",
 }
 
 _COLUMN_TITLE_MAP: dict[str, str] = {
@@ -332,6 +336,10 @@ def _build_pdf_from_rows(
         "count_doctors_total": "TOTAL DE MÉDICOS",
         "doctor_history_60d": "HISTORIAL DE SERVICIOS (60 DÍAS)",
         "count_doctors_by_department": "MÉDICOS POR DEPARTAMENTO",
+        "count_by_specific_sex": "MÉDICOS POR SEXO",
+        "doctor_history_by_name": "HISTORIAL DE SERVICIOS (60 DÍAS)",
+        "assignments_by_area": "SERVICIOS POR ÁREA",
+        "unresolved_gaps_month": "HUECOS SIN ASIGNAR POR MES",
     }
 
     title = title_map.get(query_type, f"REPORTE - {query_type.upper()}")

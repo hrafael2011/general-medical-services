@@ -376,3 +376,32 @@ def test_memory_failure_is_handled_gracefully(db_session) -> None:
 
     assert isinstance(result, AgentResult)
     assert result.response_text is not None
+
+
+# ---------------------------------------------------------------------------
+# M5: Export format tests
+# ---------------------------------------------------------------------------
+
+
+def test_export_excel_format_reaches_router(db_session) -> None:
+    """Cuando el LLM devuelve format=excel, el router recibe ese format."""
+    router = RouterStub()
+    llm = FakeLLMProvider(responses={
+        "excel": '{"action": "export", "query_type": "list_active_doctors", "params": {}, "format": "excel"}',
+    })
+    agent = _make_agent(llm=llm, router=router)
+    agent.process(text="dame un excel de los médicos activos")
+    assert router.last_handle_args is not None
+    assert router.last_handle_args.get("format") == "excel"
+
+
+def test_export_pdf_is_default_format(db_session) -> None:
+    """Cuando el LLM no especifica format, el router lo recibe como None (PDF default)."""
+    router = RouterStub()
+    llm = FakeLLMProvider(responses={
+        "pdf": '{"action": "export", "query_type": "list_active_doctors", "params": {}}',
+    })
+    agent = _make_agent(llm=llm, router=router)
+    agent.process(text="exporta médicos activos")
+    assert router.last_handle_args is not None
+    assert router.last_handle_args.get("format") is None

@@ -111,7 +111,13 @@ DEFAULT_QUERY_TYPES = [
         "query_type": "count_by_rank",
         "sql_template": "SELECT r.name AS rank, COUNT(*) AS total FROM doctors d JOIN ranks r ON d.rank_id = r.id WHERE d.active = TRUE AND d.service_active = TRUE GROUP BY r.name ORDER BY total DESC",
         "params_schema": {},
-        "description": "Cuantos medicos hay por rango.",
+        "description": "Cuantos medicos hay por cada rango (todos los rangos). Usar cuando no se especifica un rango en particular.",
+    },
+    {
+        "query_type": "count_by_specific_rank",
+        "sql_template": "SELECT r.name AS rank, COUNT(*) AS total FROM doctors d JOIN ranks r ON d.rank_id = r.id WHERE d.active = TRUE AND d.service_active = TRUE AND LOWER(r.normalized_name) = LOWER(:rank) GROUP BY r.name",
+        "params_schema": {"rank": "str"},
+        "description": "Cuenta cuantos medicos hay de un rango especifico. Usar cuando preguntan 'cuantos [rango] hay/tengo'.",
     },
     {
         "query_type": "doctors_by_rank",
@@ -178,5 +184,29 @@ DEFAULT_QUERY_TYPES = [
         "sql_template": "SELECT d.name AS department, COUNT(*) AS total FROM doctors doc JOIN departments d ON doc.department_id = d.id WHERE doc.active = TRUE AND doc.service_active = TRUE GROUP BY d.name ORDER BY total DESC",
         "params_schema": {},
         "description": "Cuantos medicos hay por departamento.",
+    },
+    {
+        "query_type": "count_by_specific_sex",
+        "sql_template": "SELECT COUNT(*) AS total FROM doctors WHERE sex = :sex AND active = TRUE AND service_active = TRUE",
+        "params_schema": {"sex": "str"},
+        "description": "Cuenta cuantos medicos hay de un sexo especifico. Usar cuando preguntan 'cuantos [hombres|mujeres|varones] hay/tengo'.",
+    },
+    {
+        "query_type": "doctor_history_by_name",
+        "sql_template": "SELECT ca.service_date, sa.display_name AS area, ca.assignment_source FROM calendar_assignments ca JOIN service_areas sa ON ca.service_area_id = sa.id JOIN doctors d ON ca.doctor_id = d.id WHERE d.name ILIKE :search AND ca.service_date >= CURRENT_DATE - INTERVAL '60 days' ORDER BY ca.service_date DESC",
+        "params_schema": {"search": "str"},
+        "description": "Historial de servicios de un medico en los ultimos 60 dias, buscando por nombre en vez de UUID.",
+    },
+    {
+        "query_type": "assignments_by_area",
+        "sql_template": "SELECT d.name AS doctor_name, ca.service_date, sa.display_name AS area FROM calendar_assignments ca JOIN doctors d ON ca.doctor_id = d.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE sa.code ILIKE :area_code AND ca.service_date BETWEEN :start_date AND :end_date ORDER BY ca.service_date, d.name",
+        "params_schema": {"area_code": "str", "start_date": "date", "end_date": "date"},
+        "description": "Asignaciones en un area especifica durante un rango de fechas.",
+    },
+    {
+        "query_type": "unresolved_gaps_month",
+        "sql_template": "SELECT ug.service_date, sa.display_name AS area, ug.reason FROM unresolved_gaps ug JOIN service_areas sa ON ug.service_area_id = sa.id WHERE ug.year = :year AND ug.month = :month ORDER BY ug.service_date",
+        "params_schema": {"year": "int", "month": "int"},
+        "description": "Huecos sin medico asignado en un mes y ano especifico.",
     },
 ]

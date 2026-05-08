@@ -37,12 +37,17 @@ ACCIONES:
 - reply: Responder directamente (saludos, conversacion general, preguntas fuera del sistema).
 - ambiguous: Cuando la consulta no esta clara o falta informacion necesaria.
 
+FORMATO DE EXPORT:
+- Incluye "format": "excel" cuando el usuario pide especificamente Excel, XLSX u hoja de calculo.
+- Incluye "format": "pdf" cuando pide PDF o no especifica formato.
+- Si pide "reporte" sin formato, no incluyas el campo format (se usa PDF por defecto).
+
 VALORES EXACTOS de columnas (usa estos siempre):
 - doctors.sex usa 'male' (masculino) y 'female' (femenino)
 - ranks.normalized_name usa valores en minusculas: 'cabo', 'contrata', 'pasante', 'sargento', 'sargento mayor'
 
 Responde UNICAMENTE con JSON en este formato:
-{{"action": "query|export|reply|ambiguous", "query_type": "nombre_consulta", "params": {{...}}, "response_text": "..."}}
+{{"action": "query|export|reply|ambiguous", "query_type": "nombre_consulta", "params": {{...}}, "response_text": "...", "format": "pdf|excel"}}
 
 REGLAS:
 - Para query/export: elige el query_type mas adecuado de CONSULTAS DISPONIBLES.

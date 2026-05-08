@@ -409,3 +409,41 @@ def test_router_ambiguous_falls_back_to_default() -> None:
     )
 
     assert "específico" in result.response_text.lower()
+
+
+# ---------------------------------------------------------------------------
+# M5: All required query types are registered
+# ---------------------------------------------------------------------------
+
+
+_REQUIRED_QUERY_TYPES = [
+    "count_doctors_total",
+    "count_by_sex",
+    "doctors_by_sex",
+    "count_by_rank",
+    "count_by_specific_rank",
+    "doctors_by_rank",
+    "list_active_doctors",
+    "doctor_detail",
+    "doctors_pending_availability",
+    "calendar_status_month",
+    "doctors_working_date",
+    "assignment_count_by_date_range",
+    "mission_ranking",
+    "operational_summary",
+    "doctor_history_60d",
+    "count_doctors_by_department",
+    "count_by_specific_sex",
+    "doctor_history_by_name",
+    "assignments_by_area",
+    "unresolved_gaps_month",
+]
+
+
+def test_all_required_query_types_are_registered() -> None:
+    """Todos los query_types esperados estan registrados al iniciar IntentRouter."""
+    router = IntentRouter()
+    for qt in _REQUIRED_QUERY_TYPES:
+        entry = router.registry.get(qt)
+        assert entry is not None, f"Falta query_type: {qt}"
+        assert entry["sql_template"], f"sql_template vacio para {qt}"
