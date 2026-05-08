@@ -5,15 +5,21 @@ Reads from existing repos; no writes to DB.
 import io
 from datetime import UTC, date, datetime
 
+from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.missions import MissionRepository
+from backend.app.infrastructure.repositories.notifications import NotificationRepository
+
 
 class ReportService:
     def __init__(
         self,
-        calendar_repo,        # CalendarRepository
-        notification_repo,    # NotificationRepository
-        doctor_repo,          # DoctorRepository
-        mission_repo=None,    # MissionRepository (opcional, para PDF ranking)
-        catalog_repo=None,    # CatalogRepository (opcional, para firmas PDF)
+        calendar_repo: CalendarRepository,
+        notification_repo: NotificationRepository,
+        doctor_repo: DoctorRepository,
+        mission_repo: MissionRepository | None = None,
+        catalog_repo: CatalogRepository | None = None,
     ) -> None:
         self.calendar_repo = calendar_repo
         self.notification_repo = notification_repo
