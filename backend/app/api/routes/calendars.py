@@ -93,11 +93,14 @@ def get_generation_service(
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.missions import MissionRepository
 
     return GenerationService(
         CalendarRepository(session),
         DoctorRepository(session),
         AvailabilityRepository(session),
+        MissionRepository(session),
+        CatalogRepository(session),
         audit=AuditService(AuditRepository(session)),
     )
 

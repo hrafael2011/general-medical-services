@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
@@ -14,8 +15,11 @@ from backend.app.infrastructure.repositories.availability import AvailabilityRep
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.missions import MissionRepository
 
 REQUIRED_AREA_CODES = ["emergencia", "pista", "disponible"]
+
+logger = logging.getLogger(__name__)
 
 
 class _AreaMapper:
@@ -48,11 +52,15 @@ class GenerationService:
         calendar_repo: CalendarRepository,
         doctor_repo: DoctorRepository,
         availability_repo: AvailabilityRepository,
+        mission_repo: MissionRepository,
+        catalog_repo: CatalogRepository,
         audit: AuditService | None = None,
     ) -> None:
         self.calendar_repo = calendar_repo
         self.doctor_repo = doctor_repo
         self.availability_repo = availability_repo
+        self.mission_repo = mission_repo
+        self.catalog_repo = catalog_repo
         self.audit = audit
 
     def generate(self, *, actor_id: str, calendar_id: str) -> GenerationSummary:
@@ -113,6 +121,16 @@ class GenerationService:
             for a in historical
         ]
 
+        # Load 60-day confirmed missions for spacing rules
+        confirmed_missions = self.mission_repo.list_confirmed_in_range(history_start, history_end)
+        mission_assignments_raw: list[dict] = []
+        for _mission, participants in confirmed_missions:
+            for p in participants:
+                mission_assignments_raw.append({
+                    "doctor_id": p.doctor_id,
+                    "mission_date": _mission.mission_date,
+                })
+
         ctx = GenerationContext(
             year=calendar.year,
             month=calendar.month,
@@ -122,9 +140,11 @@ class GenerationService:
             restrictions=restrictions,
             existing_assignments=existing_dicts,
             historical_assignments=historical_dicts,
-            mission_assignments=[],
+            mission_assignments=mission_assignments_raw,
             required_areas=REQUIRED_AREA_CODES,
             area_weights=AREA_WEIGHTS,
+            monthly_service_targets={d.id: d.monthly_service_target for d in doctors},
+            monthly_service_maxes={d.id: d.monthly_service_max for d in doctors},
         )
 
         engine = CalendarEngine()
@@ -181,5 +201,25 @@ class GenerationService:
                     "gaps": summary_raw.gap_count,
                 },
             )
+
+        # Auto-generate mission candidate ranking for the period
+        try:
+            from backend.app.application.missions.ranking_service import MissionRankingService
+
+            ranking_service = MissionRankingService(
+                mission_repo=self.mission_repo,
+                doctor_repo=self.doctor_repo,
+                calendar_repo=self.calendar_repo,
+                catalog_repo=self.catalog_repo,
+                audit=self.audit,
+            )
+            ranking_service.generate_ranking(
+                actor_id=actor_id,
+                year=calendar.year,
+                month=calendar.month,
+                calendar_version_id=version.id,
+            )
+        except Exception:
+            logger.warning("Failed to auto-generate mission ranking", exc_info=True)
 
         return summary_raw
