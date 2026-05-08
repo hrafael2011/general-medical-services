@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_ready_user
 from backend.app.application.calendars.assignment_service import AssignmentService
+from backend.app.core.config import settings
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.application.calendars.service import CalendarService
@@ -62,11 +63,26 @@ def get_calendar_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarService:
     from backend.app.application.audit.service import AuditService
+    from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
+    from backend.app.application.notifications.service import NotificationService
+    from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.audit import AuditRepository
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.notifications import NotificationRepository
+
+    provider = TwilioProvider() if settings.twilio_account_sid else FakeProvider()
+    triggers = NotificationTriggers(
+        notification_service=NotificationService(
+            repo=NotificationRepository(session),
+            provider=provider,
+        ),
+        doctor_repo=DoctorRepository(session),
+    )
 
     return CalendarService(
         CalendarRepository(session),
         audit=AuditService(AuditRepository(session)),
+        triggers=triggers,
     )
 
 

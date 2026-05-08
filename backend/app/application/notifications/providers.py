@@ -1,4 +1,7 @@
+import logging
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationProvider(Protocol):
@@ -23,6 +26,7 @@ class FakeProvider:
         import uuid
 
         msg_id = f"fake-{uuid.uuid4().hex[:8]}"
+        logger.info("FakeProvider sent to %s: %s", phone, msg_id)
         self.sent.append({"phone": phone, "message": message, "id": msg_id})
         return msg_id
 
@@ -33,11 +37,11 @@ class TwilioProvider:
     name = "twilio"
 
     def __init__(self) -> None:
-        import os
+        from backend.app.core.config import settings
 
-        self.account_sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
-        self.auth_token = os.environ.get("TWILIO_AUTH_TOKEN", "")
-        self.from_number = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+        self.account_sid = settings.twilio_account_sid or ""
+        self.auth_token = settings.twilio_auth_token or ""
+        self.from_number = settings.twilio_whatsapp_from
 
     def send(self, phone: str, message: str) -> str:
         try:
@@ -49,6 +53,21 @@ class TwilioProvider:
                 to=f"whatsapp:{phone}",
                 body=message,
             )
+            logger.info("Twilio message sent: %s to %s", msg.sid, phone)
             return msg.sid
         except Exception as exc:
-            raise Exception(str(exc)) from exc
+            error_code = None
+            # Try to extract Twilio-specific error code
+            if hasattr(exc, "code"):
+                error_code = str(exc.code)
+            elif hasattr(exc, "status"):
+                error_code = str(exc.status)
+
+            logger.warning(
+                "Twilio send failed (code=%s): %s", error_code, exc,
+                exc_info=True,
+            )
+
+            # Re-raise with error_code attached for the caller to store
+            exc.error_code = error_code  # type: ignore[attr-defined]
+            raise

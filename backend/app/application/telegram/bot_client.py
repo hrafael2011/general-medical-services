@@ -2,9 +2,9 @@ class TelegramBotClient:
     """Sends messages and documents via Telegram Bot API."""
 
     def __init__(self) -> None:
-        import os
+        from backend.app.core.config import settings
 
-        self.token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        self.token = settings.telegram_bot_token or ""
         self.base_url = f"https://api.telegram.org/bot{self.token}"
 
     def send_message(self, chat_id: int | str, text: str) -> bool:

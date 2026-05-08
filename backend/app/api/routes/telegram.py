@@ -32,7 +32,6 @@ router = APIRouter(prefix="/telegram", tags=["telegram"])
 
 logger = logging.getLogger(__name__)
 
-UTC = UTC
 
 
 # ---------------------------------------------------------------------------
@@ -59,9 +58,9 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     from backend.app.infrastructure.repositories.telegram import TelegramRepository
     from backend.app.infrastructure.repositories.users import UserRepository
 
-    use_real = os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("DEEPSEEK_API_KEY")
+    use_real = settings.telegram_bot_token and settings.deepseek_api_key
     llm = DeepSeekProvider() if use_real else FakeLLMProvider()
-    bot = TelegramBotClient() if os.environ.get("TELEGRAM_BOT_TOKEN") else FakeBotClient()
+    bot = TelegramBotClient() if settings.telegram_bot_token else FakeBotClient()
 
     query_executor = QueryExecutor(session, llm) if use_real else None
     report_service = ReportService(
