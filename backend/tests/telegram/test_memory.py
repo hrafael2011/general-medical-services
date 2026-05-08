@@ -106,3 +106,113 @@ def test_load_history_ignores_other_users(db_session) -> None:
 
     assert len(history_a) == 2
     assert history_a[0]["content"] == "A habla"
+
+
+# ---------------------------------------------------------------------------
+# SessionStore tests
+# ---------------------------------------------------------------------------
+
+
+import time
+from backend.app.application.telegram.memory import SessionStore, SessionState
+
+
+def test_session_store_set_and_get() -> None:
+    """SessionStore guarda y recupera estado por telegram_user_id."""
+    store = SessionStore(ttl_seconds=3600)
+    state = SessionState(
+        last_query_type="count_doctors_total",
+        last_params={},
+        last_results=[{"name": "Dr. Test"}],
+    )
+    store.set("tg-abc", state)
+    retrieved = store.get("tg-abc")
+    assert retrieved is not None
+    assert retrieved.last_query_type == "count_doctors_total"
+    assert retrieved.last_results == [{"name": "Dr. Test"}]
+
+
+def test_session_store_get_nonexistent() -> None:
+    """Usuario sin sesión → None."""
+    store = SessionStore()
+    assert store.get("tg-ghost") is None
+
+
+def test_session_store_ttl_expiry() -> None:
+    """Sesión expirada → None."""
+    store = SessionStore(ttl_seconds=0)  # expire immediately
+    state = SessionState(last_query_type="q")
+    store.set("tg-xyz", state)
+    time.sleep(0.01)  # let TTL pass
+    assert store.get("tg-xyz") is None
+
+
+def test_session_store_overwrite() -> None:
+    """Segundo set() sobreescribe el estado anterior."""
+    store = SessionStore()
+    s1 = SessionState(last_query_type="q1")
+    s2 = SessionState(last_query_type="q2")
+    store.set("tg-a", s1)
+    store.set("tg-a", s2)
+    assert store.get("tg-a").last_query_type == "q2"
+
+
+def test_session_store_clear_user() -> None:
+    """clear() elimina la sesión de un usuario."""
+    store = SessionStore()
+    store.set("tg-b", SessionState(last_query_type="q"))
+    store.clear("tg-b")
+    assert store.get("tg-b") is None
+
+
+def test_session_store_cleanup_expired() -> None:
+    """cleanup_expired() elimina sesiones expiradas."""
+    store = SessionStore(ttl_seconds=0)
+    store.set("tg-old", SessionState(last_query_type="q"))
+    time.sleep(0.01)
+    store.cleanup_expired()
+    assert store.get("tg-old") is None
+
+
+# ---------------------------------------------------------------------------
+# MemoryManager filtering tests
+# ---------------------------------------------------------------------------
+
+
+def test_memory_load_history_filters_formatted_responses(db_session) -> None:
+    """Respuestas formateadas ('Se encontraron...') son reemplazadas con resumen estructurado."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, UTC
+
+    from backend.app.infrastructure.db.models.telegram import TelegramInteractionModel
+
+    tg_id = f"tg-{_uuid.uuid4().hex[:8]}"
+    interaction = TelegramInteractionModel(
+        id=str(_uuid.uuid4()),
+        telegram_user_id=tg_id,
+        matched_user_id=None,
+        user_role=None,
+        intent_id="test",
+        input_text="cuántos médicos hay",
+        extracted_entities=None,
+        intent_confidence=None,
+        tool_name="count_doctors_total",
+        tool_request=None,
+        tool_response=None,
+        response_text="Se encontraron 15 resultados:\n1. Dr. A\n2. Dr. B",
+        cache_status=None,
+        fallback_reason=None,
+        status="completed",
+        created_at=_dt.now(UTC),
+    )
+    db_session.add(interaction)
+    db_session.flush()
+
+    memory = MemoryManager(TelegramRepository(db_session))
+    history = memory.load_history(tg_id)
+
+    # The formatted response should be replaced with structured summary
+    for msg in history:
+        if msg["role"] == "assistant":
+            assert not msg["content"].startswith("Se encontraron")
+            assert "Acción ejecutada" in msg["content"]

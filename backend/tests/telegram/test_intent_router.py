@@ -376,3 +376,36 @@ def test_registry_duplicate_registration_does_not_overwrite() -> None:
 
     entry = registry.get("dup")
     assert "original" in entry["sql_template"].lower()
+
+
+# ---------------------------------------------------------------------------
+# _handle_ambiguous with response_text
+# ---------------------------------------------------------------------------
+
+
+def test_router_ambiguous_uses_llm_response_text() -> None:
+    """Cuando el LLM envía response_text, se usa en vez del default."""
+    router = IntentRouter()
+    result = router.handle(
+        action="ambiguous",
+        query_type=None,
+        params={},
+        user_message="asigna a Pérez",
+        response_text="¿En qué área querés asignar a Pérez: Emergencia o Pista?",
+    )
+
+    assert "Emergencia" in result.response_text
+    assert "Pista" in result.response_text
+
+
+def test_router_ambiguous_falls_back_to_default() -> None:
+    """Sin response_text del LLM, usa el mensaje default."""
+    router = IntentRouter()
+    result = router.handle(
+        action="ambiguous",
+        query_type=None,
+        params={},
+        user_message="no sé",
+    )
+
+    assert "específico" in result.response_text.lower()

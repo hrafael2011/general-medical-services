@@ -106,8 +106,9 @@ class IntentRouter:
         self,
         **kwargs: Any,
     ) -> AgentResult:
-        """Ask for clarification."""
-        return AgentResult(response_text=_DEFAULT_AMBIGUOUS)
+        """Ask for clarification, using LLM-provided text if available."""
+        text = kwargs.get("response_text") or _DEFAULT_AMBIGUOUS
+        return AgentResult(response_text=text)
 
     def _handle_query(
         self,
@@ -237,6 +238,7 @@ _EXPORT_FILENAME_MAP = {
     "list_active_doctors": "LISTADO_MEDICOS_ACTIVOS.pdf",
     "count_by_sex": "MEDICOS_POR_SEXO.pdf",
     "count_by_rank": "MEDICOS_POR_RANGO.pdf",
+    "count_by_specific_rank": "MEDICOS_POR_RANGO.pdf",
     "doctors_by_sex": "MEDICOS_POR_SEXO.pdf",
     "doctors_by_rank": "MEDICOS_POR_RANGO.pdf",
     "doctor_detail": "DETALLE_MEDICO.pdf",
@@ -317,6 +319,7 @@ def _build_pdf_from_rows(
         "list_active_doctors": "LISTADO DE MÉDICOS ACTIVOS",
         "count_by_sex": "MÉDICOS POR SEXO",
         "count_by_rank": "MÉDICOS POR RANGO",
+        "count_by_specific_rank": "MÉDICOS POR RANGO",
         "doctors_by_sex": "LISTADO DE MÉDICOS POR SEXO",
         "doctors_by_rank": "LISTADO DE MÉDICOS POR RANGO",
         "doctor_detail": "DETALLE DE MÉDICO",
