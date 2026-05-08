@@ -23,7 +23,7 @@ function deriveAlerts(calendars: CalendarRead[]) {
     alerts.push({ severity: "info", icon: "ℹ️", title: "No hay calendario para este mes", actionLabel: "Crear", actionTo: "/calendars" });
   } else if (current.status === "approved") {
     alerts.push({ severity: "success", icon: "✅", title: `Calendario ${MONTHS[month - 1]} aprobado`, detail: "Cobertura activa para el mes en curso." });
-  } else {
+  } else if (current.status === "draft") {
     alerts.push({ severity: "warning", icon: "⚠️", title: `Calendario ${MONTHS[month - 1]} en borrador`, detail: "Pendiente de generación o aprobación.", actionLabel: "Ver", actionTo: `/calendars/${current.id}` });
   }
 

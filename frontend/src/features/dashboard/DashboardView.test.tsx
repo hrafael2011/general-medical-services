@@ -12,10 +12,6 @@ vi.mock("../../api/calendars", () => ({
   },
 }));
 
-const NOW = new Date();
-const YEAR = NOW.getFullYear();
-const MONTH = NOW.getMonth() + 1;
-
 vi.mock("../../api/doctors", () => ({
   doctorsApi: {
     list: vi.fn().mockResolvedValue({ items: [{ id: "d1", service_active: true }, { id: "d2", service_active: true }], total: 2 }),
@@ -42,7 +38,7 @@ describe("DashboardView", () => {
 
   it("muestra alerta de calendario aprobado", async () => {
     renderDashboard();
-    const matches = await screen.findAllByText(/aprobado/i);
-    expect(matches.length).toBeGreaterThan(0);
+    expect(await screen.findByText(/calendario .* aprobado/i)).toBeInTheDocument();
+    expect(screen.getByText("Aprobado")).toBeInTheDocument();
   });
 });
