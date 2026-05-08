@@ -10,7 +10,7 @@ from backend.app.infrastructure.db.models.telegram import (
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 from backend.app.infrastructure.repositories.users import UserRepository
 
-UTC = UTC
+
 
 _MSG_NOT_LINKED = (
     "No estás vinculado al sistema. "
@@ -128,6 +128,7 @@ class TelegramOrchestrator:
             text=text,
             telegram_user_id=telegram_user_id,
             user_info={"name": user.name, "role": user.role, "id": user.id},
+            actor_id=user.id,
         )
         response_text = result.response_text
 
@@ -236,6 +237,13 @@ class TelegramOrchestrator:
         )
         self._bot_client.send_message(chat_id, msg)
         return msg
+
+    def send_error(self, chat_id: int, message: str) -> None:
+        """Best-effort error notification to a Telegram chat. Never raises."""
+        try:
+            self._bot_client.send_message(chat_id, message)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Internal helper: log + send

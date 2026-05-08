@@ -153,14 +153,11 @@ def webhook(
         )
         # Try to notify the user that something went wrong
         if chat_id is not None:
-            try:
-                orchestrator._bot_client.send_message(
-                    chat_id,
-                    "Ocurrió un error al procesar tu mensaje. "
-                    "Intentá de nuevo en unos segundos.",
-                )
-            except Exception:
-                pass  # best-effort notification
+            orchestrator.send_error(
+                chat_id,
+                "Ocurrió un error al procesar tu mensaje. "
+                "Intentá de nuevo en unos segundos.",
+            )
 
     return {"ok": True}
 
