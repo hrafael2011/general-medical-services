@@ -628,7 +628,7 @@ select {
 .alert-card-title { font-weight: 700; font-size: 0.9rem; color: #172033; margin: 0 0 2px; }
 .alert-card-detail { font-size: 0.82rem; color: #64748b; margin: 0; }
 
-.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
 .kpi-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;

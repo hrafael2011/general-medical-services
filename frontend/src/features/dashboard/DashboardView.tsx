@@ -69,7 +69,6 @@ export function DashboardView() {
         <div className="kpi-grid">
           <KpiCard value={activeCount} label="Médicos activos" />
           <KpiCard value={currentCal ? (currentCal.status === "approved" ? "Aprobado" : "Borrador") : "Sin generar"} label="Estado del mes" />
-          <KpiCard value="—" label="Huecos sin resolver" />
         </div>
       </div>
     </div>

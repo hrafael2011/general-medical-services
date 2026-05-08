@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useCallback, useRef } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback, useRef, useEffect } from "react";
 import { CheckCircle2, XCircle, Info } from "lucide-react";
 
 type ToastType = "success" | "error" | "info";
@@ -22,11 +22,17 @@ const ICONS: Record<ToastType, typeof CheckCircle2> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counterRef = useRef(0);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => { timersRef.current.forEach(clearTimeout); };
+  }, []);
 
   const addToast = useCallback((type: ToastType, message: string) => {
     const id = ++counterRef.current;
     setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+    const timer = setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+    timersRef.current.push(timer);
   }, []);
 
   return (

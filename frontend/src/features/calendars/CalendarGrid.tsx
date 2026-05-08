@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarsApi, CalendarAssignmentRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead } from "../../api/doctors";
+import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
 import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
 import { useToast } from "../../components/Toast";
@@ -37,8 +38,17 @@ export function CalendarGrid() {
     enabled: !!calendarId,
   });
 
+  const { data: serviceAreasData } = useQuery({
+    queryKey: ["service-areas"],
+    queryFn: doctorsApi.listServiceAreas,
+    enabled: !!calendarId,
+  });
+
   const doctorMap: Record<string, DoctorRead> = {};
   for (const d of doctorsData?.items ?? []) doctorMap[d.id] = d;
+
+  const areaMap: Record<string, string> = {};
+  for (const a of (serviceAreasData ?? []) as ServiceAreaRead[]) areaMap[a.id] = a.display_name;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
 
@@ -153,7 +163,7 @@ export function CalendarGrid() {
           <tbody>
             {areas.map(areaId => (
               <tr key={areaId}>
-                <td style={{ padding: "6px 10px", borderBottom: "1px solid #f1f5f9", fontWeight: 600, whiteSpace: "nowrap" }}>{areaId}</td>
+                <td style={{ padding: "6px 10px", borderBottom: "1px solid #f1f5f9", fontWeight: 600, whiteSpace: "nowrap" }}>{areaMap[areaId] ?? areaId}</td>
                 {days.map(day => {
                   const slot = slotIndex.get(`${day}|${areaId}`);
                   const assignment = slot?.assignment ?? null;
@@ -167,9 +177,9 @@ export function CalendarGrid() {
                       onClick={() => {
                         if (!isDraft) return;
                         if (assignment) {
-                          setRemoveTarget({ assignment, areaName: areaId });
+                          setRemoveTarget({ assignment, areaName: areaMap[areaId] ?? areaId });
                         } else {
-                          setAssignTarget({ date: day, areaId, areaName: areaId });
+                          setAssignTarget({ date: day, areaId, areaName: areaMap[areaId] ?? areaId });
                         }
                       }}
                     >
