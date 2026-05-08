@@ -151,13 +151,7 @@ class ReportService:
 
     def generate_notifications_summary(self, year: int, month: int) -> dict:
         """Return a JSON-serialisable summary of notifications for a period."""
-        all_notifications = self.notification_repo.list_all(limit=5000)
-
-        # Filter by period
-        period_notifications = [
-            n for n in all_notifications
-            if n.created_at.year == year and n.created_at.month == month
-        ]
+        period_notifications = self.notification_repo.list_by_period(year, month)
 
         by_status: dict[str, int] = {"pending": 0, "sent": 0, "failed": 0, "skipped": 0}
         by_type: dict[str, int] = {}

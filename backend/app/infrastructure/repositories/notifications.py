@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from backend.app.infrastructure.db.models.notifications import (
 )
 
 MAX_RETRIES = 3
+BACKOFF_SECONDS = 60
 
 
 class NotificationRepository:
@@ -30,15 +31,35 @@ class NotificationRepository:
         )
         return self.session.scalars(stmt).first()
 
+    def list_by_period(self, year: int, month: int) -> list[NotificationEventModel]:
+        """Return all notifications created in the given calendar month."""
+        from calendar import monthrange
+        start = datetime(year, month, 1, tzinfo=UTC)
+        last_day = monthrange(year, month)[1]
+        end = datetime(year, month, last_day, 23, 59, 59, 999999, tzinfo=UTC)
+        stmt = (
+            select(NotificationEventModel)
+            .where(
+                NotificationEventModel.created_at >= start,
+                NotificationEventModel.created_at <= end,
+            )
+            .order_by(NotificationEventModel.created_at)
+        )
+        return list(self.session.scalars(stmt))
+
     def list_pending(self, limit: int = 50) -> list[NotificationEventModel]:
         """Return pending notifications scheduled for now or earlier."""
-        from datetime import UTC
         now = datetime.now(UTC)
+        cutoff = now - timedelta(seconds=BACKOFF_SECONDS)
         stmt = (
             select(NotificationEventModel)
             .where(
                 NotificationEventModel.status == "pending",
                 NotificationEventModel.retry_count < MAX_RETRIES,
+                (
+                    NotificationEventModel.last_retried_at.is_(None)
+                    | (NotificationEventModel.last_retried_at <= cutoff)
+                ),
                 (NotificationEventModel.scheduled_for.is_(None)) |
                 (NotificationEventModel.scheduled_for <= now),
             )
