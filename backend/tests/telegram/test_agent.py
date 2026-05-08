@@ -345,6 +345,23 @@ def test_router_not_found_triggers_fallback_to_no_results(db_session) -> None:
     assert "encontrar" in result.response_text.lower()
 
 
+def test_agent_uses_entity_hints_in_prompt(db_session) -> None:
+    """EntityResolver hints are included in the system prompt."""
+    from backend.app.application.telegram.entity_resolver import EntityResolver
+
+    llm = FakeLLMProvider(responses={
+        "Pérez": '{"action": "query", "query_type": "doctor_detail", "params": {"search": "Pérez"}}',
+    })
+    router = RouterStub()
+    resolver = EntityResolver(session=None)
+    agent = ConversationalAgent(llm=llm, router=router, entity_resolver=resolver)
+
+    agent.process(text="busca a Pérez")
+
+    assert llm.calls
+    call_text = " ".join(m.get("content", "") for m in llm.calls[-1].get("messages", []))
+
+
 def test_memory_failure_is_handled_gracefully(db_session) -> None:
     """Si memory.load_history() lanza excepción, el agente continúa sin history."""
 

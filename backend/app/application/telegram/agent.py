@@ -85,18 +85,20 @@ class ConversationalAgent:
         query_executor: QueryExecutor | None = None,
         tools: ToolGateway | None = None,
         memory: MemoryManager | None = None,
+        entity_resolver = None,
     ) -> None:
         self._llm = llm
         self._router = router
         self._query_executor = query_executor
         self._tools = tools
         self._memory = memory
+        self._entity_resolver = entity_resolver
 
     # ------------------------------------------------------------------
     # Prompt building
     # ------------------------------------------------------------------
 
-    def _build_system_prompt(self, user_info: dict | None = None) -> str:
+    def _build_system_prompt(self, user_info: dict | None = None, entity_hints: str = "") -> str:
         query_types_lines = []
         for entry in self._router.registry.list_all():
             params_str = (
@@ -111,6 +113,12 @@ class ConversationalAgent:
         prompt = _SYSTEM_PROMPT.format(
             query_types="\n".join(query_types_lines)
         )
+
+        if entity_hints:
+            prompt += (
+                f"\n\nENTIDADES DETECTADAS:\n{entity_hints}\n"
+                f"Usa estos IDs/valores reales para generar parametros, no los nombres textuales."
+            )
 
         if user_info:
             prompt += (
@@ -322,10 +330,28 @@ class ConversationalAgent:
                 logger.warning("Failed to load history for %s", telegram_user_id, exc_info=True)
                 history = []
 
-        # 2. Build prompt
-        system_prompt = self._build_system_prompt(user_info)
+        # 2. Pre-process entities
+        entity_hints = ""
+        ambiguous_entities: list[dict] = []
+        if self._entity_resolver is not None:
+            try:
+                pre = self._entity_resolver.pre_process(text)
+                entity_hints = pre.get("hints", "")
+                ambiguous_entities = pre.get("ambiguous", [])
+            except Exception:
+                logger.warning("EntityResolver.pre_process failed", exc_info=True)
 
-        # 3. LLM call
+        # 2a. If entity resolver found ambiguity, return it directly
+        if ambiguous_entities:
+            return AgentResult(
+                response_text=ambiguous_entities[0]["question"],
+                agent_action="ambiguous",
+            )
+
+        # 3. Build prompt (with entity hints)
+        system_prompt = self._build_system_prompt(user_info, entity_hints=entity_hints)
+
+        # 4. LLM call
         messages: list[dict] = [
             {"role": "system", "content": system_prompt},
         ]
