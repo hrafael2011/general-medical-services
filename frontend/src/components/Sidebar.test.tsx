@@ -33,7 +33,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("Dr. Admin")).toBeInTheDocument();
   });
 
-  it("muestra los 9 links de navegación", () => {
+  it("muestra los links de navegación principales", () => {
     renderSidebar();
     expect(screen.getByRole("link", { name: /calendarios/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /médicos/i })).toBeInTheDocument();
