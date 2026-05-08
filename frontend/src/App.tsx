@@ -3,7 +3,6 @@ import { FormEvent, useState } from "react";
 import { KeyRound, LogIn, ShieldCheck } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { changePassword } from "./api/auth";
-import { setToken } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { AuthGuard } from "./components/AuthGuard";
 import { DashboardView } from "./features/dashboard/DashboardView";
@@ -63,8 +62,7 @@ function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   if (currentUser && !currentUser.must_change_password && step === "login") {
-    navigate("/dashboard", { replace: true });
-    return null;
+    return <Navigate to="/dashboard" replace />;
   }
 
   async function handleLogin(e: FormEvent) {
@@ -94,7 +92,6 @@ function LoginPage() {
     setIsLoading(true);
     try {
       const user = await changePassword(password, newPassword);
-      setToken(null);
       setCurrentUser(user);
       navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
