@@ -5,7 +5,15 @@ from sqlalchemy import engine_from_config, pool
 
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.base import Base
+from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
+from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
+from backend.app.infrastructure.db.models import calendars as _calendars  # noqa: F401
 from backend.app.infrastructure.db.models import catalogs as _catalogs  # noqa: F401
+from backend.app.infrastructure.db.models import doctors as _doctors  # noqa: F401
+from backend.app.infrastructure.db.models import import_staging as _import_staging  # noqa: F401
+from backend.app.infrastructure.db.models import missions as _missions  # noqa: F401
+from backend.app.infrastructure.db.models import notifications as _notifications  # noqa: F401
+from backend.app.infrastructure.db.models import telegram as _telegram  # noqa: F401
 from backend.app.infrastructure.db.models import user as _user  # noqa: F401
 
 config = context.config
