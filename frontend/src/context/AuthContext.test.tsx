@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from "./AuthContext";
 vi.mock("../api/auth", () => ({
   login: vi.fn().mockResolvedValue({
     access_token: "tok",
-    user: { id: "1", name: "Admin", email: "a@b.com", role: "admin", must_change_password: false },
+    user: { id: "1", name: "Admin", email: "a@b.com", role: "admin", active: true, must_change_password: false },
   }),
 }));
 
