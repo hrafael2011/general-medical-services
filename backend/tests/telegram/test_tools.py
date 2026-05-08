@@ -230,3 +230,169 @@ def test_historial_medico_load_uses_area_weights(db_session) -> None:
     assert data["found"] is True
     assert data["assignments_60d"] == 1
     assert data["load_60d"] == 2.0  # usa el peso real del service_area (no 1.0 hardcodeado)
+
+
+# ---------------------------------------------------------------------------
+# _tool_estado_calendario_mes
+# ---------------------------------------------------------------------------
+
+
+def test_estado_calendario_mes_not_found(db_session) -> None:
+    """Sin calendario para el período → found=False."""
+    gateway = _make_gateway(db_session)
+    result = gateway.execute("estado_calendario_mes", {"month": 1, "year": 2020})
+
+    assert result["ok"] is True
+    assert result["data"]["found"] is False
+
+
+def test_estado_calendario_mes_with_calendar(db_session) -> None:
+    """Calendario existente con versión → found=True, versión correcta."""
+    import uuid as _uuid
+    from datetime import UTC as _UTC
+    from datetime import datetime as _dt
+
+    from backend.app.infrastructure.db.models.calendars import (
+        CalendarModel,
+        CalendarVersionModel,
+    )
+
+    now = _dt.now(_UTC)
+    cal = CalendarModel(
+        id=str(_uuid.uuid4()), month=6, year=2026, status="draft",
+        created_by=None, created_at=now, updated_at=now,
+    )
+    db_session.add(cal)
+    ver = CalendarVersionModel(
+        id=str(_uuid.uuid4()), calendar_id=cal.id, version_number=1, status="draft",
+        created_by=None, created_at=now,
+    )
+    db_session.add(ver)
+    db_session.flush()
+
+    gateway = _make_gateway(db_session)
+    result = gateway.execute("estado_calendario_mes", {"month": 6, "year": 2026})
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert data["found"] is True
+    assert data["version_number"] == 1
+    assert data["assignments"] == 0
+    assert data["gaps"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _tool_recommend_mission_candidates — inputs inválidos
+# ---------------------------------------------------------------------------
+
+
+def test_recommend_mission_candidates_missing_date(db_session) -> None:
+    """Sin mission_date → found=False con reason=missing_mission_date."""
+    gateway = _make_gateway(db_session)
+    result = gateway.execute("recommend_mission_candidates", {"participant_count": 2})
+
+    assert result["ok"] is True
+    assert result["data"]["found"] is False
+    assert result["data"]["reason"] == "missing_mission_date"
+
+
+def test_recommend_mission_candidates_invalid_date(db_session) -> None:
+    """mission_date con formato inválido → found=False con reason=invalid_date_format."""
+    gateway = _make_gateway(db_session)
+    result = gateway.execute("recommend_mission_candidates", {
+        "mission_date": "32-13-2026",
+        "participant_count": 1,
+    })
+
+    assert result["ok"] is True
+    assert result["data"]["found"] is False
+    assert result["data"]["reason"] == "invalid_date_format"
+
+
+# ---------------------------------------------------------------------------
+# _tool_create_mission — inputs inválidos
+# ---------------------------------------------------------------------------
+
+
+def test_create_mission_missing_fields(db_session) -> None:
+    """Sin mission_date ni doctor_ids → ok=False con error descriptivo."""
+    gateway = _make_gateway(db_session)
+    result = gateway.execute("create_mission", {})
+
+    # execute() wraps handler return in {"ok": True, "data": handler_return}
+    # but handler returns {"ok": False, "error": "..."} for validation failures
+    assert result["ok"] is True
+    assert result["data"]["ok"] is False
+    assert "Faltan datos" in result["data"]["error"]
+
+
+def test_create_mission_missing_actor_id(db_session) -> None:
+    """Con mission_date y doctor_ids pero sin _actor_id → ok=False."""
+    gateway = _make_gateway(db_session)
+    result = gateway.execute("create_mission", {
+        "mission_date": "2026-06-15",
+        "doctor_ids": ["some-id"],
+    })
+
+    # handler returns {"ok": False, "error": "..."} wrapped by execute()
+    assert result["ok"] is True
+    assert result["data"]["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Report tools con mock report_service
+# ---------------------------------------------------------------------------
+
+
+def _make_gateway_with_reports(db_session) -> ToolGateway:
+    """Gateway con ReportService mockeado para tests de report tools."""
+
+    class FakeReportService:
+        def generate_calendar_excel(self, calendar_id):
+            return b"FAKE_EXCEL"
+
+        def generate_calendar_pdf(self, calendar_id):
+            return b"FAKE_PDF"
+
+        def generate_doctor_history_excel(self, year, month):
+            return b"FAKE_EXCEL_HIST"
+
+        def generate_doctor_history_pdf(self, year, month):
+            return b"FAKE_PDF_HIST"
+
+        def generate_operational_summary_pdf(self, year, month):
+            return b"FAKE_PDF_OPER"
+
+        def generate_mission_ranking_pdf(self, year, month):
+            return b"FAKE_PDF_RANK"
+
+    return ToolGateway(
+        doctor_repo=DoctorRepository(db_session),
+        calendar_repo=CalendarRepository(db_session),
+        mission_repo=MissionRepository(db_session),
+        availability_repo=AvailabilityRepository(db_session),
+        report_service=FakeReportService(),
+    )
+
+
+def test_generate_doctor_history_report_pdf(db_session) -> None:
+    """generate_doctor_history_report con format=pdf → document_bytes con PDF."""
+    gateway = _make_gateway_with_reports(db_session)
+    result = gateway.execute("generate_doctor_history_report", {"month": 5, "year": 2026})
+
+    # execute() wraps handler return in {"ok": True, "data": handler_return}
+    # handler_return itself is {"ok": True, "data": ..., "document_bytes": ..., "document_filename": ...}
+    assert result["ok"] is True
+    inner = result["data"]
+    assert inner.get("document_bytes") == b"FAKE_PDF_HIST"
+    assert "historial" in inner.get("document_filename", "").lower()
+
+
+def test_generate_operational_summary_pdf(db_session) -> None:
+    """generate_operational_summary → document_bytes con PDF."""
+    gateway = _make_gateway_with_reports(db_session)
+    result = gateway.execute("generate_operational_summary", {"month": 5, "year": 2026})
+
+    assert result["ok"] is True
+    inner = result["data"]
+    assert inner.get("document_bytes") == b"FAKE_PDF_OPER"
