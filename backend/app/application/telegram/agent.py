@@ -13,10 +13,13 @@ import re
 
 logger = logging.getLogger(__name__)
 
+from pydantic import ValidationError
+
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager
 from backend.app.application.telegram.query_executor import QueryExecutor
+from backend.app.application.telegram.schemas import IntentOutput
 from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
 
@@ -149,6 +152,7 @@ class ConversationalAgent:
         query_type: str,
         params: dict,
         user_text: str,
+        format: str | None = None,
     ) -> AgentResult | None:
         """Try IntentRouter. Returns None if query_type is unknown or execution fails."""
         entry = self._router.registry.get(query_type)
@@ -160,6 +164,7 @@ class ConversationalAgent:
                 query_type=query_type,
                 params=params,
                 user_message=user_text,
+                format=format,
             )
             # Router returns "not found" when query_type missing or SQL fails.
             # Treat this as a fallback trigger so query_executor gets a chance.
@@ -327,7 +332,7 @@ class ConversationalAgent:
         messages.extend(history)
         messages.append({"role": "user", "content": text})
 
-        response = self._llm.chat_complete(messages, temperature=0.1)
+        response = self._llm.chat_complete(messages, temperature=0.1, json_mode=True)
         response = response.strip()
 
         # 4. Parse JSON
@@ -342,11 +347,43 @@ class ConversationalAgent:
         if parsed.get("action") == "call_tool":
             return self._handle_old_tool_format(parsed, text, actor_id=actor_id)
 
-        # 6. New format routing
-        action = parsed.get("action", "reply")
-        query_type = (parsed.get("query_type") or "").strip()
-        params = parsed.get("params") or {}
-        response_text = parsed.get("response_text") or ""
+        # 6. Validate with IntentOutput schema
+        try:
+            intent = IntentOutput.model_validate(parsed)
+        except ValidationError as exc:
+            logger.warning("LLM returned invalid IntentOutput: %.200s — %s", response, exc)
+            return AgentResult(
+                response_text="Ocurrió un error al procesar tu consulta. Intentá de nuevo.",
+                agent_action="validation_error",
+            )
+
+        # 7. Handle low confidence
+        if intent.confidence < 0.6:
+            return AgentResult(
+                response_text=(
+                    intent.response_text
+                    or "No estoy seguro de haber entendido correctamente. "
+                    "¿Podrías ser más específico?"
+                ),
+                agent_action="ambiguous",
+            )
+
+        # 8. Handle missing fields
+        if intent.missing_fields:
+            fields_str = ", ".join(intent.missing_fields)
+            return AgentResult(
+                response_text=(
+                    intent.response_text
+                    or f"Me falta información: {fields_str}. ¿Podrías indicarme?"
+                ),
+                agent_action="ambiguous",
+            )
+
+        action = intent.action
+        query_type = (intent.query_type or "").strip()
+        params = intent.params
+        response_text = intent.response_text or ""
+        fmt = intent.format
 
         # 6a. Reply / ambiguous → direct text
         if action == "reply":
@@ -368,7 +405,7 @@ class ConversationalAgent:
         # 6b. Query / export → try router, fallback to query_db
         if action in ("query", "export"):
             if query_type:
-                router_result = self._route_via_router(action, query_type, params, text)
+                router_result = self._route_via_router(action, query_type, params, text, format=fmt)
                 if router_result is not None:
                     return router_result
 

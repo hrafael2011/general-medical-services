@@ -151,7 +151,7 @@ def test_legacy_call_tool_format_falls_back_to_tools(db_session) -> None:
 def test_unknown_query_type_falls_back_to_reply(db_session) -> None:
     """When router returns not-found, agent returns fallback message."""
     llm = FakeLLMProvider(responses={
-        "rare": '{"action": "query", "query_type": "nonexistent_query", "params": {}}',
+        "rara": '{"action": "query", "query_type": "nonexistent_query", "params": {}}',
     })
     agent = _make_agent(llm=llm)
 
@@ -284,6 +284,46 @@ def test_unknown_action_from_llm_returns_fallback(db_session) -> None:
     assert isinstance(result, AgentResult)
     assert result.response_text is not None
     assert len(result.response_text) > 0
+
+
+def test_agent_validates_llm_output_with_pydantic(db_session) -> None:
+    """LLM output with action='invalid_action' → validation error, graceful fallback."""
+    llm = FakeLLMProvider(responses={
+        "mal": '{"action": "invalid_action", "query_type": "", "params": {}}',
+    })
+    agent = _make_agent(llm=llm)
+
+    result = agent.process(text="mal")
+
+    assert result.agent_action == "validation_error"
+    assert result.response_text is not None
+
+
+def test_agent_low_confidence_returns_clarification(db_session) -> None:
+    """confidence < 0.6 → ambiguous response asking for clarification."""
+    llm = FakeLLMProvider(responses={
+        "duda": '{"action": "query", "query_type": "count_doctors_total", "confidence": 0.3}',
+    })
+    agent = _make_agent(llm=llm)
+
+    result = agent.process(text="duda")
+
+    assert result.agent_action == "ambiguous"
+    assert "específico" in result.response_text.lower()
+
+
+def test_agent_missing_fields_triggers_prompt(db_session) -> None:
+    """missing_fields not empty → agent asks for the missing info."""
+    llm = FakeLLMProvider(responses={
+        "faltante": '{"action": "query", "query_type": "doctors_by_sex", '
+                    '"missing_fields": ["sex"], "confidence": 0.75}',
+    })
+    agent = _make_agent(llm=llm)
+
+    result = agent.process(text="faltante")
+
+    assert result.agent_action == "ambiguous"
+    assert "sex" in result.response_text.lower()
 
 
 def test_router_not_found_triggers_fallback_to_no_results(db_session) -> None:
