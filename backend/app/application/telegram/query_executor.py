@@ -42,6 +42,7 @@ _EXCLUDE_TABLES = {
     "import_staging",
     "import_staging_areas",
     "import_reviews",
+    "users",  # NEVER expose credentials table to LLM
 }
 
 _TABLE_DESCRIPTIONS = {
@@ -233,10 +234,15 @@ class QueryExecutor:
 
         logger = logging.getLogger(__name__)
         try:
+            # Set real PostgreSQL statement timeout (10 seconds)
+            # Silently ignored by SQLite — only takes effect on PostgreSQL
+            try:
+                self._session.execute(text("SET LOCAL statement_timeout = '10000'"))
+            except Exception:
+                pass
+
             start = time.time()
-            result = self._session.execute(
-                text(sql).execution_options(timeout=10)
-            )
+            result = self._session.execute(text(sql))
             elapsed = time.time() - start
 
             rows = result.fetchmany(101)
