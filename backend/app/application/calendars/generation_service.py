@@ -190,7 +190,7 @@ class GenerationService:
         if self.audit is not None:
             self.audit._create(
                 actor_id=actor_id,
-                action_type="generated",
+                action_type="calendar_generated",
                 entity_type="calendar_version",
                 entity_id=version.id,
                 metadata={

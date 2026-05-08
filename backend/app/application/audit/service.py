@@ -1,9 +1,24 @@
 import uuid
+from contextvars import ContextVar
 from datetime import UTC, datetime
 
 from backend.app.application.audit.errors import AuditError  # noqa: F401
 from backend.app.infrastructure.db.models.audit import AuditEventModel
 from backend.app.infrastructure.repositories.audit import AuditRepository
+
+# Context variable populated by middleware for correlating audit events
+_request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
+
+
+def get_current_request_id() -> str | None:
+    """Return the current request_id (set by middleware), if any."""
+    return _request_id_ctx.get()
+
+
+def set_current_request_id(value: str | None) -> None:
+    """Set the request_id for the current request context."""
+    if value is not None:
+        _request_id_ctx.set(value)
 
 
 class AuditService:
@@ -28,7 +43,7 @@ class AuditService:
             entity_type=entity_type,
             entity_id=entity_id,
             occurred_at=datetime.now(UTC),
-            request_id=None,
+            request_id=_request_id_ctx.get(),
             before_snapshot=before,
             after_snapshot=after,
             metadata_=metadata,
@@ -164,7 +179,7 @@ class AuditService:
     def log_calendar_created(self, *, actor_id: str, calendar) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="created",
+            action_type="calendar_created",
             entity_type="calendar",
             entity_id=calendar.id,
             after={"year": calendar.year, "month": calendar.month, "status": calendar.status},
@@ -173,7 +188,7 @@ class AuditService:
     def log_calendar_approved(self, *, actor_id: str, calendar, version) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="approved",
+            action_type="calendar_approved",
             entity_type="calendar",
             entity_id=calendar.id,
             after={
@@ -186,7 +201,7 @@ class AuditService:
     def log_calendar_new_version(self, *, actor_id: str, calendar, version) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="new_version",
+            action_type="calendar_new_version",
             entity_type="calendar",
             entity_id=calendar.id,
             after={
@@ -202,7 +217,7 @@ class AuditService:
     def log_assignment_added(self, *, actor_id: str, assignment) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="added",
+            action_type="assignment_added",
             entity_type="assignment",
             entity_id=assignment.id,
             after={
@@ -217,7 +232,7 @@ class AuditService:
     def log_assignment_removed(self, *, actor_id: str, assignment_id: str) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="removed",
+            action_type="assignment_removed",
             entity_type="assignment",
             entity_id=assignment_id,
         )
@@ -225,7 +240,7 @@ class AuditService:
     def log_assignment_replaced(self, *, actor_id: str, assignment) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="replaced",
+            action_type="assignment_replaced",
             entity_type="assignment",
             entity_id=assignment.id,
             after={
@@ -242,7 +257,7 @@ class AuditService:
     def log_mission_ranking_generated(self, actor_id: str, ranking) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="generated",
+            action_type="mission_ranking_generated",
             entity_type="mission_ranking",
             entity_id=ranking.id,
             after={
@@ -256,7 +271,7 @@ class AuditService:
     def log_mission_confirmed(self, actor_id: str, mission) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,
-            action_type="confirmed",
+            action_type="mission_confirmed",
             entity_type="mission",
             entity_id=mission.id,
             after={
