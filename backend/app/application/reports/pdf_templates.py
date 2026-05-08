@@ -1,26 +1,24 @@
 """
 PDF templates for system reports using reportlab.
 
-Generates professional PDFs with logo, headers, styled tables, and footers.
+Generates professional PDFs with institutional header (FARD, Hospital Militar),
+logo, styled tables, signature block, and page footer.
+All reports use landscape A4 format matching the existing institutional style.
 """
 
 import io
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
 from reportlab.platypus import (
-    BaseDocTemplate,
     Image,
-    PageBreak,
-    PageTemplate,
-    Frame,
-    NextPageTemplate,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -32,13 +30,49 @@ _LOGO_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", "static", "logo.png"
 )
 
+# Page dimensions (landscape A4)
+PAGE_W, PAGE_H = landscape(A4)
+LEFT_M = 1.8 * cm
+RIGHT_M = 1.8 * cm
+TOP_M = 2.5 * cm
+BOTTOM_M = 1.8 * cm
+CONTENT_W = PAGE_W - LEFT_M - RIGHT_M
+
+@dataclass
+class SignatureConfig:
+    left_name: str
+    left_title1: str
+    left_title2: str
+    left_title3: str
+    right_name: str
+    right_title1: str
+    right_title2: str
+    right_title3: str
+
+
+# Default values — used when system_settings records are absent.
+DEFAULT_SIGNATURES = SignatureConfig(
+    left_name='Dra. MIGUELINA A. ACOSTA RAMOS',
+    left_title1='Sargento Médico FARD.',
+    left_title2='Encargada de los Servicios de los Médicos Generales',
+    left_title3='del Hosp. Mil. Univ. Doc. FARD, “DRL”.',
+    right_name='ING. CARLOS J. ENCARNACION GONZALEZ',
+    right_title1='1er Tt. Ingeniero en Sistema FARD.',
+    right_title2='Encargado del Departamento Administrativo de la',
+    right_title3='Sub Dirección de Recursos Humanos del Hosp. Mil. Univ. Doc. FARD, “DRL”.',
+)
+
+
+# ---------------------------------------------------------------------------
+# Logo
+# ---------------------------------------------------------------------------
 
 def _get_logo() -> Image | None:
     """Return logo Image if file exists, else None."""
     path = os.path.abspath(_LOGO_PATH)
     if os.path.isfile(path):
         try:
-            img = Image(path, width=4 * cm, height=2 * cm)
+            img = Image(path, width=3.2 * cm, height=2.8 * cm)
             img.hAlign = "LEFT"
             return img
         except Exception:
@@ -47,137 +81,239 @@ def _get_logo() -> Image | None:
 
 
 # ---------------------------------------------------------------------------
+# Institutional header block
+# ---------------------------------------------------------------------------
+
+_HEADER_SUBDIR = "SUBDIRECCIÓN DE RECURSOS HUMANOS"
+_HEADER_HOSPITAL = (
+    "HOSPITAL MILITAR UNIVERSITARIO DOCENTE, FARD "
+    "“DR. RAMÓN DE LARA”"
+)
+_HEADER_BASE = (
+    "BASE AÉREA “SAN ISIDRO”, "
+    "FUERZA AÉREA DE REPÚBLICA DOMINICANA, "
+    "SAN ISIDRO, SANTO DOMINGO ESTE, R.D."
+)
+_HEADER_LEMA = "“Todo por la Patria”"
+
+
+# ---------------------------------------------------------------------------
 # Styles
 # ---------------------------------------------------------------------------
 
 _styles = getSampleStyleSheet()
 
-_TITLE = ParagraphStyle(
-    "ReportTitle", parent=_styles["Title"], fontSize=18, spaceAfter=12, alignment=TA_CENTER
-)
-
-_SUBTITLE = ParagraphStyle(
-    "ReportSubtitle",
-    parent=_styles["Normal"],
-    fontSize=11,
-    spaceAfter=6,
-    alignment=TA_CENTER,
-    textColor=colors.grey,
-)
-
-_SECTION = ParagraphStyle(
-    "SectionHeader",
-    parent=_styles["Heading2"],
-    fontSize=14,
-    spaceBefore=16,
-    spaceAfter=8,
-    textColor=colors.HexColor("#1a56db"),
-)
-
-_CELL = ParagraphStyle(
-    "CellStyle", parent=_styles["Normal"], fontSize=8, leading=10
-)
-
-_CELL_HEADER = ParagraphStyle(
-    "CellHeader",
-    parent=_styles["Normal"],
-    fontSize=8,
-    leading=10,
-    textColor=colors.white,
+_STYLE_SUBDIR = ParagraphStyle(
+    "SubDir", parent=_styles["Normal"],
+    fontSize=8, leading=10, alignment=TA_CENTER,
     fontName="Helvetica-Bold",
 )
 
-_FOOTER = ParagraphStyle(
-    "Footer", parent=_styles["Normal"], fontSize=7, textColor=colors.grey, alignment=TA_CENTER
+_STYLE_INSTITUCION = ParagraphStyle(
+    "Institucion", parent=_styles["Normal"],
+    fontSize=9, leading=11, alignment=TA_CENTER,
+    fontName="Helvetica-Bold",
+)
+
+_STYLE_LEMA = ParagraphStyle(
+    "Lema", parent=_styles["Normal"],
+    fontSize=8, leading=10, alignment=TA_CENTER,
+)
+
+_STYLE_DATE = ParagraphStyle(
+    "DateLine", parent=_styles["Normal"],
+    fontSize=8, leading=10, alignment=TA_LEFT,
+)
+
+_STYLE_TITLE = ParagraphStyle(
+    "ReportTitle", parent=_styles["Normal"],
+    fontSize=10, leading=13, alignment=TA_CENTER,
+    fontName="Helvetica-Bold",
+    spaceBefore=4, spaceAfter=8,
+)
+
+_STYLE_TABLE_HEADER = ParagraphStyle(
+    "TableHeader", parent=_styles["Normal"],
+    fontSize=7.5, leading=9,
+    fontName="Helvetica-Bold",
+)
+
+_STYLE_TABLE_CELL = ParagraphStyle(
+    "TableCell", parent=_styles["Normal"],
+    fontSize=7.5, leading=9,
+)
+
+_STYLE_SECTION = ParagraphStyle(
+    "Section", parent=_styles["Normal"],
+    fontSize=9, leading=11, alignment=TA_LEFT,
+    fontName="Helvetica-Bold",
+    spaceBefore=6, spaceAfter=4,
+)
+
+_STYLE_SIG_NAME = ParagraphStyle(
+    "SigName", parent=_styles["Normal"],
+    fontSize=7.5, leading=9, alignment=TA_CENTER,
+    fontName="Helvetica-Bold",
+)
+
+_STYLE_SIG_TITLE = ParagraphStyle(
+    "SigTitle", parent=_styles["Normal"],
+    fontSize=7, leading=8.5, alignment=TA_CENTER,
+)
+
+_STYLE_FOOTER = ParagraphStyle(
+    "Footer", parent=_styles["Normal"],
+    fontSize=7, textColor=colors.grey, alignment=TA_CENTER,
 )
 
 
+# ---------------------------------------------------------------------------
+# Header / footer
+# ---------------------------------------------------------------------------
+
 def _header_footer(canvas, doc):
-    """Draw header line and page number on each page."""
+    """Draw the institutional header block and page number."""
     canvas.saveState()
-    canvas.setStrokeColor(colors.HexColor("#1a56db"))
-    canvas.setLineWidth(0.5)
-    canvas.line(2 * cm, A4[1] - 1.5 * cm, A4[0] - 2 * cm, A4[1] - 1.5 * cm)
+    # Thin separator line below header area
+    y_line = PAGE_H - 1.75 * cm
+    canvas.setStrokeColor(colors.black)
+    canvas.setLineWidth(0.4)
+    canvas.line(LEFT_M, y_line, PAGE_W - RIGHT_M, y_line)
+    # Page number
     canvas.setFont("Helvetica", 7)
     canvas.setFillColor(colors.grey)
-    canvas.drawCentredString(
-        A4[0] / 2, 1 * cm, f"Pagina {doc.page}"
-    )
+    canvas.drawCentredString(PAGE_W / 2, 0.7 * cm, str(doc.page))
     canvas.restoreState()
 
 
+# ---------------------------------------------------------------------------
+# Build story helpers
+# ---------------------------------------------------------------------------
+
+def _build_header_story(date_line: str, title: str) -> list[object]:
+    """Build the institutional header: logo + text block + date + title."""
+    story: list[object] = []
+
+    # Top area: logo on left, header text centered
+    logo = _get_logo()
+    if logo:
+        # We create a table with logo on left and header text on right
+        header_text = (
+            f"<b>{_HEADER_SUBDIR}</b><br/>"
+            f"<b>{_HEADER_HOSPITAL}</b><br/>"
+            f"<b>{_HEADER_BASE}</b><br/>"
+            f"{_HEADER_LEMA}"
+        )
+        header_table = Table(
+            [[logo, Paragraph(header_text, _STYLE_INSTITUCION)]],
+            colWidths=[3.8 * cm, CONTENT_W - 3.8 * cm],
+        )
+        header_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (0, 0), 0),
+            ("RIGHTPADDING", (1, 1), (1, 1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        story.append(header_table)
+    else:
+        story.append(Paragraph(_HEADER_SUBDIR, _STYLE_SUBDIR))
+        story.append(Paragraph(_HEADER_HOSPITAL, _STYLE_INSTITUCION))
+        story.append(Paragraph(_HEADER_BASE, _STYLE_INSTITUCION))
+        story.append(Paragraph(_HEADER_LEMA, _STYLE_LEMA))
+
+    story.append(Spacer(1, 3 * mm))
+
+    # Date line
+    story.append(Paragraph(date_line, _STYLE_DATE))
+    story.append(Spacer(1, 2 * mm))
+
+    # Title
+    story.append(Paragraph(title, _STYLE_TITLE))
+
+    return story
+
+
 def _make_table(data: list[list[str]], col_widths: list[float] | None = None) -> Table:
-    """Build a styled table from a list of rows (first row = header)."""
-    styled_rows: list[list[Paragraph]] = [
-        [Paragraph(str(c), _CELL_HEADER) for c in data[0]],
-    ]
-    for row in data[1:]:
-        styled_rows.append([Paragraph(str(c), _CELL) for c in row])
+    """Build a styled table (first row = header, rest = data)."""
+    styled_rows: list[list[Paragraph]] = []
+    for i, row in enumerate(data):
+        style = _STYLE_TABLE_HEADER if i == 0 else _STYLE_TABLE_CELL
+        styled_rows.append([Paragraph(str(c), style) for c in row])
 
     t = Table(styled_rows, colWidths=col_widths, repeatRows=1)
-    t.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a56db")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, 0), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
-                ("TOPPADDING", (0, 0), (-1, 0), 6),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
-                ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f9fafb")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#f9fafb"), colors.white]),
-                ("FONTSIZE", (0, 1), (-1, -1), 8),
-                ("TOPPADDING", (0, 1), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 1), (-1, -1), 4),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ]
-        )
-    )
+    base_style = [
+        # Header
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+        ("TOPPADDING", (0, 0), (-1, 0), 5),
+        # Grid
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#bdc3c7")),
+        # Body alternating rows
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f6fa")]),
+        ("TOPPADDING", (0, 1), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 3),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        # Left/right padding
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]
+    t.setStyle(TableStyle(base_style))
     return t
 
 
-def _build_doc(title: str, subtitle: str) -> SimpleDocTemplate:
-    """Create a base PDF document with header/footer template."""
+def _build_signature_block(config: SignatureConfig | None = None) -> Table:
+    """Build the two-column signature block at the bottom."""
+    cfg = config or DEFAULT_SIGNATURES
+    left = [
+        Paragraph(cfg.left_name, _STYLE_SIG_NAME),
+        Paragraph(cfg.left_title1, _STYLE_SIG_TITLE),
+        Paragraph(cfg.left_title2, _STYLE_SIG_TITLE),
+        Paragraph(cfg.left_title3, _STYLE_SIG_TITLE),
+    ]
+    right = [
+        Paragraph(cfg.right_name, _STYLE_SIG_NAME),
+        Paragraph(cfg.right_title1, _STYLE_SIG_TITLE),
+        Paragraph(cfg.right_title2, _STYLE_SIG_TITLE),
+        Paragraph(cfg.right_title3, _STYLE_SIG_TITLE),
+    ]
+
+    # Signature line above each name
+    sig_data = [
+        [
+            Paragraph("___________________________________", _STYLE_SIG_TITLE),
+            Paragraph("___________________________________", _STYLE_SIG_TITLE),
+        ],
+        left,
+        right,
+    ]
+
+    t = Table(sig_data, colWidths=[CONTENT_W * 0.48, CONTENT_W * 0.48])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    return t
+
+
+def _build_doc(title: str, subtitle: str) -> tuple[SimpleDocTemplate, io.BytesIO]:
+    """Create a base PDF document (landscape A4)."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
-        pagesize=A4,
-        leftMargin=2 * cm,
-        rightMargin=2 * cm,
-        topMargin=2.5 * cm,
-        bottomMargin=2 * cm,
+        pagesize=landscape(A4),
+        leftMargin=LEFT_M,
+        rightMargin=RIGHT_M,
+        topMargin=TOP_M,
+        bottomMargin=BOTTOM_M,
     )
     return doc, buf
-
-
-def _build_story(
-    title: str,
-    subtitle: str,
-    sections: list[tuple[str, list[list[str]], list[float] | None]],
-) -> list[object]:
-    """Build PDF story with logo, title, subtitle, and sectioned tables."""
-    story: list[object] = []
-
-    logo = _get_logo()
-    if logo:
-        story.append(logo)
-        story.append(Spacer(1, 4 * mm))
-
-    story.append(Paragraph(title, _TITLE))
-    story.append(Paragraph(subtitle, _SUBTITLE))
-    story.append(Spacer(1, 6 * mm))
-
-    for section_title, table_data, col_widths in sections:
-        story.append(Paragraph(section_title, _SECTION))
-        if not table_data or len(table_data) < 2:
-            story.append(Paragraph("Sin datos disponibles.", _CELL))
-            story.append(Spacer(1, 4 * mm))
-            continue
-        story.append(_make_table(table_data, col_widths))
-        story.append(Spacer(1, 6 * mm))
-
-    return story
 
 
 # ---------------------------------------------------------------------------
@@ -189,18 +325,19 @@ def generate_calendar_pdf(
     assignments: list[dict],
     month: int,
     year: int,
+    signatures: SignatureConfig | None = None,
 ) -> bytes:
-    """Generate a PDF report of calendar assignments."""
+    """Generate a PDF report of calendar assignments (institutional style)."""
     month_name = [
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
     ][month - 1]
 
-    title = f"Calendario de Turnos - {month_name} {year}"
-    subtitle = f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    date_line = f"{month_name.upper()} {year}"
+    title = f"CALENDARIO DE TURNOS - {month_name.upper()} {year}"
 
-    headers = ["Fecha", "Area", "Medico", "Fuente"]
-    col_widths = [3.5 * cm, 4 * cm, 5.5 * cm, 3 * cm]
+    headers = ["Fecha", "Área", "Médico", "Fuente"]
+    col_widths = [3.2 * cm, 4.5 * cm, 6 * cm, 3 * cm]
     rows = [headers]
     for a in assignments:
         rows.append([
@@ -210,10 +347,15 @@ def generate_calendar_pdf(
             str(a.get("assignment_source", "")),
         ])
 
-    doc, buf = _build_doc(title, subtitle)
-    story = _build_story(title, subtitle, [
-        (f"Asignaciones ({len(assignments)} total)", rows, col_widths),
-    ])
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph(
+        f"Asignaciones ({len(assignments)} total)", _STYLE_SECTION
+    ))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block(signatures))
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
 
@@ -222,6 +364,7 @@ def generate_doctor_history_pdf(
     doctor_data: list[dict],
     month: int,
     year: int,
+    signatures: SignatureConfig | None = None,
 ) -> bytes:
     """Generate a PDF report of doctor service history."""
     month_name = [
@@ -229,11 +372,11 @@ def generate_doctor_history_pdf(
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
     ][month - 1]
 
-    title = f"Historial de Servicios - {month_name} {year}"
-    subtitle = f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    date_line = f"{month_name.upper()} {year}"
+    title = f"HISTORIAL DE SERVICIOS - {month_name.upper()} {year}"
 
-    headers = ["Medico", "Servicios", "Areas", "Carga"]
-    col_widths = [5 * cm, 2.5 * cm, 5.5 * cm, 2.5 * cm]
+    headers = ["Médico", "Servicios", "Áreas", "Carga"]
+    col_widths = [5.5 * cm, 2.5 * cm, 5.5 * cm, 2.5 * cm]
     rows = [headers]
     for d in doctor_data:
         rows.append([
@@ -243,34 +386,36 @@ def generate_doctor_history_pdf(
             str(d.get("load", "")),
         ])
 
-    doc, buf = _build_doc(title, subtitle)
-    story = _build_story(title, subtitle, [
-        (f"Resumen por Medico ({len(doctor_data)} medicos)", rows, col_widths),
-    ])
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph(
+        f"Resumen por Médico ({len(doctor_data)} médicos)", _STYLE_SECTION
+    ))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block(signatures))
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
 
 
-def generate_operational_summary_pdf(summary: dict) -> bytes:
+def generate_operational_summary_pdf(summary: dict, signatures: SignatureConfig | None = None) -> bytes:
     """Generate a PDF report of the operational summary."""
     period = summary.get("period", {})
-    month = period.get("month", "?")
-    year = period.get("year", "?")
+    month_num = period.get("month", 1)
+    year = period.get("year", datetime.now().year)
     month_name = [
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
     ]
+    month_str = month_name[month_num - 1] if isinstance(month_num, int) and 1 <= month_num <= 12 else str(month_num)
 
-    title = f"Resumen Operativo"
-    subtitle = (
-        f"{month_name[int(month) - 1] if isinstance(month, int) and 1 <= month <= 12 else month} {year} "
-        f"| Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-    )
+    date_line = f"{month_str.upper()} {year}"
+    title = "RESUMEN OPERATIVO"
 
-    # Key-value summary table
     rows = [
         ["Indicador", "Valor"],
-        ["Medicos Activos", str(summary.get("active_doctors", 0))],
+        ["Médicos Activos", str(summary.get("active_doctors", 0))],
         [
             "Estado del Calendario",
             str(summary.get("calendar_status", "Sin calendario")),
@@ -279,21 +424,13 @@ def generate_operational_summary_pdf(summary: dict) -> bytes:
         ["Huecos sin Resolver", str(summary.get("unresolved_gaps", 0))],
     ]
 
-    doc, buf = _build_doc(title, subtitle)
-    story: list[object] = []
-
-    logo = _get_logo()
-    if logo:
-        story.append(logo)
-        story.append(Spacer(1, 4 * mm))
-
-    story.append(Paragraph(title, _TITLE))
-    story.append(Paragraph(subtitle, _SUBTITLE))
-    story.append(Spacer(1, 6 * mm))
-    story.append(Paragraph("Indicadores del Periodo", _SECTION))
-    story.append(_make_table(rows, col_widths=[5 * cm, 8 * cm]))
-    story.append(Spacer(1, 6 * mm))
-
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph("Indicadores del Período", _STYLE_SECTION))
+    story.append(_make_table(rows, col_widths=[5 * cm, 10 * cm]))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block(signatures))
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
 
@@ -302,6 +439,7 @@ def generate_mission_ranking_pdf(
     entries: list[dict],
     month: int,
     year: int,
+    signatures: SignatureConfig | None = None,
 ) -> bytes:
     """Generate a PDF report of mission candidate rankings."""
     month_name = [
@@ -309,23 +447,148 @@ def generate_mission_ranking_pdf(
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
     ][month - 1]
 
-    title = f"Ranking de Candidatos - {month_name} {year}"
-    subtitle = f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    date_line = f"{month_name.upper()} {year}"
+    title = f"RANKING DE CANDIDATOS - {month_name.upper()} {year}"
 
-    headers = ["#", "Medico", "Carga Total", "Elegible"]
-    col_widths = [1.5 * cm, 6 * cm, 3 * cm, 2.5 * cm]
+    headers = ["#", "Médico", "Carga Total", "Elegible"]
+    col_widths = [1.5 * cm, 7 * cm, 3.5 * cm, 2.5 * cm]
     rows = [headers]
     for e in entries:
         rows.append([
             str(e.get("position", "")),
             str(e.get("doctor_name", e.get("doctor_id", ""))),
             f"{float(e.get('total_load_score', 0)):.1f}",
-            "Si" if e.get("eligible", False) else "No",
+            "Sí" if e.get("eligible", False) else "No",
         ])
 
-    doc, buf = _build_doc(title, subtitle)
-    story = _build_story(title, subtitle, [
-        (f"Ranking ({len(entries)} candidatos)", rows, col_widths),
-    ])
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph(
+        f"Ranking ({len(entries)} candidatos)", _STYLE_SECTION
+    ))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block(signatures))
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# NEW: Weekly schedule report (formato SERVICIOS)
+# ---------------------------------------------------------------------------
+
+def generate_weekly_schedule_pdf(
+    schedule_data: list[dict],
+    week_label: str,
+    month: int,
+    year: int,
+    date_str: str | None = None,
+    signatures: SignatureConfig | None = None,
+) -> bytes:
+    """Generate a weekly schedule PDF matching the SERVICIOS format.
+
+    Args:
+        schedule_data: List of day dicts:
+            {"day_name": "LUNES", "day_number": 27,
+             "assignments": [
+                {"rank_name": "CABO PEREZ, JUAN", "location": "EMERGENCIA"},
+                ...
+             ]}
+        week_label: e.g. "1RA SEMANA"
+        month: month number (1-12)
+        year: year
+        date_str: optional date override (e.g. "ABRIL 24 , 2026")
+    """
+    month_name = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    ][month - 1]
+
+    if date_str is None:
+        date_str = f"{month_name.upper()} {datetime.now().day} , {year}"
+
+    title = (
+        f"LISTA DEL PERSONAL MEDICO GENERAL, QUE SE ENCUENTRA DE SERVICIO "
+        f"LOS DÍAS INDICADOS AL LADO DE SUS RESPECTIVOS NOMBRE:"
+        f"DEL MES DE {month_name.upper()} DEL AÑO {year}"
+    )
+
+    doc, buf = _build_doc(title, date_str)
+    story = _build_header_story(date_str, title)
+    story.append(Spacer(1, 2 * mm))
+
+    # Weekly schedule table: no traditional header, just data rows
+    # Format: day rows span vertically, each person on own line
+    schedule_rows: list[list[str]] = []
+    header = ["DÍAS", "RANGO / NOMBRE", "LUGAR SERV."]
+    schedule_rows.append(header)
+
+    for day_entry in schedule_data:
+        day_name = day_entry.get("day_name", "")
+        day_number = day_entry.get("day_number", "")
+        day_label = f"{day_name} {day_number}" if day_number else day_name
+        assignments = day_entry.get("assignments", [])
+
+        for i, assgn in enumerate(assignments):
+            rank_name = assgn.get("rank_name", "")
+            location = assgn.get("location", "")
+            if i == 0:
+                schedule_rows.append([day_label, rank_name, location])
+            else:
+                schedule_rows.append(["", rank_name, location])
+
+    col_widths = [3.2 * cm, 7.5 * cm, 4.5 * cm]
+    story.append(_make_table(schedule_rows, col_widths))
+
+    # Signature block
+    story.append(Spacer(1, 1.2 * cm))
+    story.append(_build_signature_block(signatures))
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# NEW: Generic doctor listing (like MEDICOS GENERALES MILITARES.pdf)
+# ---------------------------------------------------------------------------
+
+def generate_doctor_list_pdf(
+    doctors: list[dict],
+    title: str,
+    subtitle: str = "",
+    columns: list[str] | None = None,
+    col_widths: list[float] | None = None,
+    signatures: SignatureConfig | None = None,
+) -> bytes:
+    """Generate a generic doctor listing PDF.
+
+    Args:
+        doctors: List of dicts with keys matching *columns*.
+        title: Report title (e.g. "MEDICOS GENERALES Y AREAS DONDE LABORAN").
+        subtitle: Optional subtitle/date line.
+        columns: Column header names. Defaults to ["#", "RANGO", "NOMBRE", "Área"].
+        col_widths: Column widths. Defaults proportional to page width.
+    """
+    if columns is None:
+        columns = ["#", "RANGO", "NOMBRE", "Área"]
+    if col_widths is None:
+        col_widths = [1.2 * cm, 4.5 * cm, 6 * cm, 4 * cm]
+
+    date_line = subtitle or datetime.now().strftime("%d/%m/%Y")
+
+    headers = columns
+    rows = [headers]
+    for doc_data in doctors:
+        rows.append([
+            str(doc_data.get(col.lower(), doc_data.get(col, "")))
+            for col in columns
+        ])
+
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block(signatures))
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()

@@ -63,11 +63,13 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     bot = TelegramBotClient() if settings.telegram_bot_token else FakeBotClient()
 
     query_executor = QueryExecutor(session, llm) if use_real else None
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
     report_service = ReportService(
         calendar_repo=CalendarRepository(session),
         notification_repo=NotificationRepository(session),
         doctor_repo=DoctorRepository(session),
         mission_repo=MissionRepository(session),
+        catalog_repo=CatalogRepository(session),
     )
 
     tools = ToolGateway(

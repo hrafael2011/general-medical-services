@@ -3,21 +3,46 @@ ReportService — generates Excel, JSON and PDF reports.
 Reads from existing repos; no writes to DB.
 """
 import io
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 
 class ReportService:
     def __init__(
         self,
-        calendar_repo,   # CalendarRepository
-        notification_repo,  # NotificationRepository
-        doctor_repo,     # DoctorRepository
-        mission_repo=None,  # MissionRepository (opcional, para PDF ranking)
+        calendar_repo,        # CalendarRepository
+        notification_repo,    # NotificationRepository
+        doctor_repo,          # DoctorRepository
+        mission_repo=None,    # MissionRepository (opcional, para PDF ranking)
+        catalog_repo=None,    # CatalogRepository (opcional, para firmas PDF)
     ) -> None:
         self.calendar_repo = calendar_repo
         self.notification_repo = notification_repo
         self.doctor_repo = doctor_repo
         self.mission_repo = mission_repo
+        self.catalog_repo = catalog_repo
+
+    def _load_signatures(self):
+        """Load PDF signature config from system_settings, falling back to defaults."""
+        from backend.app.application.reports.pdf_templates import DEFAULT_SIGNATURES, SignatureConfig
+
+        if self.catalog_repo is None:
+            return DEFAULT_SIGNATURES
+
+        def _get(key: str, default: str) -> str:
+            setting = self.catalog_repo.get_setting(key)
+            return setting.value if setting is not None else default
+
+        d = DEFAULT_SIGNATURES
+        return SignatureConfig(
+            left_name=_get("pdf.sig_left_name", d.left_name),
+            left_title1=_get("pdf.sig_left_title1", d.left_title1),
+            left_title2=_get("pdf.sig_left_title2", d.left_title2),
+            left_title3=_get("pdf.sig_left_title3", d.left_title3),
+            right_name=_get("pdf.sig_right_name", d.right_name),
+            right_title1=_get("pdf.sig_right_title1", d.right_title1),
+            right_title2=_get("pdf.sig_right_title2", d.right_title2),
+            right_title3=_get("pdf.sig_right_title3", d.right_title3),
+        )
 
     # ------------------------------------------------------------------
     # Excel: calendar assignments
@@ -220,7 +245,7 @@ class ReportService:
                 "assignment_source": a.assignment_source,
             })
 
-        return generate_calendar_pdf(rows, calendar.month, calendar.year)
+        return generate_calendar_pdf(rows, calendar.month, calendar.year, self._load_signatures())
 
     # ------------------------------------------------------------------
     # PDF: doctor history
@@ -256,7 +281,7 @@ class ReportService:
             })
         rows.sort(key=lambda r: (-r["count"], r["name"]))
 
-        return generate_doctor_history_pdf(rows, month, year)
+        return generate_doctor_history_pdf(rows, month, year, self._load_signatures())
 
     # ------------------------------------------------------------------
     # PDF: operational summary
@@ -267,7 +292,7 @@ class ReportService:
         from backend.app.application.reports.pdf_templates import generate_operational_summary_pdf
 
         summary = self.generate_operational_summary(year, month)
-        return generate_operational_summary_pdf(summary)
+        return generate_operational_summary_pdf(summary, self._load_signatures())
 
     # ------------------------------------------------------------------
     # PDF: mission ranking
@@ -284,7 +309,7 @@ class ReportService:
         if ranking is None:
             raise ValueError("No hay ranking generado para ese periodo")
 
-        entries = mission_repo.list_ranking_entries(ranking.id)
+        entries = self.mission_repo.list_ranking_entries(ranking.id)
         doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
 
         rows = []
@@ -297,4 +322,107 @@ class ReportService:
                 "eligible": e.eligible,
             })
 
-        return generate_mission_ranking_pdf(rows, month, year)
+        return generate_mission_ranking_pdf(rows, month, year, self._load_signatures())
+
+    # ------------------------------------------------------------------
+    # PDF: weekly schedule (formato SERVICIOS)
+    # ------------------------------------------------------------------
+
+    def generate_weekly_schedule_pdf(
+        self,
+        schedule_data: list[dict],
+        week_label: str,
+        month: int,
+        year: int,
+        date_str: str | None = None,
+    ) -> bytes:
+        """Return a PDF weekly schedule in the institutional SERVICIOS format."""
+        from backend.app.application.reports.pdf_templates import generate_weekly_schedule_pdf
+
+        return generate_weekly_schedule_pdf(schedule_data, week_label, month, year, date_str, self._load_signatures())
+
+    def build_weekly_schedule(
+        self,
+        *,
+        year: int,
+        month: int,
+        calendar_version_id: str | None = None,
+    ) -> bytes:
+        """Build a weekly schedule PDF from calendar data for the given period.
+
+        Groups all assignments in the calendar version by day and generates
+        the institutional SERVICIOS-format PDF.
+        """
+        from calendar import monthrange
+
+        calendar = self.calendar_repo.get_calendar_by_period(year, month)
+        if calendar is None:
+            raise ValueError("Calendario no encontrado")
+
+        version = None
+        if calendar_version_id:
+            version = self.calendar_repo.get_version_by_id(calendar_version_id)
+        else:
+            version = self.calendar_repo.get_latest_version(calendar.id)
+        if version is None:
+            raise ValueError("Versión del calendario no encontrada")
+
+        assignments = self.calendar_repo.list_assignments(version.id)
+        if not assignments:
+            raise ValueError("No hay asignaciones para el período")
+
+        # Load doctor names
+        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
+
+        # Load service area display names if CatalogRepository is available
+        areas: dict[str, str] = {}
+        if hasattr(self.calendar_repo, "list_service_areas"):
+            area_list = self.calendar_repo.list_service_areas()
+            areas = {a.id: a.display_name for a in area_list}
+
+        # Group assignments by day number
+        DAY_NAMES = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
+        day_assignments: dict[int, list[dict]] = {}
+
+        for a in assignments:
+            day = a.service_date.day
+            day_assignments.setdefault(day, []).append({
+                "rank_name": doctors.get(a.doctor_id, a.doctor_id),
+                "location": areas.get(a.service_area_id, a.service_area_id),
+            })
+
+        # Build schedule_data in day order
+        schedule_data: list[dict] = []
+        last_day = monthrange(year, month)[1]
+        for day in range(1, last_day + 1):
+            if day in day_assignments:
+                date_obj = date(year, month, day)
+                day_name = DAY_NAMES[date_obj.weekday()]
+                schedule_data.append({
+                    "day_name": day_name,
+                    "day_number": day,
+                    "assignments": day_assignments[day],
+                })
+
+        if not schedule_data:
+            raise ValueError("No hay asignaciones para el período")
+
+        week_label = f"{month}/{year}"
+        return self.generate_weekly_schedule_pdf(schedule_data, week_label, month, year)
+
+    # ------------------------------------------------------------------
+    # PDF: generic doctor listing
+    # ------------------------------------------------------------------
+
+    def generate_doctor_list_pdf(
+        self,
+        doctors: list[dict],
+        title: str,
+        subtitle: str = "",
+        columns: list[str] | None = None,
+        col_widths: list[float] | None = None,
+    ) -> bytes:
+        """Return a PDF listing of doctors in institutional format."""
+        from backend.app.application.reports.pdf_templates import generate_doctor_list_pdf
+
+        return generate_doctor_list_pdf(doctors, title, subtitle, columns, col_widths, self._load_signatures())
