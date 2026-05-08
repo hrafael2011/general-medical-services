@@ -125,3 +125,108 @@ def test_pendientes_disponibilidad_mes_all_missing(db_session) -> None:
 
     assert result["ok"] is True
     assert result["data"]["count"] >= 1
+
+
+def test_historial_medico_found_by_name(db_session) -> None:
+    """Doctor encontrado por nombre → found=True, datos correctos, load_60d = 0 sin asignaciones."""
+    doc = _new_doctor(db_session, active=True, in_service=True)
+    gateway = _make_gateway(db_session)
+
+    result = gateway.execute("historial_medico", {"doctor_name": doc.name[:8]})
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert data["found"] is True
+    assert data["doctor_id"] == doc.id
+    assert data["assignments_60d"] == 0
+    assert data["load_60d"] == 0.0
+
+
+def test_historial_medico_found_by_id(db_session) -> None:
+    """Doctor encontrado por doctor_id → found=True."""
+    doc = _new_doctor(db_session, active=True, in_service=True)
+    gateway = _make_gateway(db_session)
+
+    result = gateway.execute("historial_medico", {"doctor_id": doc.id})
+
+    assert result["ok"] is True
+    assert result["data"]["found"] is True
+    assert result["data"]["doctor_id"] == doc.id
+
+
+def test_historial_medico_load_uses_area_weights(db_session) -> None:
+    """Con catalog_repo inyectado, load_60d usa los pesos reales de service_areas."""
+    import uuid as _uuid
+    from datetime import UTC as _UTC
+    from datetime import date as _date
+    from datetime import datetime as _dt
+
+    from backend.app.infrastructure.db.models.calendars import (
+        CalendarAssignmentModel,
+        CalendarModel,
+        CalendarVersionModel,
+    )
+    from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+    from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+    from backend.app.infrastructure.repositories.calendars import CalendarRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.missions import MissionRepository
+
+    # Crear doctor
+    doc = _new_doctor(db_session, active=True, in_service=True)
+
+    # Crear service area con peso = 2.0
+    now = _dt.now(_UTC)
+    sa = ServiceAreaModel(
+        id=str(_uuid.uuid4()),
+        code="emergencia_test",
+        display_name="Emergencia Test",
+        load_weight=2,
+        active=True,
+        required_for_daily_coverage=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(sa)
+
+    # Crear cadena calendario → versión → asignación hoy (dentro de 60 días)
+    cal = CalendarModel(
+        id=str(_uuid.uuid4()), month=5, year=2026, status="draft",
+        created_by=None, created_at=now, updated_at=now,
+    )
+    db_session.add(cal)
+    ver = CalendarVersionModel(
+        id=str(_uuid.uuid4()), calendar_id=cal.id, version_number=1, status="draft",
+        created_by=None, created_at=now,
+    )
+    db_session.add(ver)
+    assignment = CalendarAssignmentModel(
+        id=str(_uuid.uuid4()),
+        calendar_version_id=ver.id,
+        service_date=_date.today(),
+        service_area_id=sa.id,
+        doctor_id=doc.id,
+        assignment_source="manual",
+        created_by=None,
+        created_at=now,
+    )
+    db_session.add(assignment)
+    db_session.flush()
+
+    # Gateway CON catalog_repo
+    gateway = ToolGateway(
+        doctor_repo=DoctorRepository(db_session),
+        calendar_repo=CalendarRepository(db_session),
+        mission_repo=MissionRepository(db_session),
+        availability_repo=AvailabilityRepository(db_session),
+        catalog_repo=CatalogRepository(db_session),
+    )
+
+    result = gateway.execute("historial_medico", {"doctor_id": doc.id})
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert data["found"] is True
+    assert data["assignments_60d"] == 1
+    assert data["load_60d"] == 2.0  # usa el peso real del service_area (no 1.0 hardcodeado)

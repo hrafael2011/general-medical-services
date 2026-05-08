@@ -79,6 +79,7 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         availability_repo=AvailabilityRepository(session),
         query_executor=query_executor,
         report_service=report_service,
+        catalog_repo=CatalogRepository(session),
     )
     router = IntentRouter()
     if session:

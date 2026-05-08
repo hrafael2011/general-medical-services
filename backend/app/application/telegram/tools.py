@@ -2,6 +2,7 @@ from datetime import UTC, date, timedelta
 
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
@@ -24,6 +25,7 @@ class ToolGateway:
         availability_repo: AvailabilityRepository,
         query_executor=None,  # QueryExecutor (Phase 2)
         report_service=None,  # ReportService (Phase 3)
+        catalog_repo: CatalogRepository | None = None,
     ) -> None:
         self._doctor_repo = doctor_repo
         self._calendar_repo = calendar_repo
@@ -31,6 +33,7 @@ class ToolGateway:
         self._availability_repo = availability_repo
         self._query_executor = query_executor
         self._report_service = report_service
+        self._catalog_repo = catalog_repo
 
         self._handlers = {
             "count_medicos_activos": self._tool_count_medicos_activos,
@@ -320,9 +323,15 @@ class ToolGateway:
         all_assignments = self._calendar_repo.list_assignments_in_date_range(start, end)
         doctor_assignments = [a for a in all_assignments if a.doctor_id == doctor.id]
 
-        from backend.app.domain.calendars.scoring import AREA_WEIGHTS
+        if self._catalog_repo is not None:
+            area_weights: dict[str, float] = {
+                sa.id: float(sa.load_weight)
+                for sa in self._catalog_repo.list_service_areas()
+            }
+        else:
+            area_weights = {}
         load_60d: float = sum(
-            AREA_WEIGHTS.get(a.service_area_id, 1.0) for a in doctor_assignments
+            area_weights.get(a.service_area_id, 1.0) for a in doctor_assignments
         )
 
         return {
