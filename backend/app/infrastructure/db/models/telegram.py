@@ -17,7 +17,7 @@ class TelegramLinkTokenModel(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     created_by: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=True
+        String(36), ForeignKey("users.id"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

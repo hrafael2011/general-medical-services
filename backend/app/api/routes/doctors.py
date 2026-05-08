@@ -45,7 +45,13 @@ def list_doctors(
 ) -> DoctorListResponse:
     repo = DoctorRepository(session)
     doctors = repo.list_all(active_only=active_only)
-    items = [_to_read(d, repo) for d in doctors]
+    # Bulk load allowed areas to avoid N+1
+    areas_by_doctor = repo.get_allowed_areas_bulk([d.id for d in doctors])
+    items = []
+    for d in doctors:
+        data = DoctorRead.model_validate(d)
+        data.allowed_area_ids = areas_by_doctor.get(d.id, [])
+        items.append(data)
     return DoctorListResponse(items=items, total=len(items))
 
 

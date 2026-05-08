@@ -27,7 +27,11 @@ _FORBIDDEN_KEYWORDS = [
     "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE",
     "CREATE", "REPLACE", "EXEC", "EXECUTE", "CALL", "MERGE",
     "GRANT", "REVOKE", "LOCK", "UNLOCK",
+    "INTO", "COPY", "PG_SLEEP", "PG_CANCEL_BACKEND",
 ]
+
+# Also block CTEs that start with WITH … DELETE/UPDATE/INSERT
+_CTE_DML = re.compile(r"\bWITH\s+\w+\s+AS\s*\([^)]*\)\s*(DELETE|UPDATE|INSERT)", re.DOTALL | re.IGNORECASE)
 
 _EXCLUDE_TABLES = {
     "alembic_version",
@@ -208,6 +212,10 @@ class QueryExecutor:
 
     def _validate_sql(self, sql: str) -> bool:
         """Validate SQL is SELECT-only and contains no forbidden keywords."""
+        # Block CTE-based DML: WITH … AS (…) DELETE/UPDATE/INSERT
+        if _CTE_DML.search(sql):
+            return False
+
         cleaned = re.sub(r"'[^']*'", "", sql)
         cleaned = re.sub(r'"[^"]*"', "", cleaned)
         cleaned = cleaned.strip().upper()
@@ -226,7 +234,9 @@ class QueryExecutor:
         logger = logging.getLogger(__name__)
         try:
             start = time.time()
-            result = self._session.execute(text(sql))
+            result = self._session.execute(
+                text(sql).execution_options(timeout=10)
+            )
             elapsed = time.time() - start
 
             rows = result.fetchmany(101)

@@ -29,6 +29,8 @@ def create_access_token(subject: str, role: str, token_version: int) -> str:
         "sub": subject,
         "role": role,
         "token_version": token_version,
+        "aud": settings.token_audience,
+        "iss": settings.token_issuer,
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
     }
@@ -36,5 +38,11 @@ def create_access_token(subject: str, role: str, token_version: int) -> str:
 
 
 def decode_access_token(token: str) -> dict[str, object]:
-    return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+    return jwt.decode(
+        token,
+        settings.secret_key,
+        algorithms=[ALGORITHM],
+        audience=settings.token_audience,
+        issuer=settings.token_issuer,
+    )
 

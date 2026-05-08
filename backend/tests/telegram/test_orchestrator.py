@@ -42,11 +42,13 @@ class StubAgent:
         text: str,
         telegram_user_id: str | None = None,
         user_info: dict | None = None,
+        actor_id: str | None = None,
     ) -> AgentResult:
         self.calls.append({
             "text": text,
             "telegram_user_id": telegram_user_id,
             "user_info": user_info,
+            "actor_id": actor_id,
         })
         return self._result
 

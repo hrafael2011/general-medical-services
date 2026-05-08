@@ -1,11 +1,20 @@
+import re
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
+from backend.app.application.catalogs.service import normalize_name
 from backend.app.application.doctors.errors import DoctorServiceError
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
+
+
+def _strip_html(value: str | None) -> str | None:
+    """Remove HTML/JS tags from free-text fields to prevent stored XSS."""
+    if value is None:
+        return None
+    return re.sub(r"<[^>]*>", "", value).strip()
 
 
 class DoctorService:
@@ -44,15 +53,28 @@ class DoctorService:
                     "monthly_service_target cannot exceed monthly_service_max.",
                 )
 
+        raw_name = name.strip()
+        doctor_name = _strip_html(raw_name)
+        computed_normalized = normalize_name(doctor_name)
+
+        # Check for duplicate normalized_name
+        existing = self.doctors.get_by_normalized_name(computed_normalized)
+        if existing is not None:
+            raise DoctorServiceError(
+                "duplicate_doctor_name",
+                f"Ya existe un médico con el nombre «{existing.name}».",
+            )
+
         now = datetime.now(UTC)
         doctor = DoctorModel(
             id=str(uuid4()),
-            name=name.strip(),
+            name=doctor_name,
+            normalized_name=computed_normalized,
             sex=sex,
             rank_id=rank_id,
             department_id=department_id,
-            phone=phone,
-            notes=notes,
+            phone=_strip_html(phone),
+            notes=_strip_html(notes),
             active=True,
             service_active=True,
             service_inactive_reason_id=None,
@@ -122,8 +144,21 @@ class DoctorService:
 
         changed_fields: dict = {}
         if name is not None:
-            doctor.name = name.strip()
-            changed_fields["name"] = doctor.name
+            raw_name = name.strip()
+            doctor_name = _strip_html(raw_name)
+            computed_normalized = normalize_name(doctor_name)
+
+            # Check for duplicate normalized_name (exclude current doctor)
+            existing = self.doctors.get_by_normalized_name(computed_normalized)
+            if existing is not None and existing.id != doctor_id:
+                raise DoctorServiceError(
+                    "duplicate_doctor_name",
+                    f"Ya existe un médico con el nombre «{existing.name}».",
+                )
+
+            doctor.name = doctor_name
+            doctor.normalized_name = computed_normalized
+            changed_fields["name"] = doctor_name
         if sex is not None:
             doctor.sex = sex
             changed_fields["sex"] = sex
@@ -134,17 +169,17 @@ class DoctorService:
             doctor.department_id = department_id
             changed_fields["department_id"] = department_id
         if phone is not None:
-            doctor.phone = phone
-            changed_fields["phone"] = phone
+            doctor.phone = _strip_html(phone)
+            changed_fields["phone"] = doctor.phone
         if notes is not None:
-            doctor.notes = notes
-            changed_fields["notes"] = notes
+            doctor.notes = _strip_html(notes)
+            changed_fields["notes"] = doctor.notes
         if participa_misiones is not None:
             doctor.participa_misiones = participa_misiones
             changed_fields["participa_misiones"] = participa_misiones
         if whatsapp_phone is not None:
-            doctor.whatsapp_phone = whatsapp_phone
-            changed_fields["whatsapp_phone"] = whatsapp_phone
+            doctor.whatsapp_phone = _strip_html(whatsapp_phone)
+            changed_fields["whatsapp_phone"] = doctor.whatsapp_phone
         if monthly_service_target is not None:
             doctor.monthly_service_target = monthly_service_target
             changed_fields["monthly_service_target"] = monthly_service_target
@@ -192,7 +227,7 @@ class DoctorService:
 
         doctor.service_active = False
         doctor.service_inactive_reason_id = reason_id
-        doctor.service_inactive_detail = detail
+        doctor.service_inactive_detail = _strip_html(detail)
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
 

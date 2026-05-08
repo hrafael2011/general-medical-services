@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.infrastructure.db.base import Base
@@ -9,9 +9,16 @@ from backend.app.infrastructure.db.base import Base
 class DoctorAvailabilityModel(Base):
     __tablename__ = "doctor_availability"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "doctor_id", "month", "year", "availability_type",
+            name="uq_doctor_availability_monthly",
+        ),
+    )
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     doctor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("doctors.id"), nullable=False
+        String(36), ForeignKey("doctors.id"), nullable=False, index=True
     )
     availability_type: Mapped[str] = mapped_column(String(30), nullable=False)
     days_of_week: Mapped[list | None] = mapped_column(JSON, nullable=True)
@@ -39,10 +46,10 @@ class DoctorRestrictionModel(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     doctor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("doctors.id"), nullable=False
+        String(36), ForeignKey("doctors.id"), nullable=False, index=True
     )
     reason_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("deactivation_reasons.id"), nullable=True
+        String(36), ForeignKey("deactivation_reasons.id"), nullable=True, index=True
     )
     restriction_type: Mapped[str] = mapped_column(String(30), nullable=False)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)

@@ -24,9 +24,11 @@ UTC = UTC
 def _new_doctor(db_session, *, active: bool = True, in_service: bool = True):
     from backend.app.infrastructure.db.models.doctors import DoctorModel
 
+    doc_name = f"Dr. Test {uuid.uuid4().hex[:6]}"
     d = DoctorModel(
         id=str(uuid.uuid4()),
-        name=f"Dr. Test {uuid.uuid4().hex[:6]}",
+        name=doc_name,
+        normalized_name=" ".join(doc_name.strip().lower().split()),
         sex="M",
         active=active,
         service_active=in_service,

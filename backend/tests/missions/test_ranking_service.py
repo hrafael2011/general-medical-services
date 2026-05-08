@@ -65,6 +65,7 @@ def _create_doctor(
     doctor = DoctorModel(
         id=str(uuid4()),
         name=name,
+        normalized_name=" ".join(name.strip().lower().split()),
         sex="male",
         rank_id=None,
         department_id=None,

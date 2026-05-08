@@ -5,7 +5,7 @@ from backend.app.main import create_app
 def test_health_check_returns_ok() -> None:
     response = health_check()
 
-    assert response.status == "ok"
+    assert response["status"] == "ok"
 
 
 def test_app_registers_health_route() -> None:

@@ -1,3 +1,5 @@
+import logging
+
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.templates import (
     render_initial_assignment,
@@ -5,6 +7,8 @@ from backend.app.application.notifications.templates import (
     render_mission_summary_encargado,
 )
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationTriggers:
@@ -46,6 +50,10 @@ class NotificationTriggers:
                 )
                 count += 1
             except Exception:
+                logger.warning(
+                    "Failed to queue calendar notification for assignment %s", assignment.id,
+                    exc_info=True,
+                )
                 continue
         return count
 
@@ -82,6 +90,10 @@ class NotificationTriggers:
                 )
                 count += 1
             except Exception:
+                logger.warning(
+                    "Failed to queue mission notification for participant %s", participant.doctor_id,
+                    exc_info=True,
+                )
                 continue
 
         if encargado_phone:
@@ -104,6 +116,9 @@ class NotificationTriggers:
                 )
                 count += 1
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to queue mission summary notification for mission %s", mission.id,
+                    exc_info=True,
+                )
 
         return count

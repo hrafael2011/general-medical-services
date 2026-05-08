@@ -129,10 +129,17 @@ def test_process_sends_pending(db_session) -> None:
 def test_process_skips_no_phone(db_session) -> None:
     """process_pending() skips notifications without a recipient phone."""
     service = _make_service(db_session)
-    _queue_one(service, recipient_phone=None)
+    event = _queue_one(service, recipient_phone=None)
+    assert event.status == "pending"
 
     result = service.process_pending()
 
+    # Event should be marked as skipped in the DB
+    repo = NotificationRepository(db_session)
+    fetched = repo.get_by_id(event.id)
+    assert fetched is not None
+    assert fetched.status == "skipped"
+    assert fetched.sent_at is not None
     assert result["skipped"] == 1
     assert result["sent"] == 0
 

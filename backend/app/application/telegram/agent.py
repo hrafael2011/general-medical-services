@@ -199,10 +199,13 @@ class ConversationalAgent:
     # Backward-compat handler for old-format LLM responses
     # ------------------------------------------------------------------
 
-    def _handle_old_tool_format(self, parsed: dict, user_text: str) -> AgentResult:
+    def _handle_old_tool_format(self, parsed: dict, user_text: str, actor_id: str | None = None) -> AgentResult:
         """Handle legacy {action: 'call_tool', tool: '...', entities: {...}}."""
         tool_name = parsed.get("tool", "")
-        entities = parsed.get("entities", {})
+        entities = dict(parsed.get("entities", {}))
+        # Inject actor_id for write operations (create_mission, etc.)
+        if actor_id:
+            entities["_actor_id"] = actor_id
 
         if self._tools is None:
             return AgentResult(
@@ -295,6 +298,7 @@ class ConversationalAgent:
         text: str,
         telegram_user_id: str | None = None,
         user_info: dict | None = None,
+        actor_id: str | None = None,
     ) -> AgentResult:
         """
         Process a user message and return an AgentResult.
@@ -307,7 +311,11 @@ class ConversationalAgent:
         # 1. Load history
         history: list[dict] = []
         if self._memory and telegram_user_id:
-            history = self._memory.load_history(telegram_user_id)
+            try:
+                history = self._memory.load_history(telegram_user_id)
+            except Exception:
+                logger.warning("Failed to load history for %s", telegram_user_id, exc_info=True)
+                history = []
 
         # 2. Build prompt
         system_prompt = self._build_system_prompt(user_info)
@@ -327,11 +335,12 @@ class ConversationalAgent:
 
         # Not valid JSON → treat as direct reply
         if parsed is None:
+            logger.warning("LLM returned invalid JSON: %.200s", response)
             return AgentResult(response_text=response)
 
         # 5. Legacy format support
         if parsed.get("action") == "call_tool":
-            return self._handle_old_tool_format(parsed, text)
+            return self._handle_old_tool_format(parsed, text, actor_id=actor_id)
 
         # 6. New format routing
         action = parsed.get("action", "reply")
@@ -374,4 +383,5 @@ class ConversationalAgent:
             )
 
         # 6c. Unknown action
+        logger.warning("LLM returned unknown action '%s' for: %.100s", action, text)
         return AgentResult(response_text="No pude encontrar informacion sobre eso en el sistema.")

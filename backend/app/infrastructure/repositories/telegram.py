@@ -24,14 +24,14 @@ class TelegramRepository:
     def get_link_by_telegram_id(self, telegram_user_id: str) -> TelegramUserLinkModel | None:
         stmt = select(TelegramUserLinkModel).where(
             TelegramUserLinkModel.telegram_user_id == telegram_user_id,
-            TelegramUserLinkModel.active == True,  # noqa: E712
+            TelegramUserLinkModel.active.is_(True),
         )
         return self.session.scalars(stmt).first()
 
     def get_link_by_user_id(self, user_id: str) -> TelegramUserLinkModel | None:
         stmt = select(TelegramUserLinkModel).where(
             TelegramUserLinkModel.user_id == user_id,
-            TelegramUserLinkModel.active == True,  # noqa: E712
+            TelegramUserLinkModel.active.is_(True),
         )
         return self.session.scalars(stmt).first()
 
@@ -45,7 +45,7 @@ class TelegramRepository:
     def get_valid_token(self, token_str: str) -> TelegramLinkTokenModel | None:
         stmt = select(TelegramLinkTokenModel).where(
             TelegramLinkTokenModel.token == token_str,
-            TelegramLinkTokenModel.active == True,  # noqa: E712
+            TelegramLinkTokenModel.active.is_(True),
             TelegramLinkTokenModel.used_at.is_(None),
             TelegramLinkTokenModel.expires_at > datetime.now(UTC),
         )
@@ -66,7 +66,7 @@ class TelegramRepository:
     def list_pending_tokens_by_user(self, user_id: str) -> list[TelegramLinkTokenModel]:
         stmt = select(TelegramLinkTokenModel).where(
             TelegramLinkTokenModel.user_id == user_id,
-            TelegramLinkTokenModel.active == True,  # noqa: E712
+            TelegramLinkTokenModel.active.is_(True),
             TelegramLinkTokenModel.used_at.is_(None),
             TelegramLinkTokenModel.expires_at > datetime.now(UTC),
         )

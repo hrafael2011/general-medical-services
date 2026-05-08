@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -7,6 +8,8 @@ from backend.app.infrastructure.repositories.notifications import (
     MAX_RETRIES,
     NotificationRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
@@ -77,12 +80,16 @@ class NotificationService:
         skipped = 0
 
         for event in pending:
+            now = datetime.now(UTC)
+
             if not event.recipient_phone:
+                event.status = "skipped"
+                event.sent_at = now
+                event.updated_at = now
                 skipped += 1
                 continue
 
             message = (event.payload or {}).get("message", "")
-            now = datetime.now(UTC)
 
             try:
                 msg_id = self.provider.send(event.recipient_phone, message)
@@ -93,14 +100,29 @@ class NotificationService:
                 event.error_code = None
                 event.error_message = None
                 event.updated_at = now
+                logger.info(
+                    "Notification %s sent via %s to %s (idempotency=%s)",
+                    event.id, self.provider.name, event.recipient_phone, event.idempotency_key,
+                )
                 sent += 1
             except Exception as exc:
                 event.retry_count += 1
+                event.error_code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
                 event.error_message = str(exc)
+                event.last_retried_at = now
                 event.updated_at = now
                 if event.retry_count >= MAX_RETRIES:
                     event.status = "failed"
+                    logger.error(
+                        "Notification %s failed after %d retries: %s",
+                        event.id, MAX_RETRIES, exc,
+                    )
                     failed += 1
-                # else: status remains "pending" for next processing cycle
+                else:
+                    logger.warning(
+                        "Notification %s retry %d/%d failed: %s",
+                        event.id, event.retry_count, MAX_RETRIES, exc,
+                    )
+                    # status remains "pending" for next processing cycle
 
         return {"sent": sent, "failed": failed, "skipped": skipped}

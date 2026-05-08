@@ -54,6 +54,18 @@ class MissionRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def list_participants_bulk(self, mission_ids: list[str]) -> dict[str, list[MissionParticipantModel]]:
+        """Load participants for multiple missions in a single query."""
+        if not mission_ids:
+            return {}
+        stmt = select(MissionParticipantModel).where(
+            MissionParticipantModel.mission_assignment_id.in_(mission_ids)
+        )
+        result: dict[str, list[MissionParticipantModel]] = {}
+        for p in self.session.scalars(stmt):
+            result.setdefault(p.mission_assignment_id, []).append(p)
+        return result
+
     def list_participations_for_doctor_in_range(
         self, doctor_id: str, start: date, end: date
     ) -> list[MissionParticipantModel]:
@@ -67,6 +79,19 @@ class MissionRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def list_confirmed_in_range(self, start: date, end: date) -> list[tuple[MissionAssignmentModel, list[MissionParticipantModel]]]:
+        """All confirmed missions with participants in a date range."""
+        stmt = (
+            select(MissionAssignmentModel)
+            .where(MissionAssignmentModel.status == "confirmed")
+            .where(MissionAssignmentModel.mission_date >= start)
+            .where(MissionAssignmentModel.mission_date <= end)
+            .order_by(MissionAssignmentModel.mission_date)
+        )
+        missions = list(self.session.scalars(stmt))
+        participants_by_id = self.list_participants_bulk([m.id for m in missions])
+        return [(m, participants_by_id.get(m.id, [])) for m in missions]
+
     # --- Rankings ---
 
     def add_ranking(self, ranking: MissionCandidateRankingModel) -> MissionCandidateRankingModel:
@@ -74,11 +99,14 @@ class MissionRepository:
         self.session.flush()
         return ranking
 
-    def get_ranking_by_period(self, year: int, month: int) -> MissionCandidateRankingModel | None:
+    def get_ranking_by_period(self, year: int, month: int, calendar_version_id: str | None = None) -> MissionCandidateRankingModel | None:
         stmt = select(MissionCandidateRankingModel).where(
             MissionCandidateRankingModel.year == year,
             MissionCandidateRankingModel.month == month,
         )
+        if calendar_version_id is not None:
+            stmt = stmt.where(MissionCandidateRankingModel.calendar_version_id == calendar_version_id)
+        stmt = stmt.order_by(MissionCandidateRankingModel.generated_at.desc())
         return self.session.scalars(stmt).first()
 
     def add_ranking_entry(
