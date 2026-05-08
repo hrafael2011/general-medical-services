@@ -1,3 +1,11 @@
+---
+spec: 10
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 10 - Seguridad, Acceso y Usuarios
 
 ## Goal
@@ -234,3 +242,10 @@ Audit entries must include actor, target user where applicable, timestamp, actio
 6. Given any user login attempt, when the credentials are wrong repeatedly, then throttling or temporary lockout is applied and audit events are recorded.
 7. Given an unlinked Telegram user, when they message the bot, then no operational data is returned.
 8. Given an unauthorized role attempts a restricted action, then the system rejects the action and records an audit event.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define roles admin/encargado, modelo de usuario, flujos de creación y reset de contraseña, bloqueo por cambio pendiente y eventos de auditoría de seguridad. |

@@ -62,6 +62,21 @@ class CatalogService:
             )
         )
 
+        from backend.app.application.reports.pdf_templates import DEFAULT_SIGNATURES as _sigs
+        for key, value, description in [
+            ("pdf.sig_left_name",   _sigs.left_name,   "Nombre de la firmante izquierda en PDFs institucionales."),
+            ("pdf.sig_left_title1", _sigs.left_title1, "Título 1 de la firmante izquierda."),
+            ("pdf.sig_left_title2", _sigs.left_title2, "Título 2 de la firmante izquierda."),
+            ("pdf.sig_left_title3", _sigs.left_title3, "Título 3 de la firmante izquierda."),
+            ("pdf.sig_right_name",   _sigs.right_name,   "Nombre del firmante derecho en PDFs institucionales."),
+            ("pdf.sig_right_title1", _sigs.right_title1, "Título 1 del firmante derecho."),
+            ("pdf.sig_right_title2", _sigs.right_title2, "Título 2 del firmante derecho."),
+            ("pdf.sig_right_title3", _sigs.right_title3, "Título 3 del firmante derecho."),
+        ]:
+            self.catalogs.upsert_setting(
+                SystemSettingModel(key=key, value=value, description=description, updated_at=now)
+            )
+
     def create_rank(self, name: str, abbreviation: str) -> RankModel:
         now = datetime.now(UTC)
         rank = RankModel(

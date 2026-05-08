@@ -1,6 +1,8 @@
 from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     CalendarModel,
@@ -123,7 +125,6 @@ class CalendarRepository:
         self, start_date: "date", end_date: "date"
     ) -> list[CalendarAssignmentModel]:
         """Return all assignments across all versions within a date range (for load history)."""
-        from datetime import date  # noqa: PLC0415
         stmt = (
             select(CalendarAssignmentModel)
             .where(CalendarAssignmentModel.service_date >= start_date)

@@ -5,19 +5,24 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from backend.app.infrastructure.db.models.telegram import TelegramUserLinkModel, TelegramInteractionModel
+from backend.app.application.telegram.types import AgentResult
+from backend.app.application.telegram.agent import ConversationalAgent
+from backend.app.application.telegram.bot_client import FakeBotClient
+from backend.app.application.telegram.llm import FakeLLMProvider
+from backend.app.application.telegram.orchestrator import TelegramOrchestrator
+from backend.app.infrastructure.db.models.telegram import (
+    TelegramInteractionModel,
+    TelegramUserLinkModel,
+)
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 from backend.app.infrastructure.repositories.users import UserRepository
-from backend.app.application.telegram.orchestrator import TelegramOrchestrator
-from backend.app.application.telegram.llm import FakeLLMProvider
-from backend.app.application.telegram.bot_client import FakeBotClient
 
-UTC = timezone.utc
+UTC = UTC
 
 
 # ---------------------------------------------------------------------------
@@ -25,22 +30,27 @@ UTC = timezone.utc
 # ---------------------------------------------------------------------------
 
 
-class StubClassifier:
-    def __init__(self, intent: str, entities: dict, confidence: float):
-        self._response = {"intent": intent, "entities": entities, "confidence": confidence}
+class StubAgent:
+    """Returns a predetermined AgentResult for testing orchestrator flow."""
 
-    def classify(self, text: str) -> dict:
-        return self._response
+    def __init__(self, result: AgentResult) -> None:
+        self._result = result
+        self.calls: list[dict] = []
 
-
-class StubTools:
-    def __init__(self, response: dict):
-        self._response = response
-        self.calls: list[tuple[str, dict]] = []
-
-    def execute(self, intent: str, entities: dict) -> dict:
-        self.calls.append((intent, entities))
-        return self._response
+    def process(
+        self,
+        text: str,
+        telegram_user_id: str | None = None,
+        user_info: dict | None = None,
+        actor_id: str | None = None,
+    ) -> AgentResult:
+        self.calls.append({
+            "text": text,
+            "telegram_user_id": telegram_user_id,
+            "user_info": user_info,
+            "actor_id": actor_id,
+        })
+        return self._result
 
 
 # ---------------------------------------------------------------------------
@@ -96,26 +106,18 @@ def _new_link(db_session, *, user_id: str, telegram_user_id: str, active: bool =
 def _make_orchestrator(
     db_session,
     *,
-    classifier=None,
-    tools=None,
+    agent=None,
     bot_client=None,
-    llm=None,
 ) -> TelegramOrchestrator:
-    if classifier is None:
-        classifier = StubClassifier("out_of_domain", {}, 0.9)
-    if tools is None:
-        tools = StubTools({"ok": False, "error": "out_of_domain"})
+    if agent is None:
+        agent = StubAgent(AgentResult(response_text="Respuesta por defecto"))
     if bot_client is None:
         bot_client = FakeBotClient()
-    if llm is None:
-        llm = FakeLLMProvider()
     return TelegramOrchestrator(
         telegram_repo=TelegramRepository(db_session),
         user_repo=UserRepository(db_session),
-        classifier=classifier,
-        tools=tools,
+        agent=agent,
         bot_client=bot_client,
-        llm=llm,
     )
 
 
@@ -172,14 +174,14 @@ def test_must_change_password_blocked(db_session) -> None:
     assert "contraseña" in response
 
 
-def test_out_of_domain_intent(db_session) -> None:
-    """A message classified as out_of_domain should return the out-of-scope message."""
+def test_agent_response_passed_through(db_session) -> None:
+    """The orchestrator should pass through whatever the agent returns."""
     user = _new_user(db_session)
     tg_id = f"tg-{uuid.uuid4().hex[:8]}"
     _new_link(db_session, user_id=user.id, telegram_user_id=tg_id)
 
-    classifier = StubClassifier("out_of_domain", {}, 0.9)
-    orchestrator = _make_orchestrator(db_session, classifier=classifier)
+    agent = StubAgent(AgentResult(response_text="Respuesta personalizada"))
+    orchestrator = _make_orchestrator(db_session, agent=agent)
 
     response = orchestrator.handle_message(
         telegram_user_id=tg_id,
@@ -188,18 +190,23 @@ def test_out_of_domain_intent(db_session) -> None:
         text="Cuéntame un chiste",
     )
 
-    assert "fuera del alcance" in response
+    assert response == "Respuesta personalizada"
 
 
-def test_count_medicos_activos_happy_path(db_session) -> None:
-    """count_medicos_activos intent with a stub that returns count=3 should have '3' in response."""
+def test_agent_tool_response_with_data(db_session) -> None:
+    """Tool result metadata in AgentResult should be logged but response text comes through."""
     user = _new_user(db_session)
     tg_id = f"tg-{uuid.uuid4().hex[:8]}"
     _new_link(db_session, user_id=user.id, telegram_user_id=tg_id)
 
-    classifier = StubClassifier("count_medicos_activos", {}, 0.9)
-    tools = StubTools({"ok": True, "data": {"count": 3}})
-    orchestrator = _make_orchestrator(db_session, classifier=classifier, tools=tools)
+    agent = StubAgent(AgentResult(
+        response_text="Hay 3 medicos activos.",
+        agent_action="call_tool",
+        tool_name="count_medicos_activos",
+        tool_entities={},
+        tool_result={"ok": True, "data": {"count": 3}},
+    ))
+    orchestrator = _make_orchestrator(db_session, agent=agent)
 
     response = orchestrator.handle_message(
         telegram_user_id=tg_id,
@@ -209,8 +216,32 @@ def test_count_medicos_activos_happy_path(db_session) -> None:
     )
 
     assert "3" in response
-    assert len(tools.calls) == 1
-    assert tools.calls[0][0] == "count_medicos_activos"
+    assert len(agent.calls) == 1
+    assert agent.calls[0]["text"] == "¿Cuántos médicos activos hay?"
+    assert agent.calls[0]["user_info"]["name"] == "Test User"
+
+
+def test_agent_receives_user_info(db_session) -> None:
+    """The agent should receive user info (name, role, id) from the orchestrator."""
+    user = _new_user(db_session, role="doctor")
+    tg_id = f"tg-{uuid.uuid4().hex[:8]}"
+    _new_link(db_session, user_id=user.id, telegram_user_id=tg_id)
+
+    agent = StubAgent(AgentResult(response_text="OK"))
+    orchestrator = _make_orchestrator(db_session, agent=agent)
+
+    orchestrator.handle_message(
+        telegram_user_id=tg_id,
+        telegram_username="docuser",
+        chat_id=55555,
+        text="Mi historial",
+    )
+
+    assert len(agent.calls) == 1
+    info = agent.calls[0]["user_info"]
+    assert info["name"] == "Test User"
+    assert info["role"] == "doctor"
+    assert info["id"] == user.id
 
 
 def test_interaction_is_logged(db_session) -> None:

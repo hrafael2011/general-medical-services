@@ -11,19 +11,22 @@ class DoctorModel(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(
+        String(160), nullable=False, unique=True, index=True
+    )
     sex: Mapped[str] = mapped_column(String(10), nullable=False)
     rank_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("ranks.id"), nullable=True
+        String(36), ForeignKey("ranks.id"), nullable=True, index=True
     )
     department_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("departments.id"), nullable=True
+        String(36), ForeignKey("departments.id"), nullable=True, index=True
     )
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     service_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     service_inactive_reason_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("deactivation_reasons.id"), nullable=True
+        String(36), ForeignKey("deactivation_reasons.id"), nullable=True, index=True
     )
     service_inactive_detail: Mapped[str | None] = mapped_column(
         String(500), nullable=True

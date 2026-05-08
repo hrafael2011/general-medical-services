@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -22,7 +23,6 @@ from backend.app.core.security import (
     verify_password,
 )
 from backend.app.domain.accounts import UserRole
-from backend.app.application.audit.service import AuditService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.users import UserRepository
 
@@ -100,6 +100,7 @@ class AccountService:
             self.users.add(user)
         except IntegrityError as exc:
             raise DuplicateEmailError from exc
+        self.users.add_password_history(user.id, user.password_hash)
         if self.audit is not None:
             self.audit.log_user_created(actor_id=actor.id, user=user)
         return TemporaryPasswordResult(user=user, temporary_password=password)
@@ -119,12 +120,14 @@ class AccountService:
             raise PermissionDeniedError
         password = temporary_password or generate_temporary_password()
         now = datetime.now(UTC)
-        user.password_hash = hash_password(password)
+        new_hash = hash_password(password)
+        user.password_hash = new_hash
         user.must_change_password = True
         user.token_version += 1
         user.failed_login_count = 0
         user.locked_until = None
         user.updated_at = now
+        self.users.add_password_history(user.id, new_hash)
         if self.audit is not None:
             self.audit.log_password_reset(actor_id=actor.id, user=user)
         return TemporaryPasswordResult(user=user, temporary_password=password)
@@ -142,15 +145,36 @@ class AccountService:
             raise InvalidPasswordChangeError
         if verify_password(new_password, user.password_hash):
             raise InvalidPasswordChangeError
+
+        # Password complexity: at least 10 chars, 1 upper, 1 lower, 1 digit, 1 special
         if len(new_password) < 10:
             raise InvalidPasswordChangeError
+        if not re.search(r"[A-Z]", new_password):
+            raise InvalidPasswordChangeError
+        if not re.search(r"[a-z]", new_password):
+            raise InvalidPasswordChangeError
+        if not re.search(r"\d", new_password):
+            raise InvalidPasswordChangeError
+        if not re.search(r"[!@#$%^&*(),.\-:;<>?/\\[\]{}_~`|'\"]", new_password):
+            raise InvalidPasswordChangeError
+
+        # Check against password history (last 5)
+        recent_hashes = self.users.list_recent_password_hashes(user.id)
+        new_hash = hash_password(new_password)
+        for old_hash in recent_hashes:
+            if old_hash == new_hash:
+                raise InvalidPasswordChangeError
 
         now = datetime.now(UTC)
-        user.password_hash = hash_password(new_password)
+        user.password_hash = new_hash
         user.must_change_password = False
         user.password_changed_at = now
         user.token_version += 1
         user.updated_at = now
+
+        # Save to password history
+        self.users.add_password_history(user.id, new_hash)
+
         if self.audit is not None:
             self.audit.log_password_changed(actor_id=user.id, user=user)
         return user

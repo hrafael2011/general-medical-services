@@ -41,6 +41,7 @@ def compute_candidate_score(
     monthly_assignments: list[dict],
     historical_assignments: list[dict],
     mission_assignments: list[dict],
+    monthly_service_target: int = 3,
 ) -> CandidateScore:
     """Compute a scheduling score for one doctor on one slot.
 
@@ -102,7 +103,7 @@ def compute_candidate_score(
 
     if all_service_dates:
         last_service_date = max(all_service_dates)
-        days_since_last: int = (slot.date - last_service_date).days
+        days_since_last: int = max(0, (slot.date - last_service_date).days)
     else:
         days_since_last = 999
 
@@ -117,7 +118,7 @@ def compute_candidate_score(
 
     if strong_service_dates:
         last_strong_date = max(strong_service_dates)
-        days_since_strong: int = (slot.date - last_strong_date).days
+        days_since_strong: int = max(0, (slot.date - last_strong_date).days)
     else:
         days_since_strong = 999
 
@@ -143,7 +144,7 @@ def compute_candidate_score(
 
     # Mission-based spacing
     if last_mission_date is not None:
-        days_since_mission = (slot.date - last_mission_date).days
+        days_since_mission = max(0, (slot.date - last_mission_date).days)
         if slot_area in STRONG_AREAS and days_since_mission < MIN_SPACING_AFTER_MISSION_STRONG:
             warnings.append("spacing < 7 días desde misión")
         elif slot_area == "disponible" and days_since_mission < MIN_SPACING_AFTER_MISSION_DISPONIBLE:
@@ -155,7 +156,25 @@ def compute_candidate_score(
     is_spacing_violation: bool = len(warnings) > 0
 
     # ------------------------------------------------------------------
-    # 10. Score computation (higher = better)
+    # 10. Target-aware bonus (prefer doctors below their monthly target)
+    # ------------------------------------------------------------------
+    target_bonus: float = max(0, monthly_service_target - monthly_count) * 2
+
+    # ------------------------------------------------------------------
+    # 11. Area rotation bonus (prefer different area from last assignment)
+    # ------------------------------------------------------------------
+    area_penalty: float = 0.0
+    if all_service_dates:
+        # Most recent assignment (by date), then check its area
+        last_assignment = max(
+            doctor_monthly + doctor_historical,
+            key=lambda a: a["service_date"],
+        )
+        if last_assignment["service_area_id"] == slot.service_area_id:
+            area_penalty = 3.0  # small penalty for same area
+
+    # ------------------------------------------------------------------
+    # 12. Final score (higher = better)
     # ------------------------------------------------------------------
     score: float = (
         100.0
@@ -164,6 +183,8 @@ def compute_candidate_score(
         + min(days_since_last, 30) * 0.5
         + min(days_since_strong, 30) * 0.3
         - len(warnings) * 5
+        + target_bonus
+        - area_penalty
     )
 
     return CandidateScore(

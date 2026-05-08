@@ -1,3 +1,11 @@
+---
+spec: 09
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 09 - Asistente Operacional y Tools
 
 ## Goal
@@ -321,3 +329,10 @@ Critical assistant actions must also create an `AuditEvent`.
 10. Given a Telegram request to modify or approve regular service, doctor, user, availability, restriction, or rule data in MVP, then the assistant rejects the action and directs the user to the panel.
 11. Given an encargado requests mission candidates with date and count, then Telegram proposes candidates from the stored mission ranking after applying date-specific filters.
 12. Given the encargado explicitly confirms proposed mission candidates, then Telegram may create the mission assignment, audit the action, and trigger notifications.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define flujo de tool-calling del asistente, contrato de herramientas, política anti-alucinación, misiones por Telegram y auditoría de interacciones. |

@@ -1,6 +1,17 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.infrastructure.db.base import Base
@@ -58,12 +69,12 @@ class MissionCandidateRankingModel(Base):
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     calendar_version_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("calendar_versions.id"), nullable=True
+        String(36), ForeignKey("calendar_versions.id"), nullable=True, index=True
     )
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
-    __table_args__ = (UniqueConstraint("month", "year"),)
+    __table_args__ = (UniqueConstraint("month", "year", "calendar_version_id", name="uq_ranking_period_version"),)
 
 
 class MissionCandidateRankingEntryModel(Base):
@@ -74,7 +85,7 @@ class MissionCandidateRankingEntryModel(Base):
         String(36), ForeignKey("mission_candidate_rankings.id"), nullable=False, index=True
     )
     doctor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("doctors.id"), nullable=False
+        String(36), ForeignKey("doctors.id"), nullable=False, index=True
     )
     ranking_position: Mapped[int] = mapped_column(Integer, nullable=False)
     total_load_score: Mapped[float] = mapped_column(Float, nullable=False)

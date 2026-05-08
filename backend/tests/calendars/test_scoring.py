@@ -6,15 +6,10 @@ No database access needed — all inputs are plain Python dicts and date objects
 
 import datetime
 
-import pytest
-
 from backend.app.domain.calendars.scoring import (
-    MIN_SPACING_DISPONIBLE_AFTER_STRONG,
-    MIN_SPACING_STRONG,
     compute_candidate_score,
 )
 from backend.app.domain.calendars.types import SlotRequest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -229,3 +224,111 @@ def test_is_spacing_violation_set() -> None:
 
     assert no_violation.warnings == []
     assert no_violation.is_spacing_violation is False
+
+
+# ---------------------------------------------------------------------------
+# test_score_target_bonus
+# ---------------------------------------------------------------------------
+
+
+def test_score_target_bonus() -> None:
+    """A doctor below their monthly target should score higher than one who has
+    already reached their target, all else being equal.
+
+    Doctor A: monthly_count=0, target=3 → 3 below target → +6 bonus.
+    Doctor B: monthly_count=3, target=3 → 0 below target → +0 bonus.
+    """
+    slot = _SLOT_DISPONIBLE
+
+    doc_a = compute_candidate_score(
+        doctor_id="doc-a",
+        slot=slot,
+        monthly_assignments=[],  # count=0
+        historical_assignments=[],
+        mission_assignments=[],
+        monthly_service_target=3,
+    )
+
+    doc_b = compute_candidate_score(
+        doctor_id="doc-b",
+        slot=slot,
+        monthly_assignments=[
+            {
+                "doctor_id": "doc-b",
+                "service_date": _SLOT_DATE - datetime.timedelta(days=5),
+                "service_area_id": "emergencia",
+            },
+            {
+                "doctor_id": "doc-b",
+                "service_date": _SLOT_DATE - datetime.timedelta(days=3),
+                "service_area_id": "pista",
+            },
+            {
+                "doctor_id": "doc-b",
+                "service_date": _SLOT_DATE - datetime.timedelta(days=1),
+                "service_area_id": "disponible",
+            },
+        ],
+        historical_assignments=[],
+        mission_assignments=[],
+        monthly_service_target=3,
+    )
+
+    # doc-a is below target, doc-b is at target → doc-a must score higher
+    assert doc_a.score > doc_b.score, (
+        f"Expected doc-a (below target) to score higher than doc-b (at target), "
+        f"got doc-a={doc_a.score:.1f}, doc-b={doc_b.score:.1f}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# test_score_area_rotation
+# ---------------------------------------------------------------------------
+
+
+def test_score_area_rotation() -> None:
+    """A doctor whose last area was different from the slot area scores higher
+    than one whose last area matches the slot area (area rotation bonus).
+
+    Both doctors have identical load, but doc-y's last assignment was 'disponible'
+    while the slot is 'emergencia' → doc-y scores higher.
+    """
+    slot = _SLOT_EMERGENCIA
+    last_week = _SLOT_DATE - datetime.timedelta(days=7)
+
+    # doc-x last did 'emergencia' (same as slot) → penalty
+    doc_x = compute_candidate_score(
+        doctor_id="doc-x",
+        slot=slot,
+        monthly_assignments=[
+            {
+                "doctor_id": "doc-x",
+                "service_date": last_week,
+                "service_area_id": "emergencia",
+            },
+        ],
+        historical_assignments=[],
+        mission_assignments=[],
+        monthly_service_target=3,
+    )
+
+    # doc-y last did 'disponible' (different from slot) → no penalty
+    doc_y = compute_candidate_score(
+        doctor_id="doc-y",
+        slot=slot,
+        monthly_assignments=[
+            {
+                "doctor_id": "doc-y",
+                "service_date": last_week,
+                "service_area_id": "disponible",
+            },
+        ],
+        historical_assignments=[],
+        mission_assignments=[],
+        monthly_service_target=3,
+    )
+
+    assert doc_y.score > doc_x.score, (
+        f"Expected doc-y (area rotation) to score higher than doc-x (same area), "
+        f"got doc-x={doc_x.score:.1f}, doc-y={doc_y.score:.1f}"
+    )

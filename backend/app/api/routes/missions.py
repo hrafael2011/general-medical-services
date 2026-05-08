@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_ready_user
 from backend.app.application.missions.candidate_service import MissionCandidateService
+from backend.app.core.config import settings
 from backend.app.application.missions.errors import MissionServiceError
 from backend.app.application.missions.ranking_service import MissionRankingService
 from backend.app.infrastructure.db.models.user import UserModel
@@ -64,12 +65,14 @@ def get_ranking_service(
     from backend.app.application.audit.service import AuditService
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.calendars import CalendarRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
 
     return MissionRankingService(
         MissionRepository(session),
         DoctorRepository(session),
         CalendarRepository(session),
+        CatalogRepository(session),
         audit=AuditService(AuditRepository(session)),
     )
 
@@ -78,15 +81,30 @@ def get_candidate_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionCandidateService:
     from backend.app.application.audit.service import AuditService
+    from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
+    from backend.app.application.notifications.service import NotificationService
+    from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
     from backend.app.infrastructure.repositories.calendars import CalendarRepository
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.notifications import NotificationRepository
+
+    provider = TwilioProvider() if settings.twilio_account_sid else FakeProvider()
+    triggers = NotificationTriggers(
+        notification_service=NotificationService(
+            repo=NotificationRepository(session),
+            provider=provider,
+        ),
+        doctor_repo=DoctorRepository(session),
+    )
 
     return MissionCandidateService(
         MissionRepository(session),
         CalendarRepository(session),
         AvailabilityRepository(session),
         audit=AuditService(AuditRepository(session)),
+        triggers=triggers,
     )
 
 
@@ -241,7 +259,17 @@ def list_missions(
 ) -> list[MissionAssignmentRead]:
     repo = MissionRepository(session)
     missions = repo.list_missions()
-    return [_to_mission_read(m, repo) for m in missions]
+    # Bulk load participants to avoid N+1
+    participants_by_mission = repo.list_participants_bulk([m.id for m in missions])
+    items = []
+    for m in missions:
+        data = MissionAssignmentRead.model_validate(m)
+        data.participants = [
+            MissionParticipantRead.model_validate(p)
+            for p in participants_by_mission.get(m.id, [])
+        ]
+        items.append(data)
+    return items
 
 
 @router.get(

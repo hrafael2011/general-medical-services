@@ -8,11 +8,8 @@ SimpleNamespace objects to stand in for ORM models.
 import datetime
 from types import SimpleNamespace
 
-import pytest
-
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import AREA_WEIGHTS
-
 
 # ---------------------------------------------------------------------------
 # Constants shared across tests
@@ -77,6 +74,8 @@ def test_generate_fills_all_slots_with_one_doctor() -> None:
         # Empty dicts → no availability records → unsubmitted = eligible
         availability={},
         restrictions={},
+        monthly_service_maxes={"doc-1": 999},
+        monthly_service_targets={"doc-1": 999},
     )
 
     engine = CalendarEngine()
@@ -164,3 +163,74 @@ def test_generate_respects_hard_block() -> None:
         if r.assigned_doctor_id is not None
     }
     assert "doc-1" not in assigned_doctors
+
+
+# ---------------------------------------------------------------------------
+# test_generate_respects_monthly_max
+# ---------------------------------------------------------------------------
+
+
+def test_generate_respects_monthly_max() -> None:
+    """With monthly_max=3, a doctor should be assigned at most 3 times in the month,
+    even when available every day.  All remaining slots become gaps."""
+    doctor = _make_doctor("doc-1")
+
+    ctx = _base_context(
+        doctors=[doctor],
+        allowed_areas={"doc-1": ["emergencia", "pista", "disponible"]},
+        availability={},
+        restrictions={},
+        monthly_service_maxes={"doc-1": 3},
+        monthly_service_targets={"doc-1": 3},
+    )
+
+    engine = CalendarEngine()
+    summary = engine.generate(ctx)
+
+    assert summary.total_slots == _TOTAL_SLOTS
+    assert summary.assigned_count == 3
+    assert summary.gap_count == _TOTAL_SLOTS - 3
+
+    # All assigned slots must belong to doc-1
+    for r in summary.slot_results:
+        if r.assigned_doctor_id is not None:
+            assert r.assigned_doctor_id == "doc-1"
+
+
+# ---------------------------------------------------------------------------
+# test_generate_respects_monthly_max_multi_doctor
+# ---------------------------------------------------------------------------
+
+
+def test_generate_respects_monthly_max_multi_doctor() -> None:
+    """With 3 doctors each capped at monthly_max=3, total assigned = 9.
+    The engine distributes assignments across doctors respecting limits."""
+    doctors = [_make_doctor(f"doc-{i}") for i in range(1, 4)]
+
+    allowed_areas = {d.id: ["emergencia", "pista", "disponible"] for d in doctors}
+    monthly_maxes = {d.id: 3 for d in doctors}
+    monthly_targets = {d.id: 3 for d in doctors}
+
+    ctx = _base_context(
+        doctors=doctors,
+        allowed_areas=allowed_areas,
+        availability={},
+        restrictions={},
+        monthly_service_maxes=monthly_maxes,
+        monthly_service_targets=monthly_targets,
+    )
+
+    engine = CalendarEngine()
+    summary = engine.generate(ctx)
+
+    assert summary.total_slots == _TOTAL_SLOTS
+    assert summary.assigned_count == 9  # 3 doctors × 3 max
+    assert summary.gap_count == _TOTAL_SLOTS - 9
+
+    # Verify each doctor has exactly 3 assignments
+    counts: dict[str, int] = {}
+    for r in summary.slot_results:
+        if r.assigned_doctor_id is not None:
+            counts[r.assigned_doctor_id] = counts.get(r.assigned_doctor_id, 0) + 1
+    for d in doctors:
+        assert counts.get(d.id, 0) == 3, f"{d.id} has {counts.get(d.id, 0)} assignments, expected 3"

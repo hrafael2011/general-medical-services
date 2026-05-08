@@ -6,6 +6,7 @@ import {
   MissionAssignment,
   MissionCandidateRankingEntry,
 } from "../../api/missions";
+import { useToast } from "../../components/Toast";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,6 +36,7 @@ interface ConfirmModalProps {
 }
 
 function ConfirmModal({ mission, onClose, onConfirmed }: ConfirmModalProps) {
+  const { addToast } = useToast();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const candidatesQuery = useQuery({
@@ -47,6 +49,7 @@ function ConfirmModal({ mission, onClose, onConfirmed }: ConfirmModalProps) {
     mutationFn: () =>
       missionsApi.confirmMission(mission.id, Array.from(selectedIds)),
     onSuccess: onConfirmed,
+    onError: () => addToast("error", "Error al confirmar misión."),
   });
 
   function toggleDoctor(id: string) {
@@ -157,12 +160,6 @@ function ConfirmModal({ mission, onClose, onConfirmed }: ConfirmModalProps) {
             {confirmMutation.isPending ? "Confirmando…" : "Confirmar seleccion"}
           </button>
         </div>
-
-        {confirmMutation.isError && (
-          <p style={{ color: "#dc2626", marginTop: 10, fontSize: 13 }}>
-            Error al confirmar mision.
-          </p>
-        )}
       </div>
     </div>
   );
@@ -178,6 +175,7 @@ interface NewMissionFormProps {
 }
 
 function NewMissionForm({ onCreated, onCancel }: NewMissionFormProps) {
+  const { addToast } = useToast();
   const [date, setDate] = useState("");
   const [count, setCount] = useState(2);
   const [location, setLocation] = useState("");
@@ -186,6 +184,7 @@ function NewMissionForm({ onCreated, onCancel }: NewMissionFormProps) {
     mutationFn: () =>
       missionsApi.createMission(date, count, location || undefined),
     onSuccess: onCreated,
+    onError: () => addToast("error", "Error al crear la misión."),
   });
 
   return (
@@ -250,11 +249,6 @@ function NewMissionForm({ onCreated, onCancel }: NewMissionFormProps) {
           </button>
         </div>
       </div>
-      {createMutation.isError && (
-        <p style={{ color: "#dc2626", marginTop: 8, fontSize: 13 }}>
-          Error al crear la mision.
-        </p>
-      )}
     </div>
   );
 }
@@ -264,6 +258,7 @@ function NewMissionForm({ onCreated, onCancel }: NewMissionFormProps) {
 // ---------------------------------------------------------------------------
 
 export function MissionView() {
+  const { addToast } = useToast();
   const qc = useQueryClient();
   const defaults = currentYearMonth();
 
@@ -287,9 +282,11 @@ export function MissionView() {
   const generateMutation = useMutation({
     mutationFn: () => missionsApi.generateRanking(rankYear, rankMonth),
     onSuccess: () => {
+      addToast("success", "Ranking generado.");
       setRankingLoaded(true);
       qc.invalidateQueries({ queryKey: ["ranking", rankYear, rankMonth] });
     },
+    onError: () => addToast("error", "Error al generar el ranking."),
   });
 
   // --- Missions query ---
@@ -372,12 +369,6 @@ export function MissionView() {
             </button>
           )}
         </div>
-
-        {generateMutation.isError && (
-          <p style={{ color: "#dc2626", marginBottom: 10, fontSize: 13 }}>
-            Error al generar el ranking.
-          </p>
-        )}
 
         {rankingQuery.isLoading && (
           <p style={{ color: "#6b7280", fontSize: 13 }}>Cargando ranking…</p>

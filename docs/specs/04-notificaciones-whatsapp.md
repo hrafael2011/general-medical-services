@@ -1,3 +1,11 @@
+---
+spec: 04
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 04 - Notificaciones WhatsApp (Twilio)
 
 ## Goal
@@ -65,3 +73,10 @@ Internal template identifiers may be written in English.
 5. Given the configured generation day is approaching, when doctors have missing required availability two days before generation, then the encargado receives a WhatsApp reminder listing pending doctors.
 6. Given a mission is confirmed, then each mission participant receives a WhatsApp notification with mission details.
 7. Given a mission is confirmed, then the encargado receives a WhatsApp summary with participant list and a recommendation to confirm details with participants.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define notificaciones WhatsApp vía Twilio, política sin confirmación, contenido de mensajes, programación y fiabilidad de entrega. |

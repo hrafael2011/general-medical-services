@@ -7,6 +7,7 @@ import {
   ImportSourceFile,
   ImportStagedRecord,
 } from "../../api/import_staging";
+import { useToast } from "../../components/Toast";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,14 +80,13 @@ function UploadPanel() {
     ImportQualityReport | { ignored: boolean; reason: string } | null
   >(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
 
   async function handleUpload() {
     const file = fileRef.current?.files?.[0];
     if (!file) return;
     setUploading(true);
-    setUploadError(null);
     setResult(null);
     try {
       const res = await importApi.uploadFile(
@@ -95,9 +95,10 @@ function UploadPanel() {
         month ? Number(month) : undefined,
       );
       setResult(res);
+      addToast("success", "Archivo subido correctamente.");
       void queryClient.invalidateQueries({ queryKey: ["import-files"] });
     } catch (err: unknown) {
-      setUploadError(err instanceof Error ? err.message : "Error al subir archivo.");
+      addToast("error", err instanceof Error ? err.message : "Error al subir archivo.");
     } finally {
       setUploading(false);
     }
@@ -149,8 +150,6 @@ function UploadPanel() {
           {uploading ? "Subiendo…" : "Subir"}
         </button>
       </div>
-
-      {uploadError && <p className="error-text">{uploadError}</p>}
 
       {result && isIgnoredResult(result) && (
         <div
@@ -219,6 +218,7 @@ function UploadPanel() {
 
 function StagedPanel({ fileId }: { fileId: string }) {
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["import-staged", fileId],
@@ -229,15 +229,23 @@ function StagedPanel({ fileId }: { fileId: string }) {
     mutationFn: ({ recordId, action }: { recordId: string; action: string }) =>
       importApi.reviewRecord(recordId, action),
     onSuccess: () => {
+      addToast("success", "Registro actualizado.");
       void queryClient.invalidateQueries({ queryKey: ["import-staged", fileId] });
+    },
+    onError: () => {
+      addToast("error", "Error al revisar el registro.");
     },
   });
 
   const applyMutation = useMutation({
     mutationFn: () => importApi.applyApproved(fileId),
     onSuccess: () => {
+      addToast("success", "Registros aplicados correctamente.");
       void queryClient.invalidateQueries({ queryKey: ["import-staged", fileId] });
       void queryClient.invalidateQueries({ queryKey: ["import-files"] });
+    },
+    onError: () => {
+      addToast("error", "Error al aplicar registros aprobados.");
     },
   });
 
@@ -264,10 +272,6 @@ function StagedPanel({ fileId }: { fileId: string }) {
           </button>
         </div>
       </div>
-
-      {applyMutation.isError && (
-        <p className="error-text">Error al aplicar registros aprobados.</p>
-      )}
 
       {isLoading && <p className="loading-text">Cargando registros…</p>}
       {error && <p className="error-text">Error al cargar registros staged.</p>}

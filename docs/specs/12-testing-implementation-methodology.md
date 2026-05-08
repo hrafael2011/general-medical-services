@@ -1,3 +1,11 @@
+---
+spec: 12
+version: 1.0.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 12 - Testing and Implementation Methodology
 
 ## Goal
@@ -276,3 +284,10 @@ The recommendation should happen before implementation continues on that risky b
 4. Given external providers are involved, when tests run, then provider calls are mocked or faked.
 5. Given a major delivery is prepared, when `./scripts/test.sh all` runs, then unit, API/integration, and E2E suites are executed.
 6. Given a high-risk implementation block is about to start, then Codex warns the user that high reasoning effort is recommended before continuing.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define metodología de testing por fases, matriz de pruebas, script de ejecución y guía de escalada de razonamiento para bloques de alto riesgo. |

@@ -17,14 +17,26 @@ export interface CreateTelegramLinkRequest {
   user_id: string;
 }
 
-export interface TelegramLinkListResponse {
-  items: TelegramUserLinkRead[];
-  total: number;
+export interface CreateLinkTokenResponse {
+  link_token: string;
+  deep_link_url: string;
+  expires_at: string;
+}
+
+export interface LinkTokenRead {
+  id: string;
+  token: string;
+  user_id: string;
+  created_by: string | null;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+  active: boolean;
 }
 
 export const telegramApi = {
-  listLinks(): Promise<TelegramLinkListResponse> {
-    return apiFetch<TelegramLinkListResponse>("/telegram/links");
+  listLinks(): Promise<TelegramUserLinkRead[]> {
+    return apiFetch<TelegramUserLinkRead[]>("/telegram/links");
   },
 
   createLink(data: CreateTelegramLinkRequest): Promise<TelegramUserLinkRead> {
@@ -38,5 +50,16 @@ export const telegramApi = {
     return apiFetch<void>(`/telegram/links/${id}`, {
       method: "DELETE",
     });
+  },
+
+  generateLinkToken(userId: string): Promise<CreateLinkTokenResponse> {
+    return apiFetch<CreateLinkTokenResponse>("/telegram/link-tokens", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  },
+
+  listLinkTokens(): Promise<LinkTokenRead[]> {
+    return apiFetch<LinkTokenRead[]>("/telegram/link-tokens");
   },
 };

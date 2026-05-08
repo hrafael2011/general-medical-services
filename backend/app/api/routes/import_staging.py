@@ -22,6 +22,9 @@ from backend.app.schemas.import_staging import (
 router = APIRouter(prefix="/import", tags=["import"])
 
 
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
 @router.post("/upload")
 async def upload_import_file(
     _user: Annotated[UserModel, Depends(require_ready_user)],
@@ -30,7 +33,18 @@ async def upload_import_file(
     year: int | None = Query(None),
     month: int | None = Query(None),
 ) -> dict:
+    # Reject large files before reading (Content-Length header) and after
+    if file.size and file.size > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Archivo demasiado grande. Máximo {_MAX_UPLOAD_BYTES // (1024*1024)} MB.",
+        )
     file_bytes = await file.read()
+    if len(file_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Archivo demasiado grande. Máximo {_MAX_UPLOAD_BYTES // (1024*1024)} MB.",
+        )
     service = ImportPipelineService(
         ImportRepository(session),
         DoctorRepository(session),

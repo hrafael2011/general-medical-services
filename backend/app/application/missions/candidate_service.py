@@ -1,8 +1,9 @@
-from datetime import UTC, datetime, date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.missions.errors import MissionServiceError
+from backend.app.application.notifications.triggers import NotificationTriggers
 from backend.app.domain.calendars.scoring import STRONG_AREAS
 from backend.app.infrastructure.db.models.missions import (
     MissionAssignmentModel,
@@ -21,11 +22,13 @@ class MissionCandidateService:
         calendar_repo: CalendarRepository,
         availability_repo: AvailabilityRepository,
         audit: AuditService | None = None,
+        triggers: NotificationTriggers | None = None,
     ) -> None:
         self.mission_repo = mission_repo
         self.calendar_repo = calendar_repo
         self.availability_repo = availability_repo
         self.audit = audit
+        self.triggers = triggers
 
     def recommend_candidates(
         self,
@@ -173,36 +176,46 @@ class MissionCandidateService:
                 f"Mission {mission_id} is already confirmed.",
             )
 
-        # 3. Delete existing participants
+        # 3. Load ranking entries for rationale (position, score, warnings)
+        ranking = self.mission_repo.get_ranking_by_period(
+            mission.mission_date.year, mission.mission_date.month
+        )
+        ranking_entries_by_doctor: dict[str, MissionCandidateRankingEntryModel] = {}
+        if ranking is not None:
+            all_entries = self.mission_repo.list_ranking_entries(ranking.id)
+            ranking_entries_by_doctor = {e.doctor_id: e for e in all_entries}
+
+        # 4. Delete existing participants
         existing_participants = self.mission_repo.list_participants(mission_id)
         for participant in existing_participants:
             self.mission_repo.session.delete(participant)
         self.mission_repo.session.flush()
 
-        # 4. Create new participants
+        # 5. Create new participants with rationale
         now = datetime.now(UTC)
         for doctor_id in doctor_ids:
+            entry = ranking_entries_by_doctor.get(doctor_id)
             participant = MissionParticipantModel(
                 id=str(uuid4()),
                 mission_assignment_id=mission_id,
                 doctor_id=doctor_id,
-                selection_source="manual",
-                ranking_position=None,
-                score=None,
-                reasons=None,
-                warnings=None,
+                selection_source="ranking" if entry else "manual",
+                ranking_position=entry.ranking_position if entry else None,
+                score=entry.total_load_score if entry else None,
+                reasons=dict(entry.reasons) if entry and entry.reasons else None,
+                warnings=list(entry.warnings) if entry and entry.warnings else None,
                 created_at=now,
             )
             self.mission_repo.add_participant(participant)
 
-        # 5. Update mission status
+        # 6. Update mission status
         mission.status = "confirmed"
         mission.confirmed_by = actor_id
         mission.confirmed_at = now
         mission.updated_at = now
         self.mission_repo.session.flush()
 
-        # 6. Audit log
+        # 7. Audit log
         if self.audit is not None:
             self.audit._create(
                 actor_id=actor_id,
@@ -216,5 +229,15 @@ class MissionCandidateService:
                 },
             )
 
-        # 7. Return updated mission
+        # 8. Queue notifications
+        if self.triggers is not None:
+            participants = self.mission_repo.list_participants(mission_id)
+            self.triggers.on_mission_confirmed(
+                actor_id=actor_id,
+                mission=mission,
+                participants=participants,
+                encargado_phone=None,
+            )
+
+        # 9. Return updated mission
         return mission

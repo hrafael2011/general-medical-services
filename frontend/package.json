@@ -10,24 +10,25 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@tanstack/react-query": "latest",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@tanstack/react-query": "latest",
-    "lucide-react": "latest"
+    "react-router-dom": "^7.15.0",
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
+    "@eslint/js": "latest",
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@testing-library/user-event": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "latest",
-    "@eslint/js": "latest",
+    "jsdom": "latest",
     "typescript-eslint": "latest",
-    "vitest": "latest",
-    "@testing-library/react": "latest",
-    "@testing-library/user-event": "latest",
-    "@testing-library/jest-dom": "latest",
-    "jsdom": "latest"
+    "vitest": "latest"
   }
 }

@@ -1,5 +1,5 @@
 import types
-from datetime import date
+from datetime import UTC, date
 
 from backend.app.domain.doctors.eligibility import (
     AllowedServiceAreaSpec,
@@ -113,11 +113,11 @@ def test_hard_block_restriction_fails_when_active() -> None:
 
 
 def test_hard_block_passes_when_restriction_is_lifted() -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     doctor = make_doctor()
     restriction = make_restriction(
-        severity="hard_block", lifted_at=datetime(2026, 4, 1, tzinfo=timezone.utc)
+        severity="hard_block", lifted_at=datetime(2026, 4, 1, tzinfo=UTC)
     )
     result = NoActiveHardBlockSpec().check(doctor, [restriction], date(2026, 4, 29))
     assert result.passed is True

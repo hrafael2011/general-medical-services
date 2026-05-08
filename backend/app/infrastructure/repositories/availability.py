@@ -68,7 +68,7 @@ class AvailabilityRepository:
     ) -> list[DoctorRestrictionModel]:
         stmt = select(DoctorRestrictionModel).where(
             DoctorRestrictionModel.doctor_id == doctor_id,
-            DoctorRestrictionModel.lifted_at == None,  # noqa: E711
+            DoctorRestrictionModel.lifted_at.is_(None),
             DoctorRestrictionModel.starts_at <= on_date,
         ).order_by(DoctorRestrictionModel.starts_at)
         results = list(self.session.scalars(stmt))

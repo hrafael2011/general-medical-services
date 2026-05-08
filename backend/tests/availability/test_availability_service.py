@@ -1,5 +1,6 @@
-import pytest
 from datetime import date
+
+import pytest
 
 from backend.app.application.availability.errors import AvailabilityError
 from backend.app.application.availability.service import AvailabilityService
@@ -292,7 +293,7 @@ def test_lift_restriction_fails_for_unknown_restriction(db_session) -> None:
 def test_missing_availability_exclusion_finds_monthly_doctors_without_submitted_availability(
     db_session,
 ) -> None:
-    doctor_svc = make_doctor_service(db_session)
+    make_doctor_service(db_session)
     avail_svc = make_availability_service(db_session)
     doctor_repo = DoctorRepository(db_session)
 
@@ -300,7 +301,7 @@ def test_missing_availability_exclusion_finds_monthly_doctors_without_submitted_
     doc_monthly_submitted = create_doctor(
         db_session, availability_mode="monthly", name="Dr Submitted"
     )
-    doc_monthly_pending = create_doctor(
+    create_doctor(
         db_session, availability_mode="monthly", name="Dr Pending"
     )
     _doc_fixed = create_doctor(db_session, availability_mode="fixed", name="Dr Fixed")

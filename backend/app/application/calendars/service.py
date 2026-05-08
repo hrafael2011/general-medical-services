@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
+from backend.app.application.notifications.triggers import NotificationTriggers
 from backend.app.infrastructure.db.models.calendars import CalendarModel, CalendarVersionModel
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 
@@ -12,9 +13,11 @@ class CalendarService:
         self,
         repo: CalendarRepository,
         audit: AuditService | None = None,
+        triggers: NotificationTriggers | None = None,
     ) -> None:
         self.repo = repo
         self.audit = audit
+        self.triggers = triggers
 
     def create_calendar(
         self,
@@ -112,8 +115,8 @@ class CalendarService:
         now = datetime.now(UTC)
 
         version.status = "approved"
-        # CalendarVersionModel does not have approved_at / approved_by columns,
-        # so those fields live on the CalendarModel.
+        version.approved_at = now
+        version.approved_by = actor_id
         self.repo.session.flush()
 
         calendar.status = "approved"
@@ -125,6 +128,13 @@ class CalendarService:
         if self.audit is not None:
             self.audit.log_calendar_approved(
                 actor_id=actor_id, calendar=calendar, version=version
+            )
+
+        if self.triggers is not None:
+            assignments = self.repo.list_assignments(version.id)
+            self.triggers.on_calendar_approved(
+                actor_id=actor_id,
+                assignments=assignments,
             )
 
         return version

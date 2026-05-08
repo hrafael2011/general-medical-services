@@ -3,14 +3,13 @@ from uuid import uuid4
 
 import pytest
 
-from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.assignment_service import AssignmentService
+from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.doctors.service import DoctorService
 from backend.app.infrastructure.db.models.calendars import CalendarModel, CalendarVersionModel
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
-
 
 # ---------------------------------------------------------------------------
 # Helpers

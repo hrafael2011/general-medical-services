@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -36,6 +37,29 @@ class TelegramInteractionRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CreateLinkTokenRequest(BaseModel):
+    user_id: str
+
+
+class LinkTokenRead(BaseModel):
+    id: str
+    token: str
+    user_id: str
+    created_by: str | None
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None
+    active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CreateLinkTokenResponse(BaseModel):
+    link_token: str
+    deep_link_url: str
+    expires_at: datetime
 
 
 class TelegramWebhookUpdate(BaseModel):

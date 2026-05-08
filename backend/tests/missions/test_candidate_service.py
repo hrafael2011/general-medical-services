@@ -64,6 +64,7 @@ def _create_doctor(db_session, *, name: str, participa_misiones: bool = True) ->
     doctor = DoctorModel(
         id=str(uuid4()),
         name=name,
+        normalized_name=" ".join(name.strip().lower().split()),
         sex="male",
         rank_id=None,
         department_id=None,

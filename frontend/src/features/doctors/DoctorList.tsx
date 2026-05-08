@@ -1,7 +1,7 @@
 import { Users, PlusCircle, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { doctorsApi, DoctorRead } from "../../api/doctors";
+import { doctorsApi, DoctorRead, ServiceAreaRead } from "../../api/doctors";
 
 interface Props {
   onAdd: () => void;
@@ -16,6 +16,21 @@ export function DoctorList({ onAdd, onEdit }: Props) {
     queryKey: ["doctors", activeOnly],
     queryFn: () => doctorsApi.list(activeOnly),
   });
+
+  const { data: ranks } = useQuery({
+    queryKey: ["ranks"],
+    queryFn: doctorsApi.listRanks,
+  });
+
+  const { data: serviceAreas } = useQuery({
+    queryKey: ["service-areas"],
+    queryFn: doctorsApi.listServiceAreas,
+  });
+
+  const rankMap = Object.fromEntries((ranks ?? []).map(r => [r.id, r.name]));
+  const areaMap = Object.fromEntries(
+    (serviceAreas ?? []).map((a: ServiceAreaRead) => [a.id, a.display_name])
+  );
 
   const reactivate = useMutation({
     mutationFn: (id: string) => doctorsApi.reactivateService(id),
@@ -55,9 +70,10 @@ export function DoctorList({ onAdd, onEdit }: Props) {
             <thead>
               <tr>
                 <th>Nombre</th>
+                <th>Rango</th>
                 <th>Sexo</th>
                 <th>Servicio</th>
-                <th>Areas</th>
+                <th>Áreas</th>
                 <th>Misiones</th>
                 <th>Meta/mes</th>
                 <th></th>
@@ -67,6 +83,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
               {doctors.map(doc => (
                 <tr key={doc.id} className={!doc.service_active ? "row-inactive" : ""}>
                   <td className="cell-name">{doc.name}</td>
+                  <td>{doc.rank_id ? rankMap[doc.rank_id] ?? "—" : "—"}</td>
                   <td>
                     <span className={`sex-badge sex-${doc.sex}`}>
                       {doc.sex === "male" ? "M" : "F"}
@@ -80,7 +97,14 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                   <td className="cell-areas">
                     {doc.allowed_area_ids.length === 0
                       ? <span className="no-areas">—</span>
-                      : <span className="area-count">{doc.allowed_area_ids.length} area(s)</span>}
+                      : (
+                        <div className="area-tooltip-wrapper">
+                          <span className="area-count">{doc.allowed_area_ids.length} área(s)</span>
+                          <span className="area-tooltip">
+                            {doc.allowed_area_ids.map(id => areaMap[id] ?? id).join(", ")}
+                          </span>
+                        </div>
+                      )}
                   </td>
                   <td>{doc.participa_misiones ? "Sí" : "No"}</td>
                   <td>{doc.monthly_service_target}/{doc.monthly_service_max}</td>

@@ -1,3 +1,11 @@
+---
+spec: 11
+version: 1.1.0
+status: accepted
+created: 2026-04-30
+updated: 2026-04-30
+---
+
 # Spec 11 - Implementation Architecture and Patterns
 
 ## Goal
@@ -287,6 +295,7 @@ Frontend rules:
 - Operational screens should be dense, clear, and optimized for repeated work.
 - Calendar assignment details should expose a "Ver razon" action or equivalent dialog.
 - Forms must reflect role permissions and mandatory password change state.
+- The backend API base URL must be sourced from the `VITE_API_URL` environment variable. Hardcoding a hostname or port in source code is prohibited. Local development must use a `.env.local` file (excluded from version control); production deployments must supply the variable through their platform configuration.
 
 ## Database Guidance
 
@@ -324,3 +333,12 @@ Acceptance scenarios from specs should become integration or use-case tests.
 4. Given a frontend calendar assignment, when the user opens "Ver razon", then the UI displays backend-provided structured rationale.
 5. Given a rule change, when a new strategy is added, then existing use cases can evaluate it without rewriting API routers.
 6. Given a critical command, when it succeeds or fails, then audit behavior is explicit and testable.
+7. Given the frontend is built or started in any environment, when it makes API requests, then the base URL is resolved from `VITE_API_URL` and not from a literal string in source code.
+
+
+## Changelog
+
+| Version | Fecha | Issue | Trigger | Resumen |
+|---------|-------|-------|---------|---------|
+| 1.1.0 | 2026-04-30 | — | Bug | WARN-002 (QA): URL de API hardcodeada en el cliente frontend (puerto 8000); el servidor dev corre en 8002. Se agrega regla en Frontend Architecture: VITE_API_URL debe usarse en todos los entornos. |
+| 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define arquitectura modular monolito, capas Clean Architecture, patrón repositorio, estrategia de reglas, pipeline de scoring y organización del frontend. |

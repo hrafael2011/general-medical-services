@@ -6,7 +6,7 @@ All data is pre-loaded by the service layer and passed in via GenerationContext.
 """
 
 import calendar as cal_module
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 
 from backend.app.domain.calendars.scoring import compute_candidate_score
@@ -16,7 +16,6 @@ from backend.app.domain.calendars.types import (
     SlotRequest,
     SlotResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # GenerationContext — input to the engine
@@ -48,6 +47,10 @@ class GenerationContext:
     required_areas: list[str]
     # Area weights: {"emergencia": 3.0, "pista": 2.0, "disponible": 1.0}
     area_weights: dict[str, float]
+    # Monthly service target per doctor: {doctor_id: int}. Default 3.
+    monthly_service_targets: dict[str, int] | None = None
+    # Monthly service max per doctor: {doctor_id: int}. Default 3.
+    monthly_service_maxes: dict[str, int] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -122,20 +125,13 @@ class CalendarEngine:
                     monthly_assignments=monthly_assignments,
                     historical_assignments=ctx.historical_assignments,
                     mission_assignments=ctx.mission_assignments,
+                    monthly_service_target=ctx.monthly_service_targets.get(doctor.id, 3)
+                    if ctx.monthly_service_targets else 3,
                 )
                 for doctor in eligible
             ]
 
             # Pick the highest score; break ties alphabetically by doctor_id.
-            best: CandidateScore = max(
-                scores,
-                key=lambda s: (s.score, s.doctor_id),
-            )
-            # Note: alphabetical tie-break means we want the *smallest* id when
-            # scores are equal.  max() on a tuple compares lexicographically, so
-            # we negate doctor_id ordering by negating a proxy.  Instead we sort
-            # and take the last element with a two-key tuple where the second key
-            # is the *negated* lexicographic order — simplest: sort manually.
             scores.sort(key=lambda s: (-s.score, s.doctor_id))
             best = scores[0]
 
@@ -235,6 +231,16 @@ class CalendarEngine:
 
             # 5. Not already assigned on this date
             if slot.date in assigned_dates_by_doctor.get(doctor.id, set()):
+                continue
+
+            # 6. Monthly maximum check (skip if not configured)
+            monthly_max = ctx.monthly_service_maxes.get(doctor.id, 3) if ctx.monthly_service_maxes else 3
+            monthly_count_so_far = sum(
+                1 for a in current_assignments
+                if a["doctor_id"] == doctor.id
+                and _is_same_month(a["service_date"], ctx.year, ctx.month)
+            )
+            if monthly_count_so_far >= monthly_max:
                 continue
 
             eligible.append(doctor)

@@ -22,8 +22,8 @@ router = APIRouter(prefix="/doctors", tags=["doctors"])
 
 
 def get_doctor_service(session: Annotated[Session, Depends(get_db_session)]) -> DoctorService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
     return DoctorService(
         DoctorRepository(session),
         catalog_repo=CatalogRepository(session),
@@ -45,7 +45,13 @@ def list_doctors(
 ) -> DoctorListResponse:
     repo = DoctorRepository(session)
     doctors = repo.list_all(active_only=active_only)
-    items = [_to_read(d, repo) for d in doctors]
+    # Bulk load allowed areas to avoid N+1
+    areas_by_doctor = repo.get_allowed_areas_bulk([d.id for d in doctors])
+    items = []
+    for d in doctors:
+        data = DoctorRead.model_validate(d)
+        data.allowed_area_ids = areas_by_doctor.get(d.id, [])
+        items.append(data)
     return DoctorListResponse(items=items, total=len(items))
 
 

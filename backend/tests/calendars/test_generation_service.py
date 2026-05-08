@@ -8,8 +8,6 @@ Follows the ORM-direct pattern from test_assignment_service.py.
 import datetime
 from uuid import uuid4
 
-import pytest
-
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
@@ -22,8 +20,9 @@ from backend.app.infrastructure.db.models.doctors import (
 )
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
-
+from backend.app.infrastructure.repositories.missions import MissionRepository
 
 # ---------------------------------------------------------------------------
 # Fixed area IDs that match the generation engine's required_areas list
@@ -48,6 +47,8 @@ def _make_generation_service(db_session) -> GenerationService:
         CalendarRepository(db_session),
         DoctorRepository(db_session),
         AvailabilityRepository(db_session),
+        MissionRepository(db_session),
+        CatalogRepository(db_session),
     )
 
 
@@ -124,6 +125,7 @@ def _create_doctor(
     doctor = DoctorModel(
         id=str(uuid4()),
         name=name,
+        normalized_name=" ".join(name.strip().lower().split()),
         sex="male",
         rank_id=None,
         department_id=None,
@@ -231,7 +233,7 @@ def test_generate_clears_previous_assignments(db_session) -> None:
 
     service = _make_generation_service(db_session)
 
-    summary_first = service.generate(actor_id="actor-001", calendar_id=calendar.id)
+    service.generate(actor_id="actor-001", calendar_id=calendar.id)
     summary_second = service.generate(actor_id="actor-001", calendar_id=calendar.id)
 
     cal_repo = CalendarRepository(db_session)

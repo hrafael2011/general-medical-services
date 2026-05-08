@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.infrastructure.db.base import Base
@@ -32,10 +32,21 @@ class CalendarVersionModel(Base):
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class CalendarAssignmentModel(Base):
     __tablename__ = "calendar_assignments"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "calendar_version_id", "service_date", "service_area_id",
+            name="uq_calendar_assignments_version_date_area",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     calendar_version_id: Mapped[str] = mapped_column(
@@ -46,7 +57,7 @@ class CalendarAssignmentModel(Base):
         DateTime(timezone=True), nullable=True
     )
     service_area_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("service_areas.id"), nullable=False
+        String(36), ForeignKey("service_areas.id"), nullable=False, index=True
     )
     doctor_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("doctors.id"), nullable=False, index=True
@@ -71,7 +82,7 @@ class UnresolvedGapModel(Base):
     )
     service_date: Mapped[date] = mapped_column(Date, nullable=False)
     service_area_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("service_areas.id"), nullable=False
+        String(36), ForeignKey("service_areas.id"), nullable=False, index=True
     )
     reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)

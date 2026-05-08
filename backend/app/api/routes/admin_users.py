@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
@@ -24,9 +24,24 @@ router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
 
 def get_account_service(session: Annotated[Session, Depends(get_db_session)]) -> AccountService:
-    from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
     return AccountService(UserRepository(session), audit=AuditService(AuditRepository(session)))
+
+
+@router.get("", response_model=list[UserRead])
+def list_users(
+    admin: Annotated[UserModel, Depends(require_admin)],
+    session: Annotated[Session, Depends(get_db_session)],
+    role: str | None = Query(default=None),
+) -> list[UserRead]:
+    """List system users, optionally filtered by role."""
+    repo = UserRepository(session)
+    if role:
+        users = repo.list_by_role(role)
+    else:
+        users = repo.list_by_role("doctor")  # sensible default for admin panel
+    return [UserRead.model_validate(u) for u in users]
 
 
 @router.post(

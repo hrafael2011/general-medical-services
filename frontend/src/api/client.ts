@@ -12,6 +12,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     ...(init.headers as Record<string, string> ?? {}),
   };
   const res = await fetch(`${BASE}/api${path}`, { ...init, headers });
+  if (res.status === 401 && token) {
+    setToken(null);
+    window.location.href = "/";
+    throw new ApiError(401, "Sesión expirada. Redirigiendo al login...");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body?.detail ?? "Error del servidor");

@@ -1,355 +1,226 @@
-import React, { useState } from "react";
+// frontend/src/features/calendars/CalendarGrid.tsx
+import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarAssignmentRead, calendarsApi, DaySlot } from "../../api/calendars";
+import { calendarsApi, CalendarAssignmentRead } from "../../api/calendars";
+import { doctorsApi, DoctorRead } from "../../api/doctors";
+import type { ServiceAreaRead } from "../../api/doctors";
+import { AssignDoctorModal } from "./AssignDoctorModal";
+import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
+import { useToast } from "../../components/Toast";
 import { ApiError } from "../../api/client";
 
-const MONTHS = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
+const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-interface Props {
-  calendarId: string;
-  onBack: () => void;
-}
+interface AssignTarget { date: string; areaId: string; areaName: string; }
+interface RemoveTarget { assignment: CalendarAssignmentRead; areaName: string; }
 
-export function CalendarGrid({ calendarId, onBack }: Props) {
-  const queryClient = useQueryClient();
-  const [rationaleDoc, setRationaleDoc] = useState<CalendarAssignmentRead | null>(null);
+export function CalendarGrid() {
+  const { calendarId } = useParams<{ calendarId: string }>();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { addToast } = useToast();
+
+  const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
   const [generateSummary, setGenerateSummary] = useState<string | null>(null);
-  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["calendar-grid", calendarId],
-    queryFn: () => calendarsApi.getGrid(calendarId),
+    queryFn: () => calendarsApi.getGrid(calendarId!),
+    enabled: !!calendarId,
   });
 
+  const { data: doctorsData } = useQuery({
+    queryKey: ["doctors", false],
+    queryFn: () => doctorsApi.list(false),
+    enabled: !!calendarId,
+  });
+
+  const { data: serviceAreasData } = useQuery({
+    queryKey: ["service-areas"],
+    queryFn: doctorsApi.listServiceAreas,
+    enabled: !!calendarId,
+  });
+
+  const doctorMap: Record<string, DoctorRead> = {};
+  for (const d of doctorsData?.items ?? []) doctorMap[d.id] = d;
+
+  const areaMap: Record<string, string> = {};
+  for (const a of (serviceAreasData ?? []) as ServiceAreaRead[]) areaMap[a.id] = a.display_name;
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
+
   const approveMutation = useMutation({
-    mutationFn: () => calendarsApi.approve(calendarId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] }),
+    mutationFn: () => calendarsApi.approve(calendarId!),
+    onSuccess: () => { invalidate(); addToast("success", "Calendario aprobado."); },
+    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al aprobar."),
   });
 
   const newVersionMutation = useMutation({
-    mutationFn: () => {
-      const reason = window.prompt("Motivo de la nueva versión (opcional):");
-      return calendarsApi.newVersion(calendarId, reason ?? undefined);
-    },
+    mutationFn: () => calendarsApi.newVersion(calendarId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
-      queryClient.invalidateQueries({ queryKey: ["calendars"] });
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["calendars"] });
+      addToast("success", "Nueva versión creada.");
     },
-  });
-
-  const assignMutation = useMutation({
-    mutationFn: ({ date, areaId }: { date: string; areaId: string }) => {
-      const doctorId = window.prompt(`Asignar médico — ${date} / ${areaId}\n\nID del médico:`);
-      if (!doctorId) return Promise.reject(new Error("cancelled"));
-      return calendarsApi.assignDoctor(calendarId, data!.version.id, {
-        service_date: date,
-        service_area_id: areaId,
-        doctor_id: doctorId.trim(),
-      });
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] }),
-    onError: (err: unknown) => {
-      if (err instanceof Error && err.message === "cancelled") return;
-      alert(err instanceof ApiError ? err.message : "Error al asignar médico.");
-    },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: ({ assignmentId }: { assignmentId: string }) =>
-      calendarsApi.removeAssignment(calendarId, data!.version.id, assignmentId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] }),
+    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al crear versión."),
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => calendarsApi.generate(calendarId),
+    mutationFn: () => calendarsApi.generate(calendarId!),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
-      setGenerateError(null);
+      invalidate();
       setGenerateSummary(`Asignados: ${result.assigned_count} / Huecos: ${result.gap_count}`);
+      addToast("success", "Calendario generado.");
     },
-    onError: (err: unknown) => {
-      setGenerateSummary(null);
-      setGenerateError(err instanceof ApiError ? err.message : "Error al generar el calendario.");
-    },
+    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al generar."),
   });
 
-  if (isLoading) return <p style={{ padding: "1rem" }}>Cargando grilla…</p>;
-  if (error || !data) return <p style={{ padding: "1rem", color: "#c00" }}>Error al cargar el calendario.</p>;
+  const assignMutation = useMutation({
+    mutationFn: (doctorId: string) => calendarsApi.assignDoctor(calendarId!, data!.version.id, {
+      service_date: assignTarget!.date,
+      service_area_id: assignTarget!.areaId,
+      doctor_id: doctorId,
+    }),
+    onSuccess: () => { invalidate(); setAssignTarget(null); addToast("success", "Médico asignado."); },
+    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al asignar."),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: () => calendarsApi.removeAssignment(calendarId!, data!.version.id, removeTarget!.assignment.id),
+    onSuccess: () => { invalidate(); setRemoveTarget(null); addToast("success", "Asignación quitada."); },
+    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al quitar."),
+  });
+
+  if (!calendarId) return null;
+  if (isLoading) return <p className="loading-text">Cargando grilla…</p>;
+  if (error || !data) return <p className="error-text">Error al cargar el calendario.</p>;
 
   const { calendar, version, slots } = data;
-
-  // Collect unique areas and days
-  const areas = [...new Set(slots.map(s => s.service_area_id))].sort();
-  const days = [...new Set(slots.map(s => s.service_date))].sort();
-
-  // Index slots by "date|area"
-  const slotIndex = new Map<string, DaySlot>();
-  for (const slot of slots) {
-    slotIndex.set(`${slot.service_date}|${slot.service_area_id}`, slot);
-  }
-
   const isDraft = version.status === "draft";
 
+  const areas = [...new Set(slots.map(s => s.service_area_id))].sort();
+  const days  = [...new Set(slots.map(s => s.service_date))].sort();
+  const slotIndex = new Map(slots.map(s => [`${s.service_date}|${s.service_area_id}`, s]));
+
+  function cellClass(slot: typeof slots[0] | undefined): string {
+    if (!slot?.assignment) return isDraft ? "cell-empty-draft" : "cell-empty-approved";
+    if (slot.assignment.assignment_source === "manual") return "cell-assigned-manual";
+    return "cell-assigned-generated";
+  }
+
   return (
-    <div style={{ padding: "1rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-        <button className="btn-ghost" onClick={onBack}>← Volver</button>
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+        <button className="btn-ghost" onClick={() => navigate("/calendars")}>← Volver</button>
         <h2 style={{ margin: 0, fontSize: 16 }}>
           Calendario {MONTHS[calendar.month - 1]} {calendar.year} — Versión {version.version_number}
         </h2>
         <span style={{
-          display: "inline-block",
-          padding: "2px 10px",
-          borderRadius: 12,
-          fontSize: 12,
+          padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700,
           background: version.status === "approved" ? "#d1fae5" : "#f3f4f6",
           color: version.status === "approved" ? "#065f46" : "#6b7280",
-          fontWeight: 600,
         }}>
           {version.status === "approved" ? "Aprobado" : "Borrador"}
         </span>
-
         {isDraft && (
           <>
-            <button
-              className="btn-ghost"
-              style={{ fontSize: 13 }}
-              disabled={generateMutation.isPending}
-              onClick={() => generateMutation.mutate()}
-            >
+            <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
               {generateMutation.isPending ? "Generando…" : "Generar calendario"}
             </button>
-            <button
-              className="btn-primary"
-              style={{ fontSize: 13 }}
-              disabled={approveMutation.isPending}
-              onClick={() => approveMutation.mutate()}
-            >
+            <button className="btn-primary" disabled={approveMutation.isPending} onClick={() => approveMutation.mutate()}>
               {approveMutation.isPending ? "Aprobando…" : "Aprobar"}
             </button>
           </>
         )}
-
         {!isDraft && (
-          <button
-            className="btn-ghost"
-            style={{ fontSize: 13 }}
-            disabled={newVersionMutation.isPending}
-            onClick={() => newVersionMutation.mutate()}
-          >
+          <button className="btn-ghost" disabled={newVersionMutation.isPending} onClick={() => newVersionMutation.mutate()}>
             {newVersionMutation.isPending ? "Creando…" : "Nueva versión"}
           </button>
         )}
       </div>
 
       {generateSummary && (
-        <p style={{ margin: "0.25rem 0 0.5rem", fontSize: 13, color: "#065f46" }}>
+        <p style={{ color: "#065f46", fontSize: 13, marginBottom: 8 }}>
           Generación completada — {generateSummary}
         </p>
       )}
-      {generateError && (
-        <p style={{ margin: "0.25rem 0 0.5rem", fontSize: 13, color: "#c00" }}>
-          {generateError}
-        </p>
-      )}
 
-      {slots.length === 0 ? (
-        <div style={{ color: "#888", padding: "1rem 0" }}>
-          <p>No hay asignaciones aún.</p>
-          {isDraft && (
-            <p style={{ fontSize: 13 }}>
-              Haz clic en una celda de la tabla para asignar un médico.
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      {days.length === 0 && areas.length === 0 ? (
-        <div style={{ overflowX: "auto", marginTop: "0.5rem" }}>
-          <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Área</th>
-                {Array.from({ length: new Date(calendar.year, calendar.month, 0).getDate() }, (_, i) => (
-                  <th key={i + 1} style={{ ...thStyle, width: 36 }}>{i + 1}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={35} style={{ padding: "1rem", color: "#888", textAlign: "center" }}>
-                  Sin asignaciones — usa el botón de asignar médico
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div style={{ overflowX: "auto", marginTop: "0.5rem" }}>
-          <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Área</th>
-                {days.map(d => (
-                  <th key={d} style={{ ...thStyle, width: 90 }}>
-                    {d.slice(8)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {areas.map(area => (
-                <tr key={area}>
-                  <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>{area}</td>
-                  {days.map(day => {
-                    const slot = slotIndex.get(`${day}|${area}`);
-                    const assignment = slot?.assignment ?? null;
-                    return (
-                      <td
-                        key={day}
-                        style={{
-                          ...tdStyle,
-                          cursor: isDraft ? "pointer" : "default",
-                          background: assignment ? "#f0fdf4" : isDraft ? "#fafafa" : undefined,
-                          color: assignment ? "#065f46" : "#aaa",
-                          textAlign: "center",
-                        }}
-                        title={
-                          assignment
-                            ? `${assignment.doctor_id}${assignment.override_justification ? ` (override: ${assignment.override_justification})` : ""}`
-                            : isDraft ? "Clic para asignar" : "—"
-                        }
-                        onClick={() => {
-                          if (!isDraft) return;
-                          if (assignment) {
-                            if (window.confirm(`Quitar asignación del médico ${assignment.doctor_id}?`)) {
-                              removeMutation.mutate({ assignmentId: assignment.id });
-                            }
-                          } else {
-                            assignMutation.mutate({ date: day, areaId: area });
-                          }
-                        }}
-                      >
-                        {assignment ? (
-                          <>
-                            <div>{assignment.doctor_id.slice(0, 8) + "…"}</div>
-                            {assignment.rationale && (
-                              <button
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  padding: 0,
-                                  fontSize: 11,
-                                  color: "#2563eb",
-                                  cursor: "pointer",
-                                  textDecoration: "underline",
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRationaleDoc(assignment);
-                                }}
-                              >
-                                (razón)
-                              </button>
-                            )}
-                          </>
-                        ) : "—"}
-                      </td>
-                    );
-                  })}
-                </tr>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "6px 10px", background: "#f8fafc", borderBottom: "2px solid #e2e8f0", textAlign: "left", whiteSpace: "nowrap" }}>Área</th>
+              {days.map(d => (
+                <th key={d} style={{ padding: "6px 8px", background: "#f8fafc", borderBottom: "2px solid #e2e8f0", textAlign: "center", minWidth: 80 }}>
+                  {d.slice(8)}
+                </th>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </tr>
+          </thead>
+          <tbody>
+            {areas.map(areaId => (
+              <tr key={areaId}>
+                <td style={{ padding: "6px 10px", borderBottom: "1px solid #f1f5f9", fontWeight: 600, whiteSpace: "nowrap" }}>{areaMap[areaId] ?? areaId}</td>
+                {days.map(day => {
+                  const slot = slotIndex.get(`${day}|${areaId}`);
+                  const assignment = slot?.assignment ?? null;
+                  const doctor = assignment ? doctorMap[assignment.doctor_id] : null;
+                  const cls = cellClass(slot);
+                  return (
+                    <td
+                      key={day}
+                      className={cls}
+                      style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", borderRight: "1px solid #f1f5f9", textAlign: "center" }}
+                      onClick={() => {
+                        if (!isDraft) return;
+                        if (assignment) {
+                          setRemoveTarget({ assignment, areaName: areaMap[areaId] ?? areaId });
+                        } else {
+                          setAssignTarget({ date: day, areaId, areaName: areaMap[areaId] ?? areaId });
+                        }
+                      }}
+                    >
+                      {doctor ? doctor.name.split(" ").slice(-1)[0] : (isDraft ? "+" : "—")}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {data.gaps.length > 0 && (
-        <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", background: "#fff7ed", borderRadius: 6, border: "1px solid #fed7aa" }}>
-          <strong style={{ fontSize: 13 }}>Huecos sin resolver ({data.gaps.length})</strong>
+        <div style={{ marginTop: 12, padding: "10px 14px", background: "#fff7ed", borderRadius: 6, border: "1px solid #fed7aa" }}>
+          <strong style={{ fontSize: 13 }}>Huecos sin resolver: {data.gaps.length}</strong>
         </div>
       )}
 
-      {rationaleDoc && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-          onClick={() => setRationaleDoc(null)}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 8,
-              padding: "1.5rem",
-              maxWidth: 480,
-              width: "90%",
-              maxHeight: "80vh",
-              overflowY: "auto",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-              <strong style={{ fontSize: 14 }}>Razón de asignación</strong>
-              <button
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: 18,
-                  cursor: "pointer",
-                  lineHeight: 1,
-                  color: "#555",
-                }}
-                onClick={() => setRationaleDoc(null)}
-                aria-label="Cerrar"
-              >
-                ×
-              </button>
-            </div>
-            <p style={{ fontSize: 12, color: "#666", margin: "0 0 0.75rem" }}>
-              Médico: <strong>{rationaleDoc.doctor_id}</strong> — {rationaleDoc.service_date}
-            </p>
-            {rationaleDoc.rationale ? (
-              <dl style={{ margin: 0, fontSize: 13, display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.3rem 0.75rem" }}>
-                {Object.entries(rationaleDoc.rationale).map(([key, value]) => (
-                  <React.Fragment key={key}>
-                    <dt style={{ fontWeight: 600, color: "#374151", wordBreak: "break-word" }}>{key}</dt>
-                    <dd style={{ margin: 0, color: "#555", wordBreak: "break-word" }}>
-                      {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
-                    </dd>
-                  </React.Fragment>
-                ))}
-              </dl>
-            ) : (
-              <p style={{ fontSize: 13, color: "#888" }}>Sin razón disponible.</p>
-            )}
-          </div>
-        </div>
+      {assignTarget && (
+        <AssignDoctorModal
+          date={assignTarget.date}
+          areaName={assignTarget.areaName}
+          doctors={doctorsData?.items ?? []}
+          onConfirm={doctorId => assignMutation.mutate(doctorId)}
+          onClose={() => setAssignTarget(null)}
+          isLoading={assignMutation.isPending}
+        />
+      )}
+
+      {removeTarget && (
+        <RemoveAssignmentPopover
+          doctorName={doctorMap[removeTarget.assignment.doctor_id]?.name ?? removeTarget.assignment.doctor_id}
+          date={removeTarget.assignment.service_date}
+          areaName={removeTarget.areaName}
+          source={removeTarget.assignment.assignment_source}
+          onConfirm={() => removeMutation.mutate()}
+          onClose={() => setRemoveTarget(null)}
+          isLoading={removeMutation.isPending}
+        />
       )}
     </div>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  padding: "0.4rem 0.5rem",
-  borderBottom: "2px solid #e0e0e0",
-  textAlign: "left",
-  background: "#f9fafb",
-  whiteSpace: "nowrap",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "0.35rem 0.5rem",
-  borderBottom: "1px solid #eee",
-  borderRight: "1px solid #eee",
-};
