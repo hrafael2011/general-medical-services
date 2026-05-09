@@ -5,6 +5,8 @@ import re
 from datetime import date, timedelta
 from typing import Any
 
+from backend.app.application.telegram.schemas import ResolveResult
+
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -120,58 +122,73 @@ class EntityResolver:
     # Doctor resolution
     # ------------------------------------------------------------------
 
-    def resolve_doctor(self, name: str) -> list[dict[str, Any]]:
+    def resolve_doctor(self, name: str) -> ResolveResult:
         """Find doctors by name (case-insensitive ILIKE search)."""
         if self._session is None:
-            return []
+            return ResolveResult(status="not_found")
         from backend.app.infrastructure.repositories.doctors import DoctorRepository
 
         repo = DoctorRepository(self._session)
         all_docs = repo.list_service_active()
         name_lower = name.lower().strip()
         matches = [d for d in all_docs if name_lower in d.name.lower()]
-        return [
+        result = [
             {"id": d.id, "name": d.name, "sex": d.sex, "availability_mode": d.availability_mode}
             for d in matches
         ]
+        if len(result) == 0:
+            return ResolveResult(status="not_found")
+        if len(result) == 1:
+            return ResolveResult(status="resolved", matches=result)
+        return ResolveResult(status="ambiguous", matches=result)
 
     # ------------------------------------------------------------------
     # Area resolution
     # ------------------------------------------------------------------
 
-    def resolve_area(self, name: str) -> list[dict[str, Any]]:
+    def resolve_area(self, name: str) -> ResolveResult:
         """Find service areas by display_name (case-insensitive)."""
         if self._session is None:
-            return []
+            return ResolveResult(status="not_found")
         from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 
         repo = CatalogRepository(self._session)
         areas = repo.list_service_areas()
         name_lower = name.lower().strip()
         matches = [a for a in areas if name_lower in a.display_name.lower()]
-        return [
+        result = [
             {"id": m.id, "code": m.code, "display_name": m.display_name, "load_weight": float(m.load_weight)}
             for m in matches
         ]
+        if len(result) == 0:
+            return ResolveResult(status="not_found")
+        if len(result) == 1:
+            return ResolveResult(status="resolved", matches=result)
+        return ResolveResult(status="ambiguous", matches=result)
 
     # ------------------------------------------------------------------
     # Rank resolution
     # ------------------------------------------------------------------
 
-    def resolve_rank(self, name: str) -> list[dict[str, Any]]:
+    def resolve_rank(self, name: str) -> ResolveResult:
         """Find ranks by normalized_name (case-insensitive)."""
         if self._session is None:
-            return []
+            return ResolveResult(status="not_found")
         from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 
         repo = CatalogRepository(self._session)
         all_ranks = repo.list_ranks()
         name_lower = name.lower().strip()
         matches = [r for r in all_ranks if name_lower in r.normalized_name.lower()]
-        return [
+        result = [
             {"id": m.id, "name": m.name, "normalized_name": m.normalized_name}
             for m in matches
         ]
+        if len(result) == 0:
+            return ResolveResult(status="not_found")
+        if len(result) == 1:
+            return ResolveResult(status="resolved", matches=result)
+        return ResolveResult(status="ambiguous", matches=result)
 
     # ------------------------------------------------------------------
     # Reference resolution for follow-ups
