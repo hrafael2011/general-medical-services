@@ -1,5 +1,8 @@
 """Pydantic schemas for validating LLM structured output."""
 
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -32,3 +35,18 @@ class IntentOutput(BaseModel):
         if v is not None and v not in _VALID_FORMATS:
             raise ValueError(f"format must be one of {_VALID_FORMATS}, got '{v}'")
         return v
+
+
+ResolveStatus = Literal["resolved", "ambiguous", "not_found"]
+
+
+@dataclass
+class ResolveResult:
+    """Normalized result from EntityResolver entity-resolution methods.
+
+    All resolve_* methods return this structure so callers don't need
+    to infer status from list length or isinstance checks.
+    """
+
+    status: ResolveStatus
+    matches: list[dict[str, Any]] = field(default_factory=list)
