@@ -13,6 +13,7 @@ from reportlab.lib.units import cm
 
 from sqlalchemy import text as sa_text
 
+from backend.app.application.telegram.sanitize import sanitize_text
 from backend.app.application.telegram.types import AgentResult
 from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
 
@@ -213,6 +214,7 @@ class IntentRouter:
             return rows, columns
         except Exception as exc:
             logger.warning("SQL execution failed: %s | SQL: %s", exc, sql_template[:120])
+            self._session.rollback()
             return [], []
 
     def _format_rows(self, rows: list[dict], columns: list[str], user_message: str) -> str:
@@ -222,15 +224,15 @@ class IntentRouter:
             return "No se encontraron resultados."
         if count == 1:
             first = rows[0]
-            parts = [f"{k}: {v}" for k, v in first.items() if v is not None]
+            parts = [f"{k}: {sanitize_text(v)}" for k, v in first.items() if v is not None]
             return "Resultado: " + " | ".join(parts)
         if count <= 5:
             lines = [f"{i+1}. " + " | ".join(
-                str(r.get(c, "")) for c in columns[:3]
+                sanitize_text(str(r.get(c, ""))) for c in columns[:3]
             ) for i, r in enumerate(rows)]
             return f"Se encontraron {count} resultados:\n" + "\n".join(lines)
         return f"Se encontraron {count} resultados. Los primeros:\n" + "\n".join(
-            f"{i+1}. " + " | ".join(str(r.get(c, "")) for c in columns[:3])
+            f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
             for i, r in enumerate(rows[:5])
         )
 
