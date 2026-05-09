@@ -31,12 +31,12 @@ class EntityResolver:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def resolve_date_expression(text: str) -> dict[str, Any] | str | None:
+    def resolve_date_expression(text: str) -> dict[str, Any] | None:
         """Parse a relative date expression and return a concrete value.
 
         Returns:
-            A date string ("2026-05-09"), a dict with start/end for ranges,
-            a dict with month/year for partial dates, or None if no date found.
+            A dict with a "type" key ("single_date", "date_range", "month",
+            "month_year"), or None if no date found.
         """
         t = text.lower().strip()
         today = date.today()
@@ -44,39 +44,39 @@ class EntityResolver:
         # "mañana" / "pasado mañana"
         if t in ("mañana", "manana"):
             tomorrow = today + timedelta(days=1)
-            return tomorrow.strftime("%Y-%m-%d")
+            return {"type": "single_date", "value": tomorrow.strftime("%Y-%m-%d")}
         if t in ("pasado mañana", "pasado manana"):
             d = today + timedelta(days=2)
-            return d.strftime("%Y-%m-%d")
+            return {"type": "single_date", "value": d.strftime("%Y-%m-%d")}
 
         # "hoy"
         if t == "hoy":
-            return today.strftime("%Y-%m-%d")
+            return {"type": "single_date", "value": today.strftime("%Y-%m-%d")}
 
         # "ayer"
         if t == "ayer":
             yesterday = today - timedelta(days=1)
-            return yesterday.strftime("%Y-%m-%d")
+            return {"type": "single_date", "value": yesterday.strftime("%Y-%m-%d")}
 
         # "esta semana"
         if t == "esta semana":
             weekday = today.weekday()
             start = today - timedelta(days=weekday)
             end = start + timedelta(days=6)
-            return {"start": start.strftime("%Y-%m-%d"), "end": end.strftime("%Y-%m-%d")}
+            return {"type": "date_range", "start": start.strftime("%Y-%m-%d"), "end": end.strftime("%Y-%m-%d")}
 
         # "la próxima semana" / "la semana que viene"
         if t in ("la próxima semana", "la proxima semana", "la semana que viene", "próxima semana", "proxima semana"):
             weekday = today.weekday()
             next_monday = today - timedelta(days=weekday) + timedelta(days=7)
-            return {"start": next_monday.strftime("%Y-%m-%d"), "end": (next_monday + timedelta(days=6)).strftime("%Y-%m-%d")}
+            return {"type": "date_range", "start": next_monday.strftime("%Y-%m-%d"), "end": (next_monday + timedelta(days=6)).strftime("%Y-%m-%d")}
 
         # "el mes pasado"
         if t == "el mes pasado":
             first_of_this_month = today.replace(day=1)
             last_of_last_month = first_of_this_month - timedelta(days=1)
             start = last_of_last_month.replace(day=1)
-            return {"start": start.strftime("%Y-%m-%d"), "end": last_of_last_month.strftime("%Y-%m-%d")}
+            return {"type": "date_range", "start": start.strftime("%Y-%m-%d"), "end": last_of_last_month.strftime("%Y-%m-%d")}
 
         # "este mes"
         if t == "este mes":
@@ -86,7 +86,7 @@ class EntityResolver:
             else:
                 next_month = first.replace(year=first.year + 1, month=1)
             last = next_month - timedelta(days=1)
-            return {"start": first.strftime("%Y-%m-%d"), "end": last.strftime("%Y-%m-%d")}
+            return {"type": "date_range", "start": first.strftime("%Y-%m-%d"), "end": last.strftime("%Y-%m-%d")}
 
         # "el próximo mes" / "el mes que viene"
         if t in ("el próximo mes", "el proximo mes", "el mes que viene", "próximo mes", "proximo mes"):
@@ -99,20 +99,20 @@ class EntityResolver:
                 last_next = first_next.replace(month=first_next.month + 1) - timedelta(days=1)
             else:
                 last_next = first_next.replace(year=first_next.year + 1, month=1) - timedelta(days=1)
-            return {"start": first_next.strftime("%Y-%m-%d"), "end": last_next.strftime("%Y-%m-%d")}
+            return {"type": "date_range", "start": first_next.strftime("%Y-%m-%d"), "end": last_next.strftime("%Y-%m-%d")}
 
         # Named months: "abril", "enero", etc.
         if t in _MONTH_NAMES:
             month = _MONTH_NAMES[t]
-            return {"month": month}
+            return {"type": "month", "month": month}
 
-        # "abril 2026" → {"month": 4, "year": 2026}
+        # "abril 2026" → {"type": "month_year", "month": 4, "year": 2026}
         match = re.match(r"(\w+)\s+(\d{4})", t)
         if match:
             month_name = match.group(1)
             year = int(match.group(2))
             if month_name in _MONTH_NAMES:
-                return {"month": _MONTH_NAMES[month_name], "year": year}
+                return {"type": "month_year", "month": _MONTH_NAMES[month_name], "year": year}
 
         return None
 
@@ -240,11 +240,15 @@ class EntityResolver:
                 date_result = self.resolve_date_expression(kw)
                 if date_result is not None:
                     resolved["date"] = date_result
-                    if isinstance(date_result, str):
-                        hints_parts.append(f"date={date_result}")
-                    elif isinstance(date_result, dict):
-                        for k, v in date_result.items():
-                            hints_parts.append(f"{k}={v}")
+                    dtype = date_result.get("type", "")
+                    if dtype == "single_date":
+                        hints_parts.append(f"date={date_result['value']}")
+                    elif dtype == "date_range":
+                        hints_parts.append(f"start={date_result['start']}, end={date_result['end']}")
+                    elif dtype == "month":
+                        hints_parts.append(f"month={date_result['month']}")
+                    elif dtype == "month_year":
+                        hints_parts.append(f"month={date_result['month']}, year={date_result['year']}")
                 break
 
         # Doctor names — scan for known doctor surnames
