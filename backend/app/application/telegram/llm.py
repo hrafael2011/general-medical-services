@@ -35,7 +35,7 @@ class FakeLLMProvider:
         # Only search user messages, not system prompts, so response keys
         # don't accidentally match query-type descriptions in the system prompt.
         user_text = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
-        self.calls.append({"messages": messages})
+        self.calls.append({"messages": messages, "temperature": temperature, "json_mode": json_mode})
         for key, resp in self.responses.items():
             if key.lower() in user_text.lower():
                 return resp
