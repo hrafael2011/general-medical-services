@@ -314,6 +314,17 @@ class EntityResolver:
                     hints_parts.append(f"rank_id={rank.id}, rank_name='{rank.normalized_name}'")
                     break
 
+        # Sex/gender detection
+        _FEMALE_WORDS = {"femenino", "femenina", "femeninos", "femeninas", "mujer", "mujeres"}
+        _MALE_WORDS = {"masculino", "masculina", "masculinos", "masculinas", "hombre", "hombres", "varon", "varones"}
+        msg_words = set(msg_lower.split())
+        if _FEMALE_WORDS & msg_words:
+            resolved["sex"] = "female"
+            hints_parts.append("sex='female'")
+        elif _MALE_WORDS & msg_words:
+            resolved["sex"] = "male"
+            hints_parts.append("sex='male'")
+
         return {
             "resolved": resolved,
             "ambiguous": ambiguous,

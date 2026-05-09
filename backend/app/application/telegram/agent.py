@@ -37,6 +37,22 @@ from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager
 from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.sanitize import sanitize_text
+
+# Filter dimensions that can appear in entity_hints as "key=value"
+_FILTER_DIMS = {"rank_id", "sex", "area_id", "doctor_id", "date", "start"}
+
+
+def _count_filter_dims(entity_hints: str) -> int:
+    """Count how many filter dimensions are present in entity hints."""
+    if not entity_hints:
+        return 0
+    parts = entity_hints.split(", ")
+    dims_seen = set()
+    for p in parts:
+        key = p.split("=", 1)[0]
+        if key in _FILTER_DIMS:
+            dims_seen.add(key)
+    return len(dims_seen)
 from backend.app.application.telegram.schemas import IntentOutput
 from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
@@ -377,6 +393,13 @@ class ConversationalAgent:
                 response_text=ambiguous_entities[0]["question"],
                 agent_action="ambiguous",
             )
+
+        # 2b. Compound query detection: multiple filter dimensions → NL-to-SQL
+        if _count_filter_dims(entity_hints) >= 2 and self._query_executor is not None:
+            logger.info(
+                "Compound query detected (hints=%s), routing to QueryExecutor", entity_hints
+            )
+            return self._fallback_to_query_db(text)
 
         # 3. Build prompt (with entity hints)
         system_prompt = self._build_system_prompt(user_info, entity_hints=entity_hints)
