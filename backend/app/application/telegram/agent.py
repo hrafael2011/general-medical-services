@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Patterns that suggest hallucinated data in reply text
 _HALLUCINATION_PATTERNS = [
     # "Tienes N doctores/medicos/..." or "hay N medicos/..."
-    re.compile(r"(?:tienes?|hay)\s+\d+\s+(doctores?|medicos?|asignaciones?|servicios?)", re.IGNORECASE),
+    re.compile(r"(?:tienes?|hay)\s+\d+\s+(?:doctor(?:es)?|asignac(?:ion|iones)|medicos?|servicios?)", re.IGNORECASE),
     # Specific doctor name patterns (Dr. / Dra. + capitalized name)
     re.compile(r"(?:Dr\.?|Dra\.?)\s+[A-ZÁÉÍÓÚ][a-záéíóú]+", re.IGNORECASE),
 ]

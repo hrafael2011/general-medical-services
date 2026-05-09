@@ -41,3 +41,13 @@ def test_reply_with_numbers_is_flagged():
     agent = ConversationalAgent(llm=llm, router=ReplyGuardRouterStub())
     result = agent.process("cuantos hay")
     assert "226" not in result.response_text
+
+
+def test_reply_with_singular_doctor_is_flagged():
+    """Reply with singular 'doctor' and count should also be flagged."""
+    llm = FakeLLMProvider(responses={
+        "sing": '{"action": "reply", "response_text": "Hay 1 doctor activo."}',
+    })
+    agent = ConversationalAgent(llm=llm, router=ReplyGuardRouterStub())
+    result = agent.process("cuantos doctores")
+    assert "doctor" not in result.response_text.lower() or "Puedo ayudarte" in result.response_text
