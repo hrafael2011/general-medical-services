@@ -263,4 +263,5 @@ class QueryExecutor:
             }
         except Exception as exc:
             logger.warning("Query SQL failed: %s | %s", sql[:120], exc)
+            self._session.rollback()
             return {"ok": False, "error": f"Error en la consulta: {exc}"}
