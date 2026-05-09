@@ -40,6 +40,16 @@ def test_format_rows_sanitizes_values(db_session):
     assert "alert(1)" in result
 
 
+def test_agent_format_rows_sanitizes_xss():
+    """Agent._format_rows sanitizes dangerous values."""
+    from backend.app.application.telegram.agent import _format_rows
+
+    rows = [{"name": "<script>x</script>", "count": 5}]
+    result = _format_rows(rows, ["name", "count"])
+    assert "<script>" not in result
+    assert "x" in result
+
+
 def test_intent_router_format_sanitizes_xss(db_session):
     """IntentRouter._format_rows sanitizes dangerous values from DB."""
     from backend.app.application.telegram.intent_router import IntentRouter

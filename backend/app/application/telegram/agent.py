@@ -19,6 +19,7 @@ from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager
 from backend.app.application.telegram.query_executor import QueryExecutor
+from backend.app.application.telegram.sanitize import sanitize_text
 from backend.app.application.telegram.schemas import IntentOutput
 from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
@@ -65,16 +66,16 @@ def _format_rows(rows: list[dict], columns: list[str]) -> str:
         return "No se encontraron resultados."
     if count == 1:
         first = rows[0]
-        parts = [f"{k}: {v}" for k, v in first.items() if v is not None]
+        parts = [f"{k}: {sanitize_text(v)}" for k, v in first.items() if v is not None]
         return "Resultado: " + " | ".join(parts)
     if count <= 5:
         lines = [
-            f"{i+1}. " + " | ".join(str(r.get(c, "")) for c in columns[:3])
+            f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
             for i, r in enumerate(rows)
         ]
         return f"Se encontraron {count} resultados:\n" + "\n".join(lines)
     lines = [
-        f"{i+1}. " + " | ".join(str(r.get(c, "")) for c in columns[:3])
+        f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
         for i, r in enumerate(rows[:5])
     ]
     return f"Se encontraron {count} resultados. Los primeros:\n" + "\n".join(lines)
