@@ -205,7 +205,7 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "unresolved_gaps_month",
-        "sql_template": "SELECT ug.service_date, sa.display_name AS area, ug.reason FROM unresolved_gaps ug JOIN service_areas sa ON ug.service_area_id = sa.id WHERE ug.year = :year AND ug.month = :month ORDER BY ug.service_date",
+        "sql_template": "SELECT ug.service_date, sa.display_name AS area, ug.reason_code, ug.description FROM unresolved_gaps ug JOIN service_areas sa ON ug.service_area_id = sa.id JOIN calendar_versions cv ON ug.calendar_version_id = cv.id JOIN calendars c ON cv.calendar_id = c.id WHERE c.year = :year AND c.month = :month ORDER BY ug.service_date",
         "params_schema": {"year": "int", "month": "int"},
         "description": "Huecos sin medico asignado en un mes y ano especifico.",
     },
