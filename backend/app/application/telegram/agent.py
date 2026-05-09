@@ -55,6 +55,13 @@ REGLAS:
 - Para reply/ambiguous: incluye response_text con tu respuesta directa.
 - Usa los valores EXACTOS de parametros indicados arriba.
 - Responde en el MISMO IDIOMA del usuario.
+REGLAS PARA action=reply:
+- NUNCA inventes nombres de medicos, cantidades, ni estadisticas.
+- NUNCA digas 'tienes X medicos' o 'hay Y servicios' a menos que
+  los datos vengan de una consulta SQL ejecutada (action=query).
+- Si no estas seguro, usa action=ambiguous y pide clarificacion.
+- En modo reply, solo describe tus capacidades en terminos generales.
+- NO menciones nombres especificos de doctores a menos que vengan de la BD.
 Sin explicaciones ni markdown.
 """
 
