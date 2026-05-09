@@ -399,7 +399,7 @@ def test_export_pdf_is_default_format(db_session) -> None:
     """Cuando el LLM no especifica format, el router lo recibe como None (PDF default)."""
     router = RouterStub()
     llm = FakeLLMProvider(responses={
-        "pdf": '{"action": "export", "query_type": "list_active_doctors", "params": {}}',
+        "exporta médicos activos": '{"action": "export", "query_type": "list_active_doctors", "params": {}}',
     })
     agent = _make_agent(llm=llm, router=router)
     agent.process(text="exporta médicos activos")

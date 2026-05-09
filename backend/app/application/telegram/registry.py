@@ -133,7 +133,7 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "doctor_detail",
-        "sql_template": "SELECT name, sex, availability_mode, active, service_active FROM doctors WHERE name ILIKE :search OR id = :search_id",
+        "sql_template": "SELECT name, sex, availability_mode, active, service_active FROM doctors WHERE name LIKE '%' || :search || '%' OR id = :search_id",
         "params_schema": {"search": "str", "search_id": "str"},
         "description": "Detalle de un medico por nombre o ID.",
     },
@@ -205,13 +205,13 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "doctor_history_by_name",
-        "sql_template": "SELECT ca.service_date, sa.display_name AS area, ca.assignment_source FROM calendar_assignments ca JOIN service_areas sa ON ca.service_area_id = sa.id JOIN doctors d ON ca.doctor_id = d.id WHERE d.name ILIKE :search AND ca.service_date >= CURRENT_DATE - INTERVAL '60 days' ORDER BY ca.service_date DESC",
+        "sql_template": "SELECT ca.service_date, sa.display_name AS area, ca.assignment_source FROM calendar_assignments ca JOIN service_areas sa ON ca.service_area_id = sa.id JOIN doctors d ON ca.doctor_id = d.id WHERE d.name LIKE '%' || :search || '%' AND ca.service_date >= CURRENT_DATE - INTERVAL '60 days' ORDER BY ca.service_date DESC",
         "params_schema": {"search": "str"},
         "description": "Historial de servicios de un medico en los ultimos 60 dias, buscando por nombre en vez de UUID.",
     },
     {
         "query_type": "assignments_by_area",
-        "sql_template": "SELECT d.name AS doctor_name, ca.service_date, sa.display_name AS area FROM calendar_assignments ca JOIN doctors d ON ca.doctor_id = d.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE sa.code ILIKE :area_code AND ca.service_date BETWEEN :start_date AND :end_date ORDER BY ca.service_date, d.name",
+        "sql_template": "SELECT d.name AS doctor_name, ca.service_date, sa.display_name AS area FROM calendar_assignments ca JOIN doctors d ON ca.doctor_id = d.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE sa.code LIKE :area_code AND ca.service_date BETWEEN :start_date AND :end_date ORDER BY ca.service_date, d.name",
         "params_schema": {"area_code": "str", "start_date": "date", "end_date": "date"},
         "description": "Asignaciones en un area especifica durante un rango de fechas.",
     },

@@ -32,10 +32,12 @@ class FakeLLMProvider:
         return '{"intent": "out_of_domain", "entities": {}, "confidence": 0.0}'
 
     def chat_complete(self, messages: list[dict], temperature: float = 0.1, json_mode: bool = False) -> str:
-        full_text = " ".join(m.get("content", "") for m in messages)
+        # Only search user messages, not system prompts, so response keys
+        # don't accidentally match query-type descriptions in the system prompt.
+        user_text = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
         self.calls.append({"messages": messages})
         for key, resp in self.responses.items():
-            if key.lower() in full_text.lower():
+            if key.lower() in user_text.lower():
                 return resp
         return '{"action": "reply"}'
 
