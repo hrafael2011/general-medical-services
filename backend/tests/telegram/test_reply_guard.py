@@ -1,0 +1,43 @@
+"""Tests for reply content guard."""
+import pytest
+from backend.app.application.telegram.llm import FakeLLMProvider
+from backend.app.application.telegram.agent import ConversationalAgent
+from backend.app.application.telegram.intent_router import IntentRouter
+from backend.app.application.telegram.types import AgentResult
+
+
+class ReplyGuardRouterStub(IntentRouter):
+    """Stub that returns ok for any handle() call — we only test reply path."""
+    def handle(self, **kwargs):
+        return AgentResult(response_text="ok")
+
+
+def test_reply_with_hallucinated_data_is_flagged():
+    """Reply containing invented doctor names should be replaced with generic."""
+    llm = FakeLLMProvider(responses={
+        "datos": '{"action": "reply", "response_text": "Tienes 15 doctores activos incluyendo al Dr. Perez y la Dra. Garcia."}',
+    })
+    agent = ConversationalAgent(llm=llm, router=ReplyGuardRouterStub())
+    result = agent.process("dame datos")
+    assert "Perez" not in result.response_text
+    assert "Garcia" not in result.response_text
+
+
+def test_valid_reply_passes_through():
+    """Generic reply without invented data passes through."""
+    llm = FakeLLMProvider(responses={
+        "ayuda": '{"action": "reply", "response_text": "Puedo consultar medicos, generar reportes y exportar datos."}',
+    })
+    agent = ConversationalAgent(llm=llm, router=ReplyGuardRouterStub())
+    result = agent.process("ayuda")
+    assert "Puedo consultar" in result.response_text
+
+
+def test_reply_with_numbers_is_flagged():
+    """Reply containing specific counts should be replaced."""
+    llm = FakeLLMProvider(responses={
+        "cuantos": '{"action": "reply", "response_text": "Actualmente hay 226 medicos en el sistema."}',
+    })
+    agent = ConversationalAgent(llm=llm, router=ReplyGuardRouterStub())
+    result = agent.process("cuantos hay")
+    assert "226" not in result.response_text

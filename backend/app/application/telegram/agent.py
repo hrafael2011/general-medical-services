@@ -13,6 +13,23 @@ import re
 
 logger = logging.getLogger(__name__)
 
+# Patterns that suggest hallucinated data in reply text
+_HALLUCINATION_PATTERNS = [
+    # "Tienes N doctores/medicos/..." or "hay N medicos/..."
+    re.compile(r"(?:tienes?|hay)\s+\d+\s+(doctores?|medicos?|asignaciones?|servicios?)", re.IGNORECASE),
+    # Specific doctor name patterns (Dr. / Dra. + capitalized name)
+    re.compile(r"(?:Dr\.?|Dra\.?)\s+[A-ZÁÉÍÓÚ][a-záéíóú]+", re.IGNORECASE),
+]
+
+
+def _reply_has_hallucination(text: str) -> bool:
+    """Check if *text* contains hallucination patterns."""
+    for pattern in _HALLUCINATION_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
+
 from pydantic import ValidationError
 
 from backend.app.application.telegram.intent_router import IntentRouter
@@ -426,6 +443,13 @@ class ConversationalAgent:
 
         # 6a. Reply / ambiguous → direct text
         if action == "reply":
+            if _reply_has_hallucination(response_text):
+                logger.warning("Reply contained potential hallucination, replaced with generic")
+                response_text = (
+                    "Puedo ayudarte con informacion del sistema de turnos medicos. "
+                    "Para datos especificos, preguntame algo concreto como "
+                    "'cuantos medicos activos hay' o 'dame la lista de sargentos'."
+                )
             return AgentResult(
                 response_text=response_text or "No tengo informacion sobre eso en el sistema.",
                 agent_action="reply",
