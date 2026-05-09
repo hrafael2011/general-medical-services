@@ -146,59 +146,59 @@ class TestEntityResolverIntegration:
     # ------------------------------------------------------------------
 
     def test_resolve_doctor_by_partial_name(self, db_session) -> None:
-        """Partial name 'Garcia' with 2 matches returns both."""
+        """Partial name 'Garcia' with 2 matches → ambiguous."""
         _seed_for_resolver(db_session)
         resolver = EntityResolver(session=db_session)
         result = resolver.resolve_doctor("Garcia")
-        assert len(result) == 2
+        assert result.status == "ambiguous"
+        assert len(result.matches) == 2
 
     def test_resolve_doctor_unique_match(self, db_session) -> None:
-        """Unique name 'Martinez' resolves to one doctor."""
+        """Unique name 'Martinez' → resolved with 1 match."""
         _seed_for_resolver(db_session)
         resolver = EntityResolver(session=db_session)
         result = resolver.resolve_doctor("Martinez")
-        assert len(result) == 1
-        assert result[0]["name"] == "Dra. Ana Martinez"
+        assert result.status == "resolved"
+        assert result.matches[0]["name"] == "Dra. Ana Martinez"
 
     def test_resolve_doctor_not_found(self, db_session) -> None:
-        """Non-existent name returns empty list."""
+        """Non-existent name → not_found."""
         _seed_for_resolver(db_session)
         resolver = EntityResolver(session=db_session)
         result = resolver.resolve_doctor("Fernandez")
-        assert result == []
+        assert result.status == "not_found"
 
     # ------------------------------------------------------------------
     # Area resolution
     # ------------------------------------------------------------------
 
     def test_resolve_area_by_display_name(self, db_session) -> None:
-        """Case-insensitive area display_name match."""
+        """Case-insensitive area display_name match → resolved."""
         _seed_for_resolver(db_session)
         resolver = EntityResolver(session=db_session)
         result = resolver.resolve_area("emergencia")
-        assert len(result) == 1
-        assert result[0]["display_name"] == "Emergencia"
+        assert result.status == "resolved"
+        assert result.matches[0]["display_name"] == "Emergencia"
 
     def test_resolve_area_by_code(self, db_session) -> None:
-        """Area code can also be used as query (falls through to display_name)."""
+        """Area code match → resolved."""
         _seed_for_resolver(db_session)
         resolver = EntityResolver(session=db_session)
         result = resolver.resolve_area("PISTA")
-        assert len(result) == 1
-        # resolve_area matches on display_name; "PISTA".lower() is in "Pista".lower()
-        assert result[0]["code"] == "PISTA"
+        assert result.status == "resolved"
+        assert result.matches[0]["code"] == "PISTA"
 
     # ------------------------------------------------------------------
     # Rank resolution
     # ------------------------------------------------------------------
 
     def test_resolve_rank_by_normalized_name(self, db_session) -> None:
-        """Rank normalized_name match."""
+        """Rank normalized_name match → resolved."""
         _seed_for_resolver(db_session)
         resolver = EntityResolver(session=db_session)
         result = resolver.resolve_rank("cabo")
-        assert len(result) == 1
-        assert result[0]["name"] == "Cabo"
+        assert result.status == "resolved"
+        assert result.matches[0]["name"] == "Cabo"
 
     # ------------------------------------------------------------------
     # Pre-processing

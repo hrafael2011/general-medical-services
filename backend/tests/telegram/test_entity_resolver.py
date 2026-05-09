@@ -18,7 +18,9 @@ def test_resolve_relative_date_tomorrow() -> None:
     resolver = EntityResolver(session=None)
     result = resolver.resolve_date_expression("mañana")
     tomorrow = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-    assert result == tomorrow
+    assert result is not None
+    assert result["type"] == "single_date"
+    assert result["value"] == tomorrow
 
 
 def test_resolve_relative_date_today() -> None:
@@ -26,13 +28,17 @@ def test_resolve_relative_date_today() -> None:
     resolver = EntityResolver(session=None)
     result = resolver.resolve_date_expression("hoy")
     today = date.today().strftime("%Y-%m-%d")
-    assert result == today
+    assert result is not None
+    assert result["type"] == "single_date"
+    assert result["value"] == today
 
 
 def test_resolve_relative_date_next_week() -> None:
     """'la próxima semana' → rango de fechas de la semana siguiente."""
     resolver = EntityResolver(session=None)
     result = resolver.resolve_date_expression("la próxima semana")
+    assert result is not None
+    assert result["type"] == "date_range"
     assert "start" in result
     assert "end" in result
 
@@ -41,6 +47,8 @@ def test_resolve_relative_date_last_month() -> None:
     """'el mes pasado' → rango del mes anterior."""
     resolver = EntityResolver(session=None)
     result = resolver.resolve_date_expression("el mes pasado")
+    assert result is not None
+    assert result["type"] == "date_range"
     assert "start" in result
     assert "end" in result
 
@@ -49,15 +57,19 @@ def test_resolve_relative_date_this_week() -> None:
     """'esta semana' → rango de lunes a domingo de la semana actual."""
     resolver = EntityResolver(session=None)
     result = resolver.resolve_date_expression("esta semana")
+    assert result is not None
+    assert result["type"] == "date_range"
     assert "start" in result
     assert "end" in result
 
 
 def test_resolve_relative_date_abril() -> None:
-    """'abril' → month=4."""
+    """'abril' → type=month, month=4."""
     resolver = EntityResolver(session=None)
     result = resolver.resolve_date_expression("abril")
-    assert result.get("month") == 4
+    assert result is not None
+    assert result["type"] == "month"
+    assert result["month"] == 4
 
 
 def test_resolve_date_not_found_returns_none() -> None:
@@ -73,7 +85,7 @@ def test_resolve_date_not_found_returns_none() -> None:
 
 
 def test_resolve_doctor_by_name_partial_match(db_session: Session) -> None:
-    """'Pérez' → lista de doctores que contienen 'Pérez' en el nombre."""
+    """'Pérez' → resolved con 1 match."""
     import uuid as _uuid
     from datetime import datetime as _dt, UTC
 
@@ -100,12 +112,13 @@ def test_resolve_doctor_by_name_partial_match(db_session: Session) -> None:
     resolver = EntityResolver(session=db_session)
     result = resolver.resolve_doctor("Pérez")
 
-    assert len(result) == 1
-    assert result[0]["name"] == "Juan Pérez"
+    assert result.status == "resolved"
+    assert len(result.matches) == 1
+    assert result.matches[0]["name"] == "Juan Pérez"
 
 
 def test_resolve_doctor_exact_unique_match(db_session: Session) -> None:
-    """Nombre exacto → devuelve 1 resultado sin ambigüedad."""
+    """Nombre exacto → resolved con 1 match."""
     import uuid as _uuid
     from datetime import datetime as _dt, UTC
 
@@ -132,11 +145,12 @@ def test_resolve_doctor_exact_unique_match(db_session: Session) -> None:
     resolver = EntityResolver(session=db_session)
     result = resolver.resolve_doctor("María Gómez")
 
-    assert len(result) == 1
+    assert result.status == "resolved"
+    assert len(result.matches) == 1
 
 
 def test_resolve_doctor_multiple_matches_is_ambiguous(db_session: Session) -> None:
-    """Dos doctores con mismo apellido → ambos en resultado."""
+    """Dos doctores con mismo apellido → ambiguous con 2 matches."""
     import uuid as _uuid
     from datetime import datetime as _dt, UTC
 
@@ -163,14 +177,16 @@ def test_resolve_doctor_multiple_matches_is_ambiguous(db_session: Session) -> No
     resolver = EntityResolver(session=db_session)
     result = resolver.resolve_doctor("Pérez")
 
-    assert len(result) == 2
+    assert result.status == "ambiguous"
+    assert len(result.matches) == 2
 
 
 def test_resolve_doctor_not_found(db_session: Session) -> None:
-    """Nombre que no existe → lista vacía."""
+    """Nombre que no existe → not_found, matches vacío."""
     resolver = EntityResolver(session=db_session)
     result = resolver.resolve_doctor("ZZZNotFound")
-    assert result == []
+    assert result.status == "not_found"
+    assert result.matches == []
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +195,7 @@ def test_resolve_doctor_not_found(db_session: Session) -> None:
 
 
 def test_resolve_area_by_name(db_session: Session) -> None:
-    """'Emergencia' → area con display_name coincidente (case-insensitive)."""
+    """'Emergencia' → resolved con display_name coincidente."""
     import uuid as _uuid
     from datetime import datetime as _dt, UTC
     from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
@@ -198,8 +214,9 @@ def test_resolve_area_by_name(db_session: Session) -> None:
     resolver = EntityResolver(session=db_session)
     result = resolver.resolve_area("emergencia")
 
-    assert len(result) == 1
-    assert result[0]["display_name"] == "Emergencia"
+    assert result.status == "resolved"
+    assert len(result.matches) == 1
+    assert result.matches[0]["display_name"] == "Emergencia"
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +225,7 @@ def test_resolve_area_by_name(db_session: Session) -> None:
 
 
 def test_resolve_rank_by_name(db_session: Session) -> None:
-    """'sargento' → rank con normalized_name coincidente."""
+    """'sargento' → resolved con normalized_name coincidente."""
     import uuid as _uuid
     from datetime import datetime as _dt, UTC
     from backend.app.infrastructure.db.models.catalogs import RankModel
@@ -227,8 +244,9 @@ def test_resolve_rank_by_name(db_session: Session) -> None:
     resolver = EntityResolver(session=db_session)
     result = resolver.resolve_rank("sargento")
 
-    assert len(result) == 1
-    assert result[0]["normalized_name"] == "sargento"
+    assert result.status == "resolved"
+    assert len(result.matches) == 1
+    assert result.matches[0]["normalized_name"] == "sargento"
 
 
 # ---------------------------------------------------------------------------
