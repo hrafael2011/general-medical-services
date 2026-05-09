@@ -388,7 +388,7 @@ class ConversationalAgent:
         messages.extend(history)
         messages.append({"role": "user", "content": text})
 
-        response = self._llm.chat_complete(messages, temperature=0.1, json_mode=True)
+        response = self._llm.chat_complete(messages, temperature=0.0, json_mode=True)
         response = response.strip()
 
         # 4. Parse JSON
