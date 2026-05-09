@@ -169,7 +169,19 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "operational_summary",
-        "sql_template": "SELECT (SELECT COUNT(*) FROM doctors WHERE active = TRUE AND service_active = TRUE) AS active_doctors, (SELECT status FROM calendars WHERE year = :year AND month = :month LIMIT 1) AS calendar_status",
+        "sql_template": (
+            "SELECT "
+            "(SELECT COUNT(*) FROM doctors WHERE active = TRUE AND service_active = TRUE) AS active_doctors, "
+            "(SELECT status FROM calendars WHERE year = :year AND month = :month LIMIT 1) AS calendar_status, "
+            "(SELECT COUNT(*) FROM calendar_assignments ca "
+            " JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
+            " JOIN calendars c ON cv.calendar_id = c.id "
+            " WHERE c.year = :year AND c.month = :month) AS total_assignments, "
+            "(SELECT COUNT(*) FROM unresolved_gaps ug "
+            " JOIN calendar_versions cv ON ug.calendar_version_id = cv.id "
+            " JOIN calendars c ON cv.calendar_id = c.id "
+            " WHERE c.year = :year AND c.month = :month) AS unresolved_gaps"
+        ),
         "params_schema": {"year": "int", "month": "int"},
         "description": "Resumen operativo del sistema para un periodo.",
     },

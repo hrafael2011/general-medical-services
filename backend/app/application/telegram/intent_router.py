@@ -352,6 +352,7 @@ def _build_pdf_from_rows(
             summary["active_doctors"] = row.get("active_doctors", 0)
             summary["calendar_status"] = row.get("calendar_status", "N/A")
             summary["total_assignments"] = row.get("total_assignments", 0)
+            summary["unresolved_gaps"] = row.get("unresolved_gaps", 0)
         pdf_bytes = generate_operational_summary_pdf(summary)
         filename = _EXPORT_FILENAME_MAP.get(query_type, "REPORTE.pdf")
         return AgentResult(
