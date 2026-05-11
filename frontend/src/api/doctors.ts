@@ -47,3 +47,14 @@ export const doctorsApi = {
   listServiceAreas: () => apiFetch<ServiceAreaRead[]>("/catalogs/service-areas"),
   listRanks: () => apiFetch<RankRead[]>("/catalogs/ranks"),
 };
+
+export const availabilityApi = {
+  setWeekly: (doctorId: string, body: { days_of_week: number[]; effective_from?: string; effective_to?: string }) =>
+    apiFetch<unknown>(`/availability/doctors/${doctorId}/weekly`, { method: "POST", body: JSON.stringify(body) }),
+  setMonthly: (doctorId: string, body: { year: number; month: number; available_dates: number[] }) =>
+    apiFetch<unknown>(`/availability/doctors/${doctorId}/monthly`, { method: "POST", body: JSON.stringify(body) }),
+  setRecurring: (doctorId: string, body: { weekday: number; week_number: number }) =>
+    apiFetch<unknown>(`/availability/doctors/${doctorId}/recurring`, { method: "POST", body: JSON.stringify(body) }),
+  list: (doctorId: string) =>
+    apiFetch<unknown[]>(`/availability/doctors/${doctorId}`),
+};
