@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { calendarsApi, CalendarAssignmentRead } from "../../api/calendars";
+import { calendarsApi, CalendarAssignmentRead, DaySlot } from "../../api/calendars";
 import { doctorsApi, DoctorRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
@@ -15,6 +15,78 @@ const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
 
 interface AssignTarget { date: string; areaId: string; areaName: string; }
 interface RemoveTarget { assignment: CalendarAssignmentRead; areaName: string; }
+
+interface CalendarDay {
+  day: number | null;       // null for padding days outside month
+  dateStr: string | null;   // "2026-05-14" or null
+}
+
+function buildCalendarDays(year: number, month: number): CalendarDay[] {
+  // month is 1-indexed (1=January)
+  const daysInMonth = new Date(year, month, 0).getDate();
+  // getDay(): 0=Sun, 1=Mon, ..., 6=Sat → we want Mon-first
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  // Convert JS Sunday=0 to Monday=0 offset
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
+
+  const days: CalendarDay[] = [];
+
+  // Padding days before month start
+  for (let i = 0; i < offset; i++) {
+    days.push({ day: null, dateStr: null });
+  }
+
+  // Actual days of the month
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    days.push({ day: d, dateStr });
+  }
+
+  // Pad remaining cells to complete the last week
+  while (days.length % 7 !== 0) {
+    days.push({ day: null, dateStr: null });
+  }
+
+  return days;
+}
+
+function chunkIntoWeeks(days: CalendarDay[]): CalendarDay[][] {
+  const weeks: CalendarDay[][] = [];
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
+  return weeks;
+}
+
+interface AreaAssignment {
+  areaId: string;
+  areaName: string;
+  slot: DaySlot | null;   // null if no assignment for this area on this day
+}
+
+// Returns, for a given date string, the array of all service areas with their assignment status.
+function getDayAssignments(
+  dateStr: string,
+  slots: DaySlot[],
+  areaMap: Record<string, string>,
+  sortedAreaIds: string[],
+): AreaAssignment[] {
+  return sortedAreaIds.map((areaId) => ({
+    areaId,
+    areaName: areaMap[areaId] ?? areaId,
+    slot: slots.find((s) => s.service_date === dateStr && s.service_area_id === areaId) ?? null,
+  }));
+}
+
+const AREA_COLORS = ["#dc2626", "#2563eb", "#16a34a"];
+
+function areaColor(index: number): string {
+  return AREA_COLORS[index % AREA_COLORS.length];
+}
+
+function rankDisplayName(rankName: string): string {
+  return rankName.toUpperCase();
+}
 
 export function CalendarGrid() {
   const { calendarId } = useParams<{ calendarId: string }>();
