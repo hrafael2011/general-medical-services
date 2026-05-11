@@ -78,10 +78,14 @@ function getDayAssignments(
   }));
 }
 
-const AREA_COLORS = ["#dc2626", "#2563eb", "#16a34a"];
+const AREA_COLOR_MAP: Record<string, string> = {
+  Emergencia: "#dc2626",
+  Pista: "#2563eb",
+  Disponible: "#16a34a",
+};
 
-function areaColor(index: number): string {
-  return AREA_COLORS[index % AREA_COLORS.length];
+function areaColor(areaName: string): string {
+  return AREA_COLOR_MAP[areaName] ?? "#6b7280";
 }
 
 function rankDisplayName(rankName: string): string {
@@ -240,7 +244,7 @@ export function CalendarGrid() {
             <div key={cd.dateStr} className={`calendar-cell ${isApproved ? "calendar-cell--approved" : ""}`}>
               <span className="calendar-day-number">{cd.day}</span>
               {assignments.map((areaAss, ai) => {
-                const color = areaColor(ai);
+                const color = areaColor(areaAss.areaName);
                 const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
                 const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
                 return (
