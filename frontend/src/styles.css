@@ -707,6 +707,12 @@ select {
   min-height: 1.2em;
 }
 
+.calendar-area-row + .calendar-area-row {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 2px;
+  margin-top: 1px;
+}
+
 .calendar-area-row--clickable {
   cursor: pointer;
 }
@@ -739,4 +745,151 @@ select {
 
 .calendar-assign-link:hover {
   color: #3b82f6;
+}
+
+/* ===== Doctor availability form ===== */
+.av-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.av-mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.av-mode-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.av-mode-radio input[type="radio"] {
+  accent-color: #2563eb;
+}
+
+.av-day-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-left: 22px;
+}
+
+.av-day-chip {
+  width: 36px;
+  height: 30px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  transition: all 0.1s;
+}
+
+.av-day-chip:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.av-day-chip--selected {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.av-day-chip--selected:hover {
+  background: #1d4ed8;
+}
+
+.av-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-left: 22px;
+  max-width: 280px;
+}
+
+.av-month-day {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  transition: all 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.av-month-day:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.av-month-day--selected {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.av-recurring-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-left: 22px;
+}
+
+.av-recurring-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.av-recurring-label {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.av-recurring-chip {
+  padding: 4px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  transition: all 0.1s;
+}
+
+.av-recurring-chip:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.av-recurring-chip--selected {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.av-recurring-chip--selected:hover {
+  background: #1d4ed8;
 }
