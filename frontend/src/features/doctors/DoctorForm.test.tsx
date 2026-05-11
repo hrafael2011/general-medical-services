@@ -34,20 +34,20 @@ function renderForm() {
 describe("DoctorForm availability", () => {
   it("shows weekly day chips by default", () => {
     renderForm();
-    expect(screen.getByText("Trabaja los mismos días todas las semanas")).toBeInTheDocument();
+    expect(screen.getByText(/Mismos días/)).toBeInTheDocument();
     expect(screen.getByText("Lun")).toBeInTheDocument();
     expect(screen.getByText("Dom")).toBeInTheDocument();
   });
 
-  it("shows monthly grid when monthly radio selected", () => {
+  it("shows monthly grid when monthly toggle selected", () => {
     renderForm();
-    fireEvent.click(screen.getByLabelText("Avisa sus días cada mes"));
+    fireEvent.click(screen.getByText(/Avisa sus días/));
     expect(screen.getByText("15")).toBeInTheDocument();
   });
 
-  it("shows recurring selectors when recurring radio selected", () => {
+  it("shows recurring selectors when recurring toggle selected", () => {
     renderForm();
-    fireEvent.click(screen.getByLabelText("Tiene un día fijo al mes"));
+    fireEvent.click(screen.getByText(/Día fijo/));
     expect(screen.getByText("Última")).toBeInTheDocument();
     expect(screen.getByText("Vie")).toBeInTheDocument();
   });

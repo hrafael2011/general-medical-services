@@ -175,87 +175,79 @@ export function DoctorForm({ doctor, onClose }: Props) {
           <div className="form-row">
             <fieldset className="field-group">
               <legend>Disponibilidad</legend>
-              <div className="av-mode-group">
-                {/* Option 1: Fixed weekly */}
-                <div className="av-mode-option">
-                  <label className="av-mode-radio">
-                    <input type="radio" name="avMode" checked={avMode === "weekly"} onChange={() => setAvMode("weekly")} />
-                    Trabaja los mismos días todas las semanas
-                  </label>
-                  {avMode === "weekly" && (
-                    <div className="av-day-checks">
-                      {DAY_LABELS.map((label, i) => {
-                        const backendDay = DAY_TO_BACKEND[i];
-                        const selected = selectedDays.includes(backendDay);
-                        return (
-                          <label key={label} className="check-label">
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => toggleDay(backendDay)}
-                            />
-                            {label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Option 2: Monthly */}
-                <div className="av-mode-option">
-                  <label className="av-mode-radio">
-                    <input type="radio" name="avMode" checked={avMode === "monthly"} onChange={() => setAvMode("monthly")} />
-                    Avisa sus días cada mes
-                  </label>
-                  {avMode === "monthly" && (
-                    <div className="av-month-grid">
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                        <button key={day} type="button"
-                          className={`av-month-day${selectedDates.includes(day) ? " av-month-day--selected" : ""}`}
-                          onClick={() => toggleDate(day)}>
-                          {day}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Option 3: Recurring */}
-                <div className="av-mode-option">
-                  <label className="av-mode-radio">
-                    <input type="radio" name="avMode" checked={avMode === "recurring"} onChange={() => setAvMode("recurring")} />
-                    Tiene un día fijo al mes
-                  </label>
-                  {avMode === "recurring" && (
-                    <div className="av-recurring-row">
-                      <div className="av-recurring-col">
-                        <span className="av-recurring-label">Día</span>
-                        {DAY_LABELS.map((label, i) => {
-                          const backendDay = DAY_TO_BACKEND[i];
-                          return (
-                            <button key={label} type="button"
-                              className={`av-recurring-chip${selectedWeekday === backendDay ? " av-recurring-chip--selected" : ""}`}
-                              onClick={() => setSelectedWeekday(backendDay)}>
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="av-recurring-col">
-                        <span className="av-recurring-label">Semana</span>
-                        {WEEK_LABELS.map((label, i) => (
-                          <button key={label} type="button"
-                            className={`av-recurring-chip${selectedWeekNumber === WEEK_VALUES[i] ? " av-recurring-chip--selected" : ""}`}
-                            onClick={() => setSelectedWeekNumber(WEEK_VALUES[i])}>
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <div className="av-toggle-group">
+                <button type="button"
+                  className={`av-toggle-btn${avMode === "weekly" ? " av-toggle-btn--active" : ""}`}
+                  onClick={() => setAvMode("weekly")}>
+                  Mismos días<br />todas las semanas
+                </button>
+                <button type="button"
+                  className={`av-toggle-btn${avMode === "monthly" ? " av-toggle-btn--active" : ""}`}
+                  onClick={() => setAvMode("monthly")}>
+                  Avisa sus días<br />cada mes
+                </button>
+                <button type="button"
+                  className={`av-toggle-btn${avMode === "recurring" ? " av-toggle-btn--active" : ""}`}
+                  onClick={() => setAvMode("recurring")}>
+                  Día fijo<br />al mes
+                </button>
               </div>
+              {avMode === "weekly" && (
+                <div className="av-day-checks">
+                  {DAY_LABELS.map((label, i) => {
+                    const backendDay = DAY_TO_BACKEND[i];
+                    const selected = selectedDays.includes(backendDay);
+                    return (
+                      <label key={label} className="check-label">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleDay(backendDay)}
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {avMode === "monthly" && (
+                <div className="av-month-grid">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                    <button key={day} type="button"
+                      className={`av-month-day${selectedDates.includes(day) ? " av-month-day--selected" : ""}`}
+                      onClick={() => toggleDate(day)}>
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {avMode === "recurring" && (
+                <div className="av-recurring-row">
+                  <div className="av-recurring-col">
+                    <span className="av-recurring-label">Día</span>
+                    {DAY_LABELS.map((label, i) => {
+                      const backendDay = DAY_TO_BACKEND[i];
+                      return (
+                        <button key={label} type="button"
+                          className={`av-recurring-chip${selectedWeekday === backendDay ? " av-recurring-chip--selected" : ""}`}
+                          onClick={() => setSelectedWeekday(backendDay)}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="av-recurring-col">
+                    <span className="av-recurring-label">Semana</span>
+                    {WEEK_LABELS.map((label, i) => (
+                      <button key={label} type="button"
+                        className={`av-recurring-chip${selectedWeekNumber === WEEK_VALUES[i] ? " av-recurring-chip--selected" : ""}`}
+                        onClick={() => setSelectedWeekNumber(WEEK_VALUES[i])}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </fieldset>
           </div>
 
