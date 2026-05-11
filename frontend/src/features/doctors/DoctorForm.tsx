@@ -183,16 +183,19 @@ export function DoctorForm({ doctor, onClose }: Props) {
                     Trabaja los mismos días todas las semanas
                   </label>
                   {avMode === "weekly" && (
-                    <div className="av-day-chips">
+                    <div className="av-day-checks">
                       {DAY_LABELS.map((label, i) => {
                         const backendDay = DAY_TO_BACKEND[i];
                         const selected = selectedDays.includes(backendDay);
                         return (
-                          <button key={label} type="button"
-                            className={`av-day-chip${selected ? " av-day-chip--selected" : ""}`}
-                            onClick={() => toggleDay(backendDay)}>
+                          <label key={label} className="check-label">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleDay(backendDay)}
+                            />
                             {label}
-                          </button>
+                          </label>
                         );
                       })}
                     </div>

@@ -52,12 +52,13 @@ describe("DoctorForm availability", () => {
     expect(screen.getByText("Vie")).toBeInTheDocument();
   });
 
-  it("toggles day chip selection on click", () => {
+  it("toggles day checkbox selection on click", () => {
     renderForm();
-    const lunBtn = screen.getByText("Lun");
-    fireEvent.click(lunBtn);
-    expect(lunBtn.className).toContain("av-day-chip--selected");
-    fireEvent.click(lunBtn);
-    expect(lunBtn.className).not.toContain("av-day-chip--selected");
+    const lunCheckbox = screen.getByLabelText("Lun");
+    expect(lunCheckbox).not.toBeChecked();
+    fireEvent.click(lunCheckbox);
+    expect(lunCheckbox).toBeChecked();
+    fireEvent.click(lunCheckbox);
+    expect(lunCheckbox).not.toBeChecked();
   });
 });

@@ -812,6 +812,13 @@ select {
   background: #1d4ed8;
 }
 
+.av-day-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: 22px;
+}
+
 .av-month-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
