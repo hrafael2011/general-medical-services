@@ -684,7 +684,6 @@ select {
   background: #fff;
   min-height: 95px;
   padding: 4px 6px;
-  vertical-align: top;
   display: flex;
   flex-direction: column;
 }
