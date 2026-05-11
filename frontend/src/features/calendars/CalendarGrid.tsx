@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarsApi, CalendarAssignmentRead, DaySlot } from "../../api/calendars";
-import { doctorsApi, DoctorRead } from "../../api/doctors";
+import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
 import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
@@ -116,11 +116,24 @@ export function CalendarGrid() {
     enabled: !!calendarId,
   });
 
+  const { data: ranksData } = useQuery({
+    queryKey: ["ranks"],
+    queryFn: doctorsApi.listRanks,
+    enabled: !!calendarId,
+  });
+
   const doctorMap: Record<string, DoctorRead> = {};
   for (const d of doctorsData?.items ?? []) doctorMap[d.id] = d;
 
   const areaMap: Record<string, string> = {};
   for (const a of (serviceAreasData ?? []) as ServiceAreaRead[]) areaMap[a.id] = a.display_name;
+
+  const rankMap: Record<string, RankRead> = {};
+  for (const r of ranksData ?? []) rankMap[r.id] = r;
+
+  const sortedAreaIds = [...(serviceAreasData ?? []) as ServiceAreaRead[]]
+    .sort((a, b) => a.display_name.localeCompare(b.display_name))
+    .map((a) => a.id);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
 
