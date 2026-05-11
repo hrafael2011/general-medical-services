@@ -247,15 +247,20 @@ export function CalendarGrid() {
                 const color = areaColor(areaAss.areaName);
                 const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
                 const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
+                const handleAreaClick = () => {
+                  if (!isDraft) return;
+                  if (areaAss.slot?.assignment) {
+                    setRemoveTarget({ assignment: areaAss.slot.assignment, areaName: areaAss.areaName });
+                  } else {
+                    setAssignTarget({ date: cd.dateStr!, areaId: areaAss.areaId, areaName: areaAss.areaName });
+                  }
+                };
                 return (
-                  <div key={areaAss.areaId} className="calendar-area-row" onClick={() => {
-                    if (!isDraft) return;
-                    if (areaAss.slot?.assignment) {
-                      setRemoveTarget({ assignment: areaAss.slot.assignment, areaName: areaAss.areaName });
-                    } else {
-                      setAssignTarget({ date: cd.dateStr!, areaId: areaAss.areaId, areaName: areaAss.areaName });
-                    }
-                  }}>
+                  <div key={areaAss.areaId} className={`calendar-area-row${isDraft ? " calendar-area-row--clickable" : ""}`}
+                    role="button" tabIndex={0}
+                    onClick={handleAreaClick}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleAreaClick(); } }}
+                  >
                     <span className={`calendar-area-dot ${doctor ? "" : "calendar-area-dot--empty"}`} style={{ backgroundColor: color }} />
                     {doctor ? (
                       <span>{rank ? rankDisplayName(rank.name) + " " : ""}{doctor.name}</span>
@@ -268,11 +273,21 @@ export function CalendarGrid() {
                 );
               })}
               {isDraft && (
-                <div className="calendar-assign-link" onClick={(e) => {
-                  e.stopPropagation();
-                  const firstEmpty = assignments.find((a) => !a.slot?.assignment);
-                  if (firstEmpty) setAssignTarget({ date: cd.dateStr!, areaId: firstEmpty.areaId, areaName: firstEmpty.areaName });
-                }}>+ Asignar</div>
+                <div className="calendar-assign-link" role="button" tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const firstEmpty = assignments.find((a) => !a.slot?.assignment);
+                    if (firstEmpty) setAssignTarget({ date: cd.dateStr!, areaId: firstEmpty.areaId, areaName: firstEmpty.areaName });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const firstEmpty = assignments.find((a) => !a.slot?.assignment);
+                      if (firstEmpty) setAssignTarget({ date: cd.dateStr!, areaId: firstEmpty.areaId, areaName: firstEmpty.areaName });
+                    }
+                  }}
+                >+ Asignar</div>
               )}
             </div>
           );

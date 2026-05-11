@@ -593,13 +593,6 @@ select {
 .toast-error   { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
 .toast-info    { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
 
-/* ===== Calendar cell colors ===== */
-.cell-assigned-generated { background: #dcfce7; color: #166534; }
-.cell-assigned-manual    { background: #dbeafe; color: #1e40af; }
-.cell-gap                { background: #fee2e2; color: #b91c1c; }
-.cell-empty-draft        { background: #f8fafc; color: #94a3b8; cursor: pointer; }
-.cell-empty-approved     { background: #ffffff; color: #e2e8f0; }
-
 /* ===== Dashboard ===== */
 .dashboard { display: grid; gap: 20px; }
 .dashboard-section-title {
@@ -703,10 +696,6 @@ select {
   margin-bottom: 2px;
 }
 
-.calendar-day-number--outside {
-  color: #d1d5db;
-}
-
 .calendar-area-row {
   display: flex;
   align-items: baseline;
@@ -715,11 +704,14 @@ select {
   line-height: 1.4;
   padding: 1px 2px;
   border-radius: 3px;
-  cursor: pointer;
   min-height: 1.2em;
 }
 
-.calendar-area-row:hover {
+.calendar-area-row--clickable {
+  cursor: pointer;
+}
+
+.calendar-area-row--clickable:hover {
   background: #f1f5f9;
 }
 
@@ -747,28 +739,4 @@ select {
 
 .calendar-assign-link:hover {
   color: #3b82f6;
-}
-
-.calendar-plus-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  margin-top: 2px;
-}
-
-.calendar-plus-btn {
-  font-size: 0.62rem;
-  padding: 1px 6px;
-  border-radius: 3px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  cursor: pointer;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.calendar-plus-btn:hover {
-  background: #e2e8f0;
-  color: #172033;
 }
