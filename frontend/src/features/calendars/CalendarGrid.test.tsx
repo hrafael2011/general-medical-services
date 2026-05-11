@@ -27,11 +27,11 @@ vi.mock("../../api/calendars", () => ({
 vi.mock("../../api/doctors", () => ({
   doctorsApi: {
     list: vi.fn().mockResolvedValue({ items: [{ id: "d1", name: "GARCÍA", service_active: true, rank_id: "r1" }], total: 1 }),
-    listRanks: vi.fn().mockResolvedValue([{ id: "r1", name: "cabo", level: 1 }]),
+    listRanks: vi.fn().mockResolvedValue([{ id: "r1", name: "cabo", abbreviation: "CABO" }]),
     listServiceAreas: vi.fn().mockResolvedValue([
-      { id: "area-1", display_name: "Emergencia", code: "EM" },
-      { id: "area-2", display_name: "Pista", code: "PI" },
-      { id: "area-3", display_name: "Disponible", code: "DI" },
+      { id: "area-1", display_name: "Emergencia", code: "EM", active: true },
+      { id: "area-2", display_name: "Pista", code: "PI", active: true },
+      { id: "area-3", display_name: "Disponible", code: "DI", active: true },
     ]),
   },
 }));
@@ -107,6 +107,22 @@ describe("CalendarGrid", () => {
     renderGrid();
     const assignLinks = await screen.findAllByText("+ Asignar");
     expect(assignLinks.length).toBeGreaterThan(0);
+  });
+
+  it("muestra celdas vacías cuando no hay slots en modo draft", async () => {
+    vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
+      calendar: { id: "c1", year: 2026, month: 5, status: "draft", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
+      version: { id: "v1", calendar_id: "c1", version_number: 1, status: "draft", created_by: null, reason: null, created_at: "" },
+      slots: [],
+      gaps: [],
+    });
+    renderGrid();
+    await screen.findByText(/mayo 2026/i);
+    // All areas are empty → "— — —" for all area rows
+    const dashes = await screen.findAllByText("— — —");
+    expect(dashes.length).toBeGreaterThan(0);
+    // "+ Asignar" still visible in draft even with no slots
+    expect(screen.getAllByText("+ Asignar").length).toBeGreaterThan(0);
   });
 
   it("no muestra enlaces de asignación en modo aprobado", async () => {
