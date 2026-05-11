@@ -17,6 +17,7 @@ from backend.app.schemas.availability import (
     PendingAvailabilityResponse,
     RestrictionRead,
     SetMonthlyAvailabilityRequest,
+    SetRecurringAvailabilityRequest,
     SetWeeklyAvailabilityRequest,
 )
 
@@ -89,6 +90,27 @@ def set_monthly_availability(
             year=payload.year,
             month=payload.month,
             available_dates=payload.available_dates,
+            actor_id=current_user.id,
+        )
+    except AvailabilityError as exc:
+        raise _availability_error_to_http(exc) from exc
+    session.commit()
+    return AvailabilityRead.model_validate(record)
+
+
+@router.post("/doctors/{doctor_id}/recurring", response_model=AvailabilityRead, status_code=201)
+def set_recurring_availability(
+    doctor_id: str,
+    payload: SetRecurringAvailabilityRequest,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[AvailabilityService, Depends(get_availability_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> AvailabilityRead:
+    try:
+        record = service.set_recurring_availability(
+            doctor_id,
+            weekday=payload.weekday,
+            week_number=payload.week_number,
             actor_id=current_user.id,
         )
     except AvailabilityError as exc:
