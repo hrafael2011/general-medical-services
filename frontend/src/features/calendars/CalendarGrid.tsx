@@ -186,15 +186,9 @@ export function CalendarGrid() {
   const { calendar, version, slots } = data;
   const isDraft = version.status === "draft";
 
-  const areas = [...new Set(slots.map(s => s.service_area_id))].sort();
-  const days  = [...new Set(slots.map(s => s.service_date))].sort();
-  const slotIndex = new Map(slots.map(s => [`${s.service_date}|${s.service_area_id}`, s]));
-
-  function cellClass(slot: typeof slots[0] | undefined): string {
-    if (!slot?.assignment) return isDraft ? "cell-empty-draft" : "cell-empty-approved";
-    if (slot.assignment.assignment_source === "manual") return "cell-assigned-manual";
-    return "cell-assigned-generated";
-  }
+  const calendarDays = buildCalendarDays(calendar.year, calendar.month);
+  const weeks = chunkIntoWeeks(calendarDays);
+  const isApproved = version.status === "approved";
 
   return (
     <div>
@@ -233,49 +227,52 @@ export function CalendarGrid() {
         </p>
       )}
 
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr>
-              <th style={{ padding: "6px 10px", background: "#f8fafc", borderBottom: "2px solid #e2e8f0", textAlign: "left", whiteSpace: "nowrap" }}>Área</th>
-              {days.map(d => (
-                <th key={d} style={{ padding: "6px 8px", background: "#f8fafc", borderBottom: "2px solid #e2e8f0", textAlign: "center", minWidth: 80 }}>
-                  {d.slice(8)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {areas.map(areaId => (
-              <tr key={areaId}>
-                <td style={{ padding: "6px 10px", borderBottom: "1px solid #f1f5f9", fontWeight: 600, whiteSpace: "nowrap" }}>{areaMap[areaId] ?? areaId}</td>
-                {days.map(day => {
-                  const slot = slotIndex.get(`${day}|${areaId}`);
-                  const assignment = slot?.assignment ?? null;
-                  const doctor = assignment ? doctorMap[assignment.doctor_id] : null;
-                  const cls = cellClass(slot);
-                  return (
-                    <td
-                      key={day}
-                      className={cls}
-                      style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", borderRight: "1px solid #f1f5f9", textAlign: "center" }}
-                      onClick={() => {
-                        if (!isDraft) return;
-                        if (assignment) {
-                          setRemoveTarget({ assignment, areaName: areaMap[areaId] ?? areaId });
-                        } else {
-                          setAssignTarget({ date: day, areaId, areaName: areaMap[areaId] ?? areaId });
-                        }
-                      }}
-                    >
-                      {doctor ? doctor.name.split(" ").slice(-1)[0] : (isDraft ? "+" : "—")}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="calendar-grid">
+        {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
+          <div key={d} className="calendar-grid-header">{d}</div>
+        ))}
+        {weeks.flat().map((cd, idx) => {
+          if (cd.day === null || cd.dateStr === null) {
+            return <div key={`pad-${idx}`} className="calendar-cell calendar-cell--outside" />;
+          }
+          const assignments = getDayAssignments(cd.dateStr, slots, areaMap, sortedAreaIds);
+          return (
+            <div key={cd.dateStr} className={`calendar-cell ${isApproved ? "calendar-cell--approved" : ""}`}>
+              <span className="calendar-day-number">{cd.day}</span>
+              {assignments.map((areaAss, ai) => {
+                const color = areaColor(ai);
+                const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
+                const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
+                return (
+                  <div key={areaAss.areaId} className="calendar-area-row" onClick={() => {
+                    if (!isDraft) return;
+                    if (areaAss.slot?.assignment) {
+                      setRemoveTarget({ assignment: areaAss.slot.assignment, areaName: areaAss.areaName });
+                    } else {
+                      setAssignTarget({ date: cd.dateStr!, areaId: areaAss.areaId, areaName: areaAss.areaName });
+                    }
+                  }}>
+                    <span className={`calendar-area-dot ${doctor ? "" : "calendar-area-dot--empty"}`} style={{ backgroundColor: color }} />
+                    {doctor ? (
+                      <span>{rank ? rankDisplayName(rank.name) + " " : ""}{doctor.name}</span>
+                    ) : isDraft ? (
+                      <span style={{ color: "#cbd5e1" }}>— — —</span>
+                    ) : (
+                      <span style={{ color: "#e2e8f0" }}>—</span>
+                    )}
+                  </div>
+                );
+              })}
+              {isDraft && (
+                <div className="calendar-assign-link" onClick={(e) => {
+                  e.stopPropagation();
+                  const firstEmpty = assignments.find((a) => !a.slot?.assignment);
+                  if (firstEmpty) setAssignTarget({ date: cd.dateStr!, areaId: firstEmpty.areaId, areaName: firstEmpty.areaName });
+                }}>+ Asignar</div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {data.gaps.length > 0 && (
