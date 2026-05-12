@@ -55,11 +55,11 @@ DEFAULT_SIGNATURES = SignatureConfig(
     left_name='Dra. MIGUELINA A. ACOSTA RAMOS',
     left_title1='Sargento Médico FARD.',
     left_title2='Encargada de los Servicios de los Médicos Generales',
-    left_title3='del Hosp. Mil. Univ. Doc. FARD, “DRL”.',
+    left_title3='del Hosp. Mil. Univ. Doc. FARD, "DRL".',
     right_name='ING. CARLOS J. ENCARNACION GONZALEZ',
     right_title1='1er Tt. Ingeniero en Sistema FARD.',
     right_title2='Encargado del Departamento Administrativo de la',
-    right_title3='Sub Dirección de Recursos Humanos del Hosp. Mil. Univ. Doc. FARD, “DRL”.',
+    right_title3='Sub Dirección de Recursos Humanos del Hosp. Mil. Univ. Doc. FARD, "DRL".',
 )
 
 
@@ -87,14 +87,14 @@ def _get_logo() -> Image | None:
 _HEADER_SUBDIR = "SUBDIRECCIÓN DE RECURSOS HUMANOS"
 _HEADER_HOSPITAL = (
     "HOSPITAL MILITAR UNIVERSITARIO DOCENTE, FARD "
-    "“DR. RAMÓN DE LARA”"
+    '"DR. RAMÓN DE LARA"'
 )
 _HEADER_BASE = (
-    "BASE AÉREA “SAN ISIDRO”, "
+    'BASE AÉREA "SAN ISIDRO", '
     "FUERZA AÉREA DE REPÚBLICA DOMINICANA, "
     "SAN ISIDRO, SANTO DOMINGO ESTE, R.D."
 )
-_HEADER_LEMA = "“Todo por la Patria”"
+_HEADER_LEMA = '"Todo por la Patria"'
 
 
 # ---------------------------------------------------------------------------
@@ -317,165 +317,7 @@ def _build_doc(title: str, subtitle: str) -> tuple[SimpleDocTemplate, io.BytesIO
 
 
 # ---------------------------------------------------------------------------
-# Public generators
-# ---------------------------------------------------------------------------
-
-
-def generate_calendar_pdf(
-    assignments: list[dict],
-    month: int,
-    year: int,
-    signatures: SignatureConfig | None = None,
-) -> bytes:
-    """Generate a PDF report of calendar assignments (institutional style)."""
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ][month - 1]
-
-    date_line = f"{month_name.upper()} {year}"
-    title = f"CALENDARIO DE TURNOS - {month_name.upper()} {year}"
-
-    headers = ["Fecha", "Área", "Médico", "Fuente"]
-    col_widths = [3.2 * cm, 4.5 * cm, 6 * cm, 3 * cm]
-    rows = [headers]
-    for a in assignments:
-        rows.append([
-            str(a.get("service_date", "")),
-            str(a.get("service_area_name", a.get("service_area_id", ""))),
-            str(a.get("doctor_name", a.get("doctor_id", ""))),
-            str(a.get("assignment_source", "")),
-        ])
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph(
-        f"Asignaciones ({len(assignments)} total)", _STYLE_SECTION
-    ))
-    story.append(_make_table(rows, col_widths))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-def generate_doctor_history_pdf(
-    doctor_data: list[dict],
-    month: int,
-    year: int,
-    signatures: SignatureConfig | None = None,
-) -> bytes:
-    """Generate a PDF report of doctor service history."""
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ][month - 1]
-
-    date_line = f"{month_name.upper()} {year}"
-    title = f"HISTORIAL DE SERVICIOS - {month_name.upper()} {year}"
-
-    headers = ["Médico", "Servicios", "Áreas", "Carga"]
-    col_widths = [5.5 * cm, 2.5 * cm, 5.5 * cm, 2.5 * cm]
-    rows = [headers]
-    for d in doctor_data:
-        rows.append([
-            str(d.get("name", d.get("doctor_id", ""))),
-            str(d.get("count", 0)),
-            str(d.get("areas", "")),
-            str(d.get("load", "")),
-        ])
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph(
-        f"Resumen por Médico ({len(doctor_data)} médicos)", _STYLE_SECTION
-    ))
-    story.append(_make_table(rows, col_widths))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-def generate_operational_summary_pdf(summary: dict, signatures: SignatureConfig | None = None) -> bytes:
-    """Generate a PDF report of the operational summary."""
-    period = summary.get("period", {})
-    month_num = period.get("month", 1)
-    year = period.get("year", datetime.now().year)
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ]
-    month_str = month_name[month_num - 1] if isinstance(month_num, int) and 1 <= month_num <= 12 else str(month_num)
-
-    date_line = f"{month_str.upper()} {year}"
-    title = "RESUMEN OPERATIVO"
-
-    rows = [
-        ["Indicador", "Valor"],
-        ["Médicos Activos", str(summary.get("active_doctors", 0))],
-        [
-            "Estado del Calendario",
-            str(summary.get("calendar_status", "Sin calendario")),
-        ],
-        ["Asignaciones", str(summary.get("total_assignments", 0))],
-        ["Huecos sin Resolver", str(summary.get("unresolved_gaps", 0))],
-    ]
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph("Indicadores del Período", _STYLE_SECTION))
-    story.append(_make_table(rows, col_widths=[5 * cm, 10 * cm]))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-def generate_mission_ranking_pdf(
-    entries: list[dict],
-    month: int,
-    year: int,
-    signatures: SignatureConfig | None = None,
-) -> bytes:
-    """Generate a PDF report of mission candidate rankings."""
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ][month - 1]
-
-    date_line = f"{month_name.upper()} {year}"
-    title = f"RANKING DE CANDIDATOS - {month_name.upper()} {year}"
-
-    headers = ["#", "Médico", "Carga Total", "Elegible"]
-    col_widths = [1.5 * cm, 7 * cm, 3.5 * cm, 2.5 * cm]
-    rows = [headers]
-    for e in entries:
-        rows.append([
-            str(e.get("position", "")),
-            str(e.get("doctor_name", e.get("doctor_id", ""))),
-            f"{float(e.get('total_load_score', 0)):.1f}",
-            "Sí" if e.get("eligible", False) else "No",
-        ])
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph(
-        f"Ranking ({len(entries)} candidatos)", _STYLE_SECTION
-    ))
-    story.append(_make_table(rows, col_widths))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-# ---------------------------------------------------------------------------
-# NEW: Weekly schedule report (formato SERVICIOS)
+# Weekly schedule report (formato SERVICIOS)
 # ---------------------------------------------------------------------------
 
 def generate_weekly_schedule_pdf(
@@ -543,52 +385,6 @@ def generate_weekly_schedule_pdf(
 
     # Signature block
     story.append(Spacer(1, 1.2 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-# ---------------------------------------------------------------------------
-# NEW: Generic doctor listing (like MEDICOS GENERALES MILITARES.pdf)
-# ---------------------------------------------------------------------------
-
-def generate_doctor_list_pdf(
-    doctors: list[dict],
-    title: str,
-    subtitle: str = "",
-    columns: list[str] | None = None,
-    col_widths: list[float] | None = None,
-    signatures: SignatureConfig | None = None,
-) -> bytes:
-    """Generate a generic doctor listing PDF.
-
-    Args:
-        doctors: List of dicts with keys matching *columns*.
-        title: Report title (e.g. "MEDICOS GENERALES Y AREAS DONDE LABORAN").
-        subtitle: Optional subtitle/date line.
-        columns: Column header names. Defaults to ["#", "RANGO", "NOMBRE", "Área"].
-        col_widths: Column widths. Defaults proportional to page width.
-    """
-    if columns is None:
-        columns = ["#", "RANGO", "NOMBRE", "Área"]
-    if col_widths is None:
-        col_widths = [1.2 * cm, 4.5 * cm, 6 * cm, 4 * cm]
-
-    date_line = subtitle or datetime.now().strftime("%d/%m/%Y")
-
-    headers = columns
-    rows = [headers]
-    for doc_data in doctors:
-        rows.append([
-            str(doc_data.get(col.lower(), doc_data.get(col, "")))
-            for col in columns
-        ])
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(_make_table(rows, col_widths))
-    story.append(Spacer(1, 1.5 * cm))
     story.append(_build_signature_block(signatures))
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()

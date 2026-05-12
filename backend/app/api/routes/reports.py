@@ -71,26 +71,6 @@ def get_doctor_history_excel(
     )
 
 
-@router.get("/notifications-summary")
-def get_notifications_summary(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
-    service: Annotated[ReportService, Depends(get_report_service)],
-    year: int = Query(..., ge=2000, le=2100),
-    month: int = Query(..., ge=1, le=12),
-) -> dict:
-    return service.generate_notifications_summary(year, month)
-
-
-@router.get("/operational-summary")
-def get_operational_summary(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
-    service: Annotated[ReportService, Depends(get_report_service)],
-    year: int = Query(..., ge=2000, le=2100),
-    month: int = Query(..., ge=1, le=12),
-) -> dict:
-    return service.generate_operational_summary(year, month)
-
-
 @router.get("/weekly-schedule")
 def get_weekly_schedule(
     _user: Annotated[UserModel, Depends(require_ready_user)],
