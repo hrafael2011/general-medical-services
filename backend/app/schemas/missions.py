@@ -36,6 +36,7 @@ class MissionAssignmentRead(BaseModel):
     confirmed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    deleted_at: datetime | None = None
     participants: list[MissionParticipantRead] = []
 
     model_config = {"from_attributes": True}
@@ -47,6 +48,15 @@ class CreateMissionRequest(BaseModel):
     location: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None)
     mission_start_at: datetime | None = None
+
+
+class UpdateMissionRequest(BaseModel):
+    mission_date: date | None = None
+    participant_count: int | None = Field(default=None, ge=1)
+    location: str | None = Field(default=None, max_length=200)
+    description: str | None = None
+    mission_start_at: datetime | None = None
+    mission_end_at: datetime | None = None
 
 
 # --- Mission Candidate Ranking ---
@@ -124,5 +134,4 @@ class MissionCandidateDateRankingResponse(BaseModel):
 
 class ConfirmMissionRequest(BaseModel):
     """Confirm selected doctors for a mission."""
-    mission_id: str
     doctor_ids: list[str]

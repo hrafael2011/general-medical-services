@@ -11,15 +11,17 @@ interface Props {
   doctors: DoctorRead[];
   currentDoctorId?: string;
   availableDoctorIds?: string[];
-  onConfirm: (doctorId: string) => void;
+  onConfirm: (doctorId: string, overrideJustification?: string | null) => void;
   onClose: () => void;
   isLoading: boolean;
   onRemove?: () => void;
+  warningMessage?: string | null;
 }
 
-export function AssignDoctorModal({ date, areaName, doctors, currentDoctorId, availableDoctorIds, onConfirm, onClose, isLoading, onRemove }: Props) {
+export function AssignDoctorModal({ date, areaName, doctors, currentDoctorId, availableDoctorIds, onConfirm, onClose, isLoading, onRemove, warningMessage }: Props) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(currentDoctorId ?? null);
+  const [overrideJustification, setOverrideJustification] = useState("");
 
   const [year, month, day] = date.split("-").map(Number);
   const title = `${day} de ${MONTHS[month - 1]} ${year} · ${areaName}`;
@@ -78,6 +80,19 @@ export function AssignDoctorModal({ date, areaName, doctors, currentDoctorId, av
           })}
         </div>
 
+        {warningMessage && (
+          <div style={{ marginTop: 12, padding: "10px 12px", border: "1px solid #fed7aa", borderRadius: 6, background: "#fff7ed" }}>
+            <strong style={{ display: "block", fontSize: 13, color: "#9a3412", marginBottom: 6 }}>Advertencia de regla</strong>
+            <p style={{ margin: 0, fontSize: 13, color: "#9a3412" }}>{warningMessage}</p>
+            <textarea
+              placeholder="Justificación para continuar…"
+              value={overrideJustification}
+              onChange={e => setOverrideJustification(e.target.value)}
+              style={{ marginTop: 8, minHeight: 72, resize: "vertical" }}
+            />
+          </div>
+        )}
+
         <div className="form-footer" style={{ marginTop: 16 }}>
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
           {onRemove && (
@@ -87,10 +102,10 @@ export function AssignDoctorModal({ date, areaName, doctors, currentDoctorId, av
           )}
           <button
             className="btn-primary"
-            onClick={() => selectedId && onConfirm(selectedId)}
-            disabled={!selectedId || selectedId === currentDoctorId || isLoading}
+            onClick={() => selectedId && onConfirm(selectedId, warningMessage ? overrideJustification : null)}
+            disabled={!selectedId || selectedId === currentDoctorId || isLoading || (!!warningMessage && overrideJustification.trim().length < 8)}
           >
-            {isLoading ? "Asignando…" : "Asignar"}
+            {isLoading ? "Asignando…" : warningMessage ? "Asignar con advertencia" : "Asignar"}
           </button>
         </div>
       </div>

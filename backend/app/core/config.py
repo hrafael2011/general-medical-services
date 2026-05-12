@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Medical Shift Scheduling System"
     app_env: str = "local"
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5433/medical_shifts"
+    database_url: str = "postgresql+psycopg://postgres:postgres@127.0.0.1:5433/medical_shifts"
     frontend_origin: str = "http://localhost:5173"
     secret_key: str = "change-this-local-secret"
     access_token_expire_minutes: int = 60 * 8
@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_whatsapp_from: str = "whatsapp:+14155238886"
+    calendar_auto_generation_runner_enabled: bool = False
+    calendar_auto_generation_check_interval_seconds: int = 86400
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

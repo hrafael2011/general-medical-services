@@ -34,6 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     seed_catalogs = subparsers.add_parser("seed-catalogs")
     seed_catalogs.set_defaults(func=seed_initial_catalogs)
+
+    auto_calendar = subparsers.add_parser("run-calendar-auto-generation")
+    auto_calendar.set_defaults(func=run_calendar_auto_generation)
     return parser
 
 
@@ -42,6 +45,14 @@ def seed_initial_catalogs(_args: argparse.Namespace) -> None:
         CatalogService(CatalogRepository(session)).seed_initial_catalogs()
         session.commit()
         print("Initial catalogs seeded.")
+
+
+def run_calendar_auto_generation(_args: argparse.Namespace) -> None:
+    from backend.app.application.calendars.auto_generation_runner import (
+        run_calendar_auto_generation_once,
+    )
+
+    print(run_calendar_auto_generation_once())
 
 
 def main() -> None:

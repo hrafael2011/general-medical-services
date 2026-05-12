@@ -343,6 +343,8 @@ button {
 .btn-ghost:hover { background: #f1f5f9; }
 .btn-ghost.btn-green { color: #166534; border-color: #bbf7d0; }
 .btn-ghost.btn-green:hover { background: #dcfce7; }
+.btn-ghost.btn-danger { color: #991b1b; border-color: #fecaca; }
+.btn-ghost.btn-danger:hover { background: #fee2e2; }
 
 .btn-icon {
   display: grid; place-items: center;

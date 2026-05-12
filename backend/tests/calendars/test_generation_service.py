@@ -88,6 +88,7 @@ def _create_calendar_and_version(db_session) -> tuple[CalendarModel, CalendarVer
         year=_YEAR,
         month=_MONTH,
         status="draft",
+        generation_mode="manual",
         created_by="actor-001",
         approved_by=None,
         created_at=now,
@@ -186,6 +187,11 @@ def test_generate_assigns_doctors(db_session) -> None:
     version = cal_repo.get_latest_version(calendar.id)
     assignments = cal_repo.list_assignments(version.id)
     assert len(assignments) == summary.assigned_count
+
+    updated_calendar = cal_repo.get_calendar_by_id(calendar.id)
+    assert updated_calendar.generation_mode == "assisted_auto"
+    assert updated_calendar.status == "draft"
+    assert version.status == "draft"
 
 
 def test_generate_does_not_create_mission_ranking_before_approval(db_session) -> None:

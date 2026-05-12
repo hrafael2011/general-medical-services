@@ -16,7 +16,6 @@ import backend.app.infrastructure.db.models.availability  # noqa: F401
 import backend.app.infrastructure.db.models.calendars  # noqa: F401
 import backend.app.infrastructure.db.models.catalogs  # noqa: F401
 import backend.app.infrastructure.db.models.doctors  # noqa: F401
-import backend.app.infrastructure.db.models.import_staging  # noqa: F401
 import backend.app.infrastructure.db.models.missions  # noqa: F401
 import backend.app.infrastructure.db.models.notifications  # noqa: F401
 import backend.app.infrastructure.db.models.telegram  # noqa: F401
@@ -39,9 +38,6 @@ _EXCLUDE_TABLES = {
     "telegram_user_links",
     "telegram_link_tokens",
     "audit_logs",
-    "import_staging",
-    "import_staging_areas",
-    "import_reviews",
     "users",  # NEVER expose credentials table to LLM
 }
 

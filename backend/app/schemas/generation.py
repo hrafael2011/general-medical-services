@@ -18,6 +18,9 @@ class GenerationResponse(BaseModel):
     calendar_id: str
     month: int
     year: int
+    calendar_status: str
+    generation_mode: str
+    review_required: bool
     total_slots: int
     assigned_count: int
     gap_count: int

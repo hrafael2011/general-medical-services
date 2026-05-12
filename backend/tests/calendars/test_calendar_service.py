@@ -1,7 +1,10 @@
 import pytest
 
+from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.service import CalendarService
+from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel
+from backend.app.infrastructure.repositories.audit import AuditRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 
 
@@ -15,6 +18,15 @@ class _FakeMissionRankingService:
 
     def generate_ranking(self, **kwargs):
         self.calls.append(kwargs)
+
+
+class _FakeTriggers:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def on_calendar_approved(self, **kwargs):
+        self.calls.append(kwargs)
+        return len(kwargs.get("assignments", []))
 
 
 # ---------------------------------------------------------------------------
@@ -36,12 +48,27 @@ def test_create_calendar_stores_fields(db_session) -> None:
     assert calendar.month == 5
     assert calendar.year == 2026
     assert calendar.status == "draft"
+    assert calendar.generation_mode == "manual"
 
     versions = repo.list_versions(calendar.id)
     assert len(versions) == 1
     v1 = versions[0]
     assert v1.version_number == 1
     assert v1.status == "draft"
+
+
+def test_create_calendar_stores_generation_mode(db_session) -> None:
+    service = _make_service(db_session)
+
+    calendar = service.create_calendar(
+        actor_id="actor-001",
+        month=5,
+        year=2026,
+        notes=None,
+        generation_mode="scheduled_auto",
+    )
+
+    assert calendar.generation_mode == "scheduled_auto"
 
 
 def test_create_calendar_duplicate_raises(db_session) -> None:
@@ -122,6 +149,67 @@ def test_approve_version_generates_mission_ranking(db_session) -> None:
             "calendar_version_id": version.id,
         }
     ]
+
+
+def test_approve_version_is_only_approval_boundary(db_session) -> None:
+    ranking_service = _FakeMissionRankingService()
+    triggers = _FakeTriggers()
+    audit_repo = AuditRepository(db_session)
+    service = CalendarService(
+        CalendarRepository(db_session),
+        audit=AuditService(audit_repo),
+        triggers=triggers,
+        mission_ranking_service=ranking_service,
+    )
+
+    calendar = service.create_calendar(
+        actor_id="actor-001",
+        month=5,
+        year=2026,
+        notes=None,
+        generation_mode="assisted_auto",
+    )
+    version = CalendarRepository(db_session).get_latest_version(calendar.id)
+    assignment = CalendarAssignmentModel(
+        id="assignment-approval-boundary",
+        calendar_version_id=version.id,
+        service_date=calendar.created_at.date(),
+        service_area_id="area-001",
+        doctor_id="doctor-001",
+        assignment_source="manual",
+        rationale=None,
+        override_justification=None,
+        created_by="actor-001",
+        created_at=calendar.created_at,
+    )
+    CalendarRepository(db_session).add_assignment(assignment)
+
+    assert calendar.status == "draft"
+    assert version.status == "draft"
+    assert ranking_service.calls == []
+    assert triggers.calls == []
+    assert audit_repo.count(action_type="calendar_approved") == 0
+
+    approved = service.approve_version(
+        actor_id="actor-001",
+        calendar_id=calendar.id,
+        version_number=version.version_number,
+        notes=None,
+    )
+
+    assert approved.status == "approved"
+    assert calendar.status == "approved"
+    assert ranking_service.calls == [
+        {
+            "actor_id": "actor-001",
+            "year": 2026,
+            "month": 5,
+            "calendar_version_id": version.id,
+        }
+    ]
+    assert len(triggers.calls) == 1
+    assert triggers.calls[0]["assignments"] == [assignment]
+    assert audit_repo.count(action_type="calendar_approved") == 1
 
 
 def test_approve_already_approved_raises(db_session) -> None:

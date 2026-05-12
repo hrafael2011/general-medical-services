@@ -1,14 +1,19 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 # --- Calendar ---
+
+CalendarGenerationMode = Literal["manual", "assisted_auto", "scheduled_auto"]
+
 
 class CalendarRead(BaseModel):
     id: str
     year: int
     month: int
     status: str
+    generation_mode: CalendarGenerationMode
     created_by: str | None
     approved_by: str | None
     created_at: datetime
@@ -21,6 +26,7 @@ class CalendarRead(BaseModel):
 class CreateCalendarRequest(BaseModel):
     year: int = Field(ge=2020, le=2100)
     month: int = Field(ge=1, le=12)
+    generation_mode: CalendarGenerationMode = "manual"
 
 
 # --- Calendar Version ---
@@ -82,6 +88,16 @@ class CalendarGridResponse(BaseModel):
     version: CalendarVersionRead
     slots: list[DaySlot]
     gaps: list[dict]
+
+
+class CalendarAutoGenerationRunResponse(BaseModel):
+    status: str
+    reason: str | None
+    calendar_id: str | None
+    month: int | None
+    year: int | None
+    assigned_count: int
+    gap_count: int
 
 
 # --- Approval ---

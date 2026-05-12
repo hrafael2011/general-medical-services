@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_ready_user
 from backend.app.application.calendars.assignment_service import AssignmentService
+from backend.app.application.calendars.auto_generation_service import AutoCalendarGenerationService
 from backend.app.core.config import settings
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.application.calendars.service import CalendarService
+from backend.app.application.catalogs.service import CatalogService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -16,6 +18,7 @@ from backend.app.schemas.calendars import (
     ApproveCalendarRequest,
     AssignDoctorRequest,
     CalendarAssignmentRead,
+    CalendarAutoGenerationRunResponse,
     CalendarGridResponse,
     CalendarRead,
     CalendarVersionRead,
@@ -44,6 +47,7 @@ _ERROR_STATUS: dict[str, int] = {
     "version_is_approved": status.HTTP_409_CONFLICT,
     "calendar_already_approved": status.HTTP_409_CONFLICT,
     "invalid_status_transition": status.HTTP_409_CONFLICT,
+    "invalid_generation_mode": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 
@@ -136,6 +140,16 @@ def get_assignment_service(
     )
 
 
+def get_auto_generation_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> AutoCalendarGenerationService:
+    return AutoCalendarGenerationService(
+        calendar_service=get_calendar_service(session),
+        generation_service=get_generation_service(session),
+        catalog_service=CatalogService(CatalogRepository(session)),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Calendar endpoints
 # ---------------------------------------------------------------------------
@@ -162,11 +176,26 @@ def create_calendar(
             month=payload.month,
             year=payload.year,
             notes=getattr(payload, "notes", None),
+            generation_mode=payload.generation_mode,
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
     session.commit()
     return CalendarRead.model_validate(calendar)
+
+
+@router.post("/auto-generation/run-due", response_model=CalendarAutoGenerationRunResponse)
+def run_due_auto_generation(
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[AutoCalendarGenerationService, Depends(get_auto_generation_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CalendarAutoGenerationRunResponse:
+    try:
+        result = service.run_due()
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+    return CalendarAutoGenerationRunResponse.model_validate(result)
 
 
 @router.get("/{calendar_id}", response_model=CalendarRead)
@@ -297,15 +326,23 @@ def generate_calendar(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> GenerationResponse:
     try:
-        summary = service.generate(actor_id=current_user.id, calendar_id=calendar_id)
+        summary = service.generate(
+            actor_id=current_user.id,
+            calendar_id=calendar_id,
+            generation_mode="assisted_auto",
+        )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
     session.commit()
+    calendar = service.calendar_repo.get_calendar_by_id(calendar_id)
     return GenerationResponse(
         version_id=summary.version_id,
         calendar_id=summary.calendar_id,
         month=summary.month,
         year=summary.year,
+        calendar_status=calendar.status if calendar else "draft",
+        generation_mode=calendar.generation_mode if calendar else "assisted_auto",
+        review_required=True,
         total_slots=summary.total_slots,
         assigned_count=summary.assigned_count,
         gap_count=summary.gap_count,

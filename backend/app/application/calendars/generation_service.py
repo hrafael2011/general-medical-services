@@ -6,6 +6,7 @@ from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import AREA_WEIGHTS
 from backend.app.domain.calendars.types import GenerationSummary
+from backend.app.application.calendars.service import CALENDAR_GENERATION_MODES
 from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     UnresolvedGapModel,
@@ -59,7 +60,19 @@ class GenerationService:
         self.catalog_repo = catalog_repo
         self.audit = audit
 
-    def generate(self, *, actor_id: str, calendar_id: str) -> GenerationSummary:
+    def generate(
+        self,
+        *,
+        actor_id: str,
+        calendar_id: str,
+        generation_mode: str = "assisted_auto",
+    ) -> GenerationSummary:
+        if generation_mode not in CALENDAR_GENERATION_MODES:
+            raise CalendarServiceError(
+                "invalid_generation_mode",
+                f"Unsupported calendar generation mode: {generation_mode}.",
+            )
+
         calendar = self.calendar_repo.get_calendar_by_id(calendar_id)
         if calendar is None:
             raise CalendarServiceError("calendar_not_found", f"Calendar {calendar_id} not found.")
@@ -154,6 +167,8 @@ class GenerationService:
         self.calendar_repo.session.flush()
 
         now = datetime.now(UTC)
+        calendar.generation_mode = generation_mode
+        calendar.updated_at = now
 
         # Persist results — convert service_area_id from codes back to UUIDs
         for result in summary_raw.slot_results:
@@ -195,6 +210,7 @@ class GenerationService:
                     "year": calendar.year,
                     "assigned": summary_raw.assigned_count,
                     "gaps": summary_raw.gap_count,
+                    "generation_mode": generation_mode,
                 },
             )
 

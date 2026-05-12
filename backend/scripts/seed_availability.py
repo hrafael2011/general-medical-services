@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5433/medical_shifts"
+DATABASE_URL = "postgresql+psycopg://postgres:postgres@127.0.0.1:5433/medical_shifts"
 
 # Distribute doctors across weekdays to ensure calendar coverage
 DAY_PATTERNS = [

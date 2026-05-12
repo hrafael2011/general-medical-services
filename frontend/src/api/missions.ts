@@ -42,6 +42,8 @@ export interface MissionParticipant {
 export interface MissionAssignment {
   id: string;
   mission_date: string;
+  mission_start_at: string | null;
+  mission_end_at: string | null;
   participant_count: number;
   location: string | null;
   description: string | null;
@@ -52,6 +54,7 @@ export interface MissionAssignment {
   confirmed_at: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
   participants: MissionParticipant[];
 }
 
@@ -114,6 +117,27 @@ export const missionsApi = {
     apiFetch<MissionAssignment>(`/missions/${missionId}/confirm`, {
       method: "POST",
       body: JSON.stringify({ doctor_ids: doctorIds }),
+    }),
+
+  updateMission: (
+    missionId: string,
+    payload: {
+      mission_date?: string;
+      participant_count?: number;
+      location?: string | null;
+      description?: string | null;
+      mission_start_at?: string | null;
+      mission_end_at?: string | null;
+    },
+  ) =>
+    apiFetch<MissionAssignment>(`/missions/${missionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteMission: (missionId: string) =>
+    apiFetch<void>(`/missions/${missionId}`, {
+      method: "DELETE",
     }),
 
   getCandidates: (

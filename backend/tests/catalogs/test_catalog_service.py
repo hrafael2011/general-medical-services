@@ -50,6 +50,27 @@ def test_seed_initial_catalogs_sets_generation_day(db_session) -> None:
     assert setting is not None
     assert setting.value == "27"
 
+    enabled = repository.get_setting("calendar_auto_generation_enabled")
+    assert enabled is not None
+    assert enabled.value == "false"
+
+
+def test_update_calendar_generation_settings(db_session) -> None:
+    repository = CatalogRepository(db_session)
+    service = CatalogService(repository)
+
+    settings = service.update_calendar_generation_settings(
+        auto_generation_enabled=True,
+        generation_day=25,
+    )
+
+    assert settings == {
+        "auto_generation_enabled": True,
+        "generation_day": 25,
+    }
+    assert repository.get_setting("calendar_auto_generation_enabled").value == "true"
+    assert repository.get_setting("calendar_generation_day").value == "25"
+
 
 def test_create_rank_and_department(db_session) -> None:
     repository = CatalogRepository(db_session)

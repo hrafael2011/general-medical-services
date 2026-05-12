@@ -7,6 +7,8 @@ from backend.app.application.notifications.triggers import NotificationTriggers
 from backend.app.infrastructure.db.models.calendars import CalendarModel, CalendarVersionModel
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 
+CALENDAR_GENERATION_MODES = {"manual", "assisted_auto", "scheduled_auto"}
+
 
 class CalendarService:
     def __init__(
@@ -28,8 +30,15 @@ class CalendarService:
         month: int,
         year: int,
         notes: str | None,
+        generation_mode: str = "manual",
     ) -> CalendarModel:
         """Creates calendar + initial version v1 in 'draft' status."""
+        if generation_mode not in CALENDAR_GENERATION_MODES:
+            raise CalendarServiceError(
+                "invalid_generation_mode",
+                f"Unsupported calendar generation mode: {generation_mode}.",
+            )
+
         existing = self.repo.get_calendar_by_period(year, month)
         if existing is not None:
             raise CalendarServiceError(
@@ -43,6 +52,7 @@ class CalendarService:
             year=year,
             month=month,
             status="draft",
+            generation_mode=generation_mode,
             created_by=actor_id,
             approved_by=None,
             created_at=now,

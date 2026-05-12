@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
-from backend.app.domain.doctors.eligibility import EligibilityChecker
+from backend.app.domain.doctors.eligibility import EligibilityChecker, EligibilityResult
 from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -37,7 +37,7 @@ class AssignmentService:
         service_area_id: str,
         target_date: date,
         override_justification: str | None,
-    ) -> None:
+    ) -> list[EligibilityResult]:
         """
         Runs EligibilityChecker and raises CalendarServiceError on violations.
 
@@ -65,7 +65,7 @@ class AssignmentService:
         )
 
         if report.eligible:
-            return
+            return []
 
         # Separate failures into hard blocks and soft warnings.
         hard_blocks = [r for r in report.blockers if r.code in _HARD_BLOCK_CODES]
@@ -76,6 +76,8 @@ class AssignmentService:
 
         if soft_warnings and not override_justification:
             raise CalendarServiceError("soft_warning", soft_warnings[0].reason)
+
+        return soft_warnings
 
     # ------------------------------------------------------------------
     # Public methods
@@ -126,7 +128,7 @@ class AssignmentService:
             )
 
         # 4. Eligibility checks.
-        self._run_eligibility(
+        soft_warnings = self._run_eligibility(
             doctor=doctor,
             service_area_id=service_area_id,
             target_date=date,
@@ -143,6 +145,7 @@ class AssignmentService:
             service_date=date,
             service_area_id=service_area_id,
             assignment_source="manual",
+            rationale=_manual_rationale(soft_warnings),
             override_justification=stored_justification,
             created_by=actor_id,
             created_at=datetime.now(UTC),
@@ -230,7 +233,7 @@ class AssignmentService:
             )
 
         # Eligibility checks for the new doctor against the existing slot.
-        self._run_eligibility(
+        soft_warnings = self._run_eligibility(
             doctor=doctor,
             service_area_id=assignment.service_area_id,
             target_date=assignment.service_date,
@@ -239,6 +242,7 @@ class AssignmentService:
 
         # Update the assignment in-place.
         assignment.doctor_id = new_doctor_id
+        assignment.rationale = _manual_rationale(soft_warnings)
         assignment.override_justification = override_justification if override_justification else None
         self.calendar_repo.session.flush()
 
@@ -246,3 +250,14 @@ class AssignmentService:
             self.audit.log_assignment_replaced(actor_id=actor_id, assignment=assignment)
 
         return assignment
+
+
+def _manual_rationale(soft_warnings: list[EligibilityResult]) -> dict | None:
+    if not soft_warnings:
+        return None
+    return {
+        "manual_override_warnings": [
+            {"code": warning.code, "reason": warning.reason}
+            for warning in soft_warnings
+        ]
+    }

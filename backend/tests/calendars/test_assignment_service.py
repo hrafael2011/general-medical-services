@@ -63,6 +63,7 @@ def _create_calendar_and_version(db_session) -> tuple[CalendarModel, CalendarVer
         year=2026,
         month=5,
         status="draft",
+        generation_mode="manual",
         created_by="actor-001",
         approved_by=None,
         created_at=now,
@@ -232,3 +233,48 @@ def test_hard_block_prevents_assignment(db_session) -> None:
         )
 
     assert exc_info.value.code == "hard_block"
+
+
+def test_soft_warning_requires_justification_and_is_stored(db_session) -> None:
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor_svc = DoctorService(DoctorRepository(db_session))
+    doctor = doctor_svc.create_doctor(
+        actor_id="actor-001",
+        name="Dr. Fixed",
+        sex="male",
+        rank_id=None,
+        department_id=None,
+        phone=None,
+        notes=None,
+        participa_misiones=True,
+        whatsapp_phone=None,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        availability_mode="fixed",
+        allowed_area_ids=[_AREA_ID],
+    )
+    service = _make_assignment_service(db_session)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.assign_doctor(
+            actor_id="actor-001",
+            version_id=version.id,
+            doctor_id=doctor.id,
+            date=datetime.date(2026, 5, 15),
+            service_area_id=_AREA_ID,
+        )
+
+    assert exc_info.value.code == "soft_warning"
+
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+        override_justification="Asignación manual autorizada por necesidad operativa.",
+    )
+
+    assert assignment.override_justification == "Asignación manual autorizada por necesidad operativa."
+    assert assignment.rationale["manual_override_warnings"][0]["code"] == "not_available"

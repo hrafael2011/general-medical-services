@@ -10,6 +10,8 @@ vi.mock("../../api/missions", () => ({
     getRanking: vi.fn(),
     generateRanking: vi.fn(),
     createMission: vi.fn(),
+    updateMission: vi.fn(),
+    deleteMission: vi.fn(),
     confirmMission: vi.fn(),
     getCandidates: vi.fn(),
     getRankedCandidatesForDate: vi.fn(),
@@ -73,6 +75,8 @@ describe("MissionView", () => {
       {
         id: "m1",
         mission_date: "2026-06-15",
+        mission_start_at: null,
+        mission_end_at: null,
         participant_count: 3,
         location: "Base Norte",
         description: null,
@@ -83,6 +87,7 @@ describe("MissionView", () => {
         confirmed_at: null,
         created_at: "2026-05-01T00:00:00",
         updated_at: "2026-05-01T00:00:00",
+        deleted_at: null,
         participants: [],
       },
     ]);
@@ -99,6 +104,8 @@ describe("MissionView", () => {
       {
         id: "m1",
         mission_date: "2026-06-12",
+        mission_start_at: null,
+        mission_end_at: null,
         participant_count: 2,
         location: "Base Norte",
         description: null,
@@ -109,6 +116,7 @@ describe("MissionView", () => {
         confirmed_at: null,
         created_at: "2026-05-01T00:00:00",
         updated_at: "2026-05-01T00:00:00",
+        deleted_at: null,
         participants: [],
       },
     ]);
@@ -173,6 +181,7 @@ describe("MissionView", () => {
     });
 
     renderMissions();
+    fireEvent.click(await screen.findByRole("button", { name: /ranking de candidatos/i }));
 
     expect(await screen.findByText("Dra. Ana Perez")).toBeInTheDocument();
     expect(screen.queryByText("doctor-uuid-hidden")).not.toBeInTheDocument();
@@ -233,6 +242,7 @@ describe("MissionView", () => {
     });
 
     renderMissions();
+    fireEvent.click(await screen.findByRole("button", { name: /ranking de candidatos/i }));
 
     expect(await screen.findByText("Dra. Nombre Resuelto")).toBeInTheDocument();
     expect(screen.queryByText("doctor-uuid-hidden")).not.toBeInTheDocument();
@@ -248,6 +258,7 @@ describe("MissionView", () => {
     );
 
     renderMissions();
+    fireEvent.click(await screen.findByRole("button", { name: /ranking de candidatos/i }));
 
     expect(await screen.findByText(/no tiene calendario aprobado/i)).toBeInTheDocument();
   });

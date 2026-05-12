@@ -9,7 +9,7 @@ import { calendarsApi } from "../../api/calendars";
 vi.mock("../../api/calendars", () => ({
   calendarsApi: {
     getGrid: vi.fn().mockResolvedValue({
-      calendar: { id: "c1", year: 2026, month: 5, status: "draft", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
+      calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
       version: { id: "v1", calendar_id: "c1", version_number: 1, status: "draft", created_by: null, reason: null, created_at: "" },
       slots: [
         { service_date: "2026-05-01", service_area_id: "area-1", assignment: { id: "a1", doctor_id: "d1", assignment_source: "generated", rationale: null, override_justification: null, created_by: null, created_at: "", calendar_version_id: "v1", service_date: "2026-05-01", service_area_id: "area-1" }, has_warning: false, warning_message: null },
@@ -69,7 +69,7 @@ describe("CalendarGrid", () => {
 
   it("muestra botón Generar en modo draft", async () => {
     renderGrid();
-    expect(await screen.findByRole("button", { name: /generar/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /generar con reglas/i })).toBeInTheDocument();
   });
 
   it("renderiza 7 encabezados de día de la semana", async () => {
@@ -114,7 +114,7 @@ describe("CalendarGrid", () => {
 
   it("muestra celdas vacías cuando no hay slots en modo draft", async () => {
     vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
-      calendar: { id: "c1", year: 2026, month: 5, status: "draft", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
+      calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
       version: { id: "v1", calendar_id: "c1", version_number: 1, status: "draft", created_by: null, reason: null, created_at: "" },
       slots: [],
       gaps: [],
@@ -130,7 +130,7 @@ describe("CalendarGrid", () => {
 
   it("no muestra enlaces de asignación en modo aprobado", async () => {
     vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
-      calendar: { id: "c1", year: 2026, month: 5, status: "draft", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
+      calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
       version: { id: "v1", calendar_id: "c1", version_number: 1, status: "approved", created_by: null, reason: null, created_at: "" },
       slots: [],
       gaps: [],

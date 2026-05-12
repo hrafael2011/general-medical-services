@@ -37,7 +37,7 @@ describe("AssignDoctorModal", () => {
     render(<AssignDoctorModal date="2026-05-03" areaName="Emergencia" doctors={DOCTORS} onConfirm={onConfirm} onClose={vi.fn()} isLoading={false} />);
     await user.click(screen.getByText("Dr. García Martínez"));
     await user.click(screen.getByRole("button", { name: /asignar/i }));
-    expect(onConfirm).toHaveBeenCalledWith("d1");
+    expect(onConfirm).toHaveBeenCalledWith("d1", null);
   });
 
   it("el botón Asignar está deshabilitado sin selección", () => {

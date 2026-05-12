@@ -24,6 +24,7 @@ from backend.app.schemas.missions import (
     MissionCandidateRequest,
     MissionCandidateResponse,
     MissionParticipantRead,
+    UpdateMissionRequest,
 )
 
 router = APIRouter(prefix="/missions", tags=["missions"])
@@ -402,6 +403,48 @@ def get_mission(
             },
         )
     return _to_mission_read(mission, repo)
+
+
+@router.patch(
+    "/{mission_id}",
+    response_model=MissionAssignmentRead,
+)
+def update_mission(
+    mission_id: str,
+    payload: UpdateMissionRequest,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> MissionAssignmentRead:
+    try:
+        mission = service.update_mission(
+            actor_id=current_user.id,
+            mission_id=mission_id,
+            updates=payload.model_dump(exclude_unset=True),
+        )
+    except MissionServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+    repo = MissionRepository(session)
+    return _to_mission_read(mission, repo)
+
+
+@router.delete(
+    "/{mission_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_mission(
+    mission_id: str,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.delete_mission(actor_id=current_user.id, mission_id=mission_id)
+    except MissionServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+    return None
 
 
 @router.post(

@@ -269,6 +269,93 @@ class MissionCandidateService:
         )
         return self.mission_repo.add_mission(mission)
 
+    def update_mission(
+        self,
+        *,
+        actor_id: str,
+        mission_id: str,
+        updates: dict,
+    ) -> MissionAssignmentModel:
+        mission = self.mission_repo.get_mission_by_id(mission_id)
+        if mission is None:
+            raise MissionServiceError(
+                "mission_not_found",
+                f"Mission with id {mission_id} not found.",
+            )
+
+        before = {
+            "mission_date": str(mission.mission_date),
+            "participant_count": mission.participant_count,
+            "location": mission.location,
+            "description": mission.description,
+            "mission_start_at": str(mission.mission_start_at) if mission.mission_start_at else None,
+            "mission_end_at": str(mission.mission_end_at) if mission.mission_end_at else None,
+        }
+
+        allowed_fields = {
+            "mission_date",
+            "participant_count",
+            "location",
+            "description",
+            "mission_start_at",
+            "mission_end_at",
+        }
+        for field, value in updates.items():
+            if field in allowed_fields:
+                setattr(mission, field, value)
+
+        mission.updated_at = datetime.now(UTC)
+        self.mission_repo.session.flush()
+
+        if self.audit is not None:
+            self.audit._create(
+                actor_id=actor_id,
+                action_type="mission_updated",
+                entity_type="mission",
+                entity_id=mission_id,
+                before=before,
+                after={
+                    "mission_date": str(mission.mission_date),
+                    "participant_count": mission.participant_count,
+                    "location": mission.location,
+                    "description": mission.description,
+                    "mission_start_at": str(mission.mission_start_at) if mission.mission_start_at else None,
+                    "mission_end_at": str(mission.mission_end_at) if mission.mission_end_at else None,
+                },
+            )
+
+        return mission
+
+    def delete_mission(
+        self,
+        *,
+        actor_id: str,
+        mission_id: str,
+    ) -> MissionAssignmentModel:
+        mission = self.mission_repo.get_mission_by_id(mission_id)
+        if mission is None:
+            raise MissionServiceError(
+                "mission_not_found",
+                f"Mission with id {mission_id} not found.",
+            )
+
+        now = datetime.now(UTC)
+        mission.deleted_at = now
+        mission.updated_at = now
+        self.mission_repo.session.flush()
+
+        if self.audit is not None:
+            self.audit._create(
+                actor_id=actor_id,
+                action_type="mission_deleted",
+                entity_type="mission",
+                entity_id=mission_id,
+                before={"status": mission.status},
+                after={"deleted_at": str(mission.deleted_at)},
+            )
+
+        return mission
+
     def confirm_mission(
         self,
         *,

@@ -59,3 +59,12 @@ class SystemSettingRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+class CalendarGenerationSettingsRead(BaseModel):
+    auto_generation_enabled: bool
+    generation_day: int = Field(ge=1, le=28)
+
+
+class UpdateCalendarGenerationSettingsRequest(BaseModel):
+    auto_generation_enabled: bool | None = None
+    generation_day: int | None = Field(default=None, ge=1, le=28)

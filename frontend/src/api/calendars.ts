@@ -13,6 +13,9 @@ export interface GenerationResponse {
   calendar_id: string;
   month: number;
   year: number;
+  calendar_status: "draft" | "approved";
+  generation_mode: CalendarRead["generation_mode"];
+  review_required: boolean;
   total_slots: number;
   assigned_count: number;
   gap_count: number;
@@ -24,6 +27,7 @@ export interface CalendarRead {
   year: number;
   month: number;
   status: "draft" | "approved";
+  generation_mode: "manual" | "assisted_auto" | "scheduled_auto";
   created_by: string | null;
   approved_by: string | null;
   created_at: string;
@@ -69,13 +73,22 @@ export interface CalendarGridResponse {
   gaps: Record<string, unknown>[];
 }
 
+export interface CalendarGenerationSettings {
+  auto_generation_enabled: boolean;
+  generation_day: number;
+}
+
 export const calendarsApi = {
   list: () => apiFetch<CalendarRead[]>("/calendars"),
 
-  create: (year: number, month: number) =>
+  create: (
+    year: number,
+    month: number,
+    generationMode: CalendarRead["generation_mode"] = "manual",
+  ) =>
     apiFetch<CalendarRead>("/calendars", {
       method: "POST",
-      body: JSON.stringify({ year, month }),
+      body: JSON.stringify({ year, month, generation_mode: generationMode }),
     }),
 
   getGrid: (calendarId: string) =>
@@ -126,4 +139,13 @@ export const calendarsApi = {
 
   delete: (calendarId: string) =>
     apiFetch<void>(`/calendars/${calendarId}`, { method: "DELETE" }),
+
+  getGenerationSettings: () =>
+    apiFetch<CalendarGenerationSettings>("/catalogs/settings/calendar-generation"),
+
+  updateGenerationSettings: (payload: Partial<CalendarGenerationSettings>) =>
+    apiFetch<CalendarGenerationSettings>("/catalogs/settings/calendar-generation", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 };

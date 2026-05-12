@@ -14,7 +14,6 @@ from backend.app.infrastructure.db.models import availability as _availability  
 from backend.app.infrastructure.db.models import calendars as _calendars  # noqa: F401
 from backend.app.infrastructure.db.models import catalogs as _catalogs  # noqa: F401
 from backend.app.infrastructure.db.models import doctors as _doctors  # noqa: F401
-from backend.app.infrastructure.db.models import import_staging as _import_staging  # noqa: F401
 from backend.app.infrastructure.db.models import missions as _missions  # noqa: F401
 from backend.app.infrastructure.db.models import notifications as _notifications  # noqa: F401
 from backend.app.infrastructure.db.models import telegram as _telegram  # noqa: F401
@@ -22,6 +21,7 @@ from backend.app.infrastructure.db.models import user as _user  # noqa: F401
 from backend.app.infrastructure.db.models.calendars import CalendarModel, CalendarVersionModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.missions import (
+    MissionAssignmentModel,
     MissionCandidateRankingEntryModel,
     MissionCandidateRankingModel,
 )
@@ -199,3 +199,107 @@ def test_get_ranking_uses_approved_calendar_version(client, session) -> None:
     data = response.json()
     assert data["calendar_version_id"] == approved_version.id
     assert data["entries"][0]["doctor_name"] == "Dr. Ruta"
+
+
+def _create_mission(session, *, status: str = "draft") -> MissionAssignmentModel:
+    now = datetime.datetime.now(datetime.UTC)
+    mission = MissionAssignmentModel(
+        id=str(uuid4()),
+        mission_date=datetime.date(2026, 5, 20),
+        mission_start_at=None,
+        mission_end_at=None,
+        participant_count=2,
+        location="Base Norte",
+        description=None,
+        source="manual",
+        status=status,
+        created_by=_ACTOR,
+        confirmed_by=None,
+        confirmed_at=None,
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
+    )
+    session.add(mission)
+    session.flush()
+    return mission
+
+
+def test_update_mission_edits_basic_fields(client, session) -> None:
+    mission = _create_mission(session)
+    session.commit()
+
+    response = client.patch(
+        f"/api/missions/{mission.id}",
+        json={
+            "mission_date": "2026-05-22",
+            "participant_count": 4,
+            "location": "Base Sur",
+            "description": "Operativo especial",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mission_date"] == "2026-05-22"
+    assert data["participant_count"] == 4
+    assert data["location"] == "Base Sur"
+    assert data["description"] == "Operativo especial"
+
+
+def test_delete_mission_is_soft_delete_and_hides_from_list(client, session) -> None:
+    mission = _create_mission(session)
+    session.commit()
+
+    response = client.delete(f"/api/missions/{mission.id}")
+
+    assert response.status_code == 204
+    assert mission.deleted_at is not None
+    list_response = client.get("/api/missions")
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+    get_response = client.get(f"/api/missions/{mission.id}")
+    assert get_response.status_code == 404
+
+
+def test_confirm_mission_accepts_path_id_and_doctor_ids_body(client, session) -> None:
+    approved_version = _create_calendar_version(session, approved=True)
+    doctor = _create_doctor(session)
+    now = datetime.datetime.now(datetime.UTC)
+    ranking = MissionCandidateRankingModel(
+        id=str(uuid4()),
+        year=_YEAR,
+        month=_MONTH,
+        calendar_version_id=approved_version.id,
+        generated_at=now,
+        created_by=_ACTOR,
+    )
+    session.add(ranking)
+    session.flush()
+    session.add(
+        MissionCandidateRankingEntryModel(
+            id=str(uuid4()),
+            mission_candidate_ranking_id=ranking.id,
+            doctor_id=doctor.id,
+            ranking_position=1,
+            total_load_score=0,
+            monthly_service_load=0,
+            recent_service_load=0,
+            monthly_mission_load=0,
+            eligible=True,
+            reasons=None,
+            warnings=None,
+        )
+    )
+    mission = _create_mission(session)
+    session.commit()
+
+    response = client.post(
+        f"/api/missions/{mission.id}/confirm",
+        json={"doctor_ids": [doctor.id]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "confirmed"
+    assert data["participants"][0]["doctor_name"] == "Dr. Ruta"
