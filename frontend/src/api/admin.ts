@@ -14,4 +14,21 @@ export const adminApi = {
     const query = role ? `?role=${role}` : "";
     return apiFetch<UserRead[]>(`/admin/users${query}`);
   },
+
+  createEncargado(name: string, email: string, temporaryPassword?: string) {
+    return apiFetch<{ user: UserRead; temporary_password: string }>("/admin/users/encargados", {
+      method: "POST",
+      body: JSON.stringify({ name, email, temporary_password: temporaryPassword }),
+    });
+  },
+
+  resetPassword(userId: string, temporaryPassword?: string) {
+    return apiFetch<{ user: UserRead; temporary_password: string }>(
+      `/admin/users/${userId}/reset-password`,
+      {
+        method: "POST",
+        body: JSON.stringify({ temporary_password: temporaryPassword }),
+      },
+    );
+  },
 };

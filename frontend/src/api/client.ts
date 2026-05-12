@@ -5,12 +5,16 @@ let token: string | null = null;
 export function setToken(t: string | null) { token = t; }
 export function getToken() { return token; }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(path: string, init: RequestInit = {}, responseType?: "blob"): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init.headers as Record<string, string> ?? {}),
   };
+  // Don't set Content-Type for blob downloads
+  if (responseType === "blob") {
+    delete headers["Content-Type"];
+  }
   const res = await fetch(`${BASE}/api${path}`, { ...init, headers });
   if (res.status === 401 && token) {
     setToken(null);
@@ -22,6 +26,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError(res.status, body?.detail ?? "Error del servidor");
   }
   if (res.status === 204) return undefined as T;
+  if (responseType === "blob") return res.blob() as Promise<T>;
   return res.json() as Promise<T>;
 }
 

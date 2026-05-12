@@ -14,6 +14,7 @@ import { ReportsView } from "./features/reports/ReportsView";
 import { NotificationLog } from "./features/notifications/NotificationLog";
 import { TelegramLinks } from "./features/telegram/TelegramLinks";
 import { AuditLog } from "./features/audit/AuditLog";
+import { UsersView } from "./features/users/UsersView";
 
 export function App() {
   return (
@@ -31,6 +32,7 @@ export function App() {
           <Route path="/telegram" element={<TelegramLinks />} />
           <Route path="/reports" element={<ReportsView />} />
           <Route path="/audit" element={<AuditLog />} />
+          <Route path="/users" element={<UsersView />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
