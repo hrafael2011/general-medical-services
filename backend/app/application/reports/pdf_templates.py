@@ -388,3 +388,49 @@ def generate_weekly_schedule_pdf(
     story.append(_build_signature_block(signatures))
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Generic doctor listing (used by Telegram for query-to-PDF conversion)
+# ---------------------------------------------------------------------------
+
+def generate_doctor_list_pdf(
+    doctors: list[dict],
+    title: str,
+    subtitle: str = "",
+    columns: list[str] | None = None,
+    col_widths: list[float] | None = None,
+    signatures: SignatureConfig | None = None,
+) -> bytes:
+    """Generate a generic doctor listing PDF (used by Telegram exports).
+
+    Args:
+        doctors: List of dicts with keys matching *columns*.
+        title: Report title.
+        subtitle: Optional subtitle/date line.
+        columns: Column header names. Defaults to ["#", "RANGO", "NOMBRE", "Área"].
+        col_widths: Column widths. Defaults proportional to page width.
+    """
+    if columns is None:
+        columns = ["#", "RANGO", "NOMBRE", "Área"]
+    if col_widths is None:
+        col_widths = [1.2 * cm, 4.5 * cm, 6 * cm, 4 * cm]
+
+    date_line = subtitle or datetime.now().strftime("%d/%m/%Y")
+
+    headers = columns
+    rows = [headers]
+    for doc_data in doctors:
+        rows.append([
+            str(doc_data.get(col.lower(), doc_data.get(col, "")))
+            for col in columns
+        ])
+
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block(signatures))
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()

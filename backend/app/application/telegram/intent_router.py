@@ -336,16 +336,8 @@ def _build_pdf_from_rows(
     query_type: str,
     fmt: str,
 ) -> AgentResult:
-    """Generate a real PDF document from query results using the institutional template.
-
-    Uses generate_doctor_list_pdf for generic tabular data.
-    Specialised templates are used for known report types.
-    """
-    from backend.app.application.reports.pdf_templates import (
-        generate_doctor_list_pdf,
-        generate_mission_ranking_pdf,
-        generate_operational_summary_pdf,
-    )
+    """Generate a real PDF document from query results using the institutional template."""
+    from backend.app.application.reports.pdf_templates import generate_doctor_list_pdf
 
     if not rows:
         return AgentResult(
@@ -380,44 +372,6 @@ def _build_pdf_from_rows(
     }
 
     title = title_map.get(query_type, f"REPORTE - {query_type.upper()}")
-
-    # Special case: operational summary
-    if query_type == "operational_summary":
-        summary = {"period": {}, "active_doctors": 0, "calendar_status": "N/A",
-                    "total_assignments": 0, "unresolved_gaps": 0}
-        for row in rows:
-            summary["active_doctors"] = row.get("active_doctors", 0)
-            summary["calendar_status"] = row.get("calendar_status", "N/A")
-            summary["total_assignments"] = row.get("total_assignments", 0)
-            summary["unresolved_gaps"] = row.get("unresolved_gaps", 0)
-        pdf_bytes = generate_operational_summary_pdf(summary)
-        filename = _EXPORT_FILENAME_MAP.get(query_type, "REPORTE.pdf")
-        return AgentResult(
-            response_text=f"{_DEFAULT_EXPORT_OK} ({len(rows)} registros, PDF).",
-            document_bytes=pdf_bytes,
-            document_filename=filename,
-            agent_action="export",
-        )
-
-    # Special case: mission ranking
-    if query_type == "mission_ranking" and "ranking_position" in columns:
-        entries = [
-            {
-                "position": r.get("ranking_position", i + 1),
-                "doctor_name": r.get("doctor_name", r.get("name", "")),
-                "total_load_score": r.get("total_load_score", 0),
-                "eligible": r.get("eligible", False),
-            }
-            for i, r in enumerate(rows)
-        ]
-        pdf_bytes = generate_mission_ranking_pdf(entries, 1, 2026)
-        filename = _EXPORT_FILENAME_MAP.get(query_type, "REPORTE.pdf")
-        return AgentResult(
-            response_text=f"{_DEFAULT_EXPORT_OK} ({len(entries)} registros, PDF).",
-            document_bytes=pdf_bytes,
-            document_filename=filename,
-            agent_action="export",
-        )
 
     # Generic: use generate_doctor_list_pdf with SQL column titles
     header_titles = [_column_title(c) for c in columns]
