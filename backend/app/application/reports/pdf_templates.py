@@ -434,3 +434,210 @@ def generate_doctor_list_pdf(
     story.append(_build_signature_block(signatures))
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Coverage report PDF
+# ---------------------------------------------------------------------------
+
+
+def generate_coverage_pdf(data: dict) -> bytes:
+    """Generate a PDF report of coverage and gaps."""
+    title = f"REPORTE DE COBERTURA - {data['period_label']}"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+
+    summary_data = [
+        ["Indicador", "Valor"],
+        ["% Cobertura General", f"{data['overall_coverage_pct']}%"],
+        ["Total Brechas", str(data['total_gaps'])],
+        ["Área Más Crítica", data.get('most_critical_area', '—') or '—'],
+        ["Día Más Débil", data.get('weakest_day', '—') or '—'],
+    ]
+    story.append(Paragraph("RESUMEN", _STYLE_SECTION))
+    story.append(_make_table(summary_data, col_widths=[6 * cm, 10 * cm]))
+    story.append(Spacer(1, 4 * mm))
+
+    headers = ["Área", "Días Cubiertos", "Días Descubiertos", "% Cobertura"]
+    col_widths = [4 * cm, 3.5 * cm, 3.5 * cm, 3 * cm]
+    rows = [headers]
+    for area in data.get("by_area", []):
+        rows.append([
+            area["area_name"],
+            str(area["days_covered"]),
+            str(area["days_uncovered"]),
+            f"{area['coverage_pct']}%",
+        ])
+
+    story.append(Paragraph("COBERTURA POR ÁREA", _STYLE_SECTION))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block())
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Workload report PDF
+# ---------------------------------------------------------------------------
+
+
+def generate_workload_pdf(data: dict) -> bytes:
+    """Generate a PDF report of doctor workload."""
+    title = f"CARGA DE TRABAJO - {data['period_label']}"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+
+    summary_data = [
+        ["Indicador", "Valor"],
+        ["Total Servicios", str(data['total_services'])],
+        ["Médicos Activos", str(data['active_doctors'])],
+        ["Promedio por Médico", str(data['avg_per_doctor'])],
+        ["Mayor Carga",
+         f"{data.get('most_load', {}).get('name', '—')} ({data.get('most_load', {}).get('total', 0)})"],
+        ["Menor Carga",
+         f"{data.get('least_load', {}).get('name', '—')} ({data.get('least_load', {}).get('total', 0)})"],
+    ]
+    story.append(Paragraph("RESUMEN", _STYLE_SECTION))
+    story.append(_make_table(summary_data, col_widths=[6 * cm, 10 * cm]))
+    story.append(Spacer(1, 4 * mm))
+
+    headers = ["Médico", "Rango", "Sexo", "Depto", "Emerg", "Pista", "Disp.", "Total"]
+    col_widths = [4 * cm, 2.5 * cm, 1.5 * cm, 2.5 * cm, 1.8 * cm, 1.5 * cm, 1.8 * cm, 1.8 * cm]
+    rows = [headers]
+    for entry in data.get("entries", []):
+        rows.append([
+            entry["name"],
+            entry.get("rank") or "—",
+            entry.get("sex") or "—",
+            entry.get("department") or "—",
+            str(entry.get("emergencia", 0)),
+            str(entry.get("pista", 0)),
+            str(entry.get("disponible", 0)),
+            str(entry["total"]),
+        ])
+
+    story.append(Paragraph("DETALLE POR MÉDICO", _STYLE_SECTION))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block())
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Doctor dossier PDF (portrait A4)
+# ---------------------------------------------------------------------------
+
+
+def generate_dossier_pdf(data: dict) -> bytes:
+    """Generate a PDF with full medical dossier (portrait A4)."""
+    from reportlab.lib.pagesizes import A4
+
+    title = "FICHA DE SERVICIO MÉDICO"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=LEFT_M,
+        rightMargin=RIGHT_M,
+        topMargin=TOP_M,
+        bottomMargin=BOTTOM_M,
+    )
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 4 * mm))
+
+    section = ParagraphStyle("SectionA4", parent=_STYLE_SECTION, fontSize=10, leading=12)
+    cell = ParagraphStyle("CellA4", parent=_STYLE_TABLE_CELL, fontSize=8, leading=10)
+
+    doc_data = [
+        ["Nombre", data.get("name", "—")],
+        ["Rango", data.get("rank") or "—"],
+        ["Sexo", data.get("sex") or "—"],
+        ["Departamento", data.get("department") or "—"],
+        ["Áreas Habilitadas", ", ".join(data.get("areas", [])) or "—"],
+        ["Período", data.get("period_label", "—")],
+    ]
+    t = Table(
+        [[Paragraph(c[0], cell), Paragraph(c[1], cell)] for c in doc_data],
+        colWidths=[4 * cm, 12 * cm],
+    )
+    t.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#bdc3c7")),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story.append(Paragraph("DATOS DEL MÉDICO", section))
+    story.append(t)
+    story.append(Spacer(1, 4 * mm))
+
+    services_by_area = data.get("services_by_area", {})
+    total = data.get("total_services", 0)
+    avg = data.get("avg_weekly", 0)
+    summary_rows = [
+        ["Total Servicios", str(total)],
+        ["Promedio Semanal", str(avg)],
+    ]
+    for area_name, count in services_by_area.items():
+        summary_rows.append([f"  - {area_name}", str(count)])
+
+    story.append(Paragraph("RESUMEN DEL PERÍODO", section))
+    st = Table(
+        [[Paragraph(r[0], cell), Paragraph(r[1], cell)] for r in summary_rows],
+        colWidths=[8 * cm, 4 * cm],
+    )
+    st.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#bdc3c7")),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    story.append(st)
+    story.append(Spacer(1, 4 * mm))
+
+    services = data.get("services", [])
+    if services:
+        svc_headers = ["Fecha", "Día", "Área"]
+        svc_rows = [svc_headers]
+        for s in services:
+            svc_rows.append([str(s.get("date", "")), str(s.get("day_name", "")), str(s.get("area", ""))])
+        story.append(Paragraph("DETALLE DE SERVICIOS", section))
+        story.append(_make_table(svc_rows, col_widths=[3.5 * cm, 3.5 * cm, 5 * cm]))
+        story.append(Spacer(1, 4 * mm))
+
+    missions = data.get("missions", [])
+    if missions:
+        miss_headers = ["Misión", "Rol", "Estado"]
+        miss_rows = [miss_headers]
+        for m in missions:
+            miss_rows.append([str(m.get("mission", "")), str(m.get("role", "")), str(m.get("status", ""))])
+        story.append(Paragraph("MISIONES EN EL PERÍODO", section))
+        story.append(_make_table(miss_rows, col_widths=[5 * cm, 3.5 * cm, 3 * cm]))
+        story.append(Spacer(1, 4 * mm))
+
+    restrictions = data.get("restrictions", [])
+    if restrictions:
+        rest_headers = ["Tipo", "Fecha", "Motivo"]
+        rest_rows = [rest_headers]
+        for r in restrictions:
+            rest_rows.append([str(r.get("type", "")), str(r.get("date") or "—"), str(r.get("reason", ""))])
+        story.append(Paragraph("RESTRICCIONES Y LICENCIAS", section))
+        story.append(_make_table(rest_rows, col_widths=[3.5 * cm, 3.5 * cm, 5 * cm]))
+        story.append(Spacer(1, 4 * mm))
+
+    avail = data.get("availability", [])
+    if avail:
+        story.append(Paragraph(f"DISPONIBILIDAD DECLARADA: {', '.join(avail)}", section))
+
+    story.append(Spacer(1, 1 * cm))
+    story.append(_build_signature_block())
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()

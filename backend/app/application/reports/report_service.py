@@ -216,6 +216,330 @@ class ReportService:
 
 
     # ------------------------------------------------------------------
+    # Coverage report
+    # ------------------------------------------------------------------
+
+    def generate_coverage(
+        self,
+        *,
+        year_start: int,
+        month_start: int,
+        year_end: int,
+        month_end: int,
+        area: str | None = None,
+        rank_id: str | None = None,
+        sex: str | None = None,
+        department_id: str | None = None,
+    ) -> dict:
+        """Generate coverage report — gaps by area."""
+        from calendar import monthrange
+
+        period_label = f"{month_start}/{year_start} - {month_end}/{year_end}"
+
+        # Get doctors filtered by criteria
+        filtered_doctor_ids: set[str] | None = None
+        if rank_id or sex or department_id:
+            doctors = self.doctor_repo.list_with_filters(
+                rank_id=rank_id, sex=sex, department_id=department_id, active_only=True
+            )
+            filtered_doctor_ids = {d.id for d in doctors}
+
+        # Collect all service areas
+        service_areas = self.calendar_repo.list_service_areas()
+        if area:
+            service_areas = [sa for sa in service_areas if sa.display_name == area or sa.id == area]
+
+        by_area_data: list[dict] = []
+        area_gaps: dict[str, list[dict]] = {}
+        day_of_week_gaps: dict[str, int] = {}
+        total_covered = 0
+        total_uncovered = 0
+
+        for sa in service_areas:
+            covered = 0
+            uncovered = 0
+            gaps: list[dict] = []
+
+            y, m = year_start, month_start
+            while (y < year_end) or (y == year_end and m <= month_end):
+                last_day = monthrange(y, m)[1]
+                calendar_obj = self.calendar_repo.get_calendar_by_period(y, m)
+                version = None
+                assignments = []
+                if calendar_obj:
+                    version = self.calendar_repo.get_latest_version(calendar_obj.id)
+                if version:
+                    assignments = self.calendar_repo.list_assignments(version.id)
+
+                assignments_for_area = [
+                    a for a in assignments
+                    if a.service_area_id == sa.id
+                    and (not filtered_doctor_ids or a.doctor_id in filtered_doctor_ids)
+                ]
+                assigned_dates = {a.service_date for a in assignments_for_area}
+
+                for day in range(1, last_day + 1):
+                    d = date(y, m, day)
+                    if d in assigned_dates:
+                        covered += 1
+                    else:
+                        uncovered += 1
+                        gap = {"date": d.isoformat(), "day_name": d.strftime("%A")}
+                        gaps.append(gap)
+                        day_name_es = d.strftime("%A")
+                        day_of_week_gaps[day_name_es] = day_of_week_gaps.get(day_name_es, 0) + 1
+
+                # next month
+                if m == 12:
+                    y += 1
+                    m = 1
+                else:
+                    m += 1
+
+            total = covered + uncovered
+            pct = round((covered / total) * 100, 1) if total > 0 else 0.0
+            by_area_data.append({
+                "area_id": sa.id,
+                "area_name": sa.display_name,
+                "days_covered": covered,
+                "days_uncovered": uncovered,
+                "coverage_pct": pct,
+                "gaps": gaps,
+            })
+            area_gaps[sa.id] = gaps
+            total_covered += covered
+            total_uncovered += uncovered
+
+        overall_total = total_covered + total_uncovered
+        overall_pct = round((total_covered / overall_total) * 100, 1) if overall_total > 0 else 0.0
+        total_gaps = total_uncovered
+        most_critical = max(by_area_data, key=lambda x: x["days_uncovered"])["area_name"] if by_area_data else None
+        weakest_day = max(day_of_week_gaps, key=day_of_week_gaps.get) if day_of_week_gaps else None
+
+        return {
+            "period_label": period_label,
+            "overall_coverage_pct": overall_pct,
+            "total_gaps": total_gaps,
+            "most_critical_area": most_critical,
+            "weakest_day": weakest_day,
+            "by_area": by_area_data,
+        }
+
+    # ------------------------------------------------------------------
+    # Workload report
+    # ------------------------------------------------------------------
+
+    def generate_workload(
+        self,
+        *,
+        year: int,
+        month: int,
+        area: str | None = None,
+        rank_id: str | None = None,
+        sex: str | None = None,
+        department_id: str | None = None,
+        group_by: str = "none",
+        order_by: str = "total_desc",
+    ) -> dict:
+        """Generate workload report — services per doctor."""
+        # Get doctors filtered
+        doctors = self.doctor_repo.list_with_filters(
+            rank_id=rank_id, sex=sex, department_id=department_id, active_only=True
+        )
+        doctor_map = {d.id: d for d in doctors}
+        filtered_ids = {d.id for d in doctors}
+
+        # Get calendar for period
+        calendar_obj = self.calendar_repo.get_calendar_by_period(year, month)
+        version = None
+        assignments = []
+        if calendar_obj:
+            version = self.calendar_repo.get_latest_version(calendar_obj.id)
+        if version:
+            assignments = self.calendar_repo.list_assignments(version.id)
+
+        # Filter by area
+        area_ids: set[str] | None = None
+        if area:
+            service_areas = self.calendar_repo.list_service_areas()
+            area_ids = {sa.id for sa in service_areas if sa.display_name == area or sa.id == area}
+
+        filtered_assignments = [
+            a for a in assignments
+            if a.doctor_id in filtered_ids
+            and (not area_ids or a.service_area_id in area_ids)
+        ]
+
+        # Build area name map
+        area_names = {}
+        for sa in self.calendar_repo.list_service_areas():
+            area_names[sa.id] = sa.display_name
+
+        # Per-doctor aggregation
+        entries: dict[str, dict] = {}
+        for a in filtered_assignments:
+            if a.doctor_id not in entries:
+                doc = doctor_map.get(a.doctor_id)
+                entries[a.doctor_id] = {
+                    "doctor_id": a.doctor_id,
+                    "name": doc.name if doc else a.doctor_id,
+                    "rank": doc.rank.name if doc and doc.rank else None,
+                    "sex": doc.sex if doc else None,
+                    "department": doc.department.name if doc and doc.department else None,
+                    "emergencia": 0,
+                    "pista": 0,
+                    "disponible": 0,
+                    "total": 0,
+                    "details": [],
+                }
+            e = entries[a.doctor_id]
+            area_display = area_names.get(a.service_area_id, a.service_area_id)
+            area_key = area_display.lower().replace(" ", "_")
+            if area_key in ("emergencia", "pista", "disponible"):
+                e[area_key] += 1
+            e["total"] += 1
+            e["details"].append({
+                "date": a.service_date.isoformat(),
+                "area": area_display,
+            })
+
+        entry_list = list(entries.values())
+
+        # Sort
+        if order_by == "alpha":
+            entry_list.sort(key=lambda e: e["name"])
+        elif order_by == "rank":
+            entry_list.sort(key=lambda e: e["rank"] or "")
+        else:  # total_desc
+            entry_list.sort(key=lambda e: -e["total"])
+
+        totals = [e["total"] for e in entry_list]
+        total_services = sum(totals)
+        active_doctors = len(entry_list)
+        avg_per_doctor = round(total_services / active_doctors, 1) if active_doctors else 0.0
+        most = max(entry_list, key=lambda e: e["total"]) if entry_list else None
+        least = min(entry_list, key=lambda e: e["total"]) if entry_list else None
+
+        period_label = f"{month}/{year}"
+        return {
+            "period_label": period_label,
+            "total_services": total_services,
+            "active_doctors": active_doctors,
+            "avg_per_doctor": avg_per_doctor,
+            "most_load": {"name": most["name"], "total": most["total"]} if most else None,
+            "least_load": {"name": least["name"], "total": least["total"]} if least else None,
+            "entries": entry_list,
+        }
+
+    # ------------------------------------------------------------------
+    # Doctor dossier report
+    # ------------------------------------------------------------------
+
+    def generate_doctor_dossier(
+        self,
+        doctor_id: str,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict:
+        """Generate doctor dossier — full profile for a period."""
+        doctor = self.doctor_repo.get_by_id(doctor_id)
+        if doctor is None:
+            raise ValueError("Médico no encontrado")
+
+        min_date = date_from
+        max_date = date_to
+
+        # Collect assignments for this doctor in the period
+        services = []
+        services_by_area: dict[str, int] = {}
+
+        # Walk through calendars in the period
+        yr_start = min_date.year if min_date else 2026
+        yr_end = (max_date if max_date else date(2026, 12, 31)).year
+        for y in range(yr_start, yr_end + 1):
+            for m in range(1, 13):
+                cal = self.calendar_repo.get_calendar_by_period(y, m)
+                if not cal:
+                    continue
+                version = self.calendar_repo.get_latest_version(cal.id)
+                if not version:
+                    continue
+                assignments = self.calendar_repo.list_assignments(version.id)
+                for a in assignments:
+                    if a.doctor_id != doctor_id:
+                        continue
+                    if min_date and a.service_date < min_date:
+                        continue
+                    if max_date and a.service_date > max_date:
+                        continue
+
+                    area_name = str(a.service_area_id)
+                    services.append({
+                        "date": a.service_date.isoformat(),
+                        "day_name": a.service_date.strftime("%A"),
+                        "area": area_name,
+                        "source": a.assignment_source,
+                    })
+                    services_by_area[area_name] = services_by_area.get(area_name, 0) + 1
+
+        total_services = len(services)
+
+        # Missions via participations
+        missions_data = []
+        if self.mission_repo and min_date and max_date:
+            participations = self.mission_repo.list_participations_for_doctor_in_range(
+                doctor_id, min_date, max_date
+            )
+            for p in participations:
+                missions_data.append({
+                    "mission": p.mission_assignment_id,
+                    "role": p.selection_source,
+                    "status": "confirmed",
+                })
+
+        # Allowed areas
+        areas = self.doctor_repo.get_allowed_areas(doctor_id)
+
+        # Restrictions (graceful if method doesn't exist)
+        restrictions_data = []
+        if hasattr(self.doctor_repo, "list_restrictions"):
+            rest = self.doctor_repo.list_restrictions(doctor_id)
+            for r in rest:
+                restrictions_data.append({
+                    "type": r.restriction_type,
+                    "date": r.date.isoformat() if hasattr(r, "date") and r.date else None,
+                    "reason": r.reason,
+                })
+
+        # Availability (graceful if method doesn't exist)
+        availability_days = []
+        if hasattr(self.doctor_repo, "get_availability"):
+            av = self.doctor_repo.get_availability(doctor_id)
+            if av:
+                for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+                    if getattr(av, day, False):
+                        availability_days.append(day.capitalize())
+
+        period_label = f"{min_date.isoformat() if min_date else 'inicio'} - {max_date.isoformat() if max_date else 'actualidad'}"
+
+        return {
+            "doctor_id": doctor.id,
+            "name": doctor.name,
+            "rank": doctor.rank.name if doctor.rank else None,
+            "sex": doctor.sex,
+            "department": doctor.department.name if doctor.department else None,
+            "areas": areas,
+            "period_label": period_label,
+            "total_services": total_services,
+            "services_by_area": services_by_area,
+            "avg_weekly": round(total_services / 4.33, 1) if total_services > 0 else 0.0,
+            "services": sorted(services, key=lambda s: s["date"]),
+            "missions": missions_data,
+            "restrictions": restrictions_data,
+            "availability": availability_days,
+        }
+
+    # ------------------------------------------------------------------
     # PDF: weekly schedule (formato SERVICIOS)
     # ------------------------------------------------------------------
 
