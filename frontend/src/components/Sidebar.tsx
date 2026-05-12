@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import {
-  CalendarDays, Stethoscope, Target, BarChart2, Upload,
+  CalendarDays, Stethoscope, Target,
   Bell, MessageCircle, ClipboardList, ShieldCheck, LogOut,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -14,14 +14,7 @@ const NAV_GROUPS = [
       { to: "/missions",  icon: Target,        label: "Misiones" },
     ],
   },
-  {
-    label: "DATOS",
-    items: [
-      { to: "/reports", icon: BarChart2, label: "Reportes" },
-      { to: "/import",  icon: Upload,    label: "Importar" },
-    ],
-  },
-  {
+    {
     label: "SISTEMA",
     items: [
       { to: "/notifications", icon: Bell,          label: "Notificaciones" },
