@@ -8,7 +8,6 @@ from backend.app.api.routes.calendars import router as calendars_router
 from backend.app.api.routes.catalogs import router as catalogs_router
 from backend.app.api.routes.doctors import router as doctors_router
 from backend.app.api.routes.health import router as health_router
-from backend.app.api.routes.import_staging import router as import_router
 from backend.app.api.routes.missions import router as missions_router
 from backend.app.api.routes.notifications import router as notifications_router
 from backend.app.api.routes.reports import router as reports_router
@@ -26,5 +25,4 @@ api_router.include_router(missions_router)
 api_router.include_router(notifications_router)
 api_router.include_router(reports_router)
 api_router.include_router(telegram_router)
-api_router.include_router(import_router)
 api_router.include_router(health_router, tags=["health"])
