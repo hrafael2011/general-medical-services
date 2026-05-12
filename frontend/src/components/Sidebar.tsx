@@ -1,31 +1,27 @@
 import { NavLink } from "react-router-dom";
 import {
   CalendarDays, Stethoscope, Target,
-  Bell, MessageCircle, ClipboardList, ShieldCheck, LogOut,
+  BarChart2, Bell, MessageCircle,
+  ClipboardList, ShieldCheck, LogOut, UserPlus,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
-const NAV_GROUPS = [
-  {
-    label: "OPERACIONES",
-    items: [
-      { to: "/calendars", icon: CalendarDays, label: "Calendarios" },
-      { to: "/doctors",   icon: Stethoscope,  label: "Médicos" },
-      { to: "/missions",  icon: Target,        label: "Misiones" },
-    ],
-  },
-    {
-    label: "SISTEMA",
-    items: [
-      { to: "/notifications", icon: Bell,          label: "Notificaciones" },
-      { to: "/telegram",      icon: MessageCircle, label: "Telegram" },
-      { to: "/audit",         icon: ClipboardList, label: "Auditoría" },
-    ],
-  },
+const SHARED_ITEMS = [
+  { to: "/calendars", icon: CalendarDays, label: "Calendarios" },
+  { to: "/doctors",   icon: Stethoscope,  label: "Médicos" },
+  { to: "/missions",  icon: Target,        label: "Misiones" },
+];
+
+const SYSTEM_ITEMS = [
+  { to: "/notifications", icon: Bell,          label: "Notificaciones" },
+  { to: "/telegram",      icon: MessageCircle, label: "Telegram" },
 ];
 
 export function Sidebar() {
   const { currentUser, logout } = useAuth();
+
+  const isEncargadoPlus = currentUser && (currentUser.role === "encargado" || currentUser.role === "admin");
+  const isAdmin = currentUser && currentUser.role === "admin";
 
   return (
     <aside className="sidebar">
@@ -35,23 +31,76 @@ export function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_GROUPS.map(group => (
-          <div key={group.label} className="sidebar-group">
-            <span className="sidebar-group-label">{group.label}</span>
-            {group.items.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
-                }
-              >
-                <Icon size={16} />
-                {label}
-              </NavLink>
-            ))}
+        <div className="sidebar-group">
+          <span className="sidebar-group-label">OPERACIONES</span>
+          {SHARED_ITEMS.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+              }
+            >
+              <Icon size={16} />
+              {label}
+            </NavLink>
+          ))}
+        </div>
+
+        {isEncargadoPlus && (
+          <div className="sidebar-group">
+            <span className="sidebar-group-label">ADMINISTRACIÓN</span>
+            <NavLink
+              to="/reports"
+              className={({ isActive }) =>
+                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+              }
+            >
+              <BarChart2 size={16} />
+              Reportes
+            </NavLink>
           </div>
-        ))}
+        )}
+
+        {isAdmin && (
+          <div className="sidebar-group">
+            <span className="sidebar-group-label">SEGURIDAD</span>
+            <NavLink
+              to="/audit"
+              className={({ isActive }) =>
+                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+              }
+            >
+              <ClipboardList size={16} />
+              Auditoría
+            </NavLink>
+            <NavLink
+              to="/users"
+              className={({ isActive }) =>
+                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+              }
+            >
+              <UserPlus size={16} />
+              Usuarios
+            </NavLink>
+          </div>
+        )}
+
+        <div className="sidebar-group">
+          <span className="sidebar-group-label">NOTIFICACIONES</span>
+          {SYSTEM_ITEMS.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+              }
+            >
+              <Icon size={16} />
+              {label}
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
       <div className="sidebar-footer">

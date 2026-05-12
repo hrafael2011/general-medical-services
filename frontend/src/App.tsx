@@ -10,6 +10,7 @@ import { DoctorsPage } from "./features/doctors/DoctorsPage";
 import { CalendarsPage } from "./features/calendars/CalendarsPage";
 import { CalendarGrid } from "./features/calendars/CalendarGrid";
 import { MissionView } from "./features/missions/MissionView";
+import { ReportsView } from "./features/reports/ReportsView";
 import { NotificationLog } from "./features/notifications/NotificationLog";
 import { TelegramLinks } from "./features/telegram/TelegramLinks";
 import { AuditLog } from "./features/audit/AuditLog";
@@ -28,6 +29,7 @@ export function App() {
           <Route path="/missions" element={<MissionView />} />
           <Route path="/notifications" element={<NotificationLog />} />
           <Route path="/telegram" element={<TelegramLinks />} />
+          <Route path="/reports" element={<ReportsView />} />
           <Route path="/audit" element={<AuditLog />} />
         </Route>
       </Route>
