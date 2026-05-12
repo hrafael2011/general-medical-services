@@ -188,6 +188,20 @@ def test_generate_assigns_doctors(db_session) -> None:
     assert len(assignments) == summary.assigned_count
 
 
+def test_generate_does_not_create_mission_ranking_before_approval(db_session) -> None:
+    """Calendar generation must not create mission rankings for draft calendars."""
+    _seed_service_areas(db_session)
+    calendar, _version = _create_calendar_and_version(db_session)
+
+    _create_doctor(db_session, name="Dr. Emergencia", allowed_area_ids=[_AREA_EMERGENCIA])
+
+    service = _make_generation_service(db_session)
+    service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    ranking = MissionRepository(db_session).get_ranking_by_period(_YEAR, _MONTH)
+    assert ranking is None
+
+
 # ---------------------------------------------------------------------------
 # test_generate_creates_gaps_when_no_doctors
 # ---------------------------------------------------------------------------

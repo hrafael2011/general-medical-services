@@ -1,4 +1,3 @@
-import logging
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
@@ -18,9 +17,6 @@ from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
 REQUIRED_AREA_CODES = ["emergencia", "pista", "disponible"]
-
-logger = logging.getLogger(__name__)
-
 
 class _AreaMapper:
     """Maps between service area codes (domain) and UUIDs (persistence)."""
@@ -201,25 +197,5 @@ class GenerationService:
                     "gaps": summary_raw.gap_count,
                 },
             )
-
-        # Auto-generate mission candidate ranking for the period
-        try:
-            from backend.app.application.missions.ranking_service import MissionRankingService
-
-            ranking_service = MissionRankingService(
-                mission_repo=self.mission_repo,
-                doctor_repo=self.doctor_repo,
-                calendar_repo=self.calendar_repo,
-                catalog_repo=self.catalog_repo,
-                audit=self.audit,
-            )
-            ranking_service.generate_ranking(
-                actor_id=actor_id,
-                year=calendar.year,
-                month=calendar.month,
-                calendar_version_id=version.id,
-            )
-        except Exception:
-            logger.warning("Failed to auto-generate mission ranking", exc_info=True)
 
         return summary_raw

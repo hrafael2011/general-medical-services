@@ -30,6 +30,35 @@ class MissionCandidateService:
         self.audit = audit
         self.triggers = triggers
 
+    def _service_area_code_map(self) -> dict[str, str]:
+        """Map persisted service area UUIDs to domain codes, preserving codes as-is."""
+        return {area.id: area.code for area in self.calendar_repo.list_service_areas()}
+
+    def _service_area_code(self, service_area_id: str, area_codes_by_id: dict[str, str]) -> str:
+        return area_codes_by_id.get(service_area_id, service_area_id)
+
+    def _is_strong_area(self, service_area_id: str, area_codes_by_id: dict[str, str]) -> bool:
+        return self._service_area_code(service_area_id, area_codes_by_id) in STRONG_AREAS
+
+    def _get_approved_period_ranking(self, year: int, month: int):
+        approved_version = self.calendar_repo.get_approved_version_by_period(year, month)
+        if approved_version is None:
+            raise MissionServiceError(
+                "approved_calendar_required",
+                "No approved calendar exists for this period.",
+            )
+        ranking = self.mission_repo.get_ranking_by_period(
+            year,
+            month,
+            calendar_version_id=approved_version.id,
+        )
+        if ranking is None:
+            raise MissionServiceError(
+                "ranking_not_found",
+                "No ranking exists for the approved calendar.",
+            )
+        return ranking
+
     def recommend_candidates(
         self,
         *,
@@ -46,13 +75,8 @@ class MissionCandidateService:
         Alternates (when include_alternates=True): next entries with only soft warnings,
         up to participant_count more.
         """
-        # 1. Load ranking for the period
-        ranking = self.mission_repo.get_ranking_by_period(year, month)
-        if ranking is None:
-            raise MissionServiceError(
-                "ranking_not_found",
-                "No ranking for this period. Generate the calendar first.",
-            )
+        # 1. Load ranking for the approved calendar version in the period.
+        ranking = self._get_approved_period_ranking(year, month)
 
         # 2. Load all entries (sorted by position ascending)
         entries: list[MissionCandidateRankingEntryModel] = self.mission_repo.list_ranking_entries(
@@ -68,6 +92,7 @@ class MissionCandidateService:
         same_day_assignments = self.calendar_repo.list_assignments_in_date_range(
             mission_date, mission_date
         )
+        area_codes_by_id = self._service_area_code_map()
 
         primary: list[MissionCandidateRankingEntryModel] = []
         alternates: list[MissionCandidateRankingEntryModel] = []
@@ -92,7 +117,7 @@ class MissionCandidateService:
             ]
             strong_recent = [
                 a for a in doctor_recent
-                if a.service_area_id in STRONG_AREAS
+                if self._is_strong_area(a.service_area_id, area_codes_by_id)
                 and (mission_date - a.service_date).days <= 7
             ]
             if strong_recent:
@@ -123,6 +148,97 @@ class MissionCandidateService:
             alternates = []
 
         return {"primary": primary, "alternates": alternates}
+
+    def rank_candidates_for_date(
+        self,
+        *,
+        year: int,
+        month: int,
+        mission_date: date,
+    ) -> list[dict]:
+        """Return the full monthly ranking adjusted for one mission date.
+
+        The monthly ranking remains the base ordering. This method adds
+        date-specific operational state so the UI can show why a highly ranked
+        doctor can or cannot be selected for that mission date.
+        """
+        ranking = self._get_approved_period_ranking(year, month)
+
+        entries: list[MissionCandidateRankingEntryModel] = self.mission_repo.list_ranking_entries(
+            ranking.id
+        )
+
+        lookback_start = mission_date - timedelta(days=14)
+        lookback_end = mission_date - timedelta(days=1)
+        recent_assignments = self.calendar_repo.list_assignments_in_date_range(
+            lookback_start, lookback_end
+        )
+        same_day_assignments = self.calendar_repo.list_assignments_in_date_range(
+            mission_date, mission_date
+        )
+        area_codes_by_id = self._service_area_code_map()
+
+        ranked: list[dict] = []
+        for entry in entries:
+            doctor_id = entry.doctor_id
+            reasons: list[str] = []
+            warnings: list[str] = list(entry.warnings or [])
+            selectable = bool(entry.eligible)
+
+            restrictions = self.availability_repo.list_active_restrictions_for_doctor(
+                doctor_id, on_date=mission_date
+            )
+            has_hard_block = any(r.severity == "hard_block" for r in restrictions)
+            if has_hard_block:
+                selectable = False
+                reasons.append("Tiene una restricción dura para la fecha.")
+
+            has_same_day = any(a.doctor_id == doctor_id for a in same_day_assignments)
+            if has_same_day:
+                selectable = False
+                reasons.append("Tiene servicio asignado ese día.")
+
+            doctor_recent = [
+                a for a in recent_assignments if a.doctor_id == doctor_id
+            ]
+            strong_recent = [
+                a for a in doctor_recent
+                if self._is_strong_area(a.service_area_id, area_codes_by_id)
+                and (mission_date - a.service_date).days <= 7
+            ]
+            if strong_recent and "Servicio fuerte reciente." not in warnings:
+                warnings.append("Servicio fuerte reciente.")
+
+            if not entry.eligible and not reasons:
+                selectable = False
+                reasons.append("No elegible según el ranking mensual.")
+
+            if not selectable:
+                status = "unavailable"
+            elif warnings:
+                status = "alternate"
+            else:
+                status = "recommended"
+
+            if selectable:
+                ranked.append({
+                    "entry": entry,
+                    "selectable": selectable,
+                    "recommendation_status": status,
+                    "reasons": reasons,
+                    "warnings": warnings,
+                })
+
+        ranked.sort(
+            key=lambda item: (
+                item["entry"].total_load_score,
+                item["entry"].ranking_position,
+            )
+        )
+        for index, item in enumerate(ranked, start=1):
+            item["adjusted_position"] = index
+
+        return ranked
 
     def create_mission(
         self,
@@ -176,14 +292,25 @@ class MissionCandidateService:
                 f"Mission {mission_id} is already confirmed.",
             )
 
-        # 3. Load ranking entries for rationale (position, score, warnings)
-        ranking = self.mission_repo.get_ranking_by_period(
-            mission.mission_date.year, mission.mission_date.month
+        # 3. Validate selected doctors against date-specific availability.
+        eligible_items = self.rank_candidates_for_date(
+            year=mission.mission_date.year,
+            month=mission.mission_date.month,
+            mission_date=mission.mission_date,
         )
-        ranking_entries_by_doctor: dict[str, MissionCandidateRankingEntryModel] = {}
-        if ranking is not None:
-            all_entries = self.mission_repo.list_ranking_entries(ranking.id)
-            ranking_entries_by_doctor = {e.doctor_id: e for e in all_entries}
+        ranking_entries_by_doctor = {
+            item["entry"].doctor_id: item["entry"]
+            for item in eligible_items
+        }
+        unavailable_doctor_ids = [
+            doctor_id for doctor_id in doctor_ids
+            if doctor_id not in ranking_entries_by_doctor
+        ]
+        if unavailable_doctor_ids:
+            raise MissionServiceError(
+                "candidate_not_available",
+                "One or more selected doctors are not available for this mission date.",
+            )
 
         # 4. Delete existing participants
         existing_participants = self.mission_repo.list_participants(mission_id)

@@ -1,6 +1,6 @@
-from datetime import date
+from datetime import UTC, datetime, date
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.calendars import (
@@ -9,6 +9,12 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarVersionModel,
     UnresolvedGapModel,
 )
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+
+
+def _not_deleted() -> tuple:
+    """Return filter expressions to exclude soft-deleted records."""
+    return (CalendarModel.deleted_at.is_(None),)
 
 
 class CalendarRepository:
@@ -23,18 +29,36 @@ class CalendarRepository:
         return calendar
 
     def get_calendar_by_id(self, calendar_id: str) -> CalendarModel | None:
-        return self.session.get(CalendarModel, calendar_id)
+        stmt = select(CalendarModel).where(
+            CalendarModel.id == calendar_id,
+            *_not_deleted(),
+        )
+        return self.session.scalar(stmt)
 
     def get_calendar_by_period(self, year: int, month: int) -> CalendarModel | None:
         stmt = select(CalendarModel).where(
             CalendarModel.year == year,
             CalendarModel.month == month,
+            *_not_deleted(),
         )
         return self.session.scalar(stmt)
 
     def list_calendars(self) -> list[CalendarModel]:
-        stmt = select(CalendarModel).order_by(CalendarModel.year.desc(), CalendarModel.month.desc())
+        stmt = (
+            select(CalendarModel)
+            .where(*_not_deleted())
+            .order_by(CalendarModel.year.desc(), CalendarModel.month.desc())
+        )
         return list(self.session.scalars(stmt))
+
+    def soft_delete_calendar(self, calendar_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(CalendarModel)
+            .where(CalendarModel.id == calendar_id)
+            .values(deleted_at=now, updated_at=now)
+        )
+        self.session.flush()
 
     # --- Calendar Version ---
 
@@ -58,6 +82,26 @@ class CalendarRepository:
         stmt = (
             select(CalendarVersionModel)
             .where(CalendarVersionModel.calendar_id == calendar_id)
+            .order_by(CalendarVersionModel.version_number.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def get_approved_version_by_period(
+        self,
+        year: int,
+        month: int,
+    ) -> CalendarVersionModel | None:
+        stmt = (
+            select(CalendarVersionModel)
+            .join(CalendarModel, CalendarVersionModel.calendar_id == CalendarModel.id)
+            .where(
+                CalendarModel.year == year,
+                CalendarModel.month == month,
+                CalendarModel.status == "approved",
+                CalendarVersionModel.status == "approved",
+                *_not_deleted(),
+            )
             .order_by(CalendarVersionModel.version_number.desc())
             .limit(1)
         )
@@ -130,4 +174,8 @@ class CalendarRepository:
             .where(CalendarAssignmentModel.service_date >= start_date)
             .where(CalendarAssignmentModel.service_date <= end_date)
         )
+        return list(self.session.scalars(stmt))
+
+    def list_service_areas(self) -> list[ServiceAreaModel]:
+        stmt = select(ServiceAreaModel).order_by(ServiceAreaModel.code)
         return list(self.session.scalars(stmt))

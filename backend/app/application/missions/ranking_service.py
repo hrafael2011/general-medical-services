@@ -180,6 +180,16 @@ class MissionRankingService:
             logger.exception("Failed to generate ranking for %d/%02d", year, month)
             raise
 
-    def get_ranking(self, *, year: int, month: int) -> MissionCandidateRankingModel | None:
+    def get_ranking(
+        self,
+        *,
+        year: int,
+        month: int,
+        calendar_version_id: str | None = None,
+    ) -> MissionCandidateRankingModel | None:
         """Return the existing ranking for the given period, or None."""
-        return self.mission_repo.get_ranking_by_period(year, month)
+        return self.mission_repo.get_ranking_by_period(
+            year,
+            month,
+            calendar_version_id=calendar_version_id,
+        )

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
+from backend.app.application.telegram.memory import SessionStore
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.telegram import (
     TelegramLinkTokenModel,
@@ -32,18 +33,18 @@ router = APIRouter(prefix="/telegram", tags=["telegram"])
 
 logger = logging.getLogger(__name__)
 
-
+_session_store = SessionStore()
 
 # ---------------------------------------------------------------------------
 # Dependency factory
 # ---------------------------------------------------------------------------
 
 def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # noqa: ANN201
-    import os
-
     from backend.app.application.reports.report_service import ReportService
     from backend.app.application.telegram.agent import ConversationalAgent
     from backend.app.application.telegram.bot_client import FakeBotClient, TelegramBotClient
+    from backend.app.application.telegram.doctor_query_service import DoctorQueryService
+    from backend.app.application.telegram.entity_resolver import EntityResolver
     from backend.app.application.telegram.intent_router import IntentRouter
     from backend.app.application.telegram.llm import DeepSeekProvider, FakeLLMProvider
     from backend.app.application.telegram.memory import MemoryManager
@@ -92,6 +93,9 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         query_executor=query_executor,
         tools=tools,
         memory=memory,
+        session_store=_session_store,
+        entity_resolver=EntityResolver(session=session),
+        doctor_query_service=DoctorQueryService(session=session),
     )
 
     return TelegramOrchestrator(

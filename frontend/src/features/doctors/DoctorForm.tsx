@@ -1,5 +1,5 @@
+import { FormEvent, useEffect, useState } from "react";
 import { Save, X } from "lucide-react";
-import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { doctorsApi, availabilityApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
 
@@ -27,7 +27,9 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const WEEK_LABELS = ["1ra", "2da", "3ra", "4ta", "Última"];
   const WEEK_VALUES = [0, 1, 2, 3, -1];
 
-  const [avMode, setAvMode] = useState<"weekly" | "monthly" | "recurring">("weekly");
+  const [avMode, setAvMode] = useState<"weekly" | "monthly" | "recurring">(
+    doctor?.availability_mode === "monthly" ? "monthly" : "weekly"
+  );
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [selectedDates, setSelectedDates] = useState<number[]>([]);
   const [selectedWeekday, setSelectedWeekday] = useState<number>(4);
@@ -55,6 +57,32 @@ export function DoctorForm({ doctor, onClose }: Props) {
     queryKey: ["ranks"],
     queryFn: doctorsApi.listRanks,
   });
+
+  const { data: availabilityData } = useQuery({
+    queryKey: ["doctor-availability", doctor?.id],
+    queryFn: () => availabilityApi.list(doctor!.id),
+    enabled: isEdit,
+  });
+
+  useEffect(() => {
+    if (!availabilityData || availabilityData.length === 0) return;
+
+    const weekly = availabilityData.find(a => a.availability_type === "weekly_fixed");
+    const recurring = availabilityData.find(a => a.availability_type === "recurring");
+    const monthly = availabilityData.find(a => a.availability_type === "monthly_variable");
+
+    if (weekly && doctor?.availability_mode !== "monthly") {
+      setAvMode("weekly");
+      setSelectedDays(weekly.days_of_week ?? []);
+    } else if (recurring) {
+      setAvMode("recurring");
+      setSelectedWeekday(recurring.weekday ?? 4);
+      setSelectedWeekNumber(recurring.week_number ?? -1);
+    } else if (monthly) {
+      setAvMode("monthly");
+      setSelectedDates(monthly.available_dates ?? []);
+    }
+  }, [availabilityData, doctor?.availability_mode]);
 
   const save = useMutation({
     mutationFn: (payload: CreateDoctorPayload) =>

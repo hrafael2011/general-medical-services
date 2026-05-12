@@ -1,3 +1,5 @@
+import logging
+import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -10,14 +12,14 @@ from backend.app.infrastructure.db.models.telegram import (
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 from backend.app.infrastructure.repositories.users import UserRepository
 
-
-
 _MSG_NOT_LINKED = (
     "No estás vinculado al sistema. "
     "Contacta al administrador para vincular tu cuenta de Telegram."
 )
 _MSG_INACTIVE_ACCOUNT = "Tu cuenta de sistema está inactiva. Contacta al administrador."
 _MSG_MUST_CHANGE_PASSWORD = "Debes cambiar tu contraseña temporal antes de usar el asistente."
+
+logger = logging.getLogger(__name__)
 
 
 class TelegramOrchestrator:
@@ -49,6 +51,7 @@ class TelegramOrchestrator:
         Main entry point. Returns the response text sent to the user.
         Always logs the interaction.
         """
+        start = time.perf_counter()
         # 0. Handle /start deep-link authentication
         if text.startswith("/start"):
             return self._handle_start_link(
@@ -153,6 +156,17 @@ class TelegramOrchestrator:
             tool_response=result.tool_result,
             status="completed",
             fallback_reason=None,
+        )
+        logger.info(
+            "Telegram interaction completed",
+            extra={
+                "telegram_event": "interaction_completed",
+                "agent_action": result.agent_action,
+                "tool_name": result.tool_name,
+                "has_document": result.document_bytes is not None,
+                "latency_ms": round((time.perf_counter() - start) * 1000),
+                "user_role": user.role,
+            },
         )
         return response_text
 

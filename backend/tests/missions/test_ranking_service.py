@@ -94,19 +94,24 @@ def _create_doctor(
     return doctor
 
 
-def _create_calendar_version(db_session) -> CalendarVersionModel:
+def _create_calendar_version(
+    db_session,
+    *,
+    calendar_status: str = "draft",
+    version_status: str = "draft",
+) -> CalendarVersionModel:
     """Create a minimal CalendarModel + CalendarVersionModel for use as FK."""
     now = _now()
     calendar = CalendarModel(
         id=str(uuid4()),
         year=_YEAR,
         month=_MONTH,
-        status="draft",
+        status=calendar_status,
         created_by=_ACTOR,
-        approved_by=None,
+        approved_by=_ACTOR if calendar_status == "approved" else None,
         created_at=now,
         updated_at=now,
-        approved_at=None,
+        approved_at=now if calendar_status == "approved" else None,
     )
     db_session.add(calendar)
     db_session.flush()
@@ -115,10 +120,12 @@ def _create_calendar_version(db_session) -> CalendarVersionModel:
         id=str(uuid4()),
         calendar_id=calendar.id,
         version_number=1,
-        status="draft",
+        status=version_status,
         created_by=_ACTOR,
         reason=None,
         created_at=now,
+        approved_at=now if version_status == "approved" else None,
+        approved_by=_ACTOR if version_status == "approved" else None,
     )
     db_session.add(version)
     db_session.flush()
@@ -235,3 +242,34 @@ def test_get_ranking_returns_none_when_missing(db_session) -> None:
     service = _make_ranking_service(db_session)
     result = service.get_ranking(year=2030, month=1)
     assert result is None
+
+
+def test_get_ranking_can_filter_by_calendar_version(db_session) -> None:
+    version_a = _create_calendar_version(db_session)
+    version_b = _create_calendar_version(db_session)
+    _create_doctor(db_session, name="Dr. One")
+
+    service = _make_ranking_service(db_session)
+    ranking_a = service.generate_ranking(
+        actor_id=_ACTOR,
+        year=_YEAR,
+        month=_MONTH,
+        calendar_version_id=version_a.id,
+    )
+    ranking_b = service.generate_ranking(
+        actor_id=_ACTOR,
+        year=_YEAR,
+        month=_MONTH,
+        calendar_version_id=version_b.id,
+    )
+
+    assert service.get_ranking(
+        year=_YEAR,
+        month=_MONTH,
+        calendar_version_id=version_a.id,
+    ).id == ranking_a.id
+    assert service.get_ranking(
+        year=_YEAR,
+        month=_MONTH,
+        calendar_version_id=version_b.id,
+    ).id == ranking_b.id

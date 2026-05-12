@@ -13,6 +13,12 @@ class SessionState:
     last_query_type: str | None = None
     last_params: dict[str, Any] | None = None
     last_results: list[dict[str, Any]] | None = None
+    last_filters: dict[str, Any] | None = None
+    last_tool_name: str | None = None
+    last_agent_action: str | None = None
+    last_operation: str | None = None
+    last_total: int | None = None
+    last_document_format: str | None = None
     pending_selection: dict[str, Any] | None = None
     created_at: float = field(default_factory=time.time)
 
@@ -81,17 +87,6 @@ class MemoryManager:
         # list_interactions returns desc order; reverse for chronological
         interactions.reverse()
 
-        # Only include interactions where the agent properly routed via JSON.
-        # Formatted DB outputs ("Se encontraron...", "Resultado:...") are not
-        # conversational context — feeding them back as "assistant" turns
-        # teaches DeepSeek to reply in plain text instead of JSON.
-        _replace_prefixes = (
-            "Se encontraron",
-            "Resultado:",
-            "No se encontraron",
-            "Aquí tienes el reporte",
-        )
-
         _skip_prefixes = (
             "Lo siento, no pude",
             "El servicio de IA",
@@ -105,11 +100,10 @@ class MemoryManager:
             response = interaction.response_text or ""
             tool_name = interaction.tool_name
 
-            # Replace formatted DB responses with structured summaries
-            if tool_name and any(response.startswith(p) for p in _replace_prefixes):
-                summary = f"[Acción ejecutada: {tool_name}]"
-                history.append({"role": "user", "content": interaction.input_text})
-                history.append({"role": "assistant", "content": summary})
+            # Tool outputs are operational state, not conversational text.
+            # Feeding placeholders like "[Acción ejecutada: ...]" back to the LLM
+            # can make it echo them to the user on later questions.
+            if tool_name:
                 continue
 
             # Skip other non-conversational responses

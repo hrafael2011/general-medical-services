@@ -1,11 +1,13 @@
-import { Target, PlusCircle, CheckCircle2, X, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { Target, PlusCircle, CheckCircle2, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   missionsApi,
   MissionAssignment,
-  MissionCandidateRankingEntry,
+  MissionCandidateDateRankingEntry,
 } from "../../api/missions";
+import { doctorsApi } from "../../api/doctors";
+import { ApiError } from "../../api/client";
 import { useToast } from "../../components/Toast";
 
 // ---------------------------------------------------------------------------
@@ -25,24 +27,49 @@ function statusBadge(status: string) {
   return <span style={style}>{status === "confirmed" ? "Confirmada" : "Borrador"}</span>;
 }
 
+function candidateStatusLabel(status: MissionCandidateDateRankingEntry["recommendation_status"]) {
+  if (status === "recommended") return "Recomendado";
+  if (status === "alternate") return "Alterno";
+  return "No seleccionable";
+}
+
+function candidateStatusStyle(status: MissionCandidateDateRankingEntry["recommendation_status"]): React.CSSProperties {
+  if (status === "recommended") {
+    return { background: "#d1fae5", color: "#065f46" };
+  }
+  if (status === "alternate") {
+    return { background: "#fef3c7", color: "#92400e" };
+  }
+  return { background: "#fee2e2", color: "#991b1b" };
+}
+
+function doctorDisplayName(
+  doctorId: string,
+  doctorName: string | null | undefined,
+  doctorNameById: Record<string, string>,
+) {
+  return doctorName?.trim() || doctorNameById[doctorId] || "Médico no encontrado";
+}
+
 // ---------------------------------------------------------------------------
 // ConfirmModal
 // ---------------------------------------------------------------------------
 
 interface ConfirmModalProps {
   mission: MissionAssignment;
+  doctorNameById: Record<string, string>;
   onClose: () => void;
   onConfirmed: () => void;
 }
 
-function ConfirmModal({ mission, onClose, onConfirmed }: ConfirmModalProps) {
+function ConfirmModal({ mission, doctorNameById, onClose, onConfirmed }: ConfirmModalProps) {
   const { addToast } = useToast();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const candidatesQuery = useQuery({
-    queryKey: ["mission-candidates", mission.mission_date, mission.participant_count],
+    queryKey: ["mission-candidates-ranked", mission.mission_date],
     queryFn: () =>
-      missionsApi.getCandidates(mission.mission_date, mission.participant_count),
+      missionsApi.getRankedCandidatesForDate(mission.mission_date),
   });
 
   const confirmMutation = useMutation({
@@ -61,7 +88,7 @@ function ConfirmModal({ mission, onClose, onConfirmed }: ConfirmModalProps) {
     });
   }
 
-  const primary = candidatesQuery.data?.primary ?? [];
+  const candidates = candidatesQuery.data?.entries ?? [];
 
   return (
     <div
@@ -95,22 +122,23 @@ function ConfirmModal({ mission, onClose, onConfirmed }: ConfirmModalProps) {
           <p style={{ color: "#dc2626", marginBottom: 16 }}>Error al cargar candidatos.</p>
         )}
 
-        {!candidatesQuery.isLoading && primary.length === 0 && (
+        {!candidatesQuery.isLoading && candidates.length === 0 && (
           <p style={{ color: "#6b7280", marginBottom: 16 }}>Sin candidatos disponibles para esta fecha.</p>
         )}
 
-        {primary.length > 0 && (
+        {candidates.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <p style={{ margin: "0 0 10px", fontSize: 13, color: "#374151", fontWeight: 600 }}>
-              Candidatos primarios ({primary.length})
+              Elegibles disponibles para la fecha ({candidates.length})
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
-              {primary.map((entry: MissionCandidateRankingEntry) => (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
+              {candidates.map((entry: MissionCandidateDateRankingEntry) => (
                 <label
                   key={entry.id}
                   style={{
                     display: "flex", alignItems: "center", gap: 10,
-                    padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+                    padding: "8px 12px", borderRadius: 8,
+                    cursor: "pointer",
                     background: selectedIds.has(entry.doctor_id) ? "#eff6ff" : "#f9fafb",
                     border: `1px solid ${selectedIds.has(entry.doctor_id) ? "#3b82f6" : "#e5e7eb"}`,
                   }}
@@ -121,14 +149,36 @@ function ConfirmModal({ mission, onClose, onConfirmed }: ConfirmModalProps) {
                     onChange={() => toggleDoctor(entry.doctor_id)}
                     style={{ accentColor: "#3b82f6" }}
                   />
-                  <span style={{ flex: 1, fontSize: 14, fontFamily: "monospace" }}>
-                    {entry.doctor_id}
+                  <span style={{ width: 34, fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                    #{entry.adjusted_position}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
+                      {doctorDisplayName(entry.doctor_id, entry.doctor_name, doctorNameById)}
+                    </span>
+                    {(entry.reasons.length > 0 || entry.warnings.length > 0) && (
+                      <span style={{ display: "block", fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                        {[...entry.reasons, ...entry.warnings].join(" ")}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    style={{
+                      ...candidateStatusStyle(entry.recommendation_status),
+                      borderRadius: 999,
+                      padding: "2px 8px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {candidateStatusLabel(entry.recommendation_status)}
                   </span>
                   <span style={{ fontSize: 12, color: "#6b7280" }}>
                     carga: {entry.total_load_score.toFixed(1)}
                   </span>
                   <span style={{ fontSize: 11, color: "#6b7280" }}>
-                    pos. {entry.ranking_position}
+                    base {entry.ranking_position}
                   </span>
                 </label>
               ))}
@@ -258,14 +308,12 @@ function NewMissionForm({ onCreated, onCancel }: NewMissionFormProps) {
 // ---------------------------------------------------------------------------
 
 export function MissionView() {
-  const { addToast } = useToast();
   const qc = useQueryClient();
   const defaults = currentYearMonth();
 
   // --- Ranking section state ---
   const [rankYear, setRankYear] = useState(defaults.year);
   const [rankMonth, setRankMonth] = useState(defaults.month);
-  const [rankingLoaded, setRankingLoaded] = useState(false);
 
   // --- Missions section state ---
   const [showNewForm, setShowNewForm] = useState(false);
@@ -275,18 +323,7 @@ export function MissionView() {
   const rankingQuery = useQuery({
     queryKey: ["ranking", rankYear, rankMonth],
     queryFn: () => missionsApi.getRanking(rankYear, rankMonth),
-    enabled: rankingLoaded,
     retry: false,
-  });
-
-  const generateMutation = useMutation({
-    mutationFn: () => missionsApi.generateRanking(rankYear, rankMonth),
-    onSuccess: () => {
-      addToast("success", "Ranking generado.");
-      setRankingLoaded(true);
-      qc.invalidateQueries({ queryKey: ["ranking", rankYear, rankMonth] });
-    },
-    onError: () => addToast("error", "Error al generar el ranking."),
   });
 
   // --- Missions query ---
@@ -295,9 +332,26 @@ export function MissionView() {
     queryFn: () => missionsApi.listMissions(),
   });
 
+  const doctorsQuery = useQuery({
+    queryKey: ["doctors", "mission-name-lookup"],
+    queryFn: () => doctorsApi.list(false),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const doctorNameById = useMemo(() => {
+    const doctors = doctorsQuery.data?.items ?? [];
+    return Object.fromEntries(doctors.map((doctor) => [doctor.id, doctor.name]));
+  }, [doctorsQuery.data]);
+
   const ranking = rankingQuery.data;
   const entries = ranking?.entries ?? [];
   const missions = missionsQuery.data ?? [];
+  const rankingErrorCode =
+    rankingQuery.error instanceof ApiError &&
+    rankingQuery.error.detail &&
+    typeof rankingQuery.error.detail === "object"
+      ? (rankingQuery.error.detail as { code?: string }).code
+      : null;
 
   return (
     <div className="feature-panel">
@@ -325,7 +379,7 @@ export function MissionView() {
               value={rankYear}
               min={2020}
               max={2099}
-              onChange={e => { setRankYear(Number(e.target.value)); setRankingLoaded(false); }}
+              onChange={e => setRankYear(Number(e.target.value))}
               style={{ width: 90, padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
             />
           </label>
@@ -333,7 +387,7 @@ export function MissionView() {
             Mes
             <select
               value={rankMonth}
-              onChange={e => { setRankMonth(Number(e.target.value)); setRankingLoaded(false); }}
+              onChange={e => setRankMonth(Number(e.target.value))}
               style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
             >
               {[
@@ -344,38 +398,22 @@ export function MissionView() {
               ))}
             </select>
           </label>
-          <button
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-            style={{
-              padding: "7px 18px", borderRadius: 8, border: "none",
-              background: "#0f172a", color: "#fff", cursor: "pointer",
-              fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6,
-            }}
-          >
-            <ChevronDown size={15} />
-            {generateMutation.isPending ? "Generando…" : "Generar ranking"}
-          </button>
-          {!rankingLoaded && (
-            <button
-              onClick={() => setRankingLoaded(true)}
-              style={{
-                padding: "7px 14px", borderRadius: 8,
-                border: "1px solid #d1d5db", background: "#fff",
-                cursor: "pointer", fontSize: 13, color: "#374151",
-              }}
-            >
-              Ver existente
-            </button>
-          )}
         </div>
 
         {rankingQuery.isLoading && (
           <p style={{ color: "#6b7280", fontSize: 13 }}>Cargando ranking…</p>
         )}
 
-        {rankingQuery.isError && (
-          <p style={{ color: "#6b7280", fontSize: 13 }}>Sin ranking generado para este periodo.</p>
+        {rankingQuery.isError && rankingErrorCode === "approved_calendar_required" && (
+          <p style={{ color: "#92400e", fontSize: 13 }}>
+            Este mes no tiene calendario aprobado. Aprueba el calendario para ver su ranking.
+          </p>
+        )}
+
+        {rankingQuery.isError && rankingErrorCode !== "approved_calendar_required" && (
+          <p style={{ color: "#6b7280", fontSize: 13 }}>
+            Sin ranking generado para este periodo.
+          </p>
         )}
 
         {ranking && entries.length > 0 && (
@@ -384,7 +422,7 @@ export function MissionView() {
               <thead>
                 <tr>
                   <th>Pos.</th>
-                  <th>Doctor ID</th>
+                  <th>Médico</th>
                   <th>Carga total</th>
                   <th>Carga mensual</th>
                   <th>Elegible</th>
@@ -394,7 +432,7 @@ export function MissionView() {
                 {entries.map(entry => (
                   <tr key={entry.id}>
                     <td style={{ fontWeight: 700 }}>{entry.ranking_position}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 13 }}>{entry.doctor_id}</td>
+                    <td>{doctorDisplayName(entry.doctor_id, entry.doctor_name, doctorNameById)}</td>
                     <td>{entry.total_load_score.toFixed(2)}</td>
                     <td>{entry.monthly_service_load.toFixed(2)}</td>
                     <td>
@@ -500,6 +538,7 @@ export function MissionView() {
       {confirmingMission && (
         <ConfirmModal
           mission={confirmingMission}
+          doctorNameById={doctorNameById}
           onClose={() => setConfirmingMission(null)}
           onConfirmed={() => {
             setConfirmingMission(null);

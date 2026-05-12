@@ -14,10 +14,12 @@ class CalendarService:
         repo: CalendarRepository,
         audit: AuditService | None = None,
         triggers: NotificationTriggers | None = None,
+        mission_ranking_service=None,
     ) -> None:
         self.repo = repo
         self.audit = audit
         self.triggers = triggers
+        self.mission_ranking_service = mission_ranking_service
 
     def create_calendar(
         self,
@@ -77,6 +79,19 @@ class CalendarService:
     def list_calendars(self) -> list[CalendarModel]:
         return self.repo.list_calendars()
 
+    def soft_delete_calendar(self, *, actor_id: str, calendar_id: str) -> None:
+        """Soft-delete a calendar so it no longer appears in list/get queries."""
+        calendar = self.repo.get_calendar_by_id(calendar_id)
+        if calendar is None:
+            raise CalendarServiceError(
+                "calendar_not_found",
+                f"Calendar with id {calendar_id} not found.",
+            )
+        self.repo.soft_delete_calendar(calendar_id)
+
+        if self.audit is not None:
+            self.audit.log_calendar_deleted(actor_id=actor_id, calendar=calendar)
+
     def approve_version(
         self,
         *,
@@ -135,6 +150,14 @@ class CalendarService:
             self.triggers.on_calendar_approved(
                 actor_id=actor_id,
                 assignments=assignments,
+            )
+
+        if self.mission_ranking_service is not None:
+            self.mission_ranking_service.generate_ranking(
+                actor_id=actor_id,
+                year=calendar.year,
+                month=calendar.month,
+                calendar_version_id=version.id,
             )
 
         return version

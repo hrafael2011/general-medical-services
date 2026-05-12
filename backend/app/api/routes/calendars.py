@@ -63,26 +63,40 @@ def get_calendar_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarService:
     from backend.app.application.audit.service import AuditService
+    from backend.app.application.missions.ranking_service import MissionRankingService
     from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
     from backend.app.application.notifications.service import NotificationService
     from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.audit import AuditRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.missions import MissionRepository
     from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
+    audit = AuditService(AuditRepository(session))
+    calendar_repo = CalendarRepository(session)
+    doctor_repo = DoctorRepository(session)
     provider = TwilioProvider() if settings.twilio_account_sid else FakeProvider()
     triggers = NotificationTriggers(
         notification_service=NotificationService(
             repo=NotificationRepository(session),
             provider=provider,
         ),
-        doctor_repo=DoctorRepository(session),
+        doctor_repo=doctor_repo,
+    )
+    mission_ranking_service = MissionRankingService(
+        MissionRepository(session),
+        doctor_repo,
+        calendar_repo,
+        CatalogRepository(session),
+        audit=audit,
     )
 
     return CalendarService(
-        CalendarRepository(session),
-        audit=AuditService(AuditRepository(session)),
+        calendar_repo,
+        audit=audit,
         triggers=triggers,
+        mission_ranking_service=mission_ranking_service,
     )
 
 
@@ -92,6 +106,7 @@ def get_generation_service(
     from backend.app.application.audit.service import AuditService
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.infrastructure.repositories.missions import MissionRepository
 
@@ -165,6 +180,23 @@ def get_calendar(
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
     return CalendarRead.model_validate(calendar)
+
+
+@router.delete("/{calendar_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_calendar(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[CalendarService, Depends(get_calendar_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.soft_delete_calendar(
+            actor_id=current_user.id,
+            calendar_id=calendar_id,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
 
 
 @router.get("/{calendar_id}/grid", response_model=CalendarGridResponse)

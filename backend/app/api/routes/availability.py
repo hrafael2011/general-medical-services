@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -52,6 +53,16 @@ def list_availability(
     repo = AvailabilityRepository(session)
     records = repo.list_availability_for_doctor(doctor_id)
     return [AvailabilityRead.model_validate(r) for r in records]
+
+
+@router.get("/available-doctors", response_model=list[str])
+def get_available_doctors(
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[AvailabilityService, Depends(get_availability_service)],
+    target_date: date = Query(..., alias="date"),
+) -> list[str]:
+    """Return doctor IDs of service-active doctors available on the given date."""
+    return service.get_available_doctor_ids(target_date)
 
 
 @router.post("/doctors/{doctor_id}/weekly", response_model=AvailabilityRead, status_code=201)

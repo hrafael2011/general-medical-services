@@ -2,12 +2,13 @@
 
 import logging
 import re
+import unicodedata
 from datetime import date, timedelta
 from typing import Any
 
-from backend.app.application.telegram.schemas import ResolveResult
-
 from sqlalchemy.orm import Session
+
+from backend.app.application.telegram.schemas import ResolveResult
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,29 @@ _MONTH_NAMES: dict[str, int] = {
     "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
     "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
 }
+
+_FEMALE_WORDS = {
+    "femenino", "femenina", "femeninos", "femeninas",
+    "femenio", "femenios", "mujer", "mujeres",
+}
+_MALE_WORDS = {
+    "masculino", "masculina", "masculinos", "masculinas",
+    "masuclino", "masuclinos", "masuculino", "masuculinos",
+    "massulino", "massulinos", "maculino", "maculinos",
+    "hombre", "hombres", "varon", "varones",
+}
+
+
+def _normalize_text(text: str) -> str:
+    """Lowercase, strip accents and collapse punctuation/whitespace."""
+    nfkd = unicodedata.normalize("NFD", text.lower())
+    no_accents = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+    cleaned = re.sub(r"[^\w\s]", " ", no_accents)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _tokens(text: str) -> set[str]:
+    return set(_normalize_text(text).split())
 
 
 class EntityResolver:
@@ -65,20 +89,38 @@ class EntityResolver:
             weekday = today.weekday()
             start = today - timedelta(days=weekday)
             end = start + timedelta(days=6)
-            return {"type": "date_range", "start": start.strftime("%Y-%m-%d"), "end": end.strftime("%Y-%m-%d")}
+            return {
+                "type": "date_range",
+                "start": start.strftime("%Y-%m-%d"),
+                "end": end.strftime("%Y-%m-%d"),
+            }
 
         # "la próxima semana" / "la semana que viene"
-        if t in ("la próxima semana", "la proxima semana", "la semana que viene", "próxima semana", "proxima semana"):
+        if t in (
+            "la próxima semana",
+            "la proxima semana",
+            "la semana que viene",
+            "próxima semana",
+            "proxima semana",
+        ):
             weekday = today.weekday()
             next_monday = today - timedelta(days=weekday) + timedelta(days=7)
-            return {"type": "date_range", "start": next_monday.strftime("%Y-%m-%d"), "end": (next_monday + timedelta(days=6)).strftime("%Y-%m-%d")}
+            return {
+                "type": "date_range",
+                "start": next_monday.strftime("%Y-%m-%d"),
+                "end": (next_monday + timedelta(days=6)).strftime("%Y-%m-%d"),
+            }
 
         # "el mes pasado"
         if t == "el mes pasado":
             first_of_this_month = today.replace(day=1)
             last_of_last_month = first_of_this_month - timedelta(days=1)
             start = last_of_last_month.replace(day=1)
-            return {"type": "date_range", "start": start.strftime("%Y-%m-%d"), "end": last_of_last_month.strftime("%Y-%m-%d")}
+            return {
+                "type": "date_range",
+                "start": start.strftime("%Y-%m-%d"),
+                "end": last_of_last_month.strftime("%Y-%m-%d"),
+            }
 
         # "este mes"
         if t == "este mes":
@@ -88,10 +130,20 @@ class EntityResolver:
             else:
                 next_month = first.replace(year=first.year + 1, month=1)
             last = next_month - timedelta(days=1)
-            return {"type": "date_range", "start": first.strftime("%Y-%m-%d"), "end": last.strftime("%Y-%m-%d")}
+            return {
+                "type": "date_range",
+                "start": first.strftime("%Y-%m-%d"),
+                "end": last.strftime("%Y-%m-%d"),
+            }
 
         # "el próximo mes" / "el mes que viene"
-        if t in ("el próximo mes", "el proximo mes", "el mes que viene", "próximo mes", "proximo mes"):
+        if t in (
+            "el próximo mes",
+            "el proximo mes",
+            "el mes que viene",
+            "próximo mes",
+            "proximo mes",
+        ):
             first_this = today.replace(day=1)
             if first_this.month < 12:
                 first_next = first_this.replace(month=first_this.month + 1)
@@ -100,8 +152,15 @@ class EntityResolver:
             if first_next.month < 12:
                 last_next = first_next.replace(month=first_next.month + 1) - timedelta(days=1)
             else:
-                last_next = first_next.replace(year=first_next.year + 1, month=1) - timedelta(days=1)
-            return {"type": "date_range", "start": first_next.strftime("%Y-%m-%d"), "end": last_next.strftime("%Y-%m-%d")}
+                last_next = first_next.replace(
+                    year=first_next.year + 1,
+                    month=1,
+                ) - timedelta(days=1)
+            return {
+                "type": "date_range",
+                "start": first_next.strftime("%Y-%m-%d"),
+                "end": last_next.strftime("%Y-%m-%d"),
+            }
 
         # Named months: "abril", "enero", etc.
         if t in _MONTH_NAMES:
@@ -157,7 +216,12 @@ class EntityResolver:
         name_lower = name.lower().strip()
         matches = [a for a in areas if name_lower in a.display_name.lower()]
         result = [
-            {"id": m.id, "code": m.code, "display_name": m.display_name, "load_weight": float(m.load_weight)}
+            {
+                "id": m.id,
+                "code": m.code,
+                "display_name": m.display_name,
+                "load_weight": float(m.load_weight),
+            }
             for m in matches
         ]
         if len(result) == 0:
@@ -251,9 +315,10 @@ class EntityResolver:
             "enero", "febrero", "marzo", "abril", "mayo", "junio",
             "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
         ]
-        msg_lower = user_message.lower()
+        msg_normalized = _normalize_text(user_message)
+        msg_words = _tokens(user_message)
         for kw in date_keywords:
-            if kw in msg_lower:
+            if _normalize_text(kw) in msg_normalized:
                 date_result = self.resolve_date_expression(kw)
                 if date_result is not None:
                     resolved["date"] = date_result
@@ -261,11 +326,15 @@ class EntityResolver:
                     if dtype == "single_date":
                         hints_parts.append(f"date={date_result['value']}")
                     elif dtype == "date_range":
-                        hints_parts.append(f"start={date_result['start']}, end={date_result['end']}")
+                        hints_parts.append(
+                            f"start={date_result['start']}, end={date_result['end']}"
+                        )
                     elif dtype == "month":
                         hints_parts.append(f"month={date_result['month']}")
                     elif dtype == "month_year":
-                        hints_parts.append(f"month={date_result['month']}, year={date_result['year']}")
+                        hints_parts.append(
+                            f"month={date_result['month']}, year={date_result['year']}"
+                        )
                 break
 
         # Doctor names — scan for known doctor surnames
@@ -276,18 +345,29 @@ class EntityResolver:
             for doc in all_docs:
                 parts = doc.name.lower().split()
                 surname = parts[-1] if parts else ""
-                if len(surname) >= 3 and re.search(rf"\b{re.escape(surname)}\b", msg_lower):
-                    candidates = [d for d in all_docs if surname in d.name.lower()]
+                surname_normalized = _normalize_text(surname)
+                if (
+                    len(surname_normalized) >= 3
+                    and re.search(rf"\b{re.escape(surname_normalized)}\b", msg_normalized)
+                ):
+                    candidates = [
+                        d for d in all_docs
+                        if surname_normalized in _normalize_text(d.name)
+                    ]
                     if len(candidates) == 1:
                         resolved["doctor"] = {"id": candidates[0].id, "name": candidates[0].name}
                         hints_parts.append(f"doctor_id={candidates[0].id}")
                     elif len(candidates) > 1:
+                        options = ", ".join(
+                            f"{i+1}. {d.name}" for i, d in enumerate(candidates)
+                        )
                         ambiguous.append({
                             "field": "doctor",
                             "candidates": [{"id": d.id, "name": d.name} for d in candidates],
-                            "question": f"Encontré más de un médico con el apellido {surname.title()}: "
-                                        + ", ".join(f"{i+1}. {d.name}" for i, d in enumerate(candidates))
-                                        + ". ¿Cuál deseas?",
+                            "question": (
+                                f"Encontré más de un médico con el apellido "
+                                f"{surname.title()}: {options}. ¿Cuál deseas?"
+                            ),
                         })
                     break
 
@@ -297,7 +377,9 @@ class EntityResolver:
             catalog_repo = CatalogRepository(self._session)
             areas = catalog_repo.list_service_areas()
             for area in areas:
-                if area.display_name.lower() in msg_lower or area.code.lower() in msg_lower:
+                area_name = _normalize_text(area.display_name)
+                area_code = _normalize_text(area.code)
+                if area_name in msg_normalized or area_code in msg_normalized:
                     resolved["area"] = {"id": area.id, "display_name": area.display_name}
                     hints_parts.append(f"area_id={area.id}")
                     break
@@ -308,20 +390,45 @@ class EntityResolver:
             catalog_repo = CatalogRepository(self._session)
             ranks = catalog_repo.list_ranks()
             for rank in ranks:
-                rank_words = rank.normalized_name.lower().split()
-                if any(word in msg_lower for word in rank_words if len(word) >= 3):
-                    resolved["rank"] = {"id": rank.id, "name": rank.name, "normalized_name": rank.normalized_name}
+                rank_words = _normalize_text(rank.normalized_name).split()
+                if any(word in msg_normalized for word in rank_words if len(word) >= 3):
+                    resolved["rank"] = {
+                        "id": rank.id,
+                        "name": rank.name,
+                        "normalized_name": rank.normalized_name,
+                    }
                     hints_parts.append(f"rank_id={rank.id}, rank_name='{rank.normalized_name}'")
                     break
 
+        # Department detection
+        if self._session is not None:
+            from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+            catalog_repo = CatalogRepository(self._session)
+            departments = catalog_repo.list_departments()
+            for department in departments:
+                dept_name = _normalize_text(department.normalized_name)
+                if dept_name in msg_normalized:
+                    resolved["department"] = {
+                        "id": department.id,
+                        "name": department.name,
+                        "normalized_name": department.normalized_name,
+                    }
+                    hints_parts.append(
+                        f"department_id={department.id}, "
+                        f"department_name='{department.normalized_name}'"
+                    )
+                    break
+
         # Sex/gender detection
-        _FEMALE_WORDS = {"femenino", "femenina", "femeninos", "femeninas", "mujer", "mujeres"}
-        _MALE_WORDS = {"masculino", "masculina", "masculinos", "masculinas", "hombre", "hombres", "varon", "varones"}
-        msg_words = set(msg_lower.split())
-        if _FEMALE_WORDS & msg_words:
+        has_female = bool(_FEMALE_WORDS & msg_words)
+        has_male = bool(_MALE_WORDS & msg_words)
+        if has_female and has_male:
+            resolved["sex"] = ["male", "female"]
+            hints_parts.append("sex='male|female'")
+        elif has_female:
             resolved["sex"] = "female"
             hints_parts.append("sex='female'")
-        elif _MALE_WORDS & msg_words:
+        elif has_male:
             resolved["sex"] = "male"
             hints_parts.append("sex='male'")
 

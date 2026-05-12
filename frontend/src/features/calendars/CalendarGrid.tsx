@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarsApi, CalendarAssignmentRead, DaySlot } from "../../api/calendars";
-import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
+import { doctorsApi, availabilityApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
 import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
@@ -13,7 +13,7 @@ import { ApiError } from "../../api/client";
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-interface AssignTarget { date: string; areaId: string; areaName: string; }
+interface AssignTarget { date: string; areaId: string; areaName: string; currentAssignmentId?: string; currentDoctorId?: string; }
 interface RemoveTarget { assignment: CalendarAssignmentRead; areaName: string; }
 
 interface CalendarDay {
@@ -168,11 +168,16 @@ export function CalendarGrid() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: (doctorId: string) => calendarsApi.assignDoctor(calendarId!, data!.version.id, {
-      service_date: assignTarget!.date,
-      service_area_id: assignTarget!.areaId,
-      doctor_id: doctorId,
-    }),
+    mutationFn: (doctorId: string) => {
+      if (assignTarget?.currentAssignmentId) {
+        return calendarsApi.replaceAssignment(calendarId!, data!.version.id, assignTarget.currentAssignmentId, doctorId);
+      }
+      return calendarsApi.assignDoctor(calendarId!, data!.version.id, {
+        service_date: assignTarget!.date,
+        service_area_id: assignTarget!.areaId,
+        doctor_id: doctorId,
+      });
+    },
     onSuccess: () => { invalidate(); setAssignTarget(null); addToast("success", "Médico asignado."); },
     onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al asignar."),
   });
@@ -181,6 +186,19 @@ export function CalendarGrid() {
     mutationFn: () => calendarsApi.removeAssignment(calendarId!, data!.version.id, removeTarget!.assignment.id),
     onSuccess: () => { invalidate(); setRemoveTarget(null); addToast("success", "Asignación quitada."); },
     onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al quitar."),
+  });
+
+  const quickRemoveMutation = useMutation({
+    mutationFn: (assignmentId: string) =>
+      calendarsApi.removeAssignment(calendarId!, data!.version.id, assignmentId),
+    onSuccess: () => { invalidate(); setAssignTarget(null); addToast("success", "Asignación quitada."); },
+    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al quitar."),
+  });
+
+  const { data: availableDoctorIds } = useQuery({
+    queryKey: ["available-doctors", assignTarget?.date],
+    queryFn: () => availabilityApi.availableDoctors(assignTarget!.date),
+    enabled: !!assignTarget,
   });
 
   if (!calendarId) return null;
@@ -243,14 +261,20 @@ export function CalendarGrid() {
           return (
             <div key={cd.dateStr} className={`calendar-cell ${isApproved ? "calendar-cell--approved" : ""}`}>
               <span className="calendar-day-number">{cd.day}</span>
-              {assignments.map((areaAss, ai) => {
+              {assignments.map((areaAss) => {
                 const color = areaColor(areaAss.areaName);
                 const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
                 const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
                 const handleAreaClick = () => {
                   if (!isDraft) return;
                   if (areaAss.slot?.assignment) {
-                    setRemoveTarget({ assignment: areaAss.slot.assignment, areaName: areaAss.areaName });
+                    setAssignTarget({
+                      date: cd.dateStr!,
+                      areaId: areaAss.areaId,
+                      areaName: areaAss.areaName,
+                      currentAssignmentId: areaAss.slot.assignment.id,
+                      currentDoctorId: areaAss.slot.assignment.doctor_id,
+                    });
                   } else {
                     setAssignTarget({ date: cd.dateStr!, areaId: areaAss.areaId, areaName: areaAss.areaName });
                   }
@@ -305,9 +329,12 @@ export function CalendarGrid() {
           date={assignTarget.date}
           areaName={assignTarget.areaName}
           doctors={doctorsData?.items ?? []}
+          currentDoctorId={assignTarget.currentDoctorId}
+          availableDoctorIds={availableDoctorIds}
           onConfirm={doctorId => assignMutation.mutate(doctorId)}
           onClose={() => setAssignTarget(null)}
           isLoading={assignMutation.isPending}
+          onRemove={assignTarget.currentAssignmentId ? () => quickRemoveMutation.mutate(assignTarget.currentAssignmentId!) : undefined}
         />
       )}
 

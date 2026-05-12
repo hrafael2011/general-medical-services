@@ -123,4 +123,7 @@ export const calendarsApi = {
 
   generate: (calendarId: string) =>
     apiFetch<GenerationResponse>(`/calendars/${calendarId}/generate`, { method: "POST" }),
+
+  delete: (calendarId: string) =>
+    apiFetch<void>(`/calendars/${calendarId}`, { method: "DELETE" }),
 };

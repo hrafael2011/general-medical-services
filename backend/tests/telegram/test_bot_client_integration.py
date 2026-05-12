@@ -12,10 +12,13 @@ from backend.app.core.config import settings
 
 TEST_CHAT_ID = 1368828040
 
-pytestmark = pytest.mark.skipif(
-    not settings.telegram_bot_token,
-    reason="TELEGRAM_BOT_TOKEN no configurado",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not settings.telegram_bot_token,
+        reason="TELEGRAM_BOT_TOKEN no configurado",
+    ),
+]
 
 
 @pytest.fixture(scope="module")
@@ -52,8 +55,9 @@ def test_send_document_pdf(client: TelegramBotClient) -> None:
 
 
 def test_send_document_excel(client: TelegramBotClient) -> None:
-    import openpyxl
     import io
+
+    import openpyxl
 
     wb = openpyxl.Workbook()
     ws = wb.active

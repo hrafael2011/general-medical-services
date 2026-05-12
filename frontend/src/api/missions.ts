@@ -7,6 +7,7 @@ import { apiFetch } from "./client";
 export interface MissionCandidateRankingEntry {
   id: string;
   doctor_id: string;
+  doctor_name: string | null;
   ranking_position: number;
   total_load_score: number;
   monthly_service_load: number;
@@ -31,6 +32,7 @@ export interface MissionParticipant {
   id: string;
   mission_assignment_id: string;
   doctor_id: string;
+  doctor_name: string | null;
   selection_source: string;
   ranking_position: number | null;
   score: number | null;
@@ -58,6 +60,21 @@ export interface MissionCandidateResponse {
   participant_count: number;
   primary: MissionCandidateRankingEntry[];
   alternates: MissionCandidateRankingEntry[];
+}
+
+export interface MissionCandidateDateRankingEntry extends Omit<MissionCandidateRankingEntry, "reasons" | "warnings"> {
+  adjusted_position: number;
+  recommendation_status: "recommended" | "alternate" | "unavailable";
+  selectable: boolean;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface MissionCandidateDateRankingResponse {
+  mission_date: string;
+  month: number;
+  year: number;
+  entries: MissionCandidateDateRankingEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +127,16 @@ export const missionsApi = {
         mission_date: missionDate,
         participant_count: participantCount,
         include_alternates: includeAlternates,
+      }),
+    }),
+
+  getRankedCandidatesForDate: (missionDate: string) =>
+    apiFetch<MissionCandidateDateRankingResponse>("/missions/candidates/ranked", {
+      method: "POST",
+      body: JSON.stringify({
+        mission_date: missionDate,
+        participant_count: 1,
+        include_alternates: true,
       }),
     }),
 };

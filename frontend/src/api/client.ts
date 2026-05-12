@@ -26,7 +26,16 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  public detail: unknown;
+
+  constructor(public status: number, detail: unknown) {
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object" && "message" in detail
+          ? String((detail as { message?: unknown }).message)
+          : "Error del servidor";
     super(message);
+    this.detail = detail;
   }
 }

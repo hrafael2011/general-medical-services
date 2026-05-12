@@ -392,6 +392,26 @@ class TestAllQueryTypes:
         assert result.response_text is not None
         assert "No se encontraron" not in result.response_text
 
+    def test_count_assigned_doctors_by_month(self, sqlite_router) -> None:
+        result = sqlite_router.handle(
+            action="query",
+            query_type="count_assigned_doctors_by_month",
+            params={"year": 2026, "month": 5},
+            user_message="cuantos medicos fueron asignados en mayo"
+        )
+        assert "8" in result.response_text
+
+    def test_list_assigned_doctors_by_month_does_not_show_ids(self, sqlite_router) -> None:
+        result = sqlite_router.handle(
+            action="query",
+            query_type="list_assigned_doctors_by_month",
+            params={"year": 2026, "month": 5},
+            user_message="lista medicos asignados en mayo"
+        )
+        assert result.response_text is not None
+        assert "No se encontraron" not in result.response_text
+        assert "_id" not in result.response_text
+
     # ── mission_ranking ──
     def test_mission_ranking(self, sqlite_router) -> None:
         result = sqlite_router.handle(

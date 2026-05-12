@@ -34,6 +34,9 @@ vi.mock("../../api/doctors", () => ({
       { id: "area-3", display_name: "Disponible", code: "DI", active: true },
     ]),
   },
+  availabilityApi: {
+    availableDoctors: vi.fn().mockResolvedValue([]),
+  },
 }));
 
 vi.mock("../../components/Toast", () => ({

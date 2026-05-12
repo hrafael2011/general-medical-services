@@ -30,6 +30,18 @@ export interface CreateDoctorPayload {
 export interface ServiceAreaRead { id: string; code: string; display_name: string; active: boolean; }
 export interface RankRead { id: string; name: string; abbreviation: string; }
 
+export interface AvailabilityRead {
+  id: string;
+  doctor_id: string;
+  availability_type: string;
+  days_of_week: number[] | null;
+  available_dates: number[] | null;
+  weekday: number | null;
+  week_number: number | null;
+  year: number | null;
+  month: number | null;
+}
+
 export const doctorsApi = {
   list: (activeOnly = false) =>
     apiFetch<DoctorListResponse>(`/doctors?active_only=${activeOnly}`),
@@ -56,5 +68,7 @@ export const availabilityApi = {
   setRecurring: (doctorId: string, body: { weekday: number; week_number: number }) =>
     apiFetch<unknown>(`/availability/doctors/${doctorId}/recurring`, { method: "POST", body: JSON.stringify(body) }),
   list: (doctorId: string) =>
-    apiFetch<unknown[]>(`/availability/doctors/${doctorId}`),
+    apiFetch<AvailabilityRead[]>(`/availability/doctors/${doctorId}`),
+  availableDoctors: (date: string) =>
+    apiFetch<string[]>(`/availability/available-doctors?date=${date}`),
 };

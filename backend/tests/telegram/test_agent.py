@@ -56,6 +56,27 @@ def test_agent_constructor() -> None:
     assert agent._router is not None
 
 
+def test_agent_routes_monthly_assigned_doctor_count_without_llm() -> None:
+    """Preguntas claras de asignaciones mensuales usan consulta segura registrada."""
+    llm = FakeLLMProvider(responses={
+        "cuantos medicos fueron asignados para servicios en junio 2026": (
+            '{"action": "query", "query_type": "list_active_doctors", "params": {}}'
+        )
+    })
+    router = RouterStub(result=AgentResult(response_text="Resultado: total: 76", agent_action="query"))
+    agent = ConversationalAgent(llm=llm, router=router)
+
+    result = agent.process(
+        text="cuantos medicos fueron asignados para servicios en junio 2026"
+    )
+
+    assert result.response_text == "Resultado: total: 76"
+    assert router.last_handle_args is not None
+    assert router.last_handle_args["query_type"] == "count_assigned_doctors_by_month"
+    assert router.last_handle_args["params"] == {"month": 6, "year": 2026}
+    assert llm.calls == []
+
+
 def test_direct_reply_when_llm_returns_text(db_session) -> None:
     """When LLM returns plain text (not JSON), it's passed through as response."""
     llm = FakeLLMProvider(responses={"hola": "¡Hola! ¿En qué puedo ayudarte?"})

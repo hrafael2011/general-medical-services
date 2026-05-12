@@ -8,6 +8,7 @@ class MissionParticipantRead(BaseModel):
     id: str
     mission_assignment_id: str
     doctor_id: str
+    doctor_name: str | None = None
     selection_source: str
     ranking_position: int | None
     score: float | None
@@ -53,6 +54,7 @@ class CreateMissionRequest(BaseModel):
 class MissionCandidateRankingEntryRead(BaseModel):
     id: str
     doctor_id: str
+    doctor_name: str | None = None
     ranking_position: int
     total_load_score: float
     monthly_service_load: float
@@ -92,6 +94,30 @@ class MissionCandidateResponse(BaseModel):
     participant_count: int
     primary: list[MissionCandidateRankingEntryRead]
     alternates: list[MissionCandidateRankingEntryRead]
+
+
+class MissionCandidateDateRankingEntryRead(BaseModel):
+    id: str
+    doctor_id: str
+    doctor_name: str | None = None
+    ranking_position: int
+    adjusted_position: int
+    recommendation_status: str
+    selectable: bool
+    total_load_score: float
+    monthly_service_load: float
+    recent_service_load: float
+    monthly_mission_load: float
+    eligible: bool
+    reasons: list[str]
+    warnings: list[str]
+
+
+class MissionCandidateDateRankingResponse(BaseModel):
+    mission_date: date
+    month: int
+    year: int
+    entries: list[MissionCandidateDateRankingEntryRead]
 
 
 # --- Mission Confirmation ---

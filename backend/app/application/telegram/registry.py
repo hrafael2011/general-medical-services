@@ -162,6 +162,62 @@ DEFAULT_QUERY_TYPES = [
         "description": "Cantidad de servicios por medico en un rango de fechas.",
     },
     {
+        "query_type": "count_assigned_doctors_by_month",
+        "sql_template": (
+            "SELECT COUNT(DISTINCT ca.doctor_id) AS total "
+            "FROM calendar_assignments ca "
+            "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
+            "JOIN calendars c ON cv.calendar_id = c.id "
+            "WHERE c.year = :year AND c.month = :month "
+            "AND cv.version_number = ("
+            " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
+            " WHERE cv2.calendar_id = c.id"
+            ")"
+        ),
+        "params_schema": {"year": "int", "month": "int"},
+        "description": "Cuenta cuantos medicos distintos fueron asignados a servicios en un mes.",
+    },
+    {
+        "query_type": "list_assigned_doctors_by_month",
+        "sql_template": (
+            "SELECT d.name, COUNT(ca.id) AS total "
+            "FROM doctors d "
+            "JOIN calendar_assignments ca ON ca.doctor_id = d.id "
+            "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
+            "JOIN calendars c ON cv.calendar_id = c.id "
+            "WHERE c.year = :year AND c.month = :month "
+            "AND cv.version_number = ("
+            " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
+            " WHERE cv2.calendar_id = c.id"
+            ") "
+            "GROUP BY d.name "
+            "ORDER BY d.name"
+        ),
+        "params_schema": {"year": "int", "month": "int"},
+        "description": "Lista los medicos asignados a servicios en un mes y cuantos servicios tiene cada uno.",
+    },
+    {
+        "query_type": "unassigned_doctors_by_month",
+        "sql_template": (
+            "SELECT d.name "
+            "FROM doctors d "
+            "WHERE d.active = TRUE AND d.service_active = TRUE "
+            "AND NOT EXISTS ("
+            " SELECT 1 FROM calendar_assignments ca "
+            " JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
+            " JOIN calendars c ON cv.calendar_id = c.id "
+            " WHERE ca.doctor_id = d.id AND c.year = :year AND c.month = :month "
+            " AND cv.version_number = ("
+            "  SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
+            "  WHERE cv2.calendar_id = c.id"
+            " )"
+            ") "
+            "ORDER BY d.name"
+        ),
+        "params_schema": {"year": "int", "month": "int"},
+        "description": "Lista los medicos activos que no fueron asignados en un mes.",
+    },
+    {
         "query_type": "mission_ranking",
         "sql_template": "SELECT mcr.period_year, mcr.period_month, mcre.ranking_position, d.name AS doctor_name, mcre.total_load_score, mcre.eligible FROM mission_candidate_rankings mcr JOIN mission_candidate_ranking_entries mcre ON mcre.ranking_id = mcr.id JOIN doctors d ON mcre.doctor_id = d.id WHERE mcr.period_year = :year AND mcr.period_month = :month ORDER BY mcre.ranking_position LIMIT 20",
         "params_schema": {"year": "int", "month": "int"},

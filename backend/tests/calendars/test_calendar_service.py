@@ -9,6 +9,14 @@ def _make_service(db_session) -> CalendarService:
     return CalendarService(CalendarRepository(db_session))
 
 
+class _FakeMissionRankingService:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def generate_ranking(self, **kwargs):
+        self.calls.append(kwargs)
+
+
 # ---------------------------------------------------------------------------
 # create_calendar
 # ---------------------------------------------------------------------------
@@ -86,6 +94,34 @@ def test_approve_version(db_session) -> None:
 
     updated_calendar = repo.get_calendar_by_id(calendar.id)
     assert updated_calendar.status == "approved"
+
+
+def test_approve_version_generates_mission_ranking(db_session) -> None:
+    ranking_service = _FakeMissionRankingService()
+    service = CalendarService(
+        CalendarRepository(db_session),
+        mission_ranking_service=ranking_service,
+    )
+
+    calendar = service.create_calendar(
+        actor_id="actor-001", month=5, year=2026, notes=None
+    )
+
+    version = service.approve_version(
+        actor_id="actor-001",
+        calendar_id=calendar.id,
+        version_number=1,
+        notes=None,
+    )
+
+    assert ranking_service.calls == [
+        {
+            "actor_id": "actor-001",
+            "year": 2026,
+            "month": 5,
+            "calendar_version_id": version.id,
+        }
+    ]
 
 
 def test_approve_already_approved_raises(db_session) -> None:

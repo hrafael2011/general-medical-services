@@ -212,6 +212,15 @@ class AuditService:
             },
         )
 
+    def log_calendar_deleted(self, *, actor_id: str, calendar) -> AuditEventModel:
+        return self._create(
+            actor_id=actor_id,
+            action_type="calendar_deleted",
+            entity_type="calendar",
+            entity_id=calendar.id,
+            before={"year": calendar.year, "month": calendar.month, "status": calendar.status},
+        )
+
     # --- Assignment events ---
 
     def log_assignment_added(self, *, actor_id: str, assignment) -> AuditEventModel:

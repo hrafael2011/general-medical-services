@@ -1,9 +1,10 @@
 """Tests for MemoryManager — conversation history loading."""
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from backend.app.application.telegram.memory import MemoryManager
+from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
 from backend.app.infrastructure.db.models.telegram import TelegramInteractionModel
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 
@@ -98,8 +99,18 @@ def test_load_history_ignores_other_users(db_session) -> None:
     """Las interacciones de otro telegram_user_id no aparecen en el historial."""
     tg_id_a = f"tg-{uuid.uuid4().hex[:8]}"
     tg_id_b = f"tg-{uuid.uuid4().hex[:8]}"
-    _add_interaction(db_session, telegram_user_id=tg_id_a, input_text="A habla", response_text="A resp")
-    _add_interaction(db_session, telegram_user_id=tg_id_b, input_text="B habla", response_text="B resp")
+    _add_interaction(
+        db_session,
+        telegram_user_id=tg_id_a,
+        input_text="A habla",
+        response_text="A resp",
+    )
+    _add_interaction(
+        db_session,
+        telegram_user_id=tg_id_b,
+        input_text="B habla",
+        response_text="B resp",
+    )
 
     memory = MemoryManager(TelegramRepository(db_session))
     history_a = memory.load_history(tg_id_a)
@@ -111,11 +122,6 @@ def test_load_history_ignores_other_users(db_session) -> None:
 # ---------------------------------------------------------------------------
 # SessionStore tests
 # ---------------------------------------------------------------------------
-
-
-import time
-from backend.app.application.telegram.memory import SessionStore, SessionState
-
 
 def test_session_store_set_and_get() -> None:
     """SessionStore guarda y recupera estado por telegram_user_id."""
@@ -180,15 +186,10 @@ def test_session_store_cleanup_expired() -> None:
 
 
 def test_memory_load_history_filters_formatted_responses(db_session) -> None:
-    """Respuestas formateadas ('Se encontraron...') son reemplazadas con resumen estructurado."""
-    import uuid as _uuid
-    from datetime import datetime as _dt, UTC
-
-    from backend.app.infrastructure.db.models.telegram import TelegramInteractionModel
-
-    tg_id = f"tg-{_uuid.uuid4().hex[:8]}"
+    """Tool responses are skipped so internal summaries never leak to the LLM."""
+    tg_id = f"tg-{uuid.uuid4().hex[:8]}"
     interaction = TelegramInteractionModel(
-        id=str(_uuid.uuid4()),
+        id=str(uuid.uuid4()),
         telegram_user_id=tg_id,
         matched_user_id=None,
         user_role=None,
@@ -203,7 +204,7 @@ def test_memory_load_history_filters_formatted_responses(db_session) -> None:
         cache_status=None,
         fallback_reason=None,
         status="completed",
-        created_at=_dt.now(UTC),
+        created_at=datetime.now(UTC),
     )
     db_session.add(interaction)
     db_session.flush()
@@ -211,8 +212,4 @@ def test_memory_load_history_filters_formatted_responses(db_session) -> None:
     memory = MemoryManager(TelegramRepository(db_session))
     history = memory.load_history(tg_id)
 
-    # The formatted response should be replaced with structured summary
-    for msg in history:
-        if msg["role"] == "assistant":
-            assert not msg["content"].startswith("Se encontraron")
-            assert "Acción ejecutada" in msg["content"]
+    assert history == []

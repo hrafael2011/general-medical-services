@@ -247,3 +247,22 @@ class AvailabilityService:
         """Check if a doctor has submitted monthly availability for a given period."""
         records = self.availability.list_monthly_variable_for_period(doctor_id, year, month)
         return len(records) > 0
+
+    def get_available_doctor_ids(self, target_date: date) -> list[str]:
+        """Return IDs of service-active doctors available on the given date."""
+        from backend.app.domain.doctors.eligibility import AvailabilitySpec
+
+        doctors = self.doctors.list_service_active()
+        spec = AvailabilitySpec()
+        available: list[str] = []
+
+        for doctor in doctors:
+            weekly = self.availability.list_weekly_fixed_for_doctor(doctor.id)
+            monthly = self.availability.list_monthly_variable_for_period(
+                doctor.id, target_date.year, target_date.month,
+            )
+            result = spec.check(doctor, target_date, weekly, monthly)
+            if result.passed:
+                available.append(doctor.id)
+
+        return available

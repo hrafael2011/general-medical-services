@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarRead, calendarsApi } from "../../api/calendars";
 import { ApiError } from "../../api/client";
+import { useToast } from "../../components/Toast";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -20,6 +21,7 @@ export function CalendarList({ onSelect }: Props) {
   const [formMonth, setFormMonth] = useState(new Date().getMonth() + 1);
   const [formYear, setFormYear] = useState(currentYear);
   const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
 
   const { data: calendars = [], isLoading } = useQuery({
     queryKey: ["calendars"],
@@ -37,6 +39,24 @@ export function CalendarList({ onSelect }: Props) {
       setError(err instanceof ApiError ? err.message : "Error al crear calendario.");
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (calendarId: string) => calendarsApi.delete(calendarId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendars"] });
+      addToast("success", "Calendario eliminado.");
+    },
+    onError: (err: unknown) => {
+      addToast("error", err instanceof ApiError ? err.message : "Error al eliminar calendario.");
+    },
+  });
+
+  function handleDelete(cal: CalendarRead) {
+    const period = `${MONTHS[cal.month - 1]} ${cal.year}`;
+    if (window.confirm(`¿Eliminar calendario de ${period}? Los datos se conservarán pero dejará de mostrarse.`)) {
+      deleteMutation.mutate(cal.id);
+    }
+  }
 
   if (isLoading) return <p style={{ padding: "1rem" }}>Cargando calendarios…</p>;
 
@@ -120,9 +140,17 @@ export function CalendarList({ onSelect }: Props) {
                 <td style={{ padding: "0.5rem 0.75rem", color: "#555" }}>
                   {new Date(cal.created_at).toLocaleDateString("es-DO")}
                 </td>
-                <td style={{ padding: "0.5rem 0.75rem" }}>
+                <td style={{ padding: "0.5rem 0.75rem", display: "flex", gap: 8 }}>
                   <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => onSelect(cal.id)}>
                     Ver grilla →
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    style={{ fontSize: 13, color: "#b91c1c" }}
+                    onClick={() => handleDelete(cal)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    Eliminar
                   </button>
                 </td>
               </tr>

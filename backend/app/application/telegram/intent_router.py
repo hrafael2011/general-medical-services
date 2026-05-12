@@ -29,6 +29,33 @@ _DEFAULT_AMBIGUOUS = (
 _DEFAULT_EXPORT_OK = "Aquí tienes el reporte solicitado."
 
 
+def _is_internal_identifier_column(column: str) -> bool:
+    """Return True for technical identifier columns that should not be shown."""
+    normalized = column.lower()
+    return normalized == "id" or normalized.endswith("_id")
+
+
+def _public_columns(columns: list[str]) -> list[str]:
+    """Columns safe to show to an operational user in Telegram/reports."""
+    return [column for column in columns if not _is_internal_identifier_column(column)]
+
+
+def _strip_internal_identifier_columns(
+    rows: list[dict],
+    columns: list[str],
+) -> tuple[list[dict], list[str]]:
+    public_columns = _public_columns(columns)
+    if public_columns == columns:
+        return rows, columns
+    return (
+        [
+            {column: row.get(column) for column in public_columns}
+            for row in rows
+        ],
+        public_columns,
+    )
+
+
 class IntentRouter:
     """Routes classified intents to query execution, export, or direct reply."""
 
@@ -128,6 +155,7 @@ class IntentRouter:
 
         try:
             rows, columns = self._execute_template(entry["sql_template"], params)
+            rows, columns = _strip_internal_identifier_columns(rows, columns)
             if not rows:
                 return AgentResult(
                     response_text="No se encontraron resultados para esa consulta.",
@@ -159,6 +187,7 @@ class IntentRouter:
 
         try:
             rows, columns = self._execute_template(entry["sql_template"], params)
+            rows, columns = _strip_internal_identifier_columns(rows, columns)
             if not rows:
                 return AgentResult(
                     response_text="No se encontraron resultados para generar el reporte.",
@@ -257,6 +286,9 @@ _EXPORT_FILENAME_MAP = {
     "doctor_history_by_name": "HISTORIAL_MEDICO.pdf",
     "assignments_by_area": "SERVICIOS_POR_AREA.pdf",
     "unresolved_gaps_month": "HUECOS_POR_MES.pdf",
+    "count_assigned_doctors_by_month": "MEDICOS_ASIGNADOS_MES.pdf",
+    "list_assigned_doctors_by_month": "MEDICOS_ASIGNADOS_MES.pdf",
+    "unassigned_doctors_by_month": "MEDICOS_NO_ASIGNADOS_MES.pdf",
 }
 
 _COLUMN_TITLE_MAP: dict[str, str] = {
@@ -342,6 +374,9 @@ def _build_pdf_from_rows(
         "doctor_history_by_name": "HISTORIAL DE SERVICIOS (60 DÍAS)",
         "assignments_by_area": "SERVICIOS POR ÁREA",
         "unresolved_gaps_month": "HUECOS SIN ASIGNAR POR MES",
+        "count_assigned_doctors_by_month": "MÉDICOS ASIGNADOS POR MES",
+        "list_assigned_doctors_by_month": "LISTADO DE MÉDICOS ASIGNADOS POR MES",
+        "unassigned_doctors_by_month": "MÉDICOS NO ASIGNADOS POR MES",
     }
 
     title = title_map.get(query_type, f"REPORTE - {query_type.upper()}")

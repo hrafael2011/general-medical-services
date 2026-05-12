@@ -429,6 +429,9 @@ _REQUIRED_QUERY_TYPES = [
     "calendar_status_month",
     "doctors_working_date",
     "assignment_count_by_date_range",
+    "count_assigned_doctors_by_month",
+    "list_assigned_doctors_by_month",
+    "unassigned_doctors_by_month",
     "mission_ranking",
     "operational_summary",
     "doctor_history_60d",
@@ -447,3 +450,25 @@ def test_all_required_query_types_are_registered() -> None:
         entry = router.registry.get(qt)
         assert entry is not None, f"Falta query_type: {qt}"
         assert entry["sql_template"], f"sql_template vacio para {qt}"
+
+
+def test_router_hides_internal_ids_in_text_response(db_session) -> None:
+    """Las respuestas operativas no deben exponer UUID/IDs técnicos."""
+    registry = QueryRegistry()
+    registry.register(
+        query_type="unsafe_id_projection",
+        sql_template="SELECT 'doctor-uuid' AS id, 'Ana Perez' AS name",
+        params_schema={},
+    )
+    router = IntentRouter(registry=registry)
+    router.set_session(db_session)
+
+    result = router.handle(
+        action="query",
+        query_type="unsafe_id_projection",
+        params={},
+        user_message="dame el id",
+    )
+
+    assert "doctor-uuid" not in result.response_text
+    assert "Ana Perez" in result.response_text

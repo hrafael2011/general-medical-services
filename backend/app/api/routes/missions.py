@@ -11,11 +11,14 @@ from backend.app.application.missions.errors import MissionServiceError
 from backend.app.application.missions.ranking_service import MissionRankingService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 from backend.app.schemas.missions import (
     ConfirmMissionRequest,
     CreateMissionRequest,
     MissionAssignmentRead,
+    MissionCandidateDateRankingEntryRead,
+    MissionCandidateDateRankingResponse,
     MissionCandidateRankingEntryRead,
     MissionCandidateRankingRead,
     MissionCandidateRequest,
@@ -43,7 +46,9 @@ class GenerateRankingRequest(BaseModel):
 _ERROR_STATUS: dict[str, int] = {
     "mission_not_found": status.HTTP_404_NOT_FOUND,
     "ranking_not_found": status.HTTP_404_NOT_FOUND,
+    "approved_calendar_required": status.HTTP_409_CONFLICT,
     "already_confirmed": status.HTTP_409_CONFLICT,
+    "candidate_not_available": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 
@@ -116,10 +121,7 @@ def _to_ranking_read(
     ranking, repo: MissionRepository
 ) -> MissionCandidateRankingRead:
     data = MissionCandidateRankingRead.model_validate(ranking)
-    data.entries = [
-        MissionCandidateRankingEntryRead.model_validate(e)
-        for e in repo.list_ranking_entries(ranking.id)
-    ]
+    data.entries = _ranking_entries_with_doctor_names(repo, repo.list_ranking_entries(ranking.id))
     return data
 
 
@@ -127,11 +129,94 @@ def _to_mission_read(
     mission, repo: MissionRepository
 ) -> MissionAssignmentRead:
     data = MissionAssignmentRead.model_validate(mission)
-    data.participants = [
-        MissionParticipantRead.model_validate(p)
-        for p in repo.list_participants(mission.id)
-    ]
+    data.participants = _participants_with_doctor_names(repo, repo.list_participants(mission.id))
     return data
+
+
+def _doctor_names(repo: MissionRepository, doctor_ids: list[str]) -> dict[str, str]:
+    if not doctor_ids:
+        return {}
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+    doctors = repo.session.query(DoctorModel).filter(DoctorModel.id.in_(doctor_ids)).all()
+    return {doctor.id: doctor.name for doctor in doctors}
+
+
+def _ranking_entries_with_doctor_names(
+    repo: MissionRepository,
+    entries,
+) -> list[MissionCandidateRankingEntryRead]:
+    names = _doctor_names(repo, [entry.doctor_id for entry in entries])
+    data = []
+    for entry in entries:
+        row = MissionCandidateRankingEntryRead.model_validate(entry)
+        row.doctor_name = names.get(entry.doctor_id)
+        data.append(row)
+    return data
+
+
+def _participants_with_doctor_names(
+    repo: MissionRepository,
+    participants,
+) -> list[MissionParticipantRead]:
+    names = _doctor_names(repo, [participant.doctor_id for participant in participants])
+    data = []
+    for participant in participants:
+        row = MissionParticipantRead.model_validate(participant)
+        row.doctor_name = names.get(participant.doctor_id)
+        data.append(row)
+    return data
+
+
+def _date_ranking_entries_with_doctor_names(
+    repo: MissionRepository,
+    items: list[dict],
+) -> list[MissionCandidateDateRankingEntryRead]:
+    entries = [item["entry"] for item in items]
+    names = _doctor_names(repo, [entry.doctor_id for entry in entries])
+    data: list[MissionCandidateDateRankingEntryRead] = []
+    for item in items:
+        entry = item["entry"]
+        data.append(
+            MissionCandidateDateRankingEntryRead(
+                id=entry.id,
+                doctor_id=entry.doctor_id,
+                doctor_name=names.get(entry.doctor_id),
+                ranking_position=entry.ranking_position,
+                adjusted_position=item["adjusted_position"],
+                recommendation_status=item["recommendation_status"],
+                selectable=item["selectable"],
+                total_load_score=entry.total_load_score,
+                monthly_service_load=entry.monthly_service_load,
+                recent_service_load=entry.recent_service_load,
+                monthly_mission_load=entry.monthly_mission_load,
+                eligible=entry.eligible,
+                reasons=item["reasons"],
+                warnings=item["warnings"],
+            )
+        )
+    return data
+
+
+def _approved_version_or_409(
+    session: Session,
+    *,
+    year: int,
+    month: int,
+):
+    version = CalendarRepository(session).get_approved_version_by_period(year, month)
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "approved_calendar_required",
+                "message": (
+                    f"No hay calendario aprobado para {year}/{month:02d}. "
+                    "Apruebe el calendario antes de consultar el ranking."
+                ),
+            },
+        )
+    return version
 
 
 # ---------------------------------------------------------------------------
@@ -171,13 +256,18 @@ def get_ranking(
     service: Annotated[MissionRankingService, Depends(get_ranking_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionCandidateRankingRead:
-    ranking = service.get_ranking(year=year, month=month)
+    approved_version = _approved_version_or_409(session, year=year, month=month)
+    ranking = service.get_ranking(
+        year=year,
+        month=month,
+        calendar_version_id=approved_version.id,
+    )
     if ranking is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "ranking_not_found",
-                "message": f"No ranking found for {year}/{month:02d}.",
+                "message": f"No ranking found for approved calendar {year}/{month:02d}.",
             },
         )
     repo = MissionRepository(session)
@@ -211,14 +301,34 @@ def recommend_candidates(
     return MissionCandidateResponse(
         mission_date=payload.mission_date,
         participant_count=payload.participant_count,
-        primary=[
-            MissionCandidateRankingEntryRead.model_validate(e)
-            for e in result["primary"]
-        ],
-        alternates=[
-            MissionCandidateRankingEntryRead.model_validate(e)
-            for e in result["alternates"]
-        ],
+        primary=_ranking_entries_with_doctor_names(service.mission_repo, result["primary"]),
+        alternates=_ranking_entries_with_doctor_names(service.mission_repo, result["alternates"]),
+    )
+
+
+@router.post(
+    "/candidates/ranked",
+    response_model=MissionCandidateDateRankingResponse,
+)
+def rank_candidates_for_date(
+    payload: MissionCandidateRequest,
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
+) -> MissionCandidateDateRankingResponse:
+    try:
+        entries = service.rank_candidates_for_date(
+            year=payload.mission_date.year,
+            month=payload.mission_date.month,
+            mission_date=payload.mission_date,
+        )
+    except MissionServiceError as exc:
+        raise _http_exc(exc) from exc
+
+    return MissionCandidateDateRankingResponse(
+        mission_date=payload.mission_date,
+        year=payload.mission_date.year,
+        month=payload.mission_date.month,
+        entries=_date_ranking_entries_with_doctor_names(service.mission_repo, entries),
     )
 
 
@@ -264,10 +374,10 @@ def list_missions(
     items = []
     for m in missions:
         data = MissionAssignmentRead.model_validate(m)
-        data.participants = [
-            MissionParticipantRead.model_validate(p)
-            for p in participants_by_mission.get(m.id, [])
-        ]
+        data.participants = _participants_with_doctor_names(
+            repo,
+            participants_by_mission.get(m.id, []),
+        )
         items.append(data)
     return items
 
