@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_whatsapp_from: str = "whatsapp:+14155238886"
-    calendar_auto_generation_runner_enabled: bool = False
-    calendar_auto_generation_check_interval_seconds: int = 86400
+
+    resend_api_key: str | None = None
+    resend_from_email: str = "noreply@turnos-medicos.com"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
