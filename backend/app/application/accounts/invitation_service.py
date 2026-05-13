@@ -1,8 +1,7 @@
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from secrets import token_urlsafe
 from uuid import uuid4
-
-from pwdlib import PasswordHash
 
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.set_password_token import SetPasswordTokenModel
@@ -15,7 +14,10 @@ from backend.app.infrastructure.repositories.set_password_tokens import (
 )
 
 TOKEN_EXPIRE_HOURS = 48
-password_hash = PasswordHash.recommended()
+
+
+def _hash_token(raw: str) -> str:
+    return sha256(raw.encode()).hexdigest()
 
 
 class InvitationService:
@@ -29,7 +31,7 @@ class InvitationService:
         token_record = SetPasswordTokenModel(
             id=str(uuid4()),
             user_id=user.id,
-            token_hash=password_hash.hash(raw_token),
+            token_hash=_hash_token(raw_token),
             email=user.email,
             expires_at=now + timedelta(hours=TOKEN_EXPIRE_HOURS),
             used_at=None,
@@ -51,7 +53,7 @@ class InvitationService:
         token_record = SetPasswordTokenModel(
             id=str(uuid4()),
             user_id=user.id,
-            token_hash=password_hash.hash(raw_token),
+            token_hash=_hash_token(raw_token),
             email=user.email,
             expires_at=now + timedelta(hours=TOKEN_EXPIRE_HOURS),
             used_at=None,
@@ -68,9 +70,10 @@ class InvitationService:
 
     def validate_token(self, raw_token: str) -> SetPasswordTokenModel | None:
         """Find and validate a token. Returns the token record if valid, None otherwise."""
+        token_hash = _hash_token(raw_token)
         tokens = self.token_repo.list_valid()
         for token in tokens:
-            if password_hash.verify(raw_token, token.token_hash):
+            if token.token_hash == token_hash:
                 return token
         return None
 
