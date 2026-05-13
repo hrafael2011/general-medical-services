@@ -23,11 +23,24 @@ from backend.app.schemas.accounts import (
     LoginResponse,
     UserRead,
 )
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _LOGIN_RATE_LIMIT = 20
 _LOGIN_WINDOW_SECONDS = 900  # 15 minutes
+
+
+class SetPasswordRequest(BaseModel):
+    token: str
+    password: str = Field(min_length=10)
+
+
+class SetPasswordValidateResponse(BaseModel):
+    valid: bool
+    email: str | None = None
+    name: str | None = None
+    expires_at: datetime | None = None
 
 
 def _check_login_rate_limit(session: Session, client_ip: str) -> None:
@@ -133,3 +146,103 @@ def change_password(
         ) from exc
     session.commit()
     return UserRead.model_validate(user)
+
+
+@router.get("/set-password")
+def validate_set_password_token(
+    token: str,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> SetPasswordValidateResponse:
+    """Validate a set-password token and return user info."""
+    from backend.app.application.accounts.invitation_service import InvitationService
+    from backend.app.infrastructure.repositories.set_password_tokens import (
+        SetPasswordTokenRepository,
+    )
+    from backend.app.infrastructure.repositories.users import UserRepository
+
+    token_repo = SetPasswordTokenRepository(session)
+    service = InvitationService(token_repo)
+    token_record = service.validate_token(token)
+
+    if token_record is None:
+        return SetPasswordValidateResponse(valid=False)
+
+    user_repo = UserRepository(session)
+    user = user_repo.get_by_id(token_record.user_id)
+    if user is None:
+        return SetPasswordValidateResponse(valid=False)
+
+    return SetPasswordValidateResponse(
+        valid=True,
+        email=token_record.email,
+        name=user.name,
+        expires_at=token_record.expires_at,
+    )
+
+
+@router.post("/set-password", status_code=status.HTTP_200_OK)
+def set_password(
+    payload: SetPasswordRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> dict[str, str]:
+    """Set password using a valid token."""
+    import re
+
+    from backend.app.application.accounts.invitation_service import InvitationService
+    from backend.app.core.security import hash_password
+    from backend.app.infrastructure.repositories.set_password_tokens import (
+        SetPasswordTokenRepository,
+    )
+    from backend.app.infrastructure.repositories.users import UserRepository
+
+    token_repo = SetPasswordTokenRepository(session)
+    service = InvitationService(token_repo)
+    token_record = service.validate_token(payload.token)
+
+    if token_record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Enlace inválido o expirado. Contacta al administrador.",
+        )
+
+    user_repo = UserRepository(session)
+    user = user_repo.get_by_id(token_record.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Validate password complexity
+    if not re.search(r"[A-Z]", payload.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe contener al menos una mayúscula",
+        )
+    if not re.search(r"[a-z]", payload.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe contener al menos una minúscula",
+        )
+    if not re.search(r"\d", payload.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe contener al menos un número",
+        )
+    if not re.search(r"[!@#$%^&*(),.\-:;<>?/\\[\]{}_~`|'\"]", payload.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña debe contener al menos un carácter especial",
+        )
+
+    # Set the password
+    new_hash = hash_password(payload.password)
+    user.password_hash = new_hash
+    user.must_change_password = False
+    user.token_version += 1
+    user.updated_at = datetime.now(UTC)
+
+    service.mark_used(token_record)
+    session.commit()
+
+    return {"message": "Contraseña creada exitosamente. Ahora puedes iniciar sesión."}
