@@ -31,4 +31,16 @@ export const adminApi = {
       },
     );
   },
+
+  inviteUser(userId: string) {
+    return apiFetch<{ message: string; email: string }>(`/admin/users/${userId}/invite`, {
+      method: "POST",
+    });
+  },
+
+  sendReset(userId: string) {
+    return apiFetch<{ message: string; email: string }>(`/admin/users/${userId}/send-reset`, {
+      method: "POST",
+    });
+  },
 };

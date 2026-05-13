@@ -20,3 +20,25 @@ export async function changePassword(currentPassword: string, newPassword: strin
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
 }
+
+export interface SetPasswordValidateResponse {
+  valid: boolean;
+  email?: string;
+  name?: string;
+  expires_at?: string;
+}
+
+export const authApi = {
+  validateSetPasswordToken(token: string) {
+    return apiFetch<SetPasswordValidateResponse>(
+      `/auth/set-password?token=${encodeURIComponent(token)}`,
+    );
+  },
+
+  setPassword(token: string, password: string) {
+    return apiFetch<{ message: string }>("/auth/set-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
+  },
+};
