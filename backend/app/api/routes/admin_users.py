@@ -9,9 +9,13 @@ from backend.app.application.accounts.errors import (
     PermissionDeniedError,
     UserNotFoundError,
 )
+from backend.app.application.accounts.invitation_service import InvitationService
 from backend.app.application.accounts.service import AccountService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.repositories.set_password_tokens import (
+    SetPasswordTokenRepository,
+)
 from backend.app.infrastructure.repositories.users import UserRepository
 from backend.app.schemas.accounts import (
     CreateEncargadoRequest,
@@ -100,3 +104,51 @@ def reset_encargado_password(
         user=UserRead.model_validate(result.user),
         temporary_password=result.temporary_password,
     )
+
+
+@router.post("/{user_id}/invite", status_code=status.HTTP_200_OK)
+def invite_user(
+    user_id: str,
+    admin: Annotated[UserModel, Depends(require_admin)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> dict[str, str]:
+    """Send invitation email to an encargado user."""
+    repo = UserRepository(session)
+    user = repo.get_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role not in ("encargado",):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only encargado users can be invited",
+        )
+
+    token_repo = SetPasswordTokenRepository(session)
+    service = InvitationService(token_repo)
+    service.create_invitation(user=user, created_by=admin)
+    session.commit()
+    return {"message": "Invitation sent", "email": user.email}
+
+
+@router.post("/{user_id}/send-reset", status_code=status.HTTP_200_OK)
+def send_reset_email(
+    user_id: str,
+    admin: Annotated[UserModel, Depends(require_admin)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> dict[str, str]:
+    """Send password reset email to an encargado user."""
+    repo = UserRepository(session)
+    user = repo.get_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role not in ("encargado",):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only encargado users can be reset",
+        )
+
+    token_repo = SetPasswordTokenRepository(session)
+    service = InvitationService(token_repo)
+    service.create_reset(user=user, created_by=admin)
+    session.commit()
+    return {"message": "Reset email sent", "email": user.email}
