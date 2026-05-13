@@ -19,7 +19,9 @@ export function UsersView() {
   const createMutation = useMutation({
     mutationFn: () => adminApi.createEncargado(newName, newEmail),
     onSuccess: (res) => {
-      addToast("success", `Usuario creado. Contraseña temporal: ${res.temporary_password}`);
+      // After creation, send invitation
+      adminApi.inviteUser(res.user.id).catch(() => {});
+      addToast("success", `Usuario creado. Se ha enviado una invitación a ${newEmail}.`);
       setShowCreate(false);
       setNewName("");
       setNewEmail("");
@@ -29,11 +31,9 @@ export function UsersView() {
   });
 
   const resetMutation = useMutation({
-    mutationFn: (userId: string) => adminApi.resetPassword(userId),
-    onSuccess: (res) => {
-      addToast("success", `Contraseña reseteada. Nueva: ${res.temporary_password}`);
-    },
-    onError: () => addToast("error", "Error al resetear contraseña."),
+    mutationFn: (userId: string) => adminApi.sendReset(userId),
+    onSuccess: () => addToast("success", "Correo de restablecimiento enviado."),
+    onError: () => addToast("error", "Error al enviar correo de restablecimiento."),
   });
 
   return (
@@ -76,7 +76,9 @@ export function UsersView() {
                   <td>{u.name}</td>
                   <td>{u.email}</td>
                   <td>{u.role}</td>
-                  <td>{u.active ? "Sí" : "No"}</td>
+                  <td>
+                    {!u.active ? "No" : u.must_change_password ? "Pendiente" : "Activo"}
+                  </td>
                   <td>
                     <button
                       className="btn-ghost"
@@ -84,7 +86,7 @@ export function UsersView() {
                       onClick={() => resetMutation.mutate(u.id)}
                       disabled={resetMutation.isPending}
                     >
-                      <KeyRound size={13} /> Resetear
+                      <KeyRound size={13} /> {resetMutation.isPending ? "Enviando…" : "Resetear"}
                     </button>
                   </td>
                 </tr>

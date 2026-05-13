@@ -15,11 +15,13 @@ import { NotificationLog } from "./features/notifications/NotificationLog";
 import { TelegramLinks } from "./features/telegram/TelegramLinks";
 import { AuditLog } from "./features/audit/AuditLog";
 import { UsersView } from "./features/users/UsersView";
+import { SetPasswordPage } from "./features/auth/SetPasswordPage";
 
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/set-password" element={<SetPasswordPage />} />
       <Route element={<AuthGuard />}>
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
