@@ -422,8 +422,9 @@ def _build_excel_from_rows(
     for row in rows:
         ws.append([str(row.get(c, "")) for c in columns])
 
-    for i, _ in enumerate(header):
-        ws.column_dimensions[chr(65 + i)].width = max(12, len(header[i]) + 4)
+    for i, col_title in enumerate(header):
+        letter = openpyxl.utils.get_column_letter(i + 1)
+        ws.column_dimensions[letter].width = max(12, len(col_title) + 4)
 
     buf = io.BytesIO()
     wb.save(buf)

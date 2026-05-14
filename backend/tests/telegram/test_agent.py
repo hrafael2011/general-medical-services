@@ -426,3 +426,59 @@ def test_export_pdf_is_default_format(db_session) -> None:
     agent.process(text="exporta médicos activos")
     assert router.last_handle_args is not None
     assert router.last_handle_args.get("format") is None
+
+
+def test_export_falls_back_to_query_executor(db_session) -> None:
+    """Cuando el query_type no existe y action=export, debe hacer fallback a QueryExecutor."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, UTC
+
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+    doc = DoctorModel(
+        id=str(_uuid.uuid4()),
+        name="Dr. ExportFallback",
+        normalized_name="dr. exportfallback",
+        sex="male",
+        active=True,
+        service_active=True,
+        availability_mode="variable",
+        participa_misiones=True,
+        whatsapp_phone=None,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        rank_id=None,
+        department_id=None,
+        created_at=_dt.now(UTC),
+        updated_at=_dt.now(UTC),
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    class StubQueryExecutor:
+        def execute(self, nl_query: str, user_text: str = "") -> dict:
+            return {
+                "ok": True,
+                "data": {
+                    "columns": ["name"],
+                    "rows": [{"name": "Dr. ExportFallback"}],
+                    "row_count": 1,
+                    "truncated": False,
+                },
+            }
+
+    router = RouterStub(
+        result=AgentResult(response_text="No pude encontrar información sobre eso en el sistema.")
+    )
+    llm = FakeLLMProvider(responses={
+        "exporta": (
+            '{"action": "export", "query_type": "nonexistent_export_query", "params": {}}'
+        ),
+    })
+    agent = ConversationalAgent(llm=llm, router=router, query_executor=StubQueryExecutor())
+
+    result = agent.process(text="exporta un reporte de algo no registrado")
+
+    assert "ExportFallback" in result.response_text
+    assert result.agent_action == "query_db"

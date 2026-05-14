@@ -367,8 +367,9 @@ class DoctorQueryService:
         ])
         for row in rows:
             ws.append([str(row.get(column, "")) for column in columns])
+        from openpyxl.utils import get_column_letter
         for i, column in enumerate(columns, start=1):
-            letter = chr(64 + i)
+            letter = get_column_letter(i)
             title = _COLUMN_TITLES.get(column, column.replace("_", " ").title())
             ws.column_dimensions[letter].width = max(12, len(title) + 4)
         buf = io.BytesIO()

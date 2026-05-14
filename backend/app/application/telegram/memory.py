@@ -24,19 +24,34 @@ class SessionState:
 
 
 class SessionStore:
-    """In-memory session state storage with TTL-based expiry."""
+    """Session state storage with optional DB persistence.
 
-    def __init__(self, ttl_seconds: int = 1800) -> None:
+    When *telegram_repo* is provided, sessions are persisted to the
+    ``telegram_sessions`` table and survive server restarts.
+    Without it, sessions live only in memory (backward compatible).
+    """
+
+    def __init__(
+        self,
+        ttl_seconds: int = 1800,
+        telegram_repo=None,  # TelegramRepository | None
+    ) -> None:
         self._store: dict[str, SessionState] = {}
         self._ttl = ttl_seconds
+        self._telegram_repo = telegram_repo
 
     def get(self, telegram_user_id: str) -> SessionState | None:
         """Return session state if it exists and is not expired."""
         state = self._store.get(telegram_user_id)
+        if state is None and self._telegram_repo is not None:
+            raw = self._telegram_repo.get_session(telegram_user_id)
+            if raw:
+                state = SessionState(**raw)
+
         if state is None:
             return None
         if time.time() - state.created_at > self._ttl:
-            del self._store[telegram_user_id]
+            self.clear(telegram_user_id)
             return None
         return state
 
@@ -44,10 +59,29 @@ class SessionStore:
         """Store (or overwrite) session state."""
         state.created_at = time.time()
         self._store[telegram_user_id] = state
+        if self._telegram_repo is not None:
+            self._telegram_repo.upsert_session(
+                telegram_user_id,
+                {
+                    "last_query_type": state.last_query_type,
+                    "last_params": state.last_params,
+                    "last_results": state.last_results,
+                    "last_filters": state.last_filters,
+                    "last_tool_name": state.last_tool_name,
+                    "last_agent_action": state.last_agent_action,
+                    "last_operation": state.last_operation,
+                    "last_total": state.last_total,
+                    "last_document_format": state.last_document_format,
+                    "pending_selection": state.pending_selection,
+                    "created_at": state.created_at,
+                },
+            )
 
     def clear(self, telegram_user_id: str) -> None:
         """Remove session state for a user."""
         self._store.pop(telegram_user_id, None)
+        if self._telegram_repo is not None:
+            self._telegram_repo.delete_session(telegram_user_id)
 
     def cleanup_expired(self) -> int:
         """Remove all expired sessions. Returns count removed."""
@@ -58,6 +92,8 @@ class SessionStore:
         ]
         for uid in expired:
             del self._store[uid]
+            if self._telegram_repo is not None:
+                self._telegram_repo.delete_session(uid)
         return len(expired)
 
 

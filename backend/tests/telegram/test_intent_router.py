@@ -472,3 +472,53 @@ def test_router_hides_internal_ids_in_text_response(db_session) -> None:
 
     assert "doctor-uuid" not in result.response_text
     assert "Ana Perez" in result.response_text
+
+
+def test_router_export_excel_with_30_columns_does_not_crash(db_session) -> None:
+    """Export con 30 columnas no debe crashear por chr() > Z."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, UTC
+
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+    doc = DoctorModel(
+        id=str(_uuid.uuid4()),
+        name="Dr. Wide",
+        normalized_name="dr. wide",
+        sex="male",
+        active=True,
+        service_active=True,
+        availability_mode="variable",
+        participa_misiones=True,
+        whatsapp_phone=None,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        rank_id=None,
+        department_id=None,
+        created_at=_dt.now(UTC),
+        updated_at=_dt.now(UTC),
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    router = IntentRouter()
+    router.set_session(db_session)
+    cols = ", ".join(["name AS col" + str(i) for i in range(30)])
+    router._registry.register(
+        query_type="wide_export",
+        sql_template=f"SELECT {cols} FROM doctors WHERE active = 1 AND service_active = 1",
+        params_schema={},
+        description="30 columnas",
+    )
+
+    result = router.handle(
+        action="export",
+        query_type="wide_export",
+        params={},
+        user_message="exporta en excel con muchas columnas",
+        format="excel",
+    )
+
+    assert result.document_bytes is not None
+    assert result.document_filename is not None

@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
-from backend.app.application.telegram.memory import SessionStore
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.telegram import (
     TelegramLinkTokenModel,
@@ -19,6 +18,7 @@ from backend.app.infrastructure.db.models.telegram import (
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
+from backend.app.infrastructure.repositories.users import UserRepository
 from backend.app.schemas.telegram import (
     CreateLinkTokenRequest,
     CreateLinkTokenResponse,
@@ -33,7 +33,19 @@ router = APIRouter(prefix="/telegram", tags=["telegram"])
 
 logger = logging.getLogger(__name__)
 
-_session_store = SessionStore()
+_TELEGRAM_LINKABLE_ROLES = {"admin", "encargado"}
+
+
+def _get_linkable_user(session: Session, user_id: str) -> UserModel:
+    user = UserRepository(session).get_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role not in _TELEGRAM_LINKABLE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only admin and encargado users can be linked to Telegram",
+        )
+    return user
 
 # ---------------------------------------------------------------------------
 # Dependency factory
@@ -47,7 +59,7 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     from backend.app.application.telegram.entity_resolver import EntityResolver
     from backend.app.application.telegram.intent_router import IntentRouter
     from backend.app.application.telegram.llm import DeepSeekProvider, FakeLLMProvider
-    from backend.app.application.telegram.memory import MemoryManager
+    from backend.app.application.telegram.memory import MemoryManager, SessionStore
     from backend.app.application.telegram.orchestrator import TelegramOrchestrator
     from backend.app.application.telegram.query_executor import QueryExecutor
     from backend.app.application.telegram.tools import ToolGateway
@@ -93,7 +105,7 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         query_executor=query_executor,
         tools=tools,
         memory=memory,
-        session_store=_session_store,
+        session_store=SessionStore(ttl_seconds=1800, telegram_repo=TelegramRepository(session)),
         entity_resolver=EntityResolver(session=session),
         doctor_query_service=DoctorQueryService(session=session),
     )
@@ -189,6 +201,7 @@ def create_link(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> TelegramUserLinkRead:
     """Create a new Telegram user link."""
+    _get_linkable_user(session, payload.user_id)
     repo = TelegramRepository(session)
     link = TelegramUserLinkModel(
         id=str(uuid.uuid4()),
@@ -241,6 +254,7 @@ def create_link_token(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CreateLinkTokenResponse:
     """Generate a single-use deep-link token for a user."""
+    _get_linkable_user(session, payload.user_id)
     token_str = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     expires_at = now + timedelta(hours=24)

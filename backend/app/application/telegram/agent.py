@@ -932,12 +932,12 @@ class ConversationalAgent:
                     )
                     return router_result
 
-            # Fallback for query action
-            if action == "query":
+            # Fallback for query/export action
+            if action in ("query", "export"):
                 fallback = self._fallback_to_query_db(text)
                 self._remember_result(telegram_user_id, fallback)
                 logger.info(
-                    "Agent resolved via query fallback",
+                    "Agent resolved via %s fallback", action,
                     extra={
                         "telegram_event": "agent_route_completed",
                         "match_type": "fallback",
@@ -946,20 +946,6 @@ class ConversationalAgent:
                     },
                 )
                 return fallback
-
-            logger.warning(
-                "Export request could not be matched",
-                extra={
-                    "telegram_event": "agent_route_failed",
-                    "match_type": "none",
-                    "agent_action": action,
-                    "query_type": query_type,
-                },
-            )
-            return AgentResult(
-                response_text="No pude encontrar informacion sobre eso en el sistema.",
-                agent_action=action,
-            )
 
         # 6c. Unknown action
         logger.warning("LLM returned unknown action '%s' for: %.100s", action, text)

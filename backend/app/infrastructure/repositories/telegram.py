@@ -96,3 +96,44 @@ class TelegramRepository:
         if telegram_user_id:
             stmt = stmt.where(TelegramInteractionModel.telegram_user_id == telegram_user_id)
         return list(self.session.scalars(stmt))
+
+    # --- Sessions ---
+
+    def get_session(self, telegram_user_id: str) -> dict | None:
+        """Return session_state JSON for *telegram_user_id*, or None."""
+        from backend.app.infrastructure.db.models.telegram_session import TelegramSessionModel
+
+        stmt = select(TelegramSessionModel).where(
+            TelegramSessionModel.telegram_user_id == telegram_user_id,
+        )
+        row = self.session.scalars(stmt).first()
+        if row is None:
+            return None
+        return row.session_state
+
+    def upsert_session(self, telegram_user_id: str, state: dict) -> None:
+        """Insert or update session_state for *telegram_user_id*."""
+        from datetime import UTC, datetime
+
+        from backend.app.infrastructure.db.models.telegram_session import TelegramSessionModel
+
+        row = self.session.get(TelegramSessionModel, telegram_user_id)
+        if row is None:
+            row = TelegramSessionModel(
+                telegram_user_id=telegram_user_id,
+                session_state=state,
+                created_at=datetime.now(UTC),
+            )
+            self.session.add(row)
+        else:
+            row.session_state = state
+        self.session.flush()
+
+    def delete_session(self, telegram_user_id: str) -> None:
+        """Remove persisted session for *telegram_user_id*."""
+        from backend.app.infrastructure.db.models.telegram_session import TelegramSessionModel
+
+        row = self.session.get(TelegramSessionModel, telegram_user_id)
+        if row is not None:
+            self.session.delete(row)
+            self.session.flush()
