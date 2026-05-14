@@ -6,6 +6,7 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 
 import uuid
 
+from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.notifications.providers import FakeProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.templates import (
@@ -15,10 +16,12 @@ from backend.app.application.notifications.templates import (
     render_mission_summary_encargado,
 )
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
+from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 from backend.app.infrastructure.repositories.notifications import (
     MAX_RETRIES,
     NotificationRepository,
 )
+from backend.app.schemas.notifications import NotificationEventRead
 
 # ---------------------------------------------------------------------------
 # Service factory
@@ -180,6 +183,54 @@ def test_process_retries_on_failure(db_session) -> None:
     assert final is not None
     assert final.retry_count >= MAX_RETRIES
     assert final.status == "failed"
+
+
+def test_process_failure_creates_action_alert(db_session) -> None:
+    class FailingProvider:
+        name = "failing"
+
+        def send(self, phone: str, message: str) -> str:
+            raise Exception("network error")
+
+    service = NotificationService(
+        repo=NotificationRepository(db_session),
+        provider=FailingProvider(),
+        action_alerts=ActionAlertService(ActionAlertRepository(db_session)),
+    )
+    _queue_one(service, recipient_phone="+18095550000")
+
+    for _ in range(MAX_RETRIES):
+        service.process_pending()
+
+    alerts = ActionAlertRepository(db_session).list_all(
+        status="open",
+        section="notifications",
+    )
+    assert len(alerts) == 1
+    assert alerts[0].alert_type == "notification_delivery_failed"
+
+
+def test_notification_read_redacts_confirmation_commands(db_session) -> None:
+    service = _make_service(db_session)
+    event = service.queue(
+        notification_type="initial_assignment",
+        idempotency_key=_unique_key(),
+        recipient_doctor_id=None,
+        recipient_phone="+18095551234",
+        payload={
+            "message": (
+                "Tiene servicio.\n\n"
+                "Para marcar recibido responda: /recibido secret-token\n"
+                "Para confirmar servicio responda: /confirmar secret-token"
+            ),
+            "confirmation_request_id": "confirmation-1",
+        },
+    )
+
+    read = NotificationEventRead.model_validate(event)
+
+    assert "secret-token" not in read.payload["message"]
+    assert "confirmation_request_id" not in read.payload
 
 
 # ---------------------------------------------------------------------------

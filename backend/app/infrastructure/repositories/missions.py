@@ -88,6 +88,26 @@ class MissionRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def list_future_confirmed_participations_for_doctor(
+        self,
+        doctor_id: str,
+        *,
+        from_date: date,
+    ) -> list[tuple[MissionAssignmentModel, MissionParticipantModel]]:
+        stmt = (
+            select(MissionAssignmentModel, MissionParticipantModel)
+            .join(
+                MissionParticipantModel,
+                MissionParticipantModel.mission_assignment_id == MissionAssignmentModel.id,
+            )
+            .where(MissionParticipantModel.doctor_id == doctor_id)
+            .where(MissionAssignmentModel.status == "confirmed")
+            .where(MissionAssignmentModel.mission_date >= from_date)
+            .where(MissionAssignmentModel.deleted_at.is_(None))
+            .order_by(MissionAssignmentModel.mission_date)
+        )
+        return list(self.session.execute(stmt).all())
+
     def list_confirmed_in_range(self, start: date, end: date) -> list[tuple[MissionAssignmentModel, list[MissionParticipantModel]]]:
         """All confirmed missions with participants in a date range."""
         stmt = (

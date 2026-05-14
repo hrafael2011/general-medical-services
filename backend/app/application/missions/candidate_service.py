@@ -1,10 +1,12 @@
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
+from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.audit.service import AuditService
 from backend.app.application.missions.errors import MissionServiceError
 from backend.app.application.notifications.triggers import NotificationTriggers
 from backend.app.domain.calendars.scoring import STRONG_AREAS
+from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.missions import (
     MissionAssignmentModel,
     MissionCandidateRankingEntryModel,
@@ -23,12 +25,14 @@ class MissionCandidateService:
         availability_repo: AvailabilityRepository,
         audit: AuditService | None = None,
         triggers: NotificationTriggers | None = None,
+        action_alerts: ActionAlertService | None = None,
     ) -> None:
         self.mission_repo = mission_repo
         self.calendar_repo = calendar_repo
         self.availability_repo = availability_repo
         self.audit = audit
         self.triggers = triggers
+        self.action_alerts = action_alerts
 
     def _service_area_code_map(self) -> dict[str, str]:
         """Map persisted service area UUIDs to domain codes, preserving codes as-is."""
@@ -58,6 +62,15 @@ class MissionCandidateService:
                 "No ranking exists for the approved calendar.",
             )
         return ranking
+
+    def _is_doctor_currently_mission_eligible(self, doctor_id: str) -> bool:
+        doctor = self.mission_repo.session.get(DoctorModel, doctor_id)
+        return bool(
+            doctor
+            and doctor.active
+            and doctor.service_active
+            and doctor.participa_misiones
+        )
 
     def recommend_candidates(
         self,
@@ -99,6 +112,8 @@ class MissionCandidateService:
 
         for entry in entries:
             doctor_id = entry.doctor_id
+            if not self._is_doctor_currently_mission_eligible(doctor_id):
+                continue
 
             # 3a. Check hard-block restrictions on mission_date
             restrictions = self.availability_repo.list_active_restrictions_for_doctor(
@@ -181,6 +196,8 @@ class MissionCandidateService:
         ranked: list[dict] = []
         for entry in entries:
             doctor_id = entry.doctor_id
+            if not self._is_doctor_currently_mission_eligible(doctor_id):
+                continue
             reasons: list[str] = []
             warnings: list[str] = list(entry.warnings or [])
             selectable = bool(entry.eligible)
@@ -306,6 +323,14 @@ class MissionCandidateService:
 
         mission.updated_at = datetime.now(UTC)
         self.mission_repo.session.flush()
+        details_changed = before != {
+            "mission_date": str(mission.mission_date),
+            "participant_count": mission.participant_count,
+            "location": mission.location,
+            "description": mission.description,
+            "mission_start_at": str(mission.mission_start_at) if mission.mission_start_at else None,
+            "mission_end_at": str(mission.mission_end_at) if mission.mission_end_at else None,
+        }
 
         if self.audit is not None:
             self.audit._create(
@@ -319,9 +344,21 @@ class MissionCandidateService:
                     "participant_count": mission.participant_count,
                     "location": mission.location,
                     "description": mission.description,
-                    "mission_start_at": str(mission.mission_start_at) if mission.mission_start_at else None,
-                    "mission_end_at": str(mission.mission_end_at) if mission.mission_end_at else None,
+                    "mission_start_at": (
+                        str(mission.mission_start_at) if mission.mission_start_at else None
+                    ),
+                    "mission_end_at": (
+                        str(mission.mission_end_at) if mission.mission_end_at else None
+                    ),
                 },
+            )
+
+        if mission.status == "confirmed" and details_changed and self.triggers is not None:
+            participants = self.mission_repo.list_participants(mission_id)
+            self.triggers.on_mission_details_changed(
+                actor_id=actor_id,
+                mission=mission,
+                participants=participants,
             )
 
         return mission
@@ -372,12 +409,7 @@ class MissionCandidateService:
                 f"Mission with id {mission_id} not found.",
             )
 
-        # 2. Guard: already confirmed
-        if mission.status == "confirmed":
-            raise MissionServiceError(
-                "already_confirmed",
-                f"Mission {mission_id} is already confirmed.",
-            )
+        was_confirmed = mission.status == "confirmed"
 
         # 3. Validate selected doctors against date-specific availability.
         eligible_items = self.rank_candidates_for_date(
@@ -401,12 +433,17 @@ class MissionCandidateService:
 
         # 4. Delete existing participants
         existing_participants = self.mission_repo.list_participants(mission_id)
+        existing_by_doctor = {
+            participant.doctor_id: participant
+            for participant in existing_participants
+        }
         for participant in existing_participants:
             self.mission_repo.session.delete(participant)
         self.mission_repo.session.flush()
 
         # 5. Create new participants with rationale
         now = datetime.now(UTC)
+        new_participants: list[MissionParticipantModel] = []
         for doctor_id in doctor_ids:
             entry = ranking_entries_by_doctor.get(doctor_id)
             participant = MissionParticipantModel(
@@ -420,7 +457,7 @@ class MissionCandidateService:
                 warnings=list(entry.warnings) if entry and entry.warnings else None,
                 created_at=now,
             )
-            self.mission_repo.add_participant(participant)
+            new_participants.append(self.mission_repo.add_participant(participant))
 
         # 6. Update mission status
         mission.status = "confirmed"
@@ -429,11 +466,26 @@ class MissionCandidateService:
         mission.updated_at = now
         self.mission_repo.session.flush()
 
+        removed_participants = [
+            participant for doctor_id, participant in existing_by_doctor.items()
+            if doctor_id not in set(doctor_ids)
+        ]
+        added_participants = [
+            participant for participant in new_participants
+            if participant.doctor_id not in existing_by_doctor
+        ]
+
+        for participant in removed_participants:
+            self._resolve_replacement_alert_for_participant(participant.id, actor_id=actor_id)
+
         # 7. Audit log
         if self.audit is not None:
+            action_type = (
+                "mission_participants_updated" if was_confirmed else "mission_confirmed"
+            )
             self.audit._create(
                 actor_id=actor_id,
-                action_type="mission_confirmed",
+                action_type=action_type,
                 entity_type="mission",
                 entity_id=mission_id,
                 after={
@@ -445,13 +497,37 @@ class MissionCandidateService:
 
         # 8. Queue notifications
         if self.triggers is not None:
-            participants = self.mission_repo.list_participants(mission_id)
-            self.triggers.on_mission_confirmed(
-                actor_id=actor_id,
-                mission=mission,
-                participants=participants,
-                encargado_phone=None,
-            )
+            if was_confirmed:
+                self.triggers.on_mission_participants_changed(
+                    actor_id=actor_id,
+                    mission=mission,
+                    added_participants=added_participants,
+                    removed_participants=removed_participants,
+                )
+            else:
+                participants = self.mission_repo.list_participants(mission_id)
+                self.triggers.on_mission_confirmed(
+                    actor_id=actor_id,
+                    mission=mission,
+                    participants=participants,
+                    encargado_phone=None,
+                )
 
         # 9. Return updated mission
         return mission
+
+    def _resolve_replacement_alert_for_participant(
+        self,
+        participant_id: str,
+        *,
+        actor_id: str,
+    ) -> None:
+        if self.action_alerts is None:
+            return
+        alert = self.action_alerts.repo.get_open_for_entity(
+            alert_type="mission_replacement_required",
+            entity_type="mission_participant",
+            entity_id=participant_id,
+        )
+        if alert is not None:
+            self.action_alerts.repo.mark_resolved(alert, actor_id=actor_id)

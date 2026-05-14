@@ -4,6 +4,7 @@ import { KeyRound, LogIn, ShieldCheck } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { changePassword } from "./api/auth";
 import { Sidebar } from "./components/Sidebar";
+import { AlertBell } from "./components/AlertBell";
 import { AuthGuard } from "./components/AuthGuard";
 import { DashboardView } from "./features/dashboard/DashboardView";
 import { DoctorsPage } from "./features/doctors/DoctorsPage";
@@ -16,12 +17,14 @@ import { TelegramLinks } from "./features/telegram/TelegramLinks";
 import { AuditLog } from "./features/audit/AuditLog";
 import { UsersView } from "./features/users/UsersView";
 import { SetPasswordPage } from "./features/auth/SetPasswordPage";
+import { PublicConfirmationPage } from "./features/confirmations/PublicConfirmationPage";
 
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/set-password" element={<SetPasswordPage />} />
+      <Route path="/confirmacion-medica" element={<PublicConfirmationPage />} />
       <Route element={<AuthGuard />}>
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -47,6 +50,9 @@ function AppShell() {
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
+        <div className="top-alert-bar">
+          <AlertBell />
+        </div>
         <Outlet />
       </main>
     </div>

@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_ready_user
 from backend.app.application.missions.candidate_service import MissionCandidateService
-from backend.app.core.config import settings
 from backend.app.application.missions.errors import MissionServiceError
 from backend.app.application.missions.ranking_service import MissionRankingService
+from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -24,6 +25,7 @@ from backend.app.schemas.missions import (
     MissionCandidateRequest,
     MissionCandidateResponse,
     MissionParticipantRead,
+    MissionReplacementAlertSummary,
     UpdateMissionRequest,
 )
 
@@ -86,13 +88,17 @@ def get_ranking_service(
 def get_candidate_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionCandidateService:
+    from backend.app.application.action_alerts.service import ActionAlertService
     from backend.app.application.audit.service import AuditService
+    from backend.app.application.confirmations.service import ConfirmationRequestService
     from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
     from backend.app.application.notifications.service import NotificationService
     from backend.app.application.notifications.triggers import NotificationTriggers
+    from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
     from backend.app.infrastructure.repositories.calendars import CalendarRepository
+    from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
@@ -103,6 +109,10 @@ def get_candidate_service(
             provider=provider,
         ),
         doctor_repo=DoctorRepository(session),
+        confirmation_service=ConfirmationRequestService(
+            ConfirmationRequestRepository(session),
+        ),
+        confirmation_due_hours=settings.confirmation_overdue_hours,
     )
 
     return MissionCandidateService(
@@ -111,6 +121,7 @@ def get_candidate_service(
         AvailabilityRepository(session),
         audit=AuditService(AuditRepository(session)),
         triggers=triggers,
+        action_alerts=ActionAlertService(ActionAlertRepository(session)),
     )
 
 
@@ -131,16 +142,32 @@ def _to_mission_read(
 ) -> MissionAssignmentRead:
     data = MissionAssignmentRead.model_validate(mission)
     data.participants = _participants_with_doctor_names(repo, repo.list_participants(mission.id))
+    _apply_mission_replacement_warnings(data, mission.mission_date, mission.status, repo)
     return data
 
 
-def _doctor_names(repo: MissionRepository, doctor_ids: list[str]) -> dict[str, str]:
+def _doctor_rows(repo: MissionRepository, doctor_ids: list[str]):
     if not doctor_ids:
-        return {}
+        return []
     from backend.app.infrastructure.db.models.doctors import DoctorModel
 
-    doctors = repo.session.query(DoctorModel).filter(DoctorModel.id.in_(doctor_ids)).all()
-    return {doctor.id: doctor.name for doctor in doctors}
+    return repo.session.query(DoctorModel).filter(DoctorModel.id.in_(doctor_ids)).all()
+
+
+def _doctor_names(repo: MissionRepository, doctor_ids: list[str]) -> dict[str, str]:
+    return {doctor.id: doctor.name for doctor in _doctor_rows(repo, doctor_ids)}
+
+
+def _doctor_replacement_reasons(repo: MissionRepository, doctor_ids: list[str]) -> dict[str, str]:
+    reasons: dict[str, str] = {}
+    for doctor in _doctor_rows(repo, doctor_ids):
+        if not doctor.active:
+            reasons[doctor.id] = "Médico inactivo en el sistema."
+        elif not doctor.service_active:
+            reasons[doctor.id] = "Médico inactivo para servicio."
+        elif not doctor.participa_misiones:
+            reasons[doctor.id] = "Médico no participa en misiones."
+    return reasons
 
 
 def _ranking_entries_with_doctor_names(
@@ -167,6 +194,31 @@ def _participants_with_doctor_names(
         row.doctor_name = names.get(participant.doctor_id)
         data.append(row)
     return data
+
+
+def _apply_mission_replacement_warnings(
+    mission_read: MissionAssignmentRead,
+    mission_date: date,
+    mission_status: str,
+    repo: MissionRepository,
+) -> None:
+    if mission_status != "confirmed" or mission_date < date.today():
+        return
+
+    reasons = _doctor_replacement_reasons(
+        repo,
+        [participant.doctor_id for participant in mission_read.participants],
+    )
+    for participant in mission_read.participants:
+        reason = reasons.get(participant.doctor_id)
+        if reason:
+            participant.requires_replacement = True
+            participant.replacement_reason = reason
+
+    mission_read.replacement_warning_count = sum(
+        1 for participant in mission_read.participants if participant.requires_replacement
+    )
+    mission_read.has_replacement_warnings = mission_read.replacement_warning_count > 0
 
 
 def _date_ranking_entries_with_doctor_names(
@@ -379,8 +431,40 @@ def list_missions(
             repo,
             participants_by_mission.get(m.id, []),
         )
+        _apply_mission_replacement_warnings(data, m.mission_date, m.status, repo)
         items.append(data)
     return items
+
+
+@router.get(
+    "/replacement-alerts/summary",
+    response_model=MissionReplacementAlertSummary,
+)
+def get_replacement_alert_summary(
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> MissionReplacementAlertSummary:
+    repo = MissionRepository(session)
+    missions = repo.list_missions()
+    participants_by_mission = repo.list_participants_bulk([m.id for m in missions])
+    mission_count = 0
+    participant_count = 0
+    for mission in missions:
+        if mission.status != "confirmed" or mission.mission_date < date.today():
+            continue
+        participants = participants_by_mission.get(mission.id, [])
+        reasons = _doctor_replacement_reasons(
+            repo,
+            [participant.doctor_id for participant in participants],
+        )
+        count = sum(1 for participant in participants if participant.doctor_id in reasons)
+        if count:
+            mission_count += 1
+            participant_count += count
+    return MissionReplacementAlertSummary(
+        mission_count=mission_count,
+        participant_count=participant_count,
+    )
 
 
 @router.get(

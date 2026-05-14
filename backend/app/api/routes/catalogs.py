@@ -9,15 +9,12 @@ from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.schemas.catalogs import (
-    CalendarGenerationSettingsRead,
     CreateDepartmentRequest,
     CreateRankRequest,
     DeactivationReasonRead,
     DepartmentRead,
     RankRead,
     ServiceAreaRead,
-    SystemSettingRead,
-    UpdateCalendarGenerationSettingsRequest,
 )
 
 router = APIRouter(prefix="/catalogs", tags=["catalogs"])
@@ -100,43 +97,3 @@ def create_department(
     department = service.create_department(payload.name)
     session.commit()
     return DepartmentRead.model_validate(department)
-
-
-@router.get("/settings/calendar-generation-day", response_model=SystemSettingRead)
-def get_calendar_generation_day(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
-    session: Annotated[Session, Depends(get_db_session)],
-) -> SystemSettingRead:
-    repository = CatalogRepository(session)
-    setting = repository.get_setting("calendar_generation_day")
-    if setting is None:
-        CatalogService(repository).seed_initial_catalogs()
-        session.commit()
-        setting = repository.get_setting("calendar_generation_day")
-    return SystemSettingRead.model_validate(setting)
-
-
-@router.get("/settings/calendar-generation", response_model=CalendarGenerationSettingsRead)
-def get_calendar_generation_settings(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
-    service: Annotated[CatalogService, Depends(get_catalog_service)],
-    session: Annotated[Session, Depends(get_db_session)],
-) -> CalendarGenerationSettingsRead:
-    settings = service.get_calendar_generation_settings()
-    session.commit()
-    return CalendarGenerationSettingsRead.model_validate(settings)
-
-
-@router.patch("/settings/calendar-generation", response_model=CalendarGenerationSettingsRead)
-def update_calendar_generation_settings(
-    payload: UpdateCalendarGenerationSettingsRequest,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
-    service: Annotated[CatalogService, Depends(get_catalog_service)],
-    session: Annotated[Session, Depends(get_db_session)],
-) -> CalendarGenerationSettingsRead:
-    settings = service.update_calendar_generation_settings(
-        auto_generation_enabled=payload.auto_generation_enabled,
-        generation_day=payload.generation_day,
-    )
-    session.commit()
-    return CalendarGenerationSettingsRead.model_validate(settings)

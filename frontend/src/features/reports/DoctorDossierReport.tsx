@@ -1,19 +1,46 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useToast } from "../../components/Toast";
 import { ReportFilters, FilterLabel, ActionButtons } from "../../components/ReportFilters";
 import { ReportSummaryCards } from "../../components/ReportSummaryCards";
 import { reportsApi, DossierResponse } from "../../api/reports";
+import { doctorsApi, DoctorRead } from "../../api/doctors";
 
 export function DoctorDossierReport() {
   const { addToast } = useToast();
-  const [doctorId, setDoctorId] = useState("");
+  const [doctor, setDoctor] = useState<DoctorRead | null>(null);
+  const [search, setSearch] = useState("");
+  const [doctors, setDoctors] = useState<DoctorRead[]>([]);
+  const [open, setOpen] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [data, setData] = useState<DossierResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    doctorsApi.list(true).then(res => setDoctors(res.items)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = doctors.filter(d =>
+    d.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function selectDoctor(d: DoctorRead) {
+    setDoctor(d);
+    setSearch(d.name);
+    setOpen(false);
+  }
 
   async function load() {
-    if (!doctorId.trim()) {
+    if (!doctor) {
       addToast("error", "Selecciona un médico.");
       return;
     }
@@ -21,7 +48,7 @@ export function DoctorDossierReport() {
     setData(null);
     try {
       const res = await reportsApi.getDoctorDossier(
-        doctorId,
+        doctor.id,
         dateFrom || undefined,
         dateTo || undefined,
       );
@@ -34,17 +61,17 @@ export function DoctorDossierReport() {
   }
 
   async function exportPdf() {
-    if (!doctorId.trim()) return;
+    if (!doctor) return;
     try {
       const blob = await reportsApi.getDoctorDossierPdf(
-        doctorId,
+        doctor.id,
         dateFrom || undefined,
         dateTo || undefined,
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `ficha_medico_${doctorId.slice(0, 8)}.pdf`;
+      a.download = `ficha_medico_${doctor.id.slice(0, 8)}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       addToast("success", "PDF descargado.");
@@ -56,14 +83,41 @@ export function DoctorDossierReport() {
   return (
     <div>
       <ReportFilters>
-        <FilterLabel label="Médico (ID)">
-          <input
-            type="text"
-            value={doctorId}
-            onChange={e => setDoctorId(e.target.value)}
-            placeholder="ID del médico"
-            style={{ width: "200px" }}
-          />
+        <FilterLabel label="Médico">
+          <div ref={ref} style={{ position: "relative", width: "250px" }}>
+            <input
+              type="text"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setOpen(true); if (!e.target.value) setDoctor(null); }}
+              onFocus={() => setOpen(true)}
+              placeholder="Buscar médico por nombre…"
+              style={{ width: "100%" }}
+            />
+            {open && filtered.length > 0 && (
+              <ul style={{
+                position: "absolute", top: "100%", left: 0, right: 0,
+                background: "#fff", border: "1px solid #d1d5db", borderRadius: "6px",
+                maxHeight: "220px", overflowY: "auto", zIndex: 50,
+                listStyle: "none", margin: "4px 0 0", padding: "4px 0",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              }}>
+                {filtered.map(d => (
+                  <li
+                    key={d.id}
+                    onClick={() => selectDoctor(d)}
+                    style={{
+                      padding: "6px 12px", cursor: "pointer", fontSize: "0.85rem",
+                      background: doctor?.id === d.id ? "#eff6ff" : "transparent",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#f3f4f6")}
+                    onMouseLeave={e => (e.currentTarget.style.background = doctor?.id === d.id ? "#eff6ff" : "transparent")}
+                  >
+                    {d.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </FilterLabel>
         <FilterLabel label="Desde">
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: "150px" }} />

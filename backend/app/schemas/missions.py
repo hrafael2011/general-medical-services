@@ -15,6 +15,8 @@ class MissionParticipantRead(BaseModel):
     reasons: dict | None
     warnings: list | None
     created_at: datetime
+    requires_replacement: bool = False
+    replacement_reason: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -38,8 +40,15 @@ class MissionAssignmentRead(BaseModel):
     updated_at: datetime
     deleted_at: datetime | None = None
     participants: list[MissionParticipantRead] = []
+    has_replacement_warnings: bool = False
+    replacement_warning_count: int = 0
 
     model_config = {"from_attributes": True}
+
+
+class MissionReplacementAlertSummary(BaseModel):
+    mission_count: int
+    participant_count: int
 
 
 class CreateMissionRequest(BaseModel):

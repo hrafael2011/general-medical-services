@@ -18,4 +18,3 @@ class AuthenticatedUser:
     must_change_password: bool
     token_version: int
     locked_until: datetime | None
-

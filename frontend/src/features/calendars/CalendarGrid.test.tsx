@@ -18,7 +18,7 @@ vi.mock("../../api/calendars", () => ({
     }),
     generate: vi.fn(),
     approve: vi.fn(),
-    newVersion: vi.fn(),
+    unlock: vi.fn(),
     assignDoctor: vi.fn(),
     removeAssignment: vi.fn(),
   },
@@ -99,17 +99,10 @@ describe("CalendarGrid", () => {
     expect(dots[2].getAttribute("style")).toMatch(/#2563eb|rgb\(37,\s*99,\s*235\)/);
   });
 
-  it("muestra '— — —' para áreas vacías en modo draft", async () => {
+  it("muestra '+ Asignar médico' en áreas vacías en modo draft", async () => {
     renderGrid();
-    // Multiple cells have empty areas → "— — —" appears many times
-    const dashes = await screen.findAllByText("— — —");
-    expect(dashes.length).toBeGreaterThan(0);
-  });
-
-  it("muestra '+ Asignar' en modo draft", async () => {
-    renderGrid();
-    const assignLinks = await screen.findAllByText("+ Asignar");
-    expect(assignLinks.length).toBeGreaterThan(0);
+    const assignLabels = await screen.findAllByText("+ Asignar médico");
+    expect(assignLabels.length).toBeGreaterThan(0);
   });
 
   it("muestra celdas vacías cuando no hay slots en modo draft", async () => {
@@ -121,11 +114,9 @@ describe("CalendarGrid", () => {
     });
     renderGrid();
     await screen.findByText(/mayo 2026/i);
-    // All areas are empty → "— — —" for all area rows
-    const dashes = await screen.findAllByText("— — —");
-    expect(dashes.length).toBeGreaterThan(0);
-    // "+ Asignar" still visible in draft even with no slots
-    expect(screen.getAllByText("+ Asignar").length).toBeGreaterThan(0);
+    // All slots empty → "+ Asignar médico" in all area rows
+    const assignLabels = await screen.findAllByText("+ Asignar médico");
+    expect(assignLabels.length).toBeGreaterThan(0);
   });
 
   it("no muestra enlaces de asignación en modo aprobado", async () => {
@@ -137,12 +128,11 @@ describe("CalendarGrid", () => {
     });
     renderGrid();
     await screen.findByText(/mayo 2026/i);
-    expect(screen.queryByText("+ Asignar")).not.toBeInTheDocument();
-    expect(screen.queryByText("— — —")).not.toBeInTheDocument();
+    expect(screen.queryByText("+ Asignar médico")).not.toBeInTheDocument();
     // Approved mode shows single "—" for empty areas
     const dashes = await screen.findAllByText("—");
     expect(dashes.length).toBeGreaterThan(0);
-    // "Nueva versión" button replaces "Generar" in approved mode
-    expect(screen.getByRole("button", { name: /nueva versión/i })).toBeInTheDocument();
+    // "Editar calendario" button replaces "Generar" in approved mode
+    expect(screen.getByRole("button", { name: /editar calendario/i })).toBeInTheDocument();
   });
 });

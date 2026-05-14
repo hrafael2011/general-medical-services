@@ -1,6 +1,9 @@
+import uuid
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -16,6 +19,7 @@ from backend.app.infrastructure.db.models import missions as _missions  # noqa: 
 from backend.app.infrastructure.db.models import notifications as _notifications  # noqa: F401
 from backend.app.infrastructure.db.models import telegram as _telegram  # noqa: F401
 from backend.app.infrastructure.db.models import user as _user  # noqa: F401
+from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.users import UserRepository
 from backend.app.main import create_app
@@ -73,8 +77,33 @@ def client(session, admin_user):
     return TestClient(app)
 
 
+def _create_user(session, *, role: str) -> UserModel:
+    user = UserModel(
+        id=str(uuid.uuid4()),
+        name=f"Usuario {role}",
+        email=f"{role}-{uuid.uuid4().hex[:8]}@example.com",
+        role=role,
+        active=True,
+        password_hash="hashed",
+        must_change_password=False,
+        token_version=1,
+        failed_login_count=0,
+        locked_until=None,
+        last_login_at=None,
+        password_changed_at=None,
+        created_by=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+        deactivated_at=None,
+        deactivated_by=None,
+    )
+    session.add(user)
+    session.flush()
+    return user
+
+
 def test_list_users_returns_200(client):
-    # GET /api/admin/users — default role filter is "doctor", so returns empty list
+    # GET /api/admin/users — default role filter is "encargado"
     response = client.get("/api/admin/users")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
@@ -134,3 +163,44 @@ def test_reset_nonexistent_user_returns_404(client):
         json={"temporary_password": "NewTemp456!"},
     )
     assert response.status_code == 404
+
+
+def test_telegram_link_token_allows_encargado(client, session):
+    user = _create_user(session, role="encargado")
+    session.commit()
+
+    response = client.post(
+        "/api/telegram/link-tokens",
+        json={"user_id": user.id},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["deep_link_url"]
+
+
+def test_telegram_link_token_rejects_non_internal_role(client, session):
+    user = _create_user(session, role="doctor")
+    session.commit()
+
+    response = client.post(
+        "/api/telegram/link-tokens",
+        json={"user_id": user.id},
+    )
+
+    assert response.status_code == 400
+
+
+def test_telegram_manual_link_rejects_non_internal_role(client, session):
+    user = _create_user(session, role="doctor")
+    session.commit()
+
+    response = client.post(
+        "/api/telegram/links",
+        json={
+            "telegram_user_id": "123456",
+            "telegram_username": "doctoruser",
+            "user_id": user.id,
+        },
+    )
+
+    assert response.status_code == 400

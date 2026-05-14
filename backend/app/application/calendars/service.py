@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -155,7 +156,16 @@ class CalendarService:
                 actor_id=actor_id, calendar=calendar, version=version
             )
 
-        if self.triggers is not None:
+        should_notify = True
+        if version.reason and version.reason.startswith("__unlock__"):
+            should_notify = False
+            # Restore original reason
+            if "__orig__" in version.reason:
+                version.reason = version.reason.split("__orig__", 1)[1]
+            else:
+                version.reason = None
+
+        if self.triggers is not None and should_notify:
             assignments = self.repo.list_assignments(version.id)
             self.triggers.on_calendar_approved(
                 actor_id=actor_id,
@@ -168,6 +178,68 @@ class CalendarService:
                 year=calendar.year,
                 month=calendar.month,
                 calendar_version_id=version.id,
+            )
+
+        return version
+
+    def unlock_calendar(
+        self,
+        *,
+        actor_id: str,
+        calendar_id: str,
+    ) -> CalendarVersionModel:
+        """Revert an approved calendar back to draft. Keeps all assignments intact."""
+        calendar = self.repo.get_calendar_by_id(calendar_id)
+        if calendar is None:
+            raise CalendarServiceError(
+                "calendar_not_found",
+                f"Calendar with id {calendar_id} not found.",
+            )
+
+        if calendar.status != "approved":
+            raise CalendarServiceError(
+                "invalid_status_transition",
+                "unlock_calendar can only be called on an approved calendar.",
+            )
+
+        versions = self.repo.list_versions(calendar_id)
+        if not versions:
+            raise CalendarServiceError(
+                "version_not_found",
+                f"No versions found for calendar {calendar_id}.",
+            )
+
+        now = datetime.now(UTC)
+        version = versions[0]  # latest version (list ordered desc)
+
+        # Snapshot hash of current assignments to detect changes on re-approval
+        current_assignments = self.repo.list_assignments(version.id)
+        snap_data = "|".join(
+            sorted(
+                f"{a.service_date}|{a.service_area_id}|{a.doctor_id}"
+                for a in current_assignments
+            )
+        )
+        snap_hash = hashlib.md5(snap_data.encode()).hexdigest()
+        original_reason = version.reason
+        version.reason = f"__unlock__{snap_hash}"
+        if original_reason:
+            version.reason += f"__orig__{original_reason}"
+
+        version.status = "draft"
+        version.approved_at = None
+        version.approved_by = None
+        self.repo.session.flush()
+
+        calendar.status = "draft"
+        calendar.updated_at = now
+        self.repo.session.flush()
+
+        if self.audit is not None:
+            self.audit.log_calendar_unlocked(
+                actor_id=actor_id,
+                calendar=calendar,
+                version=version,
             )
 
         return version

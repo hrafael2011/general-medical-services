@@ -52,3 +52,14 @@ def require_admin(
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
     return current_user
+
+
+def require_encargado_or_admin(
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+) -> UserModel:
+    if current_user.role not in {"encargado", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Encargado or admin role required",
+        )
+    return current_user

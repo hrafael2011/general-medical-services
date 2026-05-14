@@ -1,15 +1,18 @@
 import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
-  CalendarDays, Stethoscope, Target,
+  LayoutDashboard, CalendarDays, Stethoscope, Target,
   BarChart2, Bell, MessageCircle,
   ClipboardList, ShieldCheck, LogOut, UserPlus,
 } from "lucide-react";
+import { actionAlertsApi } from "../api/actionAlerts";
 import { useAuth } from "../context/AuthContext";
 
 const SHARED_ITEMS = [
-  { to: "/calendars", icon: CalendarDays, label: "Calendarios" },
-  { to: "/doctors",   icon: Stethoscope,  label: "Médicos" },
-  { to: "/missions",  icon: Target,        label: "Misiones" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/calendars", icon: CalendarDays,     label: "Calendarios" },
+  { to: "/doctors",   icon: Stethoscope,      label: "Médicos" },
+  { to: "/missions",  icon: Target,            label: "Misiones" },
 ];
 
 const SYSTEM_ITEMS = [
@@ -19,9 +22,15 @@ const SYSTEM_ITEMS = [
 
 export function Sidebar() {
   const { currentUser, logout } = useAuth();
+  const { data: alertSummary } = useQuery({
+    queryKey: ["action-alerts-summary"],
+    queryFn: actionAlertsApi.summary,
+    staleTime: 60 * 1000,
+  });
 
   const isEncargadoPlus = currentUser && (currentUser.role === "encargado" || currentUser.role === "admin");
   const isAdmin = currentUser && currentUser.role === "admin";
+  const alertCounts = alertSummary?.by_section ?? {};
 
   return (
     <aside className="sidebar">
@@ -42,7 +51,17 @@ export function Sidebar() {
               }
             >
               <Icon size={16} />
-              {label}
+              <span className="sidebar-link-label">{label}</span>
+              {to === "/missions" && (alertCounts.missions ?? 0) > 0 && (
+                <span className="sidebar-badge" aria-label={`${alertCounts.missions} alertas en misiones`}>
+                  {alertCounts.missions}
+                </span>
+              )}
+              {to === "/calendars" && (alertCounts.calendar ?? 0) > 0 && (
+                <span className="sidebar-badge" aria-label={`${alertCounts.calendar} alertas en calendarios`}>
+                  {alertCounts.calendar}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>
@@ -97,7 +116,12 @@ export function Sidebar() {
               }
             >
               <Icon size={16} />
-              {label}
+              <span className="sidebar-link-label">{label}</span>
+              {to === "/notifications" && (alertCounts.notifications ?? 0) > 0 && (
+                <span className="sidebar-badge" aria-label={`${alertCounts.notifications} alertas en notificaciones`}>
+                  {alertCounts.notifications}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>

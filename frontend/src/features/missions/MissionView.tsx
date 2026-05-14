@@ -10,7 +10,7 @@ import { doctorsApi } from "../../api/doctors";
 import { ApiError } from "../../api/client";
 import { useToast } from "../../components/Toast";
 
-type MissionSection = "manage" | "create" | "ranking";
+type MissionSection = "manage" | "ranking";
 
 function currentYearMonth(): { year: number; month: number } {
   const now = new Date();
@@ -232,6 +232,7 @@ export function MissionView() {
   const [rankYear, setRankYear] = useState(defaults.year);
   const [rankMonth, setRankMonth] = useState(defaults.month);
   const [editingMission, setEditingMission] = useState<MissionAssignment | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [confirmingMission, setConfirmingMission] = useState<MissionAssignment | null>(null);
 
   const rankingQuery = useQuery({
@@ -274,6 +275,7 @@ export function MissionView() {
 
   function refreshMissions() {
     setEditingMission(null);
+    setShowCreateForm(false);
     setSection("manage");
     qc.invalidateQueries({ queryKey: ["missions"] });
   }
@@ -290,7 +292,6 @@ export function MissionView() {
       <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
         {[
           ["manage", "Gestión de misiones"],
-          ["create", "Crear misión"],
           ["ranking", "Ranking de candidatos"],
         ].map(([key, label]) => (
           <button
@@ -302,13 +303,6 @@ export function MissionView() {
           </button>
         ))}
       </div>
-
-      {section === "create" && (
-        <section>
-          <h3 style={{ fontSize: 16, marginBottom: 14, color: "#1e293b" }}>Crear misión</h3>
-          <MissionForm onSaved={refreshMissions} />
-        </section>
-      )}
 
       {section === "ranking" && (
         <section>
@@ -361,7 +355,22 @@ export function MissionView() {
 
       {section === "manage" && (
         <section>
-          <h3 style={{ fontSize: 16, marginBottom: 14, color: "#1e293b" }}>Gestión de misiones</h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+            <h3 style={{ fontSize: 16, margin: 0, color: "#1e293b" }}>Gestión de misiones</h3>
+            <button
+              className={showCreateForm ? "btn-ghost" : "btn-primary"}
+              onClick={() => {
+                setShowCreateForm(prev => !prev);
+                setEditingMission(null);
+              }}
+            >
+              <PlusCircle size={15} />
+              {showCreateForm ? "Ocultar creación" : "Crear misión"}
+            </button>
+          </div>
+          {showCreateForm && (
+            <MissionForm onSaved={refreshMissions} onCancel={() => setShowCreateForm(false)} />
+          )}
           {editingMission && (
             <MissionForm mission={editingMission} onSaved={refreshMissions} onCancel={() => setEditingMission(null)} />
           )}
@@ -380,8 +389,28 @@ export function MissionView() {
                       <td>{mission.mission_date}</td>
                       <td>{mission.location ?? <span style={{ color: "#9ca3af" }}>—</span>}</td>
                       <td>{mission.participant_count}</td>
-                      <td>{statusBadge(mission.status)}</td>
-                      <td>{mission.participants.length}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                          {statusBadge(mission.status)}
+                          {mission.has_replacement_warnings && (
+                            <span className="warning-badge">
+                              {mission.replacement_warning_count} reemplazo pendiente
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <span>{mission.participants.length}</span>
+                          {mission.participants
+                            .filter(participant => participant.requires_replacement)
+                            .map(participant => (
+                              <span key={participant.id} className="mission-replacement-warning">
+                                {participant.doctor_name ?? "Médico no encontrado"}: {participant.replacement_reason}
+                              </span>
+                            ))}
+                        </div>
+                      </td>
                       <td className="cell-actions">
                         {mission.status === "draft" && (
                           <button className="btn-ghost btn-green" onClick={() => setConfirmingMission(mission)}>

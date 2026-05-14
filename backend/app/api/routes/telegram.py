@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
 from backend.app.core.config import settings
+from backend.app.infrastructure.rate_limiter import RateLimiter
 from backend.app.infrastructure.db.models.telegram import (
     TelegramLinkTokenModel,
     TelegramUserLinkModel,
@@ -35,6 +36,10 @@ logger = logging.getLogger(__name__)
 
 _TELEGRAM_LINKABLE_ROLES = {"admin", "encargado"}
 
+# Per-user rate limiter for the Telegram webhook:
+# 20 requests/minute per telegram_user_id
+_webhook_limiter = RateLimiter(max_requests=20, window_seconds=60)
+
 
 def _get_linkable_user(session: Session, user_id: str) -> UserModel:
     user = UserRepository(session).get_by_id(user_id)
@@ -52,7 +57,6 @@ def _get_linkable_user(session: Session, user_id: str) -> UserModel:
 # ---------------------------------------------------------------------------
 
 def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # noqa: ANN201
-    from backend.app.application.reports.report_service import ReportService
     from backend.app.application.telegram.agent import ConversationalAgent
     from backend.app.application.telegram.bot_client import FakeBotClient, TelegramBotClient
     from backend.app.application.telegram.doctor_query_service import DoctorQueryService
@@ -62,12 +66,6 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     from backend.app.application.telegram.memory import MemoryManager, SessionStore
     from backend.app.application.telegram.orchestrator import TelegramOrchestrator
     from backend.app.application.telegram.query_executor import QueryExecutor
-    from backend.app.application.telegram.tools import ToolGateway
-    from backend.app.infrastructure.repositories.availability import AvailabilityRepository
-    from backend.app.infrastructure.repositories.calendars import CalendarRepository
-    from backend.app.infrastructure.repositories.doctors import DoctorRepository
-    from backend.app.infrastructure.repositories.missions import MissionRepository
-    from backend.app.infrastructure.repositories.notifications import NotificationRepository
     from backend.app.infrastructure.repositories.telegram import TelegramRepository
     from backend.app.infrastructure.repositories.users import UserRepository
 
@@ -76,24 +74,6 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     bot = TelegramBotClient() if settings.telegram_bot_token else FakeBotClient()
 
     query_executor = QueryExecutor(session, llm) if use_real else None
-    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
-    report_service = ReportService(
-        calendar_repo=CalendarRepository(session),
-        notification_repo=NotificationRepository(session),
-        doctor_repo=DoctorRepository(session),
-        mission_repo=MissionRepository(session),
-        catalog_repo=CatalogRepository(session),
-    )
-
-    tools = ToolGateway(
-        doctor_repo=DoctorRepository(session),
-        calendar_repo=CalendarRepository(session),
-        mission_repo=MissionRepository(session),
-        availability_repo=AvailabilityRepository(session),
-        query_executor=query_executor,
-        report_service=report_service,
-        catalog_repo=CatalogRepository(session),
-    )
     router = IntentRouter()
     if session:
         router.set_session(session)
@@ -103,7 +83,6 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         llm=llm,
         router=router,
         query_executor=query_executor,
-        tools=tools,
         memory=memory,
         session_store=SessionStore(ttl_seconds=1800, telegram_repo=TelegramRepository(session)),
         entity_resolver=EntityResolver(session=session),
@@ -142,6 +121,14 @@ def webhook(
         telegram_username = update.message.from_.username
         chat_id = update.message.chat.id
         text = update.message.text
+
+        # Rate limiting: 20 req/min per user
+        if not _webhook_limiter.allow(telegram_user_id):
+            logger.warning(
+                "Rate limited user=%s chat=%s",
+                telegram_user_id, chat_id,
+            )
+            return {"ok": True, "rate_limited": True}
 
         # Attempt processing with 1 automatic retry on failure
         for attempt in range(2):

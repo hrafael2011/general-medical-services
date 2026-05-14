@@ -315,17 +315,17 @@ def test_router_export_excel_format(db_session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _format_rows en IntentRouter (distintos tamaños)
+# format_rows (ahora en sanitize)
 # ---------------------------------------------------------------------------
 
 
 def test_router_format_rows_single_row() -> None:
     """1 fila → 'Resultado:' con los pares clave:valor."""
-    router = IntentRouter()
-    result = router._format_rows(
+    from backend.app.application.telegram.sanitize import format_rows
+
+    result = format_rows(
         rows=[{"name": "Dr. Test", "count": 7}],
         columns=["name", "count"],
-        user_message="cuántos hay",
     )
     assert "Resultado:" in result
     assert "Test" in result
@@ -333,18 +333,20 @@ def test_router_format_rows_single_row() -> None:
 
 def test_router_format_rows_five_rows() -> None:
     """5 filas → lista numerada completa incluyendo '5.'."""
-    router = IntentRouter()
+    from backend.app.application.telegram.sanitize import format_rows
+
     rows = [{"name": f"Dr. {i}", "sex": "M", "area": "E"} for i in range(5)]
-    result = router._format_rows(rows, ["name", "sex", "area"], "test")
+    result = format_rows(rows, ["name", "sex", "area"])
     assert "5 resultados" in result
     assert "5." in result
 
 
 def test_router_format_rows_more_than_five() -> None:
     """6+ filas → solo primeros 5 mostrados, '6.' no aparece."""
-    router = IntentRouter()
+    from backend.app.application.telegram.sanitize import format_rows
+
     rows = [{"name": f"Dr. {i}"} for i in range(8)]
-    result = router._format_rows(rows, ["name"], "test")
+    result = format_rows(rows, ["name"])
     assert "8 resultados" in result
     assert "6." not in result
 

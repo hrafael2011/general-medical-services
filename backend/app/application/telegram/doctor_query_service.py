@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.application.telegram.sanitize import sanitize_text
+from backend.app.application.telegram.sanitize import format_rows
 from backend.app.application.telegram.types import AgentResult
 from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
@@ -25,33 +25,6 @@ _SEX_LABELS = {
     "male": "Masculino",
     "female": "Femenino",
 }
-
-
-def _format_rows(rows: list[dict], columns: list[str]) -> str:
-    columns = [
-        column for column in columns
-        if column.lower() != "id" and not column.lower().endswith("_id")
-    ]
-    rows = [{column: row.get(column) for column in columns} for row in rows]
-    if not rows:
-        return "No se encontraron resultados para esa consulta."
-    if len(rows) == 1:
-        return "Resultado: " + " | ".join(
-            f"{k}: {sanitize_text(v)}" for k, v in rows[0].items() if v is not None
-        )
-    if len(rows) <= 5:
-        lines = [
-            f"{i + 1}. "
-            + " | ".join(sanitize_text(str(row.get(column, ""))) for column in columns[:3])
-            for i, row in enumerate(rows)
-        ]
-        return f"Se encontraron {len(rows)} resultados:\n" + "\n".join(lines)
-    lines = [
-        f"{i + 1}. "
-        + " | ".join(sanitize_text(str(row.get(column, ""))) for column in columns[:3])
-        for i, row in enumerate(rows[:5])
-    ]
-    return f"Se encontraron {len(rows)} resultados. Los primeros:\n" + "\n".join(lines)
 
 
 def _sorted_filters(filters: dict[str, Any]) -> dict[str, Any]:
@@ -147,7 +120,7 @@ class DoctorQueryService:
             },
         )
         return AgentResult(
-            response_text=_format_rows(rows, columns),
+            response_text=format_rows(rows, columns),
             agent_action="query",
             tool_name="doctor_query_service",
             tool_entities={

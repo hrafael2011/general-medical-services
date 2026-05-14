@@ -1,19 +1,24 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DoctorForm } from "./DoctorForm";
 
 const mockSetWeekly = vi.fn().mockResolvedValue({});
 const mockSetMonthly = vi.fn().mockResolvedValue({});
 const mockSetRecurring = vi.fn().mockResolvedValue({});
+const mockCreateDoctor = vi.fn().mockResolvedValue({ id: "d-new", name: "TEST" });
+const mockUpdateDoctor = vi.fn().mockResolvedValue({ id: "d-edit", name: "TEST" });
 
 vi.mock("../../api/doctors", () => ({
   doctorsApi: {
-    create: vi.fn().mockResolvedValue({ id: "d-new", name: "TEST" }),
-    update: vi.fn().mockResolvedValue({ id: "d-edit", name: "TEST" }),
+    create: (...args: unknown[]) => mockCreateDoctor(...args),
+    update: (...args: unknown[]) => mockUpdateDoctor(...args),
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     listServiceAreas: vi.fn().mockResolvedValue([]),
     listRanks: vi.fn().mockResolvedValue([]),
+    listDepartments: vi.fn().mockResolvedValue([
+      { id: "dept-1", name: "Recursos Humanos", normalized_name: "recursos humanos", active: true },
+    ]),
   },
   availabilityApi: {
     setWeekly: (...args: unknown[]) => mockSetWeekly(...args),
@@ -32,6 +37,10 @@ function renderForm() {
 }
 
 describe("DoctorForm availability", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("shows weekly day chips by default", () => {
     renderForm();
     expect(screen.getByText(/Mismos días/)).toBeInTheDocument();
@@ -60,5 +69,25 @@ describe("DoctorForm availability", () => {
     expect(lunCheckbox).toBeChecked();
     fireEvent.click(lunCheckbox);
     expect(lunCheckbox).not.toBeChecked();
+  });
+
+  it("sends selected department when creating a doctor", async () => {
+    renderForm();
+
+    fireEvent.change(screen.getByLabelText("Nombre completo"), {
+      target: { value: "Dra. Prueba" },
+    });
+    await screen.findByText("Recursos Humanos");
+    fireEvent.change(screen.getByLabelText("Departamento"), {
+      target: { value: "dept-1" },
+    });
+    fireEvent.click(screen.getByLabelText("Lun"));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar/i }));
+
+    await waitFor(() => {
+      expect(mockCreateDoctor).toHaveBeenCalledWith(
+        expect.objectContaining({ department_id: "dept-1" })
+      );
+    });
   });
 });

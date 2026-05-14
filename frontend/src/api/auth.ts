@@ -1,7 +1,12 @@
 import { apiFetch, setToken } from "./client";
 
 export interface UserRead {
-  id: string; name: string; email: string; role: string; active: boolean; must_change_password: boolean;
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  must_change_password: boolean;
 }
 export interface LoginResponse { access_token: string; token_type: string; user: UserRead; }
 

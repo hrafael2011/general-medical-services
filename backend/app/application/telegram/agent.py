@@ -4,7 +4,7 @@ Architecture:
   1. Single LLM call translates user message to {action, query_type, params}
   2. IntentRouter executes pre-registered queries (fast path)
   3. QueryExecutor fallback for unregistered questions (slow path)
-  4. ToolGateway kept for backward compatibility with old-format responses
+  4. Legacy call_tool handler returns graceful error
 """
 
 import json
@@ -20,9 +20,8 @@ from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
 from backend.app.application.telegram.query_executor import QueryExecutor
-from backend.app.application.telegram.sanitize import sanitize_text
+from backend.app.application.telegram.sanitize import format_rows, sanitize_text
 from backend.app.application.telegram.schemas import IntentOutput
-from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
 
 logger = logging.getLogger(__name__)
@@ -162,14 +161,6 @@ def _calendar_assignment_query_intent(text: str) -> tuple[str, dict[str, int]] |
     return None
 
 
-def _public_columns(columns: list[str]) -> list[str]:
-    """Columns safe to show in Telegram text responses."""
-    return [
-        column for column in columns
-        if column.lower() != "id" and not column.lower().endswith("_id")
-    ]
-
-
 def _count_filter_dims(entity_hints: str) -> int:
     """Count how many filter dimensions are present in entity hints."""
     if not entity_hints:
@@ -225,28 +216,7 @@ Sin explicaciones ni markdown.
 """
 
 
-def _format_rows(rows: list[dict], columns: list[str]) -> str:
-    """Generate a human-readable response from query results."""
-    columns = _public_columns(columns)
-    rows = [{column: row.get(column) for column in columns} for row in rows]
-    count = len(rows)
-    if count == 0:
-        return "No se encontraron resultados."
-    if count == 1:
-        first = rows[0]
-        parts = [f"{k}: {sanitize_text(v)}" for k, v in first.items() if v is not None]
-        return "Resultado: " + " | ".join(parts)
-    if count <= 5:
-        lines = [
-            f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
-            for i, r in enumerate(rows)
-        ]
-        return f"Se encontraron {count} resultados:\n" + "\n".join(lines)
-    lines = [
-        f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
-        for i, r in enumerate(rows[:5])
-    ]
-    return f"Se encontraron {count} resultados. Los primeros:\n" + "\n".join(lines)
+
 
 
 class ConversationalAgent:
@@ -257,7 +227,6 @@ class ConversationalAgent:
         llm: LLMProvider,
         router: IntentRouter,
         query_executor: QueryExecutor | None = None,
-        tools: ToolGateway | None = None,
         memory: MemoryManager | None = None,
         session_store: SessionStore | None = None,
         entity_resolver = None,
@@ -266,7 +235,6 @@ class ConversationalAgent:
         self._llm = llm
         self._router = router
         self._query_executor = query_executor
-        self._tools = tools
         self._memory = memory
         self._session_store = session_store
         self._entity_resolver = entity_resolver
@@ -389,7 +357,7 @@ class ConversationalAgent:
         data = result["data"]
         rows = data.get("rows", [])
         columns = data.get("columns", [])
-        response = _format_rows(rows, columns)
+        response = format_rows(rows, columns)
 
         logger.info(
             "NL-to-SQL fallback completed",
@@ -533,93 +501,9 @@ class ConversationalAgent:
         user_text: str,
         actor_id: str | None = None,
     ) -> AgentResult:
-        """Handle legacy {action: 'call_tool', tool: '...', entities: {...}}."""
-        tool_name = parsed.get("tool", "")
-        entities = dict(parsed.get("entities", {}))
-        # Inject actor_id for write operations (create_mission, etc.)
-        if actor_id:
-            entities["_actor_id"] = actor_id
-
-        if self._tools is None:
-            return AgentResult(
-                response_text="No tengo informacion sobre eso en el sistema."
-            )
-
-        result = self._tools.execute(tool_name, entities)
-
-        if not result.get("ok"):
-            error = result.get("error", "")
-            if error == "out_of_domain":
-                return AgentResult(
-                    response_text="No tengo informacion sobre eso en el sistema.",
-                    agent_action="call_tool",
-                    tool_name=tool_name,
-                    tool_entities=entities,
-                    tool_result=result,
-                )
-            return AgentResult(
-                response_text="Ocurrio un error al consultar los datos. Intenta de nuevo.",
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        data = result["data"]
-
-        # Two-step confirmation flow
-        if isinstance(data, dict) and data.get("requires_confirmation"):
-            return AgentResult(
-                response_text=data.get("message", "Confirma la accion para continuar."),
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        # Document response (PDF/Excel)
-        document_bytes = result.get("document_bytes")
-        document_filename = result.get("document_filename")
-        if document_bytes and document_filename:
-            return AgentResult(
-                response_text="Aqui tienes el reporte solicitado.",
-                document_bytes=document_bytes,
-                document_filename=document_filename,
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        # Plain data — format via LLM (legacy 2nd call)
-        data_str = json.dumps(data, ensure_ascii=False, default=str)
-        format_prompt = (
-            "Con los siguientes datos del sistema de turnos medicos, "
-            "genera una respuesta natural y amigable para el medico.\n\n"
-            f"DATOS:\n{data_str}\n\n"
-            f"Pregunta original: {user_text}\n\n"
-            "Responde en el mismo idioma que la pregunta original, "
-            "de forma clara y concisa."
-        )
-        format_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Eres un asistente amable que explica datos del sistema "
-                    "de turnos medicos. Responde en el mismo idioma "
-                    "de la pregunta original, de forma clara y concisa."
-                ),
-            },
-            {"role": "user", "content": format_prompt},
-        ]
-
-        response = self._llm.chat_complete(format_messages, temperature=0.3)
+        """Handle legacy {action: 'call_tool', ...} — no longer supported."""
         return AgentResult(
-            response_text=response.strip(),
-            agent_action="call_tool",
-            tool_name=tool_name,
-            tool_entities=entities,
-            tool_result=result,
+            response_text="No tengo informacion sobre eso en el sistema."
         )
 
     # ------------------------------------------------------------------
@@ -638,7 +522,7 @@ class ConversationalAgent:
 
         1. Loads conversation history (if memory available)
         2. Calls LLM to translate message to command JSON
-        3. Routes: router (fast), query_executor (fallback), reply, or ToolGateway (legacy)
+        3. Routes: router (fast), query_executor (fallback), reply, or legacy call_tool handler
         4. Returns final response
         """
         start = time.perf_counter()

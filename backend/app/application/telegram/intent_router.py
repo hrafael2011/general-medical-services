@@ -13,7 +13,7 @@ from reportlab.lib.units import cm
 
 from sqlalchemy import text as sa_text
 
-from backend.app.application.telegram.sanitize import sanitize_text
+from backend.app.application.telegram.sanitize import format_rows
 from backend.app.application.telegram.types import AgentResult
 from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
 
@@ -162,7 +162,7 @@ class IntentRouter:
                     agent_action="query",
                 )
             return AgentResult(
-                response_text=self._format_rows(rows, columns, user_message),
+                response_text=format_rows(rows, columns),
                 agent_action="query",
             )
         except Exception as exc:
@@ -246,25 +246,6 @@ class IntentRouter:
             self._session.rollback()
             return [], []
 
-    def _format_rows(self, rows: list[dict], columns: list[str], user_message: str) -> str:
-        """Generate a natural-language response from query results."""
-        count = len(rows)
-        if count == 0:
-            return "No se encontraron resultados."
-        if count == 1:
-            first = rows[0]
-            parts = [f"{k}: {sanitize_text(v)}" for k, v in first.items() if v is not None]
-            return "Resultado: " + " | ".join(parts)
-        if count <= 5:
-            lines = [f"{i+1}. " + " | ".join(
-                sanitize_text(str(r.get(c, ""))) for c in columns[:3]
-            ) for i, r in enumerate(rows)]
-            return f"Se encontraron {count} resultados:\n" + "\n".join(lines)
-        return f"Se encontraron {count} resultados. Los primeros:\n" + "\n".join(
-            f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
-            for i, r in enumerate(rows[:5])
-        )
-
 _EXPORT_FILENAME_MAP = {
     "list_active_doctors": "LISTADO_MEDICOS_ACTIVOS.pdf",
     "count_by_sex": "MEDICOS_POR_SEXO.pdf",
@@ -320,6 +301,12 @@ _COLUMN_TITLE_MAP: dict[str, str] = {
     "department": "Departamento",
     "doctor_id": "ID Médico",
     "id": "ID",
+    "active_doctors": "Médicos Activos",
+    "calendar_status": "Estado Calendario",
+    "total_assignments": "Total Servicios",
+    "unresolved_gaps": "Huecos",
+    "description": "Descripción",
+    "reason_code": "Motivo",
 }
 
 _DEFAULT_COLUMN_TITLE = "Columna"

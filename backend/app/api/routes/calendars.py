@@ -5,12 +5,10 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_ready_user
 from backend.app.application.calendars.assignment_service import AssignmentService
-from backend.app.application.calendars.auto_generation_service import AutoCalendarGenerationService
-from backend.app.core.config import settings
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.application.calendars.service import CalendarService
-from backend.app.application.catalogs.service import CatalogService
+from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -18,7 +16,6 @@ from backend.app.schemas.calendars import (
     ApproveCalendarRequest,
     AssignDoctorRequest,
     CalendarAssignmentRead,
-    CalendarAutoGenerationRunResponse,
     CalendarGridResponse,
     CalendarRead,
     CalendarVersionRead,
@@ -67,12 +64,14 @@ def get_calendar_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarService:
     from backend.app.application.audit.service import AuditService
+    from backend.app.application.confirmations.service import ConfirmationRequestService
     from backend.app.application.missions.ranking_service import MissionRankingService
     from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
     from backend.app.application.notifications.service import NotificationService
     from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+    from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.infrastructure.repositories.missions import MissionRepository
     from backend.app.infrastructure.repositories.notifications import NotificationRepository
@@ -87,6 +86,10 @@ def get_calendar_service(
             provider=provider,
         ),
         doctor_repo=doctor_repo,
+        confirmation_service=ConfirmationRequestService(
+            ConfirmationRequestRepository(session),
+        ),
+        confirmation_due_hours=settings.confirmation_overdue_hours,
     )
     mission_ranking_service = MissionRankingService(
         MissionRepository(session),
@@ -128,25 +131,36 @@ def get_assignment_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AssignmentService:
     from backend.app.application.audit.service import AuditService
+    from backend.app.application.confirmations.service import ConfirmationRequestService
+    from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
+    from backend.app.application.notifications.service import NotificationService
+    from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+    from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.notifications import NotificationRepository
+
+    doctor_repo = DoctorRepository(session)
+    provider = TwilioProvider() if settings.twilio_account_sid else FakeProvider()
+    triggers = NotificationTriggers(
+        notification_service=NotificationService(
+            repo=NotificationRepository(session),
+            provider=provider,
+        ),
+        doctor_repo=doctor_repo,
+        confirmation_service=ConfirmationRequestService(
+            ConfirmationRequestRepository(session),
+        ),
+        confirmation_due_hours=settings.confirmation_overdue_hours,
+    )
 
     return AssignmentService(
         CalendarRepository(session),
-        DoctorRepository(session),
+        doctor_repo,
         AvailabilityRepository(session),
         audit=AuditService(AuditRepository(session)),
-    )
-
-
-def get_auto_generation_service(
-    session: Annotated[Session, Depends(get_db_session)],
-) -> AutoCalendarGenerationService:
-    return AutoCalendarGenerationService(
-        calendar_service=get_calendar_service(session),
-        generation_service=get_generation_service(session),
-        catalog_service=CatalogService(CatalogRepository(session)),
+        triggers=triggers,
     )
 
 
@@ -182,20 +196,6 @@ def create_calendar(
         raise _http_exc(exc) from exc
     session.commit()
     return CalendarRead.model_validate(calendar)
-
-
-@router.post("/auto-generation/run-due", response_model=CalendarAutoGenerationRunResponse)
-def run_due_auto_generation(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
-    service: Annotated[AutoCalendarGenerationService, Depends(get_auto_generation_service)],
-    session: Annotated[Session, Depends(get_db_session)],
-) -> CalendarAutoGenerationRunResponse:
-    try:
-        result = service.run_due()
-    except CalendarServiceError as exc:
-        raise _http_exc(exc) from exc
-    session.commit()
-    return CalendarAutoGenerationRunResponse.model_validate(result)
 
 
 @router.get("/{calendar_id}", response_model=CalendarRead)
@@ -246,7 +246,10 @@ def get_calendar_grid(
     if version is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "version_not_found", "message": f"No versions found for calendar {calendar_id}."},
+            detail={
+                "code": "version_not_found",
+                "message": f"No versions found for calendar {calendar_id}.",
+            },
         )
 
     assignments = repo.list_assignments(version.id)
@@ -283,7 +286,10 @@ def approve_calendar(
     if version is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "version_not_found", "message": f"No versions found for calendar {calendar_id}."},
+            detail={
+                "code": "version_not_found",
+                "message": f"No versions found for calendar {calendar_id}.",
+            },
         )
     try:
         approved_version = service.approve_version(
@@ -298,7 +304,11 @@ def approve_calendar(
     return CalendarVersionRead.model_validate(approved_version)
 
 
-@router.post("/{calendar_id}/new-version", response_model=CalendarVersionRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{calendar_id}/new-version",
+    response_model=CalendarVersionRead,
+    status_code=status.HTTP_201_CREATED,
+)
 def new_version(
     calendar_id: str,
     current_user: Annotated[UserModel, Depends(require_ready_user)],
@@ -318,7 +328,29 @@ def new_version(
     return CalendarVersionRead.model_validate(new_ver)
 
 
-@router.post("/{calendar_id}/generate", response_model=GenerationResponse, status_code=status.HTTP_200_OK)
+@router.post("/{calendar_id}/unlock", response_model=CalendarVersionRead)
+def unlock_calendar(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[CalendarService, Depends(get_calendar_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CalendarVersionRead:
+    try:
+        version = service.unlock_calendar(
+            actor_id=current_user.id,
+            calendar_id=calendar_id,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+    return CalendarVersionRead.model_validate(version)
+
+
+@router.post(
+    "/{calendar_id}/generate",
+    response_model=GenerationResponse,
+    status_code=status.HTTP_200_OK,
+)
 def generate_calendar(
     calendar_id: str,
     current_user: Annotated[UserModel, Depends(require_ready_user)],

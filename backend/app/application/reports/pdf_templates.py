@@ -500,9 +500,9 @@ def generate_workload_pdf(data: dict) -> bytes:
         ["Médicos Activos", str(data['active_doctors'])],
         ["Promedio por Médico", str(data['avg_per_doctor'])],
         ["Mayor Carga",
-         f"{data.get('most_load', {}).get('name', '—')} ({data.get('most_load', {}).get('total', 0)})"],
+         f"{((data.get('most_load') or {}).get('name', '—'))} ({((data.get('most_load') or {}).get('total', 0))})"],
         ["Menor Carga",
-         f"{data.get('least_load', {}).get('name', '—')} ({data.get('least_load', {}).get('total', 0)})"],
+         f"{((data.get('least_load') or {}).get('name', '—'))} ({((data.get('least_load') or {}).get('total', 0))})"],
     ]
     story.append(Paragraph("RESUMEN", _STYLE_SECTION))
     story.append(_make_table(summary_data, col_widths=[6 * cm, 10 * cm]))
@@ -515,7 +515,7 @@ def generate_workload_pdf(data: dict) -> bytes:
         rows.append([
             entry["name"],
             entry.get("rank") or "—",
-            entry.get("sex") or "—",
+            _sex_label(entry.get("sex")) or "—",
             entry.get("department") or "—",
             str(entry.get("emergencia", 0)),
             str(entry.get("pista", 0)),
@@ -529,6 +529,14 @@ def generate_workload_pdf(data: dict) -> bytes:
     story.append(_build_signature_block())
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
+
+
+def _sex_label(value: str | None) -> str | None:
+    if value == "male":
+        return "Masculino"
+    if value == "female":
+        return "Femenino"
+    return value
 
 
 # ---------------------------------------------------------------------------

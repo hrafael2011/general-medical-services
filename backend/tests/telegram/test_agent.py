@@ -144,31 +144,6 @@ def test_export_action_routes_to_router(db_session) -> None:
     assert router.last_handle_args["query_type"] == "list_active_doctors"
 
 
-def test_legacy_call_tool_format_falls_back_to_tools(db_session) -> None:
-    """Old-format {action: 'call_tool', tool: '...'} still works via ToolGateway."""
-    from backend.app.application.telegram.tools import ToolGateway
-    from backend.app.infrastructure.repositories.doctors import DoctorRepository
-
-    llm = FakeLLMProvider(responses={
-        "activos": (
-            '{"action": "call_tool", "tool": "count_medicos_activos", "entities": {}}'
-        ),
-    })
-    router = RouterStub()
-    tools = ToolGateway(
-        doctor_repo=DoctorRepository(db_session),
-        calendar_repo=None,  # type: ignore[arg-type]
-        mission_repo=None,   # type: ignore[arg-type]
-        availability_repo=None,  # type: ignore[arg-type]
-    )
-    agent = ConversationalAgent(llm=llm, router=router, tools=tools)
-
-    result = agent.process(text="cuantos medicos activos hay")
-
-    assert result.agent_action == "call_tool"
-    assert result.tool_name == "count_medicos_activos"
-
-
 def test_unknown_query_type_falls_back_to_reply(db_session) -> None:
     """When router returns not-found, agent returns fallback message."""
     llm = FakeLLMProvider(responses={
@@ -237,44 +212,6 @@ def test_extract_json_partial_json_returns_none() -> None:
 
 # ---------------------------------------------------------------------------
 # _format_rows tests (función en agent.py)
-# ---------------------------------------------------------------------------
-
-
-def test_format_rows_empty() -> None:
-    """0 filas → 'No se encontraron resultados.'"""
-    from backend.app.application.telegram.agent import _format_rows
-    assert _format_rows([], []) == "No se encontraron resultados."
-
-
-def test_format_rows_single_row() -> None:
-    """1 fila → muestra todos los campos con 'Resultado:'."""
-    from backend.app.application.telegram.agent import _format_rows
-    rows = [{"name": "Dr. García", "count": 5}]
-    result = _format_rows(rows, ["name", "count"])
-    assert "García" in result
-    assert "Resultado:" in result
-
-
-def test_format_rows_few_rows() -> None:
-    """2-5 filas → lista numerada."""
-    from backend.app.application.telegram.agent import _format_rows
-    rows = [{"name": f"Dr. {i}", "sex": "M", "area": "E"} for i in range(3)]
-    result = _format_rows(rows, ["name", "sex", "area"])
-    assert "3 resultados" in result
-    assert "1." in result
-    assert "2." in result
-
-
-def test_format_rows_many_rows() -> None:
-    """Más de 5 filas → muestra solo los primeros 5 con 'Los primeros'."""
-    from backend.app.application.telegram.agent import _format_rows
-    rows = [{"name": f"Dr. {i}"} for i in range(10)]
-    result = _format_rows(rows, ["name"])
-    assert "10 resultados" in result
-    assert "Los primeros" in result
-    assert "6." not in result
-
-
 # ---------------------------------------------------------------------------
 # Fallbacks y edge cases del agente
 # ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [max, setMax] = useState(String(doctor?.monthly_service_max ?? 3));
   const [limitMode, setLimitMode] = useState(doctor?.monthly_service_limit_mode ?? "warn_only");
   const [rankId, setRankId] = useState<string>(doctor?.rank_id ?? "");
+  const [departmentId, setDepartmentId] = useState<string>(doctor?.department_id ?? "");
   const [allowedAreaIds, setAllowedAreaIds] = useState<string[]>(doctor?.allowed_area_ids ?? []);
 
   const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -56,6 +57,11 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const { data: ranks } = useQuery({
     queryKey: ["ranks"],
     queryFn: doctorsApi.listRanks,
+  });
+
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: doctorsApi.listDepartments,
   });
 
   const { data: availabilityData } = useQuery({
@@ -130,6 +136,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
     save.mutate({
       name, sex, phone: phone || null, participa_misiones: participaMisiones,
       rank_id: rankId || null,
+      department_id: departmentId || null,
       availability_mode: availabilityMode,
       monthly_service_target: t, monthly_service_max: m,
       monthly_service_limit_mode: limitMode,
@@ -176,6 +183,18 @@ export function DoctorForm({ doctor, onClose }: Props) {
                 ))}
               </select>
             </label>
+            <label>
+              Departamento
+              <select value={departmentId} onChange={e => setDepartmentId(e.target.value)}>
+                <option value="">— Sin departamento —</option>
+                {(departments ?? []).filter(d => d.active).map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="form-row">
             <label>
               Teléfono
               <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Opcional" />

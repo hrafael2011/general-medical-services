@@ -17,6 +17,7 @@ const STATUS_LABELS: Record<string, string> = {
   sent: "Enviado",
   failed: "Fallido",
   cancelled: "Cancelado",
+  skipped: "Omitido",
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -24,6 +25,12 @@ const TYPE_LABELS: Record<string, string> = {
   reminder_12h: "Recordatorio 12h",
   mission_participant: "Misión participante",
   mission_summary: "Resumen misión",
+  service_assignment_added: "Servicio agregado",
+  service_assignment_removed: "Servicio removido",
+  service_assignment_updated: "Servicio actualizado",
+  mission_participant_added: "Participante agregado",
+  mission_participant_removed: "Participante removido",
+  mission_details_updated: "Misión actualizada",
   availability: "Disponibilidad",
 };
 
@@ -33,6 +40,7 @@ const STATUS_OPTIONS = [
   { value: "sent", label: "Enviado" },
   { value: "failed", label: "Fallido" },
   { value: "cancelled", label: "Cancelado" },
+  { value: "skipped", label: "Omitido" },
 ];
 
 const TYPE_OPTIONS = [
@@ -41,6 +49,12 @@ const TYPE_OPTIONS = [
   { value: "reminder_12h", label: "Recordatorio 12h" },
   { value: "mission_participant", label: "Misión participante" },
   { value: "mission_summary", label: "Resumen misión" },
+  { value: "service_assignment_added", label: "Servicio agregado" },
+  { value: "service_assignment_removed", label: "Servicio removido" },
+  { value: "service_assignment_updated", label: "Servicio actualizado" },
+  { value: "mission_participant_added", label: "Participante agregado" },
+  { value: "mission_participant_removed", label: "Participante removido" },
+  { value: "mission_details_updated", label: "Misión actualizada" },
   { value: "availability", label: "Disponibilidad" },
 ];
 
@@ -70,6 +84,8 @@ function statusBadgeStyle(status: string): React.CSSProperties {
       return { ...base, background: "#d1fae5", color: "#065f46" };
     case "failed":
       return { ...base, background: "#fee2e2", color: "#991b1b" };
+    case "skipped":
+      return { ...base, background: "#e0f2fe", color: "#075985" };
     case "cancelled":
       return { ...base, background: "#f3f4f6", color: "#6b7280" };
     default:

@@ -1,13 +1,15 @@
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
+from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.audit.service import AuditService
 from backend.app.application.catalogs.service import normalize_name
 from backend.app.application.doctors.errors import DoctorServiceError
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.missions import MissionRepository
 
 
 def _strip_html(value: str | None) -> str | None:
@@ -17,16 +19,23 @@ def _strip_html(value: str | None) -> str | None:
     return re.sub(r"<[^>]*>", "", value).strip()
 
 
+_MISSING = object()
+
+
 class DoctorService:
     def __init__(
         self,
         doctors: DoctorRepository,
         catalog_repo: CatalogRepository | None = None,
         audit: AuditService | None = None,
+        mission_repo: MissionRepository | None = None,
+        action_alerts: ActionAlertService | None = None,
     ) -> None:
         self.doctors = doctors
         self.catalog_repo = catalog_repo
         self.audit = audit
+        self.mission_repo = mission_repo
+        self.action_alerts = action_alerts
 
     def create_doctor(
         self,
@@ -103,12 +112,12 @@ class DoctorService:
         actor_id: str,
         name: str | None = None,
         sex: str | None = None,
-        rank_id: str | None = None,
-        department_id: str | None = None,
-        phone: str | None = None,
-        notes: str | None = None,
+        rank_id: str | None | object = _MISSING,
+        department_id: str | None | object = _MISSING,
+        phone: str | None | object = _MISSING,
+        notes: str | None | object = _MISSING,
         participa_misiones: bool | None = None,
-        whatsapp_phone: str | None = None,
+        whatsapp_phone: str | None | object = _MISSING,
         monthly_service_target: int | None = None,
         monthly_service_max: int | None = None,
         monthly_service_limit_mode: str | None = None,
@@ -162,22 +171,22 @@ class DoctorService:
         if sex is not None:
             doctor.sex = sex
             changed_fields["sex"] = sex
-        if rank_id is not None:
+        if rank_id is not _MISSING:
             doctor.rank_id = rank_id
             changed_fields["rank_id"] = rank_id
-        if department_id is not None:
+        if department_id is not _MISSING:
             doctor.department_id = department_id
             changed_fields["department_id"] = department_id
-        if phone is not None:
+        if phone is not _MISSING:
             doctor.phone = _strip_html(phone)
             changed_fields["phone"] = doctor.phone
-        if notes is not None:
+        if notes is not _MISSING:
             doctor.notes = _strip_html(notes)
             changed_fields["notes"] = doctor.notes
         if participa_misiones is not None:
             doctor.participa_misiones = participa_misiones
             changed_fields["participa_misiones"] = participa_misiones
-        if whatsapp_phone is not None:
+        if whatsapp_phone is not _MISSING:
             doctor.whatsapp_phone = _strip_html(whatsapp_phone)
             changed_fields["whatsapp_phone"] = doctor.whatsapp_phone
         if monthly_service_target is not None:
@@ -228,11 +237,14 @@ class DoctorService:
         doctor.service_active = False
         doctor.service_inactive_reason_id = reason_id
         doctor.service_inactive_detail = _strip_html(detail)
+        doctor.participa_misiones = False
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
 
         if self.audit is not None:
             self.audit.log_doctor_service_deactivated(actor_id=actor_id, doctor=doctor)
+
+        self._create_mission_replacement_alerts_for_deactivated_doctor(doctor, actor_id=actor_id)
 
         return doctor
 
@@ -244,6 +256,7 @@ class DoctorService:
         doctor.service_active = True
         doctor.service_inactive_reason_id = None
         doctor.service_inactive_detail = None
+        doctor.participa_misiones = True
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
 
@@ -251,3 +264,41 @@ class DoctorService:
             self.audit.log_doctor_service_reactivated(actor_id=actor_id, doctor=doctor)
 
         return doctor
+
+    def _create_mission_replacement_alerts_for_deactivated_doctor(
+        self,
+        doctor: DoctorModel,
+        *,
+        actor_id: str,
+    ) -> None:
+        if self.mission_repo is None or self.action_alerts is None:
+            return
+
+        participations = self.mission_repo.list_future_confirmed_participations_for_doctor(
+            doctor.id,
+            from_date=date.today(),
+        )
+        for mission, participant in participations:
+            location = f" en {mission.location}" if mission.location else ""
+            self.action_alerts.create_if_missing(
+                alert_type="mission_replacement_required",
+                section="missions",
+                severity="critical",
+                title="Reemplazo requerido en misión",
+                message=(
+                    f"{doctor.name} fue desactivado para servicios y está asignado a la "
+                    f"misión del {mission.mission_date}{location}. Debe reemplazarse."
+                ),
+                entity_type="mission_participant",
+                entity_id=participant.id,
+                action_url="/missions",
+                alert_metadata={
+                    "doctor_id": doctor.id,
+                    "doctor_name": doctor.name,
+                    "mission_id": mission.id,
+                    "mission_date": str(mission.mission_date),
+                    "reason_id": doctor.service_inactive_reason_id,
+                    "reason_detail": doctor.service_inactive_detail,
+                },
+                created_by=actor_id,
+            )

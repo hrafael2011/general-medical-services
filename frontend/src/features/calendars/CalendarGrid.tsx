@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Wand2 } from "lucide-react";
+import { CheckCircle2, Trash2, Wand2 } from "lucide-react";
 import { calendarsApi, CalendarAssignmentRead, DaySlot } from "../../api/calendars";
 import { doctorsApi, availabilityApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
@@ -10,6 +10,7 @@ import { AssignDoctorModal } from "./AssignDoctorModal";
 import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
 import { useToast } from "../../components/Toast";
 import { ApiError } from "../../api/client";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -110,6 +111,7 @@ export function CalendarGrid() {
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
   const [generateSummary, setGenerateSummary] = useState<string | null>(null);
   const [assignmentWarning, setAssignmentWarning] = useState<string | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["calendar-grid", calendarId],
@@ -156,14 +158,26 @@ export function CalendarGrid() {
     onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al aprobar."),
   });
 
-  const newVersionMutation = useMutation({
-    mutationFn: () => calendarsApi.newVersion(calendarId!),
+  const unlockMutation = useMutation({
+    mutationFn: () => calendarsApi.unlock(calendarId!),
     onSuccess: () => {
       invalidate();
       qc.invalidateQueries({ queryKey: ["calendars"] });
-      addToast("success", "Nueva versión creada.");
+      addToast("success", "Calendario desbloqueado. Ahora puedes editarlo.");
     },
-    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al crear versión."),
+    onError: (err) =>
+      addToast("error", err instanceof ApiError ? err.message : "Error al desbloquear calendario."),
+  });
+
+  const deleteCalendarMutation = useMutation({
+    mutationFn: () => calendarsApi.delete(calendarId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["calendars"] });
+      addToast("success", "Calendario eliminado.");
+      navigate("/calendars");
+    },
+    onError: (err) =>
+      addToast("error", err instanceof ApiError ? err.message : "Error al eliminar calendario."),
   });
 
   const generateMutation = useMutation({
@@ -265,10 +279,18 @@ export function CalendarGrid() {
           </>
         )}
         {!isDraft && (
-          <button className="btn-ghost" disabled={newVersionMutation.isPending} onClick={() => newVersionMutation.mutate()}>
-            {newVersionMutation.isPending ? "Creando…" : "Nueva versión"}
+          <button className="btn-ghost" disabled={unlockMutation.isPending} onClick={() => unlockMutation.mutate()}>
+            🔓 {unlockMutation.isPending ? "Desbloqueando…" : "Editar calendario"}
           </button>
         )}
+        <button
+          className="btn-ghost btn-danger"
+          onClick={() => setShowDeleteDialog(true)}
+          disabled={deleteCalendarMutation.isPending}
+          title="Eliminar calendario"
+        >
+          <Trash2 size={15} />
+        </button>
       </div>
 
       {generateSummary && (
@@ -310,7 +332,7 @@ export function CalendarGrid() {
                   }
                 };
                 return (
-                  <div key={areaAss.areaId} className={`calendar-area-row${isDraft ? " calendar-area-row--clickable" : ""}`}
+                  <div key={areaAss.areaId} className={`calendar-area-row${isDraft ? " calendar-area-row--clickable" : ""}${!doctor && isDraft ? " calendar-area-row--empty" : ""}`}
                     role="button" tabIndex={0}
                     onClick={handleAreaClick}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleAreaClick(); } }}
@@ -319,36 +341,13 @@ export function CalendarGrid() {
                     {doctor ? (
                       <span>{rank ? rankDisplayName(rank.name) + " " : ""}{doctor.name}</span>
                     ) : isDraft ? (
-                      <span style={{ color: "#cbd5e1" }}>— — —</span>
+                      <span className="calendar-assign-label">+ Asignar médico</span>
                     ) : (
                       <span style={{ color: "#e2e8f0" }}>—</span>
                     )}
                   </div>
                 );
               })}
-              {isDraft && (
-                <div className="calendar-assign-link" role="button" tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const firstEmpty = assignments.find((a) => !a.slot?.assignment);
-                    if (firstEmpty) {
-                      setAssignTarget({ date: cd.dateStr!, areaId: firstEmpty.areaId, areaName: firstEmpty.areaName });
-                      setAssignmentWarning(null);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const firstEmpty = assignments.find((a) => !a.slot?.assignment);
-                      if (firstEmpty) {
-                        setAssignTarget({ date: cd.dateStr!, areaId: firstEmpty.areaId, areaName: firstEmpty.areaName });
-                        setAssignmentWarning(null);
-                      }
-                    }
-                  }}
-                >+ Asignar</div>
-              )}
             </div>
           );
         })}
@@ -386,6 +385,16 @@ export function CalendarGrid() {
           isLoading={removeMutation.isPending}
         />
       )}
+
+      <ConfirmDialog
+        open={showDeleteDialog}
+        title="Eliminar calendario"
+        message={`¿Estás seguro de eliminar ${MONTHS[calendar.month - 1]} ${calendar.year}?`}
+        confirmLabel="Sí, eliminar"
+        onConfirm={() => deleteCalendarMutation.mutate()}
+        onCancel={() => setShowDeleteDialog(false)}
+        isLoading={deleteCalendarMutation.isPending}
+      />
     </div>
   );
 }

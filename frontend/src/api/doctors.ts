@@ -29,6 +29,16 @@ export interface CreateDoctorPayload {
 
 export interface ServiceAreaRead { id: string; code: string; display_name: string; active: boolean; }
 export interface RankRead { id: string; name: string; abbreviation: string; }
+export interface DepartmentRead { id: string; name: string; normalized_name: string; active: boolean; }
+export interface DeactivationReasonRead {
+  id: string;
+  code: string;
+  display_name: string;
+  active: boolean;
+  requires_detail: boolean;
+  applies_to_sex: string | null;
+  severity: string;
+}
 
 export interface AvailabilityRead {
   id: string;
@@ -58,6 +68,11 @@ export const doctorsApi = {
     apiFetch<DoctorRead>(`/doctors/${id}/reactivate-service`, { method: "POST" }),
   listServiceAreas: () => apiFetch<ServiceAreaRead[]>("/catalogs/service-areas"),
   listRanks: () => apiFetch<RankRead[]>("/catalogs/ranks"),
+  listDepartments: () => apiFetch<DepartmentRead[]>("/catalogs/departments"),
+  listDeactivationReasons: (sex?: string) =>
+    apiFetch<DeactivationReasonRead[]>(
+      `/catalogs/deactivation-reasons${sex ? `?sex=${sex}` : ""}`
+    ),
 };
 
 export const availabilityApi = {

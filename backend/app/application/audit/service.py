@@ -212,6 +212,20 @@ class AuditService:
             },
         )
 
+    def log_calendar_unlocked(self, *, actor_id: str, calendar, version) -> AuditEventModel:
+        return self._create(
+            actor_id=actor_id,
+            action_type="calendar_unlocked",
+            entity_type="calendar",
+            entity_id=calendar.id,
+            before={"status": "approved"},
+            after={
+                "status": calendar.status,
+                "version_number": version.version_number,
+                "version_id": version.id,
+            },
+        )
+
     def log_calendar_deleted(self, *, actor_id: str, calendar) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,

@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
+from backend.app.application.notifications.triggers import NotificationTriggers
 from backend.app.domain.doctors.eligibility import EligibilityChecker, EligibilityResult
 from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
@@ -20,11 +21,13 @@ class AssignmentService:
         doctor_repo: DoctorRepository,
         availability_repo: AvailabilityRepository,
         audit: AuditService | None = None,
+        triggers: NotificationTriggers | None = None,
     ) -> None:
         self.calendar_repo = calendar_repo
         self.doctor_repo = doctor_repo
         self.availability_repo = availability_repo
         self.audit = audit
+        self.triggers = triggers
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -156,6 +159,9 @@ class AssignmentService:
         if self.audit is not None:
             self.audit.log_assignment_added(actor_id=actor_id, assignment=assignment)
 
+        if self._is_unlocked_approved_version(version):
+            self._notify_assignment_added(actor_id=actor_id, assignment=assignment)
+
         return assignment
 
     def remove_assignment(
@@ -184,10 +190,19 @@ class AssignmentService:
                 "Cannot modify an approved calendar version.",
             )
 
+        service_area_name = self._service_area_name(assignment.service_area_id)
+        should_notify = self._is_unlocked_approved_version(version)
         self.calendar_repo.delete_assignment(assignment_id)
 
         if self.audit is not None:
             self.audit.log_assignment_removed(actor_id=actor_id, assignment_id=assignment_id)
+
+        if should_notify and self.triggers is not None:
+            self.triggers.on_calendar_assignment_removed_after_approval(
+                actor_id=actor_id,
+                assignment=assignment,
+                service_area_name=service_area_name,
+            )
 
     def replace_assignment(
         self,
@@ -240,16 +255,58 @@ class AssignmentService:
             override_justification=override_justification,
         )
 
+        old_doctor_id = assignment.doctor_id
+        should_notify = self._is_unlocked_approved_version(version)
+        service_area_name = self._service_area_name(assignment.service_area_id)
+
         # Update the assignment in-place.
         assignment.doctor_id = new_doctor_id
         assignment.rationale = _manual_rationale(soft_warnings)
-        assignment.override_justification = override_justification if override_justification else None
+        assignment.override_justification = (
+            override_justification if override_justification else None
+        )
         self.calendar_repo.session.flush()
 
         if self.audit is not None:
             self.audit.log_assignment_replaced(actor_id=actor_id, assignment=assignment)
 
+        if should_notify and self.triggers is not None and old_doctor_id != new_doctor_id:
+            removed_assignment = _assignment_snapshot(assignment, doctor_id=old_doctor_id)
+            self.triggers.on_calendar_assignment_removed_after_approval(
+                actor_id=actor_id,
+                assignment=removed_assignment,
+                service_area_name=service_area_name,
+            )
+            self.triggers.on_calendar_assignment_updated_after_approval(
+                actor_id=actor_id,
+                assignment=assignment,
+                service_area_name=service_area_name,
+            )
+
         return assignment
+
+    def _is_unlocked_approved_version(self, version) -> bool:
+        return bool(version and version.reason and version.reason.startswith("__unlock__"))
+
+    def _service_area_name(self, service_area_id: str) -> str:
+        for area in self.calendar_repo.list_service_areas():
+            if area.id == service_area_id or area.code == service_area_id:
+                return area.display_name
+        return service_area_id
+
+    def _notify_assignment_added(
+        self,
+        *,
+        actor_id: str,
+        assignment: CalendarAssignmentModel,
+    ) -> None:
+        if self.triggers is None:
+            return
+        self.triggers.on_calendar_assignment_added_after_approval(
+            actor_id=actor_id,
+            assignment=assignment,
+            service_area_name=self._service_area_name(assignment.service_area_id),
+        )
 
 
 def _manual_rationale(soft_warnings: list[EligibilityResult]) -> dict | None:
@@ -261,3 +318,16 @@ def _manual_rationale(soft_warnings: list[EligibilityResult]) -> dict | None:
             for warning in soft_warnings
         ]
     }
+
+
+def _assignment_snapshot(assignment: CalendarAssignmentModel, *, doctor_id: str):
+    class AssignmentSnapshot:
+        pass
+
+    snapshot = AssignmentSnapshot()
+    snapshot.id = assignment.id
+    snapshot.calendar_version_id = assignment.calendar_version_id
+    snapshot.doctor_id = doctor_id
+    snapshot.service_date = assignment.service_date
+    snapshot.service_area_id = assignment.service_area_id
+    return snapshot

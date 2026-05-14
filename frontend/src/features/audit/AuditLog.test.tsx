@@ -64,10 +64,13 @@ describe("AuditLog", () => {
           action_type: "doctor_created",
           entity_type: "doctor",
           entity_id: "d1",
+          actor_display: "Ana Martínez (ana@example.com)",
+          entity_display: "Médico: Dr. López",
           occurred_at: "2026-05-01T10:00:00",
           before_snapshot: null,
           after_snapshot: { name: "Dr. López" },
           metadata_: null,
+          detail_summary: "Se creó el médico Dr. López.",
         },
       ],
       total: 1,
@@ -80,7 +83,10 @@ describe("AuditLog", () => {
     const actionLabel = await screen.findByText("Médico creado");
     expect(actionLabel).toBeInTheDocument();
 
-    const entityLabel = screen.getByText("Médico");
+    const entityLabel = await screen.findByText("Médico: Dr. López");
     expect(entityLabel).toBeInTheDocument();
+
+    expect(screen.getByText("Ana Martínez (ana@example.com)")).toBeInTheDocument();
+    expect(screen.getByText("Se creó el médico Dr. López.")).toBeInTheDocument();
   });
 });

@@ -54,12 +54,19 @@ class DeepSeekProvider:
         self.base_url = settings.deepseek_base_url
         self.model = settings.deepseek_model
 
+        self._client: OpenAI | None = None
+
+    def _ensure_client(self) -> "OpenAI":
+        if self._client is None:
+            from openai import OpenAI  # type: ignore[import]
+
+            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        return self._client
+
     def _call(self, messages: list[dict], temperature: float, json_mode: bool = False) -> str:
         import openai
 
-        from openai import OpenAI  # type: ignore[import]
-
-        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        client = self._ensure_client()
         kwargs: dict = {
             "model": self.model,
             "messages": messages,

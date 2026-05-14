@@ -6,10 +6,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
 from backend.app.infrastructure.db.base import Base
+from backend.app.infrastructure.db.models import action_alerts as _action_alerts  # noqa: F401
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
 from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
 from backend.app.infrastructure.db.models import calendars as _calendars  # noqa: F401
 from backend.app.infrastructure.db.models import catalogs as _catalogs  # noqa: F401
+from backend.app.infrastructure.db.models import confirmations as _confirmations  # noqa: F401
 from backend.app.infrastructure.db.models import doctors as _doctors  # noqa: F401
 from backend.app.infrastructure.db.models import missions as _missions  # noqa: F401
 from backend.app.infrastructure.db.models import notifications as _notifications  # noqa: F401

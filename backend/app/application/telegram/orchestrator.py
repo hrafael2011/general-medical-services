@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -18,6 +19,10 @@ _MSG_NOT_LINKED = (
 )
 _MSG_INACTIVE_ACCOUNT = "Tu cuenta de sistema está inactiva. Contacta al administrador."
 _MSG_MUST_CHANGE_PASSWORD = "Debes cambiar tu contraseña temporal antes de usar el asistente."
+_CONFIRMATION_COMMAND_RE = re.compile(
+    r"^/(recibido|confirmar)\s+([A-Za-z0-9_\-=]+)\s*$",
+    re.IGNORECASE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +131,16 @@ class TelegramOrchestrator:
         # 3. Update last_used_at
         link.last_used_at = datetime.now(UTC)
 
+        confirmation_response = self._handle_confirmation_command(
+            telegram_user_id=telegram_user_id,
+            chat_id=chat_id,
+            text=text,
+            user_id=user.id,
+            user_role=user.role,
+        )
+        if confirmation_response is not None:
+            return confirmation_response
+
         # 4. Process through conversational agent
         result: AgentResult = self._agent.process(
             text=text,
@@ -170,6 +185,39 @@ class TelegramOrchestrator:
         )
         return response_text
 
+    def _handle_confirmation_command(
+        self,
+        *,
+        telegram_user_id: str,
+        chat_id: int,
+        text: str,
+        user_id: str,
+        user_role: str,
+    ) -> str | None:
+        match = _CONFIRMATION_COMMAND_RE.match(text.strip())
+        if match is None:
+            return None
+
+        command = match.group(1).lower()
+        response_text = "Las confirmaciones de médicos no se realizan desde cuentas internas."
+        self._log_and_send(
+            telegram_user_id=telegram_user_id,
+            chat_id=chat_id,
+            text=text,
+            response_text=response_text,
+            matched_user_id=user_id,
+            user_role=user_role,
+            intent_id="confirmation_command",
+            entities={"command": command},
+            confidence=1.0,
+            tool_name="confirmation_service",
+            tool_request={"command": command},
+            tool_response={"status": "not_authorized_internal_user"},
+            status="completed",
+            fallback_reason="confirmation_internal_user",
+        )
+        return response_text
+
     # ------------------------------------------------------------------
     # Deep-link /start handler
     # ------------------------------------------------------------------
@@ -201,6 +249,12 @@ class TelegramOrchestrator:
                 "El link es inválido o ha expirado. "
                 "Solicita uno nuevo al administrador."
             )
+            self._bot_client.send_message(chat_id, msg)
+            return msg
+
+        linked_user = self._user_repo.get_by_id(token_record.user_id)
+        if linked_user is None or linked_user.role not in {"admin", "encargado"}:
+            msg = "Este link no corresponde a un usuario autorizado para Telegram."
             self._bot_client.send_message(chat_id, msg)
             return msg
 

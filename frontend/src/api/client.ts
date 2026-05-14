@@ -1,4 +1,5 @@
-const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const configuredBase = import.meta.env.VITE_API_URL;
+const BASE = configuredBase || `${window.location.protocol}//${window.location.hostname}:8999`;
 
 let token: string | null = null;
 

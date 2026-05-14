@@ -24,6 +24,7 @@ from backend.app.infrastructure.db.models.missions import (
     MissionAssignmentModel,
     MissionCandidateRankingEntryModel,
     MissionCandidateRankingModel,
+    MissionParticipantModel,
 )
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
@@ -146,6 +147,24 @@ def _create_doctor(session) -> DoctorModel:
     return doctor
 
 
+def _add_mission_participant(session, *, mission_id: str, doctor_id: str) -> MissionParticipantModel:
+    now = datetime.datetime.now(datetime.UTC)
+    participant = MissionParticipantModel(
+        id=str(uuid4()),
+        mission_assignment_id=mission_id,
+        doctor_id=doctor_id,
+        selection_source="manual",
+        ranking_position=None,
+        score=None,
+        reasons=None,
+        warnings=None,
+        created_at=now,
+    )
+    session.add(participant)
+    session.flush()
+    return participant
+
+
 def _create_ranking(session, *, version_id: str) -> None:
     doctor = _create_doctor(session)
     now = datetime.datetime.now(datetime.UTC)
@@ -260,6 +279,39 @@ def test_delete_mission_is_soft_delete_and_hides_from_list(client, session) -> N
     assert list_response.json() == []
     get_response = client.get(f"/api/missions/{mission.id}")
     assert get_response.status_code == 404
+
+
+def test_list_missions_marks_future_confirmed_inactive_participant_for_replacement(client, session) -> None:
+    doctor = _create_doctor(session)
+    doctor.service_active = False
+    doctor.participa_misiones = False
+    mission = _create_mission(session, status="confirmed")
+    mission.mission_date = datetime.date.today() + datetime.timedelta(days=10)
+    _add_mission_participant(session, mission_id=mission.id, doctor_id=doctor.id)
+    session.commit()
+
+    response = client.get("/api/missions")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["has_replacement_warnings"] is True
+    assert data[0]["replacement_warning_count"] == 1
+    assert data[0]["participants"][0]["requires_replacement"] is True
+    assert data[0]["participants"][0]["replacement_reason"] == "Médico inactivo para servicio."
+
+
+def test_replacement_alert_summary_counts_future_confirmed_replacements(client, session) -> None:
+    doctor = _create_doctor(session)
+    doctor.service_active = False
+    mission = _create_mission(session, status="confirmed")
+    mission.mission_date = datetime.date.today() + datetime.timedelta(days=10)
+    _add_mission_participant(session, mission_id=mission.id, doctor_id=doctor.id)
+    session.commit()
+
+    response = client.get("/api/missions/replacement-alerts/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {"mission_count": 1, "participant_count": 1}
 
 
 def test_confirm_mission_accepts_path_id_and_doctor_ids_body(client, session) -> None:

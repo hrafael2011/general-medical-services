@@ -25,6 +25,21 @@ def _is_sqlite() -> bool:
     return op.get_bind().engine.driver == "pysqlite"
 
 
+def _index_exists(table_name: str, index_name: str) -> bool:
+    inspector = sa.inspect(op.get_bind())
+    return any(index["name"] == index_name for index in inspector.get_indexes(table_name))
+
+
+def _create_index_if_missing(index_name: str, table_name: str, columns: list[str]) -> None:
+    if not _index_exists(table_name, index_name):
+        op.create_index(index_name, table_name, columns)
+
+
+def _drop_index_if_exists(index_name: str, table_name: str) -> None:
+    if _index_exists(table_name, index_name):
+        op.drop_index(index_name, table_name=table_name)
+
+
 def _drop_old_ranking_constraint() -> None:
     """Drop the unnamed unique constraint on mission_candidate_rankings (month, year).
 
@@ -111,38 +126,83 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     # Missing FK indexes
     # ------------------------------------------------------------------
-    op.create_index(op.f("ix_doctors_rank_id"), "doctors", ["rank_id"])
-    op.create_index(op.f("ix_doctors_department_id"), "doctors", ["department_id"])
-    op.create_index(op.f("ix_doctors_service_inactive_reason_id"), "doctors", ["service_inactive_reason_id"])
+    _create_index_if_missing(op.f("ix_doctors_rank_id"), "doctors", ["rank_id"])
+    _create_index_if_missing(op.f("ix_doctors_department_id"), "doctors", ["department_id"])
+    _create_index_if_missing(
+        op.f("ix_doctors_service_inactive_reason_id"),
+        "doctors",
+        ["service_inactive_reason_id"],
+    )
 
-    op.create_index(op.f("ix_doctor_availability_doctor_id"), "doctor_availability", ["doctor_id"])
-    op.create_index(op.f("ix_doctor_restrictions_doctor_id"), "doctor_restrictions", ["doctor_id"])
-    op.create_index(op.f("ix_doctor_restrictions_reason_id"), "doctor_restrictions", ["reason_id"])
+    _create_index_if_missing(
+        op.f("ix_doctor_availability_doctor_id"),
+        "doctor_availability",
+        ["doctor_id"],
+    )
+    _create_index_if_missing(
+        op.f("ix_doctor_restrictions_doctor_id"),
+        "doctor_restrictions",
+        ["doctor_id"],
+    )
+    _create_index_if_missing(
+        op.f("ix_doctor_restrictions_reason_id"),
+        "doctor_restrictions",
+        ["reason_id"],
+    )
 
-    op.create_index(op.f("ix_telegram_link_tokens_created_by"), "telegram_link_tokens", ["created_by"])
+    _create_index_if_missing(
+        op.f("ix_telegram_link_tokens_created_by"),
+        "telegram_link_tokens",
+        ["created_by"],
+    )
 
-    op.create_index(op.f("ix_calendar_assignments_service_area_id"), "calendar_assignments", ["service_area_id"])
-    op.create_index(op.f("ix_unresolved_gaps_service_area_id"), "unresolved_gaps", ["service_area_id"])
+    _create_index_if_missing(
+        op.f("ix_calendar_assignments_service_area_id"),
+        "calendar_assignments",
+        ["service_area_id"],
+    )
+    _create_index_if_missing(
+        op.f("ix_unresolved_gaps_service_area_id"),
+        "unresolved_gaps",
+        ["service_area_id"],
+    )
 
-    op.create_index(op.f("ix_mission_candidate_rankings_calendar_version_id"), "mission_candidate_rankings", ["calendar_version_id"])
-    op.create_index(op.f("ix_mission_candidate_ranking_entries_doctor_id"), "mission_candidate_ranking_entries", ["doctor_id"])
+    _create_index_if_missing(
+        op.f("ix_mission_candidate_rankings_calendar_version_id"),
+        "mission_candidate_rankings",
+        ["calendar_version_id"],
+    )
+    _create_index_if_missing(
+        op.f("ix_mission_candidate_ranking_entries_doctor_id"),
+        "mission_candidate_ranking_entries",
+        ["doctor_id"],
+    )
 
 
 def downgrade() -> None:
     # ------------------------------------------------------------------
     # Drop FK indexes
     # ------------------------------------------------------------------
-    op.drop_index(op.f("ix_mission_candidate_ranking_entries_doctor_id"), table_name="mission_candidate_ranking_entries")
-    op.drop_index(op.f("ix_mission_candidate_rankings_calendar_version_id"), table_name="mission_candidate_rankings")
-    op.drop_index(op.f("ix_unresolved_gaps_service_area_id"), table_name="unresolved_gaps")
-    op.drop_index(op.f("ix_calendar_assignments_service_area_id"), table_name="calendar_assignments")
-    op.drop_index(op.f("ix_telegram_link_tokens_created_by"), table_name="telegram_link_tokens")
-    op.drop_index(op.f("ix_doctor_restrictions_reason_id"), table_name="doctor_restrictions")
-    op.drop_index(op.f("ix_doctor_restrictions_doctor_id"), table_name="doctor_restrictions")
-    op.drop_index(op.f("ix_doctor_availability_doctor_id"), table_name="doctor_availability")
-    op.drop_index(op.f("ix_doctors_service_inactive_reason_id"), table_name="doctors")
-    op.drop_index(op.f("ix_doctors_department_id"), table_name="doctors")
-    op.drop_index(op.f("ix_doctors_rank_id"), table_name="doctors")
+    _drop_index_if_exists(
+        op.f("ix_mission_candidate_ranking_entries_doctor_id"),
+        "mission_candidate_ranking_entries",
+    )
+    _drop_index_if_exists(
+        op.f("ix_mission_candidate_rankings_calendar_version_id"),
+        "mission_candidate_rankings",
+    )
+    _drop_index_if_exists(op.f("ix_unresolved_gaps_service_area_id"), "unresolved_gaps")
+    _drop_index_if_exists(
+        op.f("ix_calendar_assignments_service_area_id"),
+        "calendar_assignments",
+    )
+    _drop_index_if_exists(op.f("ix_telegram_link_tokens_created_by"), "telegram_link_tokens")
+    _drop_index_if_exists(op.f("ix_doctor_restrictions_reason_id"), "doctor_restrictions")
+    _drop_index_if_exists(op.f("ix_doctor_restrictions_doctor_id"), "doctor_restrictions")
+    _drop_index_if_exists(op.f("ix_doctor_availability_doctor_id"), "doctor_availability")
+    _drop_index_if_exists(op.f("ix_doctors_service_inactive_reason_id"), "doctors")
+    _drop_index_if_exists(op.f("ix_doctors_department_id"), "doctors")
+    _drop_index_if_exists(op.f("ix_doctors_rank_id"), "doctors")
 
     # ------------------------------------------------------------------
     # doctor_availability: drop UC (created after index so no conflict)

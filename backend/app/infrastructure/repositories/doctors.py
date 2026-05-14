@@ -23,7 +23,7 @@ class DoctorRepository:
     def list_all(self, *, active_only: bool = False) -> list[DoctorModel]:
         stmt = select(DoctorModel)
         if active_only:
-            stmt = stmt.where(DoctorModel.active.is_(True))
+            stmt = stmt.where(DoctorModel.active.is_(True), DoctorModel.service_active.is_(True))
         return list(self.session.scalars(stmt.order_by(DoctorModel.name)))
 
     def list_service_active(self) -> list[DoctorModel]:

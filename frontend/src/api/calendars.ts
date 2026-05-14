@@ -73,11 +73,6 @@ export interface CalendarGridResponse {
   gaps: Record<string, unknown>[];
 }
 
-export interface CalendarGenerationSettings {
-  auto_generation_enabled: boolean;
-  generation_day: number;
-}
-
 export const calendarsApi = {
   list: () => apiFetch<CalendarRead[]>("/calendars"),
 
@@ -100,9 +95,9 @@ export const calendarsApi = {
       body: JSON.stringify({ reason: reason ?? null }),
     }),
 
-  newVersion: (calendarId: string, reason?: string) =>
+  unlock: (calendarId: string) =>
     apiFetch<CalendarVersionRead>(
-      `/calendars/${calendarId}/new-version${reason ? `?reason=${encodeURIComponent(reason)}` : ""}`,
+      `/calendars/${calendarId}/unlock`,
       { method: "POST" },
     ),
 
@@ -139,13 +134,4 @@ export const calendarsApi = {
 
   delete: (calendarId: string) =>
     apiFetch<void>(`/calendars/${calendarId}`, { method: "DELETE" }),
-
-  getGenerationSettings: () =>
-    apiFetch<CalendarGenerationSettings>("/catalogs/settings/calendar-generation"),
-
-  updateGenerationSettings: (payload: Partial<CalendarGenerationSettings>) =>
-    apiFetch<CalendarGenerationSettings>("/catalogs/settings/calendar-generation", {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
 };

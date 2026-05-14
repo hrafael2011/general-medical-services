@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # --- Notification Event ---
 
@@ -11,7 +11,6 @@ class NotificationEventRead(BaseModel):
     recipient_phone: str | None
     assignment_id: str | None
     mission_id: str | None
-    idempotency_key: str
     scheduled_for: datetime | None
     sent_at: datetime | None
     status: str
@@ -23,6 +22,18 @@ class NotificationEventRead(BaseModel):
     payload: dict | None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("payload", mode="before")
+    @classmethod
+    def redact_sensitive_payload(cls, value: dict | None) -> dict | None:
+        if not value:
+            return value
+        redacted = dict(value)
+        message = redacted.get("message")
+        if isinstance(message, str):
+            redacted["message"] = _redact_confirmation_commands(message)
+        redacted.pop("confirmation_request_id", None)
+        return redacted
 
     model_config = {"from_attributes": True}
 
@@ -58,3 +69,13 @@ class ProcessNotificationsResponse(BaseModel):
     sent: int
     failed: int
     skipped: int
+
+
+def _redact_confirmation_commands(message: str) -> str:
+    lines = []
+    for line in message.splitlines():
+        stripped = line.strip().lower()
+        if "/confirmar " in stripped or "/recibido " in stripped or "/rechazar " in stripped:
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()

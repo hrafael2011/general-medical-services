@@ -159,7 +159,14 @@ Resolution criteria:
 
 Related phase: `0`
 
-Status: `open`
+Status: `resolved`
+
+Resolved notes:
+
+- Added `scripts/migrate.sh` as the project migration command.
+- Deployment entrypoint now runs migrations through `python -m alembic upgrade head`.
+- Verified local database migration state with `alembic current` and `alembic upgrade head` at revision `20260513_0023`.
+- Verified full reproducibility by creating a temporary empty PostgreSQL database and applying all migrations through `20260513_0023`.
 
 ## P1 - Post-MVP Hardening
 

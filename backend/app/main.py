@@ -1,6 +1,4 @@
 import uuid
-import asyncio
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +7,6 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from backend.app.api.router import api_router
-from backend.app.application.calendars.auto_generation_runner import calendar_auto_generation_loop
 from backend.app.application.audit.service import set_current_request_id
 from backend.app.core.config import settings
 
@@ -25,24 +22,13 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    if settings.calendar_auto_generation_runner_enabled:
-        app.state.calendar_auto_generation_task = asyncio.create_task(
-            calendar_auto_generation_loop()
-        )
-    yield
-    task = getattr(app.state, "calendar_auto_generation_task", None)
-    if task is not None:
-        task.cancel()
-
-
 def create_app() -> FastAPI:
-    app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    app = FastAPI(title=settings.app_name)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin, "http://localhost:5174"],
+        allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+):5173$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

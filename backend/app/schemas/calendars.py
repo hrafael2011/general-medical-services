@@ -90,16 +90,6 @@ class CalendarGridResponse(BaseModel):
     gaps: list[dict]
 
 
-class CalendarAutoGenerationRunResponse(BaseModel):
-    status: str
-    reason: str | None
-    calendar_id: str | None
-    month: int | None
-    year: int | None
-    assigned_count: int
-    gap_count: int
-
-
 # --- Approval ---
 
 class ApproveCalendarRequest(BaseModel):

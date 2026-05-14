@@ -18,6 +18,12 @@ vi.mock("../../api/doctors", () => ({
   },
 }));
 
+vi.mock("../../api/missions", () => ({
+  missionsApi: {
+    getReplacementAlertSummary: vi.fn().mockResolvedValue({ mission_count: 1, participant_count: 1 }),
+  },
+}));
+
 function renderDashboard() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -40,5 +46,11 @@ describe("DashboardView", () => {
     renderDashboard();
     expect(await screen.findByText(/calendario .* aprobado/i)).toBeInTheDocument();
     expect(screen.getByText("Aprobado")).toBeInTheDocument();
+  });
+
+  it("muestra alerta operativa de reemplazos pendientes", async () => {
+    renderDashboard();
+    expect(await screen.findByText(/misión futura requiere reemplazo/i)).toBeInTheDocument();
+    expect(screen.getByText(/participante\(s\) deben ser reemplazados/i)).toBeInTheDocument();
   });
 });

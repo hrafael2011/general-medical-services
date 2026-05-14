@@ -88,6 +88,8 @@ describe("MissionView", () => {
         created_at: "2026-05-01T00:00:00",
         updated_at: "2026-05-01T00:00:00",
         deleted_at: null,
+        has_replacement_warnings: false,
+        replacement_warning_count: 0,
         participants: [],
       },
     ]);
@@ -96,6 +98,84 @@ describe("MissionView", () => {
 
     expect(await screen.findByText("2026-06-15")).toBeInTheDocument();
     expect(screen.getByText("Base Norte")).toBeInTheDocument();
+  });
+
+  it("muestra advertencia de reemplazo pendiente en gestión de misiones", async () => {
+    const { missionsApi } = await import("../../api/missions");
+    vi.mocked(missionsApi.listMissions).mockResolvedValueOnce([
+      {
+        id: "m-warning",
+        mission_date: "2026-06-20",
+        mission_start_at: null,
+        mission_end_at: null,
+        participant_count: 1,
+        location: "Base Norte",
+        description: null,
+        status: "confirmed",
+        source: "manual",
+        created_by: null,
+        confirmed_by: null,
+        confirmed_at: "2026-05-01T00:00:00",
+        created_at: "2026-05-01T00:00:00",
+        updated_at: "2026-05-01T00:00:00",
+        deleted_at: null,
+        has_replacement_warnings: true,
+        replacement_warning_count: 1,
+        participants: [
+          {
+            id: "p1",
+            mission_assignment_id: "m-warning",
+            doctor_id: "d1",
+            doctor_name: "Dr. Inactivo",
+            selection_source: "manual",
+            ranking_position: null,
+            score: null,
+            created_at: "2026-05-01T00:00:00",
+            requires_replacement: true,
+            replacement_reason: "Médico inactivo para servicio.",
+          },
+        ],
+      },
+    ]);
+
+    renderMissions();
+
+    expect(await screen.findByText("1 reemplazo pendiente")).toBeInTheDocument();
+    expect(screen.getByText(/Dr\. Inactivo: Médico inactivo para servicio/i)).toBeInTheDocument();
+  });
+
+  it("abre el formulario de creación dentro de gestión sin ocultar la tabla", async () => {
+    const { missionsApi } = await import("../../api/missions");
+    vi.mocked(missionsApi.listMissions).mockResolvedValueOnce([
+      {
+        id: "m1",
+        mission_date: "2026-06-15",
+        mission_start_at: null,
+        mission_end_at: null,
+        participant_count: 3,
+        location: "Base Norte",
+        description: null,
+        status: "draft",
+        source: "manual",
+        created_by: null,
+        confirmed_by: null,
+        confirmed_at: null,
+        created_at: "2026-05-01T00:00:00",
+        updated_at: "2026-05-01T00:00:00",
+        deleted_at: null,
+        has_replacement_warnings: false,
+        replacement_warning_count: 0,
+        participants: [],
+      },
+    ]);
+
+    renderMissions();
+    fireEvent.click(await screen.findByRole("button", { name: /^crear misión$/i }));
+
+    expect(screen.getByLabelText(/fecha/i)).toBeInTheDocument();
+    expect(screen.getByText("2026-06-15")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^crear misión$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ocultar creación/i })).toBeInTheDocument();
   });
 
   it("muestra solo elegibles disponibles en confirmación", async () => {
@@ -117,6 +197,8 @@ describe("MissionView", () => {
         created_at: "2026-05-01T00:00:00",
         updated_at: "2026-05-01T00:00:00",
         deleted_at: null,
+        has_replacement_warnings: false,
+        replacement_warning_count: 0,
         participants: [],
       },
     ]);

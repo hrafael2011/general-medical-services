@@ -67,7 +67,13 @@ def _now() -> datetime.datetime:
     return datetime.datetime.now(datetime.UTC)
 
 
-def _create_doctor(db_session, *, name: str, participa_misiones: bool = True) -> DoctorModel:
+def _create_doctor(
+    db_session,
+    *,
+    name: str,
+    participa_misiones: bool = True,
+    service_active: bool = True,
+) -> DoctorModel:
     now = _now()
     doctor = DoctorModel(
         id=str(uuid4()),
@@ -79,7 +85,7 @@ def _create_doctor(db_session, *, name: str, participa_misiones: bool = True) ->
         phone=None,
         notes=None,
         active=True,
-        service_active=True,
+        service_active=service_active,
         service_inactive_reason_id=None,
         service_inactive_detail=None,
         participa_misiones=participa_misiones,
@@ -210,6 +216,33 @@ def test_rank_candidates_for_date_marks_same_day_service_unavailable(db_session)
     assert [item["entry"].doctor_id for item in ranked] == [doctor_b.id]
     assert ranked[0]["recommendation_status"] == "recommended"
     assert ranked[0]["adjusted_position"] == 1
+
+
+def test_rank_candidates_for_date_excludes_doctor_deactivated_after_ranking(db_session) -> None:
+    doctor_a = _create_doctor(db_session, name="Dr. Inactivo Despues")
+    doctor_b = _create_doctor(db_session, name="Dr. Disponible")
+    version = _create_approved_calendar_version(db_session)
+
+    ranking_service = _make_ranking_service(db_session)
+    ranking_service.generate_ranking(
+        actor_id=_ACTOR,
+        year=_YEAR,
+        month=_MONTH,
+        calendar_version_id=version.id,
+    )
+
+    doctor_a.service_active = False
+    doctor_a.participa_misiones = False
+    db_session.flush()
+
+    service = _make_candidate_service(db_session)
+    ranked = service.rank_candidates_for_date(
+        year=_YEAR,
+        month=_MONTH,
+        mission_date=_MISSION_DATE,
+    )
+
+    assert [item["entry"].doctor_id for item in ranked] == [doctor_b.id]
 
 
 def test_rank_candidates_for_date_detects_recent_strong_area_stored_as_uuid(db_session) -> None:
@@ -374,10 +407,10 @@ def test_confirm_mission_rejects_same_day_service_doctor(db_session) -> None:
     assert exc_info.value.code == "candidate_not_available"
 
 
-def test_confirm_already_confirmed_raises(db_session) -> None:
-    """Confirming a mission that is already confirmed must raise
-    MissionServiceError with code='already_confirmed'."""
+def test_reconfirm_confirmed_mission_updates_participants(db_session) -> None:
+    """Reconfirming a confirmed mission is a controlled participant update."""
     doctor = _create_doctor(db_session, name="Dr. Solo")
+    replacement = _create_doctor(db_session, name="Dr. Relevo")
     version = _create_approved_calendar_version(db_session)
 
     ranking_service = _make_ranking_service(db_session)
@@ -398,19 +431,18 @@ def test_confirm_already_confirmed_raises(db_session) -> None:
         description=None,
     )
 
-    # First confirm — should succeed
     service.confirm_mission(
         actor_id=_ACTOR,
         mission_id=mission.id,
         doctor_ids=[doctor.id],
     )
 
-    # Second confirm — must raise
-    with pytest.raises(MissionServiceError) as exc_info:
-        service.confirm_mission(
-            actor_id=_ACTOR,
-            mission_id=mission.id,
-            doctor_ids=[doctor.id],
-        )
+    updated = service.confirm_mission(
+        actor_id=_ACTOR,
+        mission_id=mission.id,
+        doctor_ids=[replacement.id],
+    )
 
-    assert exc_info.value.code == "already_confirmed"
+    assert updated.status == "confirmed"
+    participants = MissionRepository(db_session).list_participants(mission.id)
+    assert {participant.doctor_id for participant in participants} == {replacement.id}

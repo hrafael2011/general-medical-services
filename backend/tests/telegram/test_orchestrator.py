@@ -9,11 +9,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from backend.app.application.telegram.types import AgentResult
-from backend.app.application.telegram.agent import ConversationalAgent
 from backend.app.application.telegram.bot_client import FakeBotClient
-from backend.app.application.telegram.llm import FakeLLMProvider
 from backend.app.application.telegram.orchestrator import TelegramOrchestrator
+from backend.app.application.telegram.types import AgentResult
 from backend.app.infrastructure.db.models.telegram import (
     TelegramInteractionModel,
     TelegramUserLinkModel,
@@ -87,7 +85,13 @@ def _new_user(
     return user
 
 
-def _new_link(db_session, *, user_id: str, telegram_user_id: str, active: bool = True) -> TelegramUserLinkModel:
+def _new_link(
+    db_session,
+    *,
+    user_id: str,
+    telegram_user_id: str,
+    active: bool = True,
+) -> TelegramUserLinkModel:
     link = TelegramUserLinkModel(
         id=str(uuid.uuid4()),
         telegram_user_id=telegram_user_id,
@@ -223,7 +227,7 @@ def test_agent_tool_response_with_data(db_session) -> None:
 
 def test_agent_receives_user_info(db_session) -> None:
     """The agent should receive user info (name, role, id) from the orchestrator."""
-    user = _new_user(db_session, role="doctor")
+    user = _new_user(db_session, role="encargado")
     tg_id = f"tg-{uuid.uuid4().hex[:8]}"
     _new_link(db_session, user_id=user.id, telegram_user_id=tg_id)
 
@@ -240,7 +244,7 @@ def test_agent_receives_user_info(db_session) -> None:
     assert len(agent.calls) == 1
     info = agent.calls[0]["user_info"]
     assert info["name"] == "Test User"
-    assert info["role"] == "doctor"
+    assert info["role"] == "encargado"
     assert info["id"] == user.id
 
 
@@ -262,3 +266,21 @@ def test_interaction_is_logged(db_session) -> None:
     interactions = list(db_session.scalars(stmt))
     assert len(interactions) == 1
     assert interactions[0].input_text == "Test message"
+
+
+def test_confirmation_command_is_blocked_for_internal_users(db_session) -> None:
+    user = _new_user(db_session, role="encargado")
+    tg_id = f"tg-{uuid.uuid4().hex[:8]}"
+    _new_link(db_session, user_id=user.id, telegram_user_id=tg_id)
+    agent = StubAgent(AgentResult(response_text="No debe llamarse"))
+    orchestrator = _make_orchestrator(db_session, agent=agent)
+
+    response = orchestrator.handle_message(
+        telegram_user_id=tg_id,
+        telegram_username="docuser",
+        chat_id=99999,
+        text="/confirmar token-de-prueba",
+    )
+
+    assert "cuentas internas" in response
+    assert agent.calls == []

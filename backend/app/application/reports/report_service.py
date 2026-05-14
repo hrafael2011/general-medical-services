@@ -6,10 +6,24 @@ import io
 from datetime import UTC, date, datetime
 
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
+
+# Spanish day names mapping
+_DAY_NAMES_ES = {
+    0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves",
+    4: "Viernes", 5: "Sábado", 6: "Domingo",
+}
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 from backend.app.infrastructure.repositories.notifications import NotificationRepository
+
+
+def _sex_label(value: str | None) -> str | None:
+    if value == "male":
+        return "Masculino"
+    if value == "female":
+        return "Femenino"
+    return value
 
 
 class ReportService:
@@ -70,7 +84,7 @@ class ReportService:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Calendario {calendar.month}/{calendar.year}"
+        ws.title = f"Calendario {calendar.month}-{calendar.year}"
 
         # Header row
         ws.append(["Fecha", "Area", "Doctor ID", "Estado"])
@@ -136,7 +150,7 @@ class ReportService:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Historial {month}/{year}"
+        ws.title = f"Historial {month}-{year}"
 
         ws.append(["Doctor ID", "Nombre", "Servicios Mes", "Areas"])
         for row in rows:
@@ -284,9 +298,9 @@ class ReportService:
                         covered += 1
                     else:
                         uncovered += 1
-                        gap = {"date": d.isoformat(), "day_name": d.strftime("%A")}
+                        gap = {"date": d.isoformat(), "day_name": _DAY_NAMES_ES[d.weekday()]}
                         gaps.append(gap)
-                        day_name_es = d.strftime("%A")
+                        day_name_es = _DAY_NAMES_ES[d.weekday()]
                         day_of_week_gaps[day_name_es] = day_of_week_gaps.get(day_name_es, 0) + 1
 
                 # next month
@@ -375,6 +389,15 @@ class ReportService:
         for sa in self.calendar_repo.list_service_areas():
             area_names[sa.id] = sa.display_name
 
+        # Pre-load rank and department names for name resolution
+        _rank_names: dict[str, str] = {}
+        _dept_names: dict[str, str] = {}
+        if self.catalog_repo:
+            for r in self.catalog_repo.list_ranks():
+                _rank_names[r.id] = r.name
+            for d in self.catalog_repo.list_departments():
+                _dept_names[d.id] = d.name
+
         # Per-doctor aggregation
         entries: dict[str, dict] = {}
         for a in filtered_assignments:
@@ -383,9 +406,9 @@ class ReportService:
                 entries[a.doctor_id] = {
                     "doctor_id": a.doctor_id,
                     "name": doc.name if doc else a.doctor_id,
-                    "rank": doc.rank.name if doc and doc.rank else None,
-                    "sex": doc.sex if doc else None,
-                    "department": doc.department.name if doc and doc.department else None,
+                    "rank": _rank_names.get(doc.rank_id) if doc and doc.rank_id else None,
+                    "sex": _sex_label(doc.sex) if doc else None,
+                    "department": _dept_names.get(doc.department_id) if doc and doc.department_id else None,
                     "emergencia": 0,
                     "pista": 0,
                     "disponible": 0,
@@ -453,6 +476,11 @@ class ReportService:
         services = []
         services_by_area: dict[str, int] = {}
 
+        # Build area id → display name map
+        area_names: dict[str, str] = {}
+        for sa in self.calendar_repo.list_service_areas():
+            area_names[sa.id] = sa.display_name
+
         # Walk through calendars in the period
         yr_start = min_date.year if min_date else 2026
         yr_end = (max_date if max_date else date(2026, 12, 31)).year
@@ -473,10 +501,10 @@ class ReportService:
                     if max_date and a.service_date > max_date:
                         continue
 
-                    area_name = str(a.service_area_id)
+                    area_name = area_names.get(a.service_area_id, str(a.service_area_id))
                     services.append({
                         "date": a.service_date.isoformat(),
-                        "day_name": a.service_date.strftime("%A"),
+                        "day_name": _DAY_NAMES_ES[a.service_date.weekday()],
                         "area": area_name,
                         "source": a.assignment_source,
                     })
@@ -497,8 +525,20 @@ class ReportService:
                     "status": "confirmed",
                 })
 
-        # Allowed areas
-        areas = self.doctor_repo.get_allowed_areas(doctor_id)
+        # Resolve rank and department names from catalog
+        _rank_name = None
+        _dept_name = None
+        if self.catalog_repo:
+            if doctor.rank_id:
+                _r = self.catalog_repo.get_rank_by_id(doctor.rank_id)
+                _rank_name = _r.name if _r else None
+            if doctor.department_id:
+                _d = self.catalog_repo.get_department_by_id(doctor.department_id)
+                _dept_name = _d.name if _d else None
+
+        # Allowed areas (resolve ids to display names)
+        area_ids = self.doctor_repo.get_allowed_areas(doctor_id)
+        areas = [area_names.get(aid, aid) for aid in area_ids]
 
         # Restrictions (graceful if method doesn't exist)
         restrictions_data = []
@@ -525,9 +565,9 @@ class ReportService:
         return {
             "doctor_id": doctor.id,
             "name": doctor.name,
-            "rank": doctor.rank.name if doctor.rank else None,
+            "rank": _rank_name,
             "sex": doctor.sex,
-            "department": doctor.department.name if doctor.department else None,
+            "department": _dept_name,
             "areas": areas,
             "period_label": period_label,
             "total_services": total_services,
@@ -624,4 +664,3 @@ class ReportService:
 
         week_label = f"{month}/{year}"
         return self.generate_weekly_schedule_pdf(schedule_data, week_label, month, year)
-

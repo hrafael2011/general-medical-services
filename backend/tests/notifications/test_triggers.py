@@ -10,10 +10,12 @@ import datetime
 import types
 import uuid
 
+from backend.app.application.confirmations.service import ConfirmationRequestService
 from backend.app.application.notifications.providers import FakeProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.triggers import NotificationTriggers
 from backend.app.infrastructure.db.models.doctors import DoctorModel
+from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
@@ -36,6 +38,19 @@ def _make_triggers(db_session) -> NotificationTriggers:
             provider=FakeProvider(),
         ),
         doctor_repo=DoctorRepository(db_session),
+    )
+
+
+def _make_confirming_triggers(db_session) -> NotificationTriggers:
+    return NotificationTriggers(
+        notification_service=NotificationService(
+            repo=NotificationRepository(db_session),
+            provider=FakeProvider(),
+        ),
+        doctor_repo=DoctorRepository(db_session),
+        confirmation_service=ConfirmationRequestService(
+            ConfirmationRequestRepository(db_session),
+        ),
     )
 
 
@@ -100,7 +115,7 @@ def _make_mission(*, mission_id: str | None = None) -> types.SimpleNamespace:
 
 
 def _make_participant(*, doctor_id: str) -> types.SimpleNamespace:
-    return types.SimpleNamespace(doctor_id=doctor_id)
+    return types.SimpleNamespace(id=str(uuid.uuid4()), doctor_id=doctor_id)
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +157,27 @@ def test_on_calendar_approved_idempotent(db_session) -> None:
     all_events = repo.list_all()
     # Each assignment has a fixed idempotency key "assign:<id>", so only 2 rows total
     assert len(all_events) == 2
+
+
+def test_on_calendar_approved_creates_confirmation_requests(db_session) -> None:
+    doc1 = _create_doctor(db_session, name="Dr. Confirm Service", whatsapp_phone="+18095553333")
+    assignment = _make_assignment(doctor_id=doc1.id, assignment_id="assign-confirm-service")
+
+    triggers = _make_confirming_triggers(db_session)
+    triggers.on_calendar_approved(actor_id=_ACTOR, assignments=[assignment])
+    triggers.on_calendar_approved(actor_id=_ACTOR, assignments=[assignment])
+
+    confirmations = ConfirmationRequestRepository(db_session).list_all()
+    assert len(confirmations) == 1
+    assert confirmations[0].confirmation_type == "service"
+    assert confirmations[0].status == "pending"
+    assert confirmations[0].assignment_id == assignment.id
+    assert confirmations[0].due_at is not None
+    notification = NotificationRepository(db_session).list_all()[0]
+    assert confirmations[0].response_token in notification.payload["message"]
+    assert "/confirmacion-medica?token=" in notification.payload["message"]
+    assert "/confirmar " not in notification.payload["message"]
+    assert "rechazar" not in notification.payload["message"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -203,3 +239,91 @@ def test_on_mission_confirmed_no_summary_without_encargado_phone(db_session) -> 
     notification_types = {e.notification_type for e in all_events}
     assert "mission_summary" not in notification_types
     assert "mission_participant" in notification_types
+
+
+def test_on_mission_confirmed_creates_confirmation_requests(db_session) -> None:
+    doc1 = _create_doctor(db_session, name="Dr. Confirm Mission", whatsapp_phone="+18095557777")
+    mission = _make_mission(mission_id="mission-confirm")
+    participant = _make_participant(doctor_id=doc1.id)
+
+    triggers = _make_confirming_triggers(db_session)
+    triggers.on_mission_confirmed(
+        actor_id=_ACTOR,
+        mission=mission,
+        participants=[participant],
+        encargado_phone=None,
+    )
+    triggers.on_mission_confirmed(
+        actor_id=_ACTOR,
+        mission=mission,
+        participants=[participant],
+        encargado_phone=None,
+    )
+
+    confirmations = ConfirmationRequestRepository(db_session).list_all()
+    assert len(confirmations) == 1
+    assert confirmations[0].confirmation_type == "mission"
+    assert confirmations[0].status == "pending"
+    assert confirmations[0].mission_id == mission.id
+    assert confirmations[0].due_at is not None
+    notification = NotificationRepository(db_session).list_all()[0]
+    assert confirmations[0].response_token in notification.payload["message"]
+    assert "/confirmacion-medica?token=" in notification.payload["message"]
+    assert "/confirmar " not in notification.payload["message"]
+    assert "rechazar" not in notification.payload["message"].lower()
+
+
+def test_calendar_assignment_added_after_approval_creates_change_confirmation(db_session) -> None:
+    doc1 = _create_doctor(db_session, name="Dr. Calendar Change", whatsapp_phone="+18095550001")
+    assignment = _make_assignment(doctor_id=doc1.id, assignment_id="assign-calendar-change")
+
+    triggers = _make_confirming_triggers(db_session)
+    triggers.on_calendar_assignment_added_after_approval(
+        actor_id=_ACTOR,
+        assignment=assignment,
+        service_area_name="Emergencia",
+    )
+    triggers.on_calendar_assignment_added_after_approval(
+        actor_id=_ACTOR,
+        assignment=assignment,
+        service_area_name="Emergencia",
+    )
+
+    events = NotificationRepository(db_session).list_all()
+    confirmations = ConfirmationRequestRepository(db_session).list_all()
+
+    assert len(events) == 1
+    assert events[0].notification_type == "service_assignment_added"
+    assert len(confirmations) == 1
+    assert confirmations[0].confirmation_type == "service"
+    assert confirmations[0].assignment_id == assignment.id
+    assert confirmations[0].response_token in events[0].payload["message"]
+
+
+def test_mission_participants_changed_notifies_removed_and_confirms_added(db_session) -> None:
+    removed = _create_doctor(db_session, name="Dr. Removed", whatsapp_phone="+18095550002")
+    added = _create_doctor(db_session, name="Dr. Added", whatsapp_phone="+18095550003")
+    mission = _make_mission(mission_id="mission-change")
+
+    removed_participant = _make_participant(doctor_id=removed.id)
+    added_participant = _make_participant(doctor_id=added.id)
+
+    triggers = _make_confirming_triggers(db_session)
+    count = triggers.on_mission_participants_changed(
+        actor_id=_ACTOR,
+        mission=mission,
+        removed_participants=[removed_participant],
+        added_participants=[added_participant],
+    )
+
+    events = NotificationRepository(db_session).list_all()
+    confirmations = ConfirmationRequestRepository(db_session).list_all()
+
+    assert count == 2
+    assert {event.notification_type for event in events} == {
+        "mission_participant_removed",
+        "mission_participant_added",
+    }
+    assert len(confirmations) == 1
+    assert confirmations[0].confirmation_type == "mission"
+    assert confirmations[0].doctor_id == added.id

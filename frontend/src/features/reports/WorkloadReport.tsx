@@ -4,6 +4,12 @@ import { ReportFilters, FilterLabel, ActionButtons } from "../../components/Repo
 import { ReportSummaryCards } from "../../components/ReportSummaryCards";
 import { reportsApi, WorkloadResponse } from "../../api/reports";
 
+function sexLabel(value: string | null) {
+  if (value === "male") return "Masculino";
+  if (value === "female") return "Femenino";
+  return value ?? "—";
+}
+
 export function WorkloadReport() {
   const { addToast } = useToast();
   const now = new Date();
@@ -112,7 +118,7 @@ export function WorkloadReport() {
                   >
                     <td>{entry.name}</td>
                     <td>{entry.rank ?? "—"}</td>
-                    <td>{entry.sex ?? "—"}</td>
+                    <td>{sexLabel(entry.sex)}</td>
                     <td>{entry.department ?? "—"}</td>
                     <td style={{ textAlign: "center" }}>{entry.emergencia}</td>
                     <td style={{ textAlign: "center" }}>{entry.pista}</td>

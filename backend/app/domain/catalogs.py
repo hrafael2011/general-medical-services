@@ -33,6 +33,14 @@ INITIAL_SERVICE_AREAS = [
     },
 ]
 
+INITIAL_DEPARTMENTS = [
+    {"name": "Licencias Médicas"},
+    {"name": "Enseñanza"},
+    {"name": "Evaluaciones Médicas"},
+    {"name": "Subdirección"},
+    {"name": "Recursos Humanos"},
+]
+
 INITIAL_DEACTIVATION_REASONS = [
     {
         "code": "medical_license",
@@ -58,6 +66,13 @@ INITIAL_DEACTIVATION_REASONS = [
     {
         "code": "vacation",
         "display_name": "Vacaciones",
+        "requires_detail": False,
+        "applies_to_sex": None,
+        "severity": DeactivationSeverity.WARN.value,
+    },
+    {
+        "code": "loan",
+        "display_name": "Préstamo",
         "requires_detail": False,
         "applies_to_sex": None,
         "severity": DeactivationSeverity.WARN.value,
@@ -91,4 +106,3 @@ INITIAL_DEACTIVATION_REASONS = [
         "severity": DeactivationSeverity.WARN.value,
     },
 ]
-

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 8
     failed_login_lock_threshold: int = 5
     failed_login_lock_minutes: int = 15
+    confirmation_overdue_hours: int = 12
     token_audience: str = "medical-shifts-app"
     token_issuer: str = "medical-shifts-system"
 

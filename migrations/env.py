@@ -1,18 +1,22 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.base import Base
+from backend.app.infrastructure.db.models import action_alerts as _action_alerts  # noqa: F401
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
 from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
 from backend.app.infrastructure.db.models import calendars as _calendars  # noqa: F401
 from backend.app.infrastructure.db.models import catalogs as _catalogs  # noqa: F401
+from backend.app.infrastructure.db.models import confirmations as _confirmations  # noqa: F401
 from backend.app.infrastructure.db.models import doctors as _doctors  # noqa: F401
 from backend.app.infrastructure.db.models import missions as _missions  # noqa: F401
 from backend.app.infrastructure.db.models import notifications as _notifications  # noqa: F401
+from backend.app.infrastructure.db.models import set_password_token as _set_password_token  # noqa: F401
 from backend.app.infrastructure.db.models import telegram as _telegram  # noqa: F401
+from backend.app.infrastructure.db.models import telegram_session as _telegram_session  # noqa: F401
 from backend.app.infrastructure.db.models import user as _user  # noqa: F401
 
 config = context.config
@@ -37,9 +41,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    connectable = create_engine(
+        settings.database_url,
         poolclass=pool.NullPool,
     )
 

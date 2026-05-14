@@ -37,6 +37,8 @@ export interface MissionParticipant {
   ranking_position: number | null;
   score: number | null;
   created_at: string;
+  requires_replacement: boolean;
+  replacement_reason: string | null;
 }
 
 export interface MissionAssignment {
@@ -56,6 +58,13 @@ export interface MissionAssignment {
   updated_at: string;
   deleted_at: string | null;
   participants: MissionParticipant[];
+  has_replacement_warnings: boolean;
+  replacement_warning_count: number;
+}
+
+export interface MissionReplacementAlertSummary {
+  mission_count: number;
+  participant_count: number;
 }
 
 export interface MissionCandidateResponse {
@@ -96,6 +105,9 @@ export const missionsApi = {
 
   listMissions: () =>
     apiFetch<MissionAssignment[]>("/missions"),
+
+  getReplacementAlertSummary: () =>
+    apiFetch<MissionReplacementAlertSummary>("/missions/replacement-alerts/summary"),
 
   createMission: (
     date: string,

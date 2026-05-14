@@ -2,6 +2,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.notifications.providers import NotificationProvider
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 from backend.app.infrastructure.repositories.notifications import (
@@ -17,9 +18,11 @@ class NotificationService:
         self,
         repo: NotificationRepository,
         provider: NotificationProvider,
+        action_alerts: ActionAlertService | None = None,
     ) -> None:
         self.repo = repo
         self.provider = provider
+        self.action_alerts = action_alerts
 
     def queue(
         self,
@@ -113,6 +116,7 @@ class NotificationService:
                 event.updated_at = now
                 if event.retry_count >= MAX_RETRIES:
                     event.status = "failed"
+                    self._create_failed_notification_alert(event)
                     logger.error(
                         "Notification %s failed after %d retries: %s",
                         event.id, MAX_RETRIES, exc,
@@ -126,3 +130,25 @@ class NotificationService:
                     # status remains "pending" for next processing cycle
 
         return {"sent": sent, "failed": failed, "skipped": skipped}
+
+    def _create_failed_notification_alert(self, event: NotificationEventModel) -> None:
+        if self.action_alerts is None:
+            return
+        self.action_alerts.create_if_missing(
+            alert_type="notification_delivery_failed",
+            section="notifications",
+            severity="warning",
+            title="Notificación fallida",
+            message="Una notificación no pudo enviarse después de varios intentos.",
+            entity_type="notification_event",
+            entity_id=event.id,
+            action_url="/notifications",
+            alert_metadata={
+                "notification_type": event.notification_type,
+                "recipient_doctor_id": event.recipient_doctor_id,
+                "assignment_id": event.assignment_id,
+                "mission_id": event.mission_id,
+                "error_code": event.error_code,
+            },
+            created_by=event.created_by,
+        )

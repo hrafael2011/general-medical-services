@@ -3,13 +3,17 @@ import { apiFetch } from "./client";
 export interface AuditEventRead {
   id: string;
   actor_id: string | null;
+  actor_display?: string | null;
   action_type: string;
   entity_type: string;
   entity_id: string | null;
+  entity_display?: string | null;
   occurred_at: string;
+  request_id?: string | null;
   before_snapshot: Record<string, unknown> | null;
   after_snapshot: Record<string, unknown> | null;
   metadata_: Record<string, unknown> | null;
+  detail_summary?: string | null;
 }
 
 export interface AuditListResponse {

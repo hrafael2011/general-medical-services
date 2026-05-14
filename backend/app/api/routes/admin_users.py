@@ -44,7 +44,7 @@ def list_users(
     if role:
         users = repo.list_by_role(role)
     else:
-        users = repo.list_by_role("doctor")  # sensible default for admin panel
+        users = repo.list_by_role("encargado")  # sensible default for admin panel
     return [UserRead.model_validate(u) for u in users]
 
 
