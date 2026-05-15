@@ -393,7 +393,7 @@ class ConversationalAgent:
         except Exception:
             return None
 
-    def _fallback_to_query_db(self, user_text: str) -> AgentResult:
+    def _fallback_to_query_db(self, user_text: str, entity_hints: str = "") -> AgentResult:
         """Fallback: use QueryExecutor for NL-to-SQL."""
         if self._query_executor is None:
             return AgentResult(
@@ -401,7 +401,7 @@ class ConversationalAgent:
             )
 
         start = time.perf_counter()
-        result = self._query_executor.execute(user_text, user_text)
+        result = self._query_executor.execute(user_text, user_text, entity_hints=entity_hints)
         elapsed_ms = round((time.perf_counter() - start) * 1000)
         if not result.get("ok"):
             logger.warning(
@@ -786,7 +786,7 @@ class ConversationalAgent:
             logger.info(
                 "Compound query detected (hints=%s), routing to QueryExecutor", entity_hints
             )
-            result = self._fallback_to_query_db(text)
+            result = self._fallback_to_query_db(text, entity_hints=entity_hints)
             self._remember_result(telegram_user_id, result)
             logger.info(
                 "Agent resolved via compound fallback",
@@ -892,7 +892,7 @@ class ConversationalAgent:
             if _looks_like_data_request(text):
                 logger.warning("LLM used reply for a data request, refusing ungrounded answer")
                 if self._query_executor is not None:
-                    fallback = self._fallback_to_query_db(text)
+                    fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
                     self._remember_result(telegram_user_id, fallback)
                     return fallback
                 return AgentResult(
@@ -967,7 +967,7 @@ class ConversationalAgent:
 
             # Fallback for query/export action
             if action in ("query", "export"):
-                fallback = self._fallback_to_query_db(text)
+                fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
                 self._remember_result(telegram_user_id, fallback)
                 logger.info(
                     "Agent resolved via %s fallback", action,

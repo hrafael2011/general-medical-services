@@ -457,7 +457,7 @@ def test_export_falls_back_to_query_executor(db_session) -> None:
     db_session.flush()
 
     class StubQueryExecutor:
-        def execute(self, nl_query: str, user_text: str = "") -> dict:
+        def execute(self, nl_query: str, user_text: str = "", entity_hints: str = "") -> dict:
             return {
                 "ok": True,
                 "data": {

@@ -397,7 +397,7 @@ class EntityResolver:
                         "name": rank.name,
                         "normalized_name": rank.normalized_name,
                     }
-                    hints_parts.append(f"rank_id={rank.id}, rank_name='{rank.normalized_name}'")
+                    hints_parts.append(f"rank_id={rank.id}, rank='{rank.normalized_name}'")
                     break
 
         # Department detection
@@ -415,7 +415,7 @@ class EntityResolver:
                     }
                     hints_parts.append(
                         f"department_id={department.id}, "
-                        f"department_name='{department.normalized_name}'"
+                        f"department='{department.normalized_name}'"
                     )
                     break
 

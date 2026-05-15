@@ -48,6 +48,27 @@ def stress_agent(db_session, sqlite_registry):
             '{"action": "reply", "response_text": "De nada, estoy para ayudarte."}'
         ),
     }
+    # Seed a doctor so that count queries return non-empty results
+    from datetime import datetime as _dt, UTC as _UTC
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
+    if not db_session.query(DoctorModel).first():
+        db_session.add(DoctorModel(
+            id="00000000-0000-0000-0000-000000000001",
+            name="Dr. Stress Test",
+            normalized_name="dr. stress test",
+            sex="male",
+            active=True,
+            service_active=True,
+            availability_mode="monthly",
+            participa_misiones=True,
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            created_at=_dt.now(_UTC),
+            updated_at=_dt.now(_UTC),
+        ))
+        db_session.commit()
+
     llm = FakeLLMProvider(responses=responses)
     router = IntentRouter(registry=sqlite_registry)
     router.set_session(db_session)

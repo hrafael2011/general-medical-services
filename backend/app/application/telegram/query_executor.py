@@ -145,6 +145,7 @@ class QueryExecutor:
         self,
         nl_query: str,
         user_text: str = "",
+        entity_hints: str = "",
     ) -> dict:
         """
         Convert a natural language query to SQL, validate, execute, return results.
@@ -153,7 +154,7 @@ class QueryExecutor:
             {"ok": True, "data": {"columns": [...], "rows": [...], "row_count": N, ...}}
             or {"ok": False, "error": "..."}
         """
-        sql = self._generate_sql(nl_query, user_text)
+        sql = self._generate_sql(nl_query, user_text, entity_hints=entity_hints)
         if not sql:
             return {"ok": False, "error": "No se pudo generar una consulta SQL."}
 
@@ -180,9 +181,17 @@ class QueryExecutor:
         # No code block — assume the whole response is SQL
         return text
 
-    def _generate_sql(self, nl_query: str, user_text: str = "") -> str:
+    def _generate_sql(self, nl_query: str, user_text: str = "", entity_hints: str = "") -> str:
         """Send schema + query to LLM and extract SQL."""
         context = user_text or nl_query
+
+        entity_section = ""
+        if entity_hints:
+            entity_section = (
+                f"\n\nENTIDADES DETECTADAS (usa estos valores exactos en los predicados SQL):\n"
+                f"{entity_hints}\n"
+            )
+
         messages = [
             {
                 "role": "system",
@@ -195,7 +204,8 @@ class QueryExecutor:
                 "role": "user",
                 "content": (
                     f"Esquema de la base de datos:\n\n"
-                    f"{self._schema_summary}\n\n"
+                    f"{self._schema_summary}"
+                    f"{entity_section}\n\n"
                     f"Pregunta: {context}\n\n"
                     f"Genera una consulta SELECT de PostgreSQL para responder. "
                     f"Usa los nombres exactos de tablas y columnas. "
