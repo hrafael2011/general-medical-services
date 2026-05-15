@@ -458,12 +458,15 @@ def test_export_falls_back_to_query_executor(db_session) -> None:
 
     class StubQueryExecutor:
         def execute(self, nl_query: str, user_text: str = "", entity_hints: str = "") -> dict:
+            # Return >20 rows so _format_nl_response falls back to _format_rows
+            # (avoids the FakeLLMProvider not supporting NL formatting in tests)
+            rows = [{"name": f"Dr. ExportFallback {i}"} for i in range(25)]
             return {
                 "ok": True,
                 "data": {
                     "columns": ["name"],
-                    "rows": [{"name": "Dr. ExportFallback"}],
-                    "row_count": 1,
+                    "rows": rows,
+                    "row_count": 25,
                     "truncated": False,
                 },
             }

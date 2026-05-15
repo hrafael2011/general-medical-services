@@ -422,7 +422,10 @@ class ConversationalAgent:
         data = result["data"]
         rows = data.get("rows", [])
         columns = data.get("columns", [])
-        response = _format_rows(rows, columns)
+        if rows:
+            response = self._format_nl_response(user_text, rows, columns)
+        else:
+            response = self._format_nl_empty_response(user_text)
 
         logger.info(
             "NL-to-SQL fallback completed",
@@ -440,6 +443,80 @@ class ConversationalAgent:
             agent_action="query_db",
             tool_result=result,
         )
+
+    # ------------------------------------------------------------------
+    # NL response formatting
+    # ------------------------------------------------------------------
+
+    def _format_nl_response(
+        self, original_question: str, rows: list[dict], columns: list[str]
+    ) -> str:
+        """Use LLM to format SQL results into natural Spanish text."""
+        if len(rows) <= 20:
+            try:
+                formatted = self._llm.chat_complete(
+                    [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Eres un asistente que convierte resultados de base de datos "
+                                "en texto natural en espanol. Responde de forma conversacional "
+                                "y clara. Incluye los datos relevantes. "
+                                "NO inventes informacion que no este en los resultados."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Pregunta original: {original_question}\n\n"
+                                f"Columnas: {', '.join(columns)}\n"
+                                f"Resultados ({len(rows)} filas):\n"
+                                f"{json.dumps(rows, default=str, ensure_ascii=False)}\n\n"
+                                f"Responde en espanol de forma natural y conversacional."
+                            ),
+                        },
+                    ],
+                    temperature=0.3,
+                )
+                if formatted and len(formatted.strip()) > 20:
+                    return formatted.strip()
+            except Exception:
+                logger.warning("NL response formatting failed, falling back to format_rows")
+
+        return _format_rows(rows, columns)
+
+    def _format_nl_empty_response(self, original_question: str) -> str:
+        """Generate a natural language explanation when no data matches."""
+        try:
+            response = self._llm.chat_complete(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Eres un asistente de un sistema de turnos medicos. "
+                            "El usuario hizo una consulta pero no se encontraron datos. "
+                            "Responde de forma natural y amable en espanol, explicando "
+                            "que no hay datos que coincidan. NO inventes datos. "
+                            "Sugiere que intente con otros criterios si es apropiado."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"El usuario pregunto: '{original_question}'\n"
+                            f"La base de datos no devolvio resultados.\n"
+                            f"Genera una respuesta natural en espanol."
+                        ),
+                    },
+                ],
+                temperature=0.3,
+            )
+            if response and len(response.strip()) > 10:
+                return response.strip()
+        except Exception:
+            logger.warning("NL empty response formatting failed")
+
+        return "No se encontraron datos que coincidan con tu consulta en el sistema."
 
     def _remember_result(
         self,
