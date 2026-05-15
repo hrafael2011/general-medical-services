@@ -72,6 +72,7 @@ _FOLLOWUP_PATTERNS = [
 _FILTER_DIMS = {
     "rank_id",
     "rank_name",
+    "rank",
     "sex",
     "area_id",
     "doctor_id",
@@ -79,6 +80,7 @@ _FILTER_DIMS = {
     "start",
     "department_id",
     "department_name",
+    "department",
 }
 
 _FILTER_DIM_ALIASES = {
@@ -103,6 +105,32 @@ _MONTH_NAME_TO_NUMBER = {
     "noviembre": 11,
     "diciembre": 12,
 }
+
+
+def _fetch_rank_values(session) -> str:
+    """Query the DB for all rank normalized_names and format for the system prompt.
+
+    Returns an empty string if session is None or query fails, so the prompt
+    still works even without DB access (e.g. in tests).
+    """
+    if session is None:
+        return ""
+    try:
+        from sqlalchemy import text as sa_text
+
+        result = session.execute(
+            sa_text(
+                "SELECT normalized_name FROM ranks "
+                "WHERE active = TRUE ORDER BY name"
+            )
+        )
+        vals = [row[0] for row in result.fetchall()]
+        if not vals:
+            return ""
+        formatted = ", ".join(f"'{v}'" for v in vals)
+        return f"- ranks.normalized_name usa valores en minusculas:\n  {formatted}"
+    except Exception:
+        return ""
 
 
 def _looks_like_data_request(text: str) -> bool:
@@ -202,8 +230,7 @@ FORMATO DE EXPORT:
 
 VALORES EXACTOS de columnas (usa estos siempre):
 - doctors.sex usa 'male' (masculino) y 'female' (femenino)
-- ranks.normalized_name usa valores en minusculas:
-  'cabo', 'contrata', 'pasante', 'sargento', 'sargento mayor'
+{rank_values}
 
 Responde UNICAMENTE con JSON en este formato:
 {{"action": "query|export|reply|ambiguous", "query_type": "nombre_consulta",
@@ -262,6 +289,7 @@ class ConversationalAgent:
         session_store: SessionStore | None = None,
         entity_resolver = None,
         doctor_query_service = None,
+        session = None,
     ) -> None:
         self._llm = llm
         self._router = router
@@ -271,6 +299,7 @@ class ConversationalAgent:
         self._session_store = session_store
         self._entity_resolver = entity_resolver
         self._doctor_query_service = doctor_query_service
+        self._session = session
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -288,8 +317,12 @@ class ConversationalAgent:
                 f"Params: {params_str}"
             )
 
+        # Fetch available ranks from DB for dynamic prompt
+        rank_vals = _fetch_rank_values(self._session)
+
         prompt = _SYSTEM_PROMPT.format(
-            query_types="\n".join(query_types_lines)
+            query_types="\n".join(query_types_lines),
+            rank_values=rank_vals,
         )
 
         if entity_hints:
@@ -354,7 +387,7 @@ class ConversationalAgent:
             )
             # Router returns "not found" when query_type missing or SQL fails.
             # Treat this as a fallback trigger so query_executor gets a chance.
-            if result.response_text.startswith("No pude encontrar"):
+            if result.response_text.startswith("No pude encontrar") or result.response_text.startswith("No se encontraron resultados"):
                 return None
             return result
         except Exception:
@@ -510,10 +543,10 @@ class ConversationalAgent:
         merged.update(resolved_entities)
 
         hints_parts = [part for part in entity_hints.split(", ") if part]
-        if "rank" in merged and "rank_id" not in entity_hints and "rank_name" not in entity_hints:
-            hints_parts.append(f"rank_name='{merged['rank']['normalized_name']}'")
-        if "department" in merged and "department_id" not in entity_hints:
-            hints_parts.append(f"department_name='{merged['department']['normalized_name']}'")
+        if "rank" in merged and "rank_id" not in entity_hints and "rank='" not in entity_hints:
+            hints_parts.append(f"rank='{merged['rank']['normalized_name']}'")
+        if "department" in merged and "department_id" not in entity_hints and "department='" not in entity_hints:
+            hints_parts.append(f"department='{merged['department']['normalized_name']}'")
         if "sex" in merged and "sex=" not in entity_hints:
             sex = merged["sex"]
             if isinstance(sex, list):
