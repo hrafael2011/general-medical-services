@@ -54,18 +54,21 @@ def _reply_has_hallucination(text: str) -> bool:
 
 _DATA_REQUEST_PATTERNS = [
     re.compile(
-        r"\b(cuant[oa]s?|cauant[oa]s?|lista|dame|muestra|mu[eé]strame|exporta|reporte|pdf|excel)\b",
+        r"\b(cuant[oa]s?|cauant[oa]s?|lista|dame|muestra|mu[eé]strame|"
+        r"exporta|esporta|reporte|pdf|excel)\b",
         re.IGNORECASE,
     ),
     re.compile(
         r"\b(m[eé]dicos?|doctores?|cabos?|sargentos?|pasantes?|turnos?|servicios?)\b",
         re.IGNORECASE,
     ),
+    re.compile(r"\bmisi[oó]n(?:es)?\b", re.IGNORECASE),
 ]
 
 _FOLLOWUP_PATTERNS = [
     re.compile(
-        r"\b(y|son|ellos|ellas|eso|esa|esos|esas|mismo|misma|exp[oó]rtalo|exportalo)\b",
+        r"\b(y|son|ellos|ellas|eso|esa|esos|esas|mismo|misma|"
+        r"exp[oó]rtalo|exportalo|esportalo)\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -118,6 +121,7 @@ _WEEK_ORDINAL_TO_NUMBER = {
     "primer": 1,
     "primea": 1,
     "segunda": 2,
+    "seguna": 2,
     "tercera": 3,
     "cuarta": 4,
     "quinta": 5,
@@ -218,17 +222,23 @@ def _calendar_service_query_intent(
     if period is not None:
         month, year = period
         week_match = re.search(
-            r"\b(primera|primer|primea|segunda|tercera|cuarta|quinta)\s+semana\b",
+            r"\b(primera|primer|primea|segunda|seguna|tercera|cuarta|quinta)\s+semana\b",
             normalized,
             re.IGNORECASE,
         )
+        if week_match is None:
+            week_match = re.search(
+                r"\bsemana\s+(primera|primer|primea|segunda|seguna|tercera|cuarta|quinta)\b",
+                normalized,
+                re.IGNORECASE,
+            )
         mentions_calendar_assignments = re.search(
             r"\b(calendario|servicio|servicios|turno|turnos|asignad[oa]s?|incluid[oa]s?)\b",
             normalized,
             re.IGNORECASE,
         )
         mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-        if week_match and mentions_calendar_assignments:
+        if week_match and (mentions_calendar_assignments or mentions_doctors):
             week_number = _WEEK_ORDINAL_TO_NUMBER[week_match.group(1).lower()]
             start_day = ((week_number - 1) * 7) + 1
             last_day = monthrange(year, month)[1]
@@ -295,6 +305,45 @@ def _mission_ranking_query_intent(text: str) -> tuple[str, dict[str, int]] | Non
         return None
     month, year = period
     return "mission_ranking", {"year": year, "month": month}
+
+
+def _active_missions_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
+    """Map active mission questions to the registered deterministic query."""
+    normalized = text.lower()
+    if not re.search(r"\bmisi[oó]n(?:es)?\b", normalized, re.IGNORECASE):
+        return None
+    if re.search(r"\branking\b", normalized, re.IGNORECASE):
+        return None
+    if not re.search(
+        r"\b(activa?s?|vigentes?|programadas?|creadas?|confirmadas?)\b",
+        normalized,
+        re.IGNORECASE,
+    ):
+        return None
+    return "list_active_missions", {}
+
+
+def _looks_like_contextual_export(text: str) -> bool:
+    """Return True for requests to export the previous result/listing."""
+    normalized = text.lower()
+    if re.search(
+        r"\b(exportalo|exportalos|exportarlo|exportarlos|"
+        r"esportalo|esportalos|esportarlo|esportarlos)\b",
+        normalized,
+    ):
+        return True
+    asks_export = re.search(
+        r"\b(exporta|exportar|exportalo|exportalos|exportarlo|exportarlos|"
+        r"esporta|esportar|esportalo|esportalos|reporte|pdf|excel|xlsx)\b",
+        normalized,
+        re.IGNORECASE,
+    )
+    references_context = re.search(
+        r"\b(eso|esa|ese|esos|esas|listado|lista|resultado|resultados|anterior)\b",
+        normalized,
+        re.IGNORECASE,
+    )
+    return bool(asks_export and references_context)
 
 
 def _count_filter_dims(entity_hints: str) -> int:
@@ -678,6 +727,9 @@ class ConversationalAgent:
                 "month": params.get("month"),
             }
             subject = "mission_ranking"
+        elif query_type == "list_active_missions":
+            domain = "missions"
+            subject = "active_missions"
 
         state = SessionState(
             last_query_type=query_type,
@@ -729,6 +781,162 @@ class ConversationalAgent:
             else int(previous_period.get("year") or detected_year)
         )
         return state.last_query_type, {"year": year, "month": month}
+
+    def _mission_contextual_followup_result(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+    ) -> AgentResult | None:
+        """Answer follow-ups over the last active-missions listing."""
+        if self._session_store is None or telegram_user_id is None:
+            return None
+        try:
+            state = self._session_store.get(telegram_user_id)
+        except Exception:
+            logger.warning("Failed to load Telegram session state", exc_info=True)
+            return None
+        if (
+            state is None
+            or state.last_domain != "missions"
+            or state.last_query_type != "list_active_missions"
+            or not state.last_results
+        ):
+            return None
+
+        normalized = text.lower()
+        rows = [row for row in state.last_results if isinstance(row, dict)]
+        if not rows:
+            return None
+
+        if re.search(r"\b(aprobadas?|confirmadas?)\b", normalized, re.IGNORECASE):
+            filtered = [
+                row
+                for row in rows
+                if str(row.get("estado", "")).lower() in {"confirmada", "confirmado"}
+            ]
+            columns = list(filtered[0].keys()) if filtered else list(rows[0].keys())
+            response_text = (
+                _format_rows(filtered, columns)
+                if filtered
+                else "No se encontraron misiones aprobadas en el listado anterior."
+            )
+            return AgentResult(
+                response_text=response_text,
+                agent_action="query",
+                tool_name="mission_context",
+                tool_entities={
+                    "operation": "contextual_filter",
+                    "query_type": "list_active_missions",
+                    "filter": "confirmed",
+                },
+                tool_result={
+                    "ok": True,
+                    "source": "session_context",
+                    "query_type": "list_active_missions",
+                    "row_count": len(filtered),
+                    "data": {"columns": columns, "rows": filtered},
+                },
+            )
+
+        asks_responsibles = re.search(
+            r"\b(responsables?|participantes?|medicos?|m[eé]dicos?)\b",
+            normalized,
+            re.IGNORECASE,
+        )
+        number_match = re.search(r"\b(?:numero|n[uú]mero|#)\s*(\d+)\b", normalized)
+        if not (asks_responsibles and number_match):
+            return None
+
+        index = int(number_match.group(1)) - 1
+        if index < 0 or index >= len(rows):
+            return AgentResult(
+                response_text="No encuentro ese numero en el listado anterior de misiones.",
+                agent_action="ambiguous",
+            )
+
+        selected = rows[index]
+        mission_keys = ("fecha_mision", "estado", "lugar", "descripcion")
+        matching = [
+            row
+            for row in rows
+            if all(row.get(key) == selected.get(key) for key in mission_keys)
+        ]
+        doctors = [
+            {"medico": row.get("medico")}
+            for row in matching
+            if row.get("medico") and row.get("medico") != "Sin participante asignado"
+        ]
+        columns = ["medico"]
+        response_text = (
+            _format_rows(doctors, columns)
+            if doctors
+            else "Esa mision no tiene participantes asignados en el listado anterior."
+        )
+        return AgentResult(
+            response_text=response_text,
+            agent_action="query",
+            tool_name="mission_context",
+            tool_entities={
+                "operation": "contextual_selection",
+                "query_type": "list_active_missions",
+                "selected_number": index + 1,
+            },
+            tool_result={
+                "ok": True,
+                "source": "session_context",
+                "query_type": "list_active_missions",
+                "row_count": len(doctors),
+                "data": {"columns": columns, "rows": doctors},
+            },
+        )
+
+    def _contextual_export_result(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+    ) -> AgentResult | None:
+        """Export the last operational result when the user says 'ese listado'."""
+        if not _looks_like_contextual_export(text):
+            return None
+        if self._session_store is None or telegram_user_id is None:
+            return None
+        try:
+            state = self._session_store.get(telegram_user_id)
+        except Exception:
+            logger.warning("Failed to load Telegram session state", exc_info=True)
+            return None
+        if state is None or not state.last_results:
+            return None
+
+        rows = state.last_results
+        columns = list(rows[0].keys()) if rows and isinstance(rows[0], dict) else []
+        if not rows or not columns:
+            return None
+
+        fmt = "excel" if re.search(r"\b(excel|xlsx|xls)\b", text, re.IGNORECASE) else "pdf"
+        query_type = state.last_query_type or "contextual_export"
+        try:
+            result = self._router._build_document(rows, columns, fmt, query_type)  # noqa: SLF001
+        except Exception:
+            logger.warning("Contextual export failed", exc_info=True)
+            return None
+
+        result.agent_action = "export"
+        result.tool_name = state.last_tool_name or "contextual_export"
+        result.tool_entities = {
+            "operation": "contextual_export",
+            "query_type": query_type,
+            "format": fmt,
+            "reused_last_result": True,
+        }
+        result.tool_result = {
+            "ok": True,
+            "source": "session_context",
+            "query_type": query_type,
+            "row_count": len(rows),
+            "data": {"columns": columns, "rows": rows},
+        }
+        return result
 
     def _filters_from_query_context(
         self,
@@ -978,6 +1186,27 @@ class ConversationalAgent:
             except Exception:
                 logger.warning("Failed to load Telegram session state", exc_info=True)
 
+        mission_followup = self._mission_contextual_followup_result(text, telegram_user_id)
+        if mission_followup is not None:
+            self._remember_result(
+                telegram_user_id,
+                mission_followup,
+                query_type=(
+                    mission_followup.tool_entities or {}
+                ).get("query_type"),
+                params={},
+            )
+            logger.info(
+                "Agent resolved via mission contextual follow-up",
+                extra={
+                    "telegram_event": "agent_route_completed",
+                    "match_type": "mission_contextual_followup",
+                    "agent_action": mission_followup.agent_action,
+                    "latency_ms": round((time.perf_counter() - start) * 1000),
+                },
+            )
+            return mission_followup
+
         conversation_plan = build_conversation_plan(
             text,
             resolved_entities=resolved_entities,
@@ -1021,6 +1250,27 @@ class ConversationalAgent:
                 agent_action="ambiguous",
             )
 
+        contextual_export = self._contextual_export_result(text, telegram_user_id)
+        if contextual_export is not None:
+            self._remember_result(
+                telegram_user_id,
+                contextual_export,
+                query_type=(
+                    contextual_export.tool_entities or {}
+                ).get("query_type"),
+                params={},
+            )
+            logger.info(
+                "Agent resolved via contextual export",
+                extra={
+                    "telegram_event": "agent_route_completed",
+                    "match_type": "contextual_export",
+                    "agent_action": contextual_export.agent_action,
+                    "latency_ms": round((time.perf_counter() - start) * 1000),
+                },
+            )
+            return contextual_export
+
         mission_ranking_query = _mission_ranking_query_intent(text)
         if mission_ranking_query is not None:
             query_type, params = mission_ranking_query
@@ -1037,6 +1287,29 @@ class ConversationalAgent:
                     extra={
                         "telegram_event": "agent_route_completed",
                         "match_type": "mission_ranking",
+                        "agent_action": router_result.agent_action,
+                        "query_type": query_type,
+                        "latency_ms": round((time.perf_counter() - start) * 1000),
+                    },
+                )
+                return router_result
+
+        active_missions_query = _active_missions_query_intent(text)
+        if active_missions_query is not None:
+            query_type, params = active_missions_query
+            router_result = self._route_via_router("query", query_type, params, text)
+            if router_result is not None:
+                self._remember_result(
+                    telegram_user_id,
+                    router_result,
+                    query_type=query_type,
+                    params=params,
+                )
+                logger.info(
+                    "Agent resolved via deterministic active missions query",
+                    extra={
+                        "telegram_event": "agent_route_completed",
+                        "match_type": "active_missions",
                         "agent_action": router_result.agent_action,
                         "query_type": query_type,
                         "latency_ms": round((time.perf_counter() - start) * 1000),

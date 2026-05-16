@@ -168,6 +168,75 @@ def test_first_week_query_accepts_common_typo_primea(db_session):
     assert llm.calls == []
 
 
+def test_week_query_without_service_word_still_uses_calendar(db_session):
+    _seed_calendar_assignment(
+        db_session,
+        year=2026,
+        month=7,
+        status="approved",
+        service_date=date(2026, 7, 1),
+        doctor_name="Dr. Julio Sin Servicio",
+    )
+    agent, llm = _agent(db_session)
+
+    result = agent.process("cuales medicos estan la primera semana de julio")
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "calendar_query_service"
+    assert "Dr. Julio Sin Servicio" in result.response_text
+    assert result.tool_entities["period"] == {
+        "start_date": "2026-07-01",
+        "end_date": "2026-07-07",
+    }
+    assert llm.calls == []
+
+
+def test_week_query_accepts_reversed_order_semana_primera(db_session):
+    _seed_calendar_assignment(
+        db_session,
+        year=2026,
+        month=7,
+        status="approved",
+        service_date=date(2026, 7, 1),
+        doctor_name="Dra. Julio Orden Invertido",
+    )
+    agent, llm = _agent(db_session)
+
+    result = agent.process("cuales medicos estan de servicio la semana primera de julio")
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "calendar_query_service"
+    assert "Dra. Julio Orden Invertido" in result.response_text
+    assert result.tool_entities["period"] == {
+        "start_date": "2026-07-01",
+        "end_date": "2026-07-07",
+    }
+    assert llm.calls == []
+
+
+def test_second_week_query_accepts_common_typo_seguna(db_session):
+    _seed_calendar_assignment(
+        db_session,
+        year=2026,
+        month=7,
+        status="approved",
+        service_date=date(2026, 7, 8),
+        doctor_name="Dra. Julio Segunda Typo",
+    )
+    agent, llm = _agent(db_session)
+
+    result = agent.process("cuales medicos estan la seguna semana de julio")
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "calendar_query_service"
+    assert "Dra. Julio Segunda Typo" in result.response_text
+    assert result.tool_entities["period"] == {
+        "start_date": "2026-07-08",
+        "end_date": "2026-07-14",
+    }
+    assert llm.calls == []
+
+
 def test_first_week_query_mentions_draft_when_no_approved_calendar(db_session):
     _seed_calendar_assignment(
         db_session,
@@ -236,6 +305,68 @@ def test_first_week_month_followup_reuses_previous_week_range(db_session):
         "start_date": "2026-07-01",
         "end_date": "2026-07-07",
     }
+    assert llm.calls == []
+
+
+def test_contextual_export_reuses_previous_calendar_listing(db_session):
+    _seed_calendar_assignment(
+        db_session,
+        year=2026,
+        month=7,
+        status="approved",
+        service_date=date(2026, 7, 1),
+        doctor_name="Dr. Julio Export Uno",
+    )
+    _seed_calendar_assignment(
+        db_session,
+        year=2026,
+        month=7,
+        status="approved",
+        service_date=date(2026, 7, 2),
+        doctor_name="Dra. Julio Export Dos",
+    )
+    llm = FakeLLMProvider(responses={
+        "esporta": '{"action": "reply", "response_text": "No se encontraron resultados."}',
+    })
+    router = IntentRouter()
+    router.set_session(db_session)
+    agent = ConversationalAgent(
+        llm=llm,
+        router=router,
+        calendar_query_service=CalendarQueryService(db_session),
+        session_store=SessionStore(),
+    )
+
+    listing = agent.process(
+        "cuales medicos estan de servicio la primera semana de julio 2026",
+        telegram_user_id="tg-calendar-export",
+    )
+    export = agent.process(
+        "esporta ese listado a pdf",
+        telegram_user_id="tg-calendar-export",
+    )
+    short_export = agent.process(
+        "exportalo a pdf",
+        telegram_user_id="tg-calendar-export",
+    )
+    plural_export = agent.process(
+        "exportalos",
+        telegram_user_id="tg-calendar-export",
+    )
+
+    assert listing.tool_name == "calendar_query_service"
+    assert export.agent_action == "export"
+    assert export.document_bytes is not None
+    assert export.document_filename == "SERVICIOS_CALENDARIO.pdf"
+    assert export.tool_result["row_count"] == 2
+    assert short_export.agent_action == "export"
+    assert short_export.document_bytes is not None
+    assert short_export.document_filename == "SERVICIOS_CALENDARIO.pdf"
+    assert short_export.tool_result["row_count"] == 2
+    assert plural_export.agent_action == "export"
+    assert plural_export.document_bytes is not None
+    assert plural_export.document_filename == "SERVICIOS_CALENDARIO.pdf"
+    assert plural_export.tool_result["row_count"] == 2
     assert llm.calls == []
 
 

@@ -308,6 +308,7 @@ _EXPORT_FILENAME_MAP = {
     "calendar_status_month": "ESTADO_CALENDARIO.pdf",
     "assignment_count_by_date_range": "SERVICIOS_POR_MEDICO.pdf",
     "mission_ranking": "RANKING_MISIONES.pdf",
+    "list_active_missions": "MISIONES_ACTIVAS.pdf",
     "operational_summary": "RESUMEN_OPERATIVO.pdf",
     "doctors_pending_availability": "MEDICOS_SIN_DISPONIBILIDAD.pdf",
     "count_doctors_total": "TOTAL_MEDICOS.pdf",
@@ -325,6 +326,7 @@ _EXPORT_FILENAME_MAP = {
     "calendar_approval_info": "AUDITORIA_CALENDARIO.pdf",
     "pending_mission_confirmation": "PENDIENTES_MISION.pdf",
     "pending_service_confirmation": "PENDIENTES_SERVICIO.pdf",
+    "list_calendar_assignments_by_date_range": "SERVICIOS_CALENDARIO.pdf",
 }
 
 _COLUMN_TITLE_MAP: dict[str, str] = {
@@ -368,6 +370,8 @@ _COLUMN_TITLE_MAP: dict[str, str] = {
     "actor": "Actor",
     "medico": "Médico",
     "estado": "Estado",
+    "lugar": "Lugar",
+    "descripcion": "Descripción",
 }
 
 _DEFAULT_COLUMN_TITLE = "Columna"
@@ -405,6 +409,7 @@ def _build_pdf_from_rows(
         "calendar_status_month": "ESTADO DEL CALENDARIO",
         "assignment_count_by_date_range": "SERVICIOS POR MÉDICO",
         "mission_ranking": "RANKING DE CANDIDATOS PARA MISIONES",
+        "list_active_missions": "MISIONES ACTIVAS",
         "operational_summary": "RESUMEN OPERATIVO",
         "doctors_pending_availability": "MÉDICOS SIN DISPONIBILIDAD",
         "count_doctors_total": "TOTAL DE MÉDICOS",
@@ -422,6 +427,7 @@ def _build_pdf_from_rows(
         "calendar_approval_info": "AUDITORÍA DE CAMBIOS DEL CALENDARIO",
         "pending_mission_confirmation": "CONFIRMACIONES PENDIENTES DE MISIÓN",
         "pending_service_confirmation": "CONFIRMACIONES PENDIENTES DE SERVICIO",
+        "list_calendar_assignments_by_date_range": "SERVICIOS DEL CALENDARIO",
     }
 
     title = title_map.get(query_type, f"REPORTE - {query_type.upper()}")

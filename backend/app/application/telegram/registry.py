@@ -260,6 +260,29 @@ DEFAULT_QUERY_TYPES = [
         "description": "Ranking de candidatos para misiones en un periodo.",
     },
     {
+        "query_type": "list_active_missions",
+        "sql_template": (
+            "SELECT ma.mission_date AS fecha_mision, "
+            "CASE ma.status "
+            " WHEN 'confirmed' THEN 'Confirmada' "
+            " WHEN 'draft' THEN 'Pendiente de aprobacion' "
+            " ELSE ma.status END AS estado, "
+            "COALESCE(ma.location, '') AS lugar, "
+            "COALESCE(ma.description, '') AS descripcion, "
+            "COALESCE(d.name, 'Sin participante asignado') AS medico "
+            "FROM mission_assignments ma "
+            "LEFT JOIN mission_participants mp ON mp.mission_assignment_id = ma.id "
+            "LEFT JOIN doctors d ON d.id = mp.doctor_id "
+            "WHERE ma.deleted_at IS NULL "
+            "AND ma.status IN ('draft', 'confirmed') "
+            "AND ma.mission_date >= CURRENT_DATE "
+            "ORDER BY ma.mission_date, ma.location, d.name "
+            "LIMIT 50"
+        ),
+        "params_schema": {},
+        "description": "Lista las misiones activas o vigentes, con sus participantes si existen.",
+    },
+    {
         "query_type": "operational_summary",
         "sql_template": (
             "SELECT "

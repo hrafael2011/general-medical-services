@@ -5,7 +5,7 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 
@@ -265,6 +265,49 @@ def test_agent_tool_observability_is_persisted(db_session) -> None:
     assert interaction.tool_request["query_type"] == "count_doctors_total"
     assert interaction.tool_response["source"] == "query_registry"
     assert interaction.tool_response["row_count"] == 1
+
+
+def test_agent_tool_response_dates_are_json_serialized(db_session) -> None:
+    user = _new_user(db_session)
+    tg_id = f"tg-{uuid.uuid4().hex[:8]}"
+    _new_link(db_session, user_id=user.id, telegram_user_id=tg_id)
+
+    agent = StubAgent(AgentResult(
+        response_text="Se encontraron servicios.",
+        agent_action="query",
+        tool_name="calendar_query_service",
+        tool_entities={
+            "period": {
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 7),
+            },
+        },
+        tool_result={
+            "ok": True,
+            "data": {
+                "columns": ["service_date", "doctor_name"],
+                "rows": [
+                    {"service_date": date(2026, 7, 1), "doctor_name": "Dra. Uno"},
+                ],
+            },
+        },
+    ))
+    orchestrator = _make_orchestrator(db_session, agent=agent)
+
+    orchestrator.handle_message(
+        telegram_user_id=tg_id,
+        telegram_username="regularuser",
+        chat_id=44444,
+        text="cuales medicos estan de servicio la primera semana de julio",
+    )
+
+    interaction = db_session.scalars(
+        select(TelegramInteractionModel).where(
+            TelegramInteractionModel.telegram_user_id == tg_id
+        )
+    ).one()
+    assert interaction.tool_request["period"]["start_date"] == "2026-07-01"
+    assert interaction.tool_response["data"]["rows"][0]["service_date"] == "2026-07-01"
 
 
 def test_agent_receives_user_info(db_session) -> None:

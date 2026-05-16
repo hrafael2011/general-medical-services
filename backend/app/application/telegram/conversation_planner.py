@@ -34,13 +34,18 @@ _MONTH_RE = re.compile(
 
 _COUNT_RE = re.compile(r"\b(cuantos?|cuantas?|cauantos?|cauantas?|total)\b|\b\d+\s+o\s+\d+\b")
 _LIST_RE = re.compile(r"\b(cuales|quienes|lista|listado|dame|muestra|muestrame|top)\b")
-_EXPORT_RE = re.compile(r"\b(exporta|exportar|exportalo|exportarlo|reporte|pdf|excel|xlsx|xls)\b")
+_EXPORT_RE = re.compile(
+    r"\b(exporta|exportar|exportalo|exportalos|exportarlo|exportarlos|"
+    r"esporta|esportar|esportalo|esportalos|"
+    r"reporte|pdf|excel|xlsx|xls)\b"
+)
 _SHORT_FOLLOWUP_RE = re.compile(
     r"^\s*(y\s+)?(el|la|los|las|de|del|en|a)?\s*"
     r"(enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
     r"septiembre|octubre|noviembre|diciembre|masculinos?|femeninos?|feminios?|"
     r"femenios?|pdf|excel|"
-    r"listado|lista|exportalo|exportarlo)"
+    r"listado|lista|exportalo|exportalos|exportarlo|exportarlos|"
+    r"esportalo|esportalos)"
     r"\??\s*$"
 )
 
@@ -90,7 +95,7 @@ def _domain_candidates(text: str) -> set[str]:
         candidates.add("misiones")
     if not doctor_service_status and re.search(
         r"\b(calendario|servicio|servicios|turno|turnos|asignad[oa]s?|"
-        r"incluid[oa]s?|primera semana|primea semana|segunda semana|"
+        r"incluid[oa]s?|primera semana|primea semana|segunda semana|seguna semana|"
         r"tercera semana|cuarta semana)\b",
         text,
     ):
@@ -134,7 +139,11 @@ def _is_short_followup(text: str) -> bool:
         text,
     ):
         return True
-    if len(words) <= 4 and re.search(r"\b(exportalo|exportarlo|pdf|excel|xlsx)\b", text):
+    if len(words) <= 5 and re.search(
+        r"\b(exportalo|exportalos|exportarlo|exportarlos|esportalo|esportalos|"
+        r"pdf|excel|xlsx)\b",
+        text,
+    ):
         return True
     return False
 

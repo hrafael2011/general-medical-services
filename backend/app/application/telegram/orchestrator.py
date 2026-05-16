@@ -1,7 +1,9 @@
 import logging
 import re
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
 from backend.app.application.telegram.agent import ConversationalAgent
@@ -25,6 +27,19 @@ _CONFIRMATION_COMMAND_RE = re.compile(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert nested values to JSON-safe primitives before DB persistence."""
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 class TelegramOrchestrator:
@@ -343,11 +358,11 @@ class TelegramOrchestrator:
             user_role=user_role,
             intent_id=intent_id,
             input_text=text,
-            extracted_entities=entities,
+            extracted_entities=_json_safe(entities),
             intent_confidence=confidence,
             tool_name=tool_name,
-            tool_request=tool_request,
-            tool_response=tool_response,
+            tool_request=_json_safe(tool_request),
+            tool_response=_json_safe(tool_response),
             response_text=response_text,
             cache_status=None,
             fallback_reason=fallback_reason,
