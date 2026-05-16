@@ -38,7 +38,8 @@ _EXPORT_RE = re.compile(r"\b(exporta|exportar|exportalo|exportarlo|reporte|pdf|e
 _SHORT_FOLLOWUP_RE = re.compile(
     r"^\s*(y\s+)?(el|la|los|las|de|del|en|a)?\s*"
     r"(enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
-    r"septiembre|octubre|noviembre|diciembre|masculinos?|femeninos?|pdf|excel|"
+    r"septiembre|octubre|noviembre|diciembre|masculinos?|femeninos?|feminios?|"
+    r"femenios?|pdf|excel|"
     r"listado|lista|exportalo|exportarlo)"
     r"\??\s*$"
 )
@@ -89,7 +90,8 @@ def _domain_candidates(text: str) -> set[str]:
         candidates.add("misiones")
     if not doctor_service_status and re.search(
         r"\b(calendario|servicio|servicios|turno|turnos|asignad[oa]s?|"
-        r"incluid[oa]s?|primera semana|segunda semana|tercera semana|cuarta semana)\b",
+        r"incluid[oa]s?|primera semana|primea semana|segunda semana|"
+        r"tercera semana|cuarta semana)\b",
         text,
     ):
         candidates.add("calendario")
@@ -127,7 +129,10 @@ def _is_short_followup(text: str) -> bool:
     words = text.replace("?", "").split()
     if len(words) <= 5 and bool(_MONTH_RE.search(text)):
         return True
-    if len(words) <= 6 and re.search(r"\b(masculinos?|femeninos?)\b|\b\d+\s+o\s+\d+\b", text):
+    if len(words) <= 6 and re.search(
+        r"\b(masculinos?|femeninos?|feminios?|femenios?)\b|\b\d+\s+o\s+\d+\b",
+        text,
+    ):
         return True
     if len(words) <= 4 and re.search(r"\b(exportalo|exportarlo|pdf|excel|xlsx)\b", text):
         return True
@@ -190,7 +195,9 @@ def build_conversation_plan(
     clarification_question = None
     if confidence < 0.6 and action in {"contar", "listar", "exportar"}:
         route = "clarification"
-        clarification_question = "Necesito que me indiques sobre que informacion del sistema quieres consultar."
+        clarification_question = (
+            "Necesito que me indiques sobre que informacion del sistema quieres consultar."
+        )
 
     return ConversationPlan(
         domain=domain,

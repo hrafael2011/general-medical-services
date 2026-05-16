@@ -24,7 +24,7 @@ _MONTH_NAMES: dict[str, int] = {
 
 _FEMALE_WORDS = {
     "femenino", "femenina", "femeninos", "femeninas",
-    "femenio", "femenios", "mujer", "mujeres",
+    "femenio", "femenios", "feminio", "fiminios", "mujer", "mujeres",
 }
 _MALE_WORDS = {
     "masculino", "masculina", "masculinos", "masculinas",

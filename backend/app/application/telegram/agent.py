@@ -68,7 +68,10 @@ _FOLLOWUP_PATTERNS = [
         r"\b(y|son|ellos|ellas|eso|esa|esos|esas|mismo|misma|exp[oó]rtalo|exportalo)\b",
         re.IGNORECASE,
     ),
-    re.compile(r"\b(femenin[oa]s?|masculin[oa]s?|pdf|excel|listado|lista)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(femenin[oa]s?|feminios?|femenios?|masculin[oa]s?|pdf|excel|listado|lista)\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\b\d+\s+o\s+\d+\b", re.IGNORECASE),
 ]
 
@@ -113,6 +116,7 @@ _MONTH_NAME_TO_NUMBER = {
 _WEEK_ORDINAL_TO_NUMBER = {
     "primera": 1,
     "primer": 1,
+    "primea": 1,
     "segunda": 2,
     "tercera": 3,
     "cuarta": 4,
@@ -214,7 +218,7 @@ def _calendar_service_query_intent(
     if period is not None:
         month, year = period
         week_match = re.search(
-            r"\b(primera|primer|segunda|tercera|cuarta|quinta)\s+semana\b",
+            r"\b(primera|primer|primea|segunda|tercera|cuarta|quinta)\s+semana\b",
             normalized,
             re.IGNORECASE,
         )

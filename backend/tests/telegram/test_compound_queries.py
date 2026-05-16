@@ -460,11 +460,14 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
 
     first = agent.process("cuantos pasantes tenemos", telegram_user_id="tg-followup")
     second = agent.process("cuantos son femeninos?", telegram_user_id="tg-followup")
+    typo_second = agent.process("cuantas son feminio?", telegram_user_id="tg-followup")
     third = agent.process("exportalo en pdf", telegram_user_id="tg-followup")
 
     assert first.agent_action == "query"
     assert second.tool_name == "doctor_query_service"
     assert second.response_text == "Resultado: total: 1"
+    assert typo_second.tool_name == "doctor_query_service"
+    assert typo_second.response_text == "Resultado: total: 1"
     assert third.agent_action == "export"
     assert third.document_filename == "MEDICOS_FILTRADOS.pdf"
     assert third.tool_result["data"]["rows"] == [

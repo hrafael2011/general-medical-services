@@ -62,7 +62,15 @@ def _seed_doctor(session, name: str) -> DoctorModel:
     return doctor
 
 
-def _seed_calendar_assignment(session, *, year: int, month: int, status: str, service_date: date, doctor_name: str):
+def _seed_calendar_assignment(
+    session,
+    *,
+    year: int,
+    month: int,
+    status: str,
+    service_date: date,
+    doctor_name: str,
+):
     now = datetime.now(UTC)
     area = _seed_area(session)
     doctor = _seed_doctor(session, doctor_name)
@@ -138,6 +146,25 @@ def test_first_week_query_uses_approved_calendar_assignments(db_session):
         "start_date": "2026-07-01",
         "end_date": "2026-07-07",
     }
+    assert llm.calls == []
+
+
+def test_first_week_query_accepts_common_typo_primea(db_session):
+    _seed_calendar_assignment(
+        db_session,
+        year=2026,
+        month=7,
+        status="approved",
+        service_date=date(2026, 7, 3),
+        doctor_name="Dr. Julio Typo",
+    )
+    agent, llm = _agent(db_session)
+
+    result = agent.process("cuales medicos estan de servicio la primea semana de julio")
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "calendar_query_service"
+    assert "Dr. Julio Typo" in result.response_text
     assert llm.calls == []
 
 
