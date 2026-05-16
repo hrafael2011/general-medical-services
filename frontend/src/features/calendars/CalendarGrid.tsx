@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Trash2, Wand2 } from "lucide-react";
-import { calendarsApi, CalendarAssignmentRead, DaySlot } from "../../api/calendars";
+import { CheckCircle2, Download, FileDown, Trash2, Wand2 } from "lucide-react";
+import { calendarsApi, CalendarAssignmentRead, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, availabilityApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
@@ -238,6 +238,54 @@ export function CalendarGrid() {
     enabled: !!assignTarget,
   });
 
+  const { data: calendarWeeks = [] } = useQuery({
+    queryKey: ["calendar-weeks", calendarId],
+    queryFn: () => calendarsApi.listWeeks(calendarId!),
+    enabled: !!calendarId,
+  });
+
+  const approveWeekMutation = useMutation({
+    mutationFn: (weekId: string) => calendarsApi.approveWeek(calendarId!, weekId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
+      qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
+      qc.invalidateQueries({ queryKey: ["calendars"] });
+      addToast("success", "Semana aprobada.");
+    },
+    onError: (err) =>
+      addToast("error", err instanceof ApiError ? err.message : "Error al aprobar semana."),
+  });
+
+  const unlockWeekMutation = useMutation({
+    mutationFn: (weekId: string) => calendarsApi.unlockWeek(calendarId!, weekId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
+      qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
+      qc.invalidateQueries({ queryKey: ["calendars"] });
+      addToast("success", "Semana desbloqueada.");
+    },
+    onError: (err) =>
+      addToast("error", err instanceof ApiError ? err.message : "Error al desbloquear semana."),
+  });
+
+  const handleExportWeeklyPDF = async (weekId: string) => {
+    try {
+      const blob = await calendarsApi.exportWeeklyPDF(calendarId!, weekId);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err) {
+      addToast("error", err instanceof ApiError ? err.message : "Error al exportar PDF semanal.");
+    }
+  };
+
+  const handleExportFullCalendarPDF = async () => {
+    try {
+      const blob = await calendarsApi.exportFullCalendarPDF(calendarId!);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err) {
+      addToast("error", err instanceof ApiError ? err.message : "Error al exportar PDF del calendario.");
+    }
+  };
+
   if (!calendarId) return null;
   if (isLoading) return <p className="loading-text">Cargando grilla…</p>;
   if (error || !data) return <p className="error-text">Error al cargar el calendario.</p>;
@@ -356,6 +404,93 @@ export function CalendarGrid() {
       {data.gaps.length > 0 && (
         <div style={{ marginTop: 12, padding: "10px 14px", background: "#fff7ed", borderRadius: 6, border: "1px solid #fed7aa" }}>
           <strong style={{ fontSize: 13 }}>Huecos sin resolver: {data.gaps.length}</strong>
+        </div>
+      )}
+
+      {/* Week panel */}
+      {calendarWeeks.length > 0 && (
+        <div style={{ marginTop: "1.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Semanas</h3>
+            <button
+              className="btn-ghost"
+              onClick={handleExportFullCalendarPDF}
+              title="Exportar calendario completo en PDF"
+            >
+              <FileDown size={15} /> Calendario completo PDF
+            </button>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}>
+                <th style={{ padding: "0.4rem 0.5rem" }}>Semana</th>
+                <th style={{ padding: "0.4rem 0.5rem" }}>Rango</th>
+                <th style={{ padding: "0.4rem 0.5rem" }}>Asignaciones</th>
+                <th style={{ padding: "0.4rem 0.5rem" }}>Estado</th>
+                <th style={{ padding: "0.4rem 0.5rem" }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calendarWeeks.map((w: WeekRead) => (
+                <tr key={w.id} style={{ borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>
+                    {w.label}
+                  </td>
+                  <td style={{ padding: "0.4rem 0.5rem", color: "#555" }}>
+                    {w.start_date} → {w.end_date}
+                  </td>
+                  <td style={{ padding: "0.4rem 0.5rem" }}>
+                    {w.assignment_count}
+                  </td>
+                  <td style={{ padding: "0.4rem 0.5rem" }}>
+                    <span style={{
+                      display: "inline-block",
+                      padding: "2px 8px",
+                      borderRadius: 12,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      background: w.status === "approved" ? "#d1fae5" : "#f3f4f6",
+                      color: w.status === "approved" ? "#065f46" : "#6b7280",
+                    }}>
+                      {w.status === "approved" ? "Aprobada" : "Borrador"}
+                    </span>
+                  </td>
+                  <td style={{ padding: "0.4rem 0.5rem", display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                    {w.status === "draft" && isDraft && (
+                      <button
+                        className="btn-primary"
+                        style={{ fontSize: 12, padding: "2px 10px" }}
+                        disabled={approveWeekMutation.isPending}
+                        onClick={() => approveWeekMutation.mutate(w.id)}
+                      >
+                        <CheckCircle2 size={13} /> Aprobar
+                      </button>
+                    )}
+                    {w.status === "approved" && (
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: 12, padding: "2px 10px" }}
+                        disabled={unlockWeekMutation.isPending}
+                        onClick={() => unlockWeekMutation.mutate(w.id)}
+                      >
+                        Desbloquear
+                      </button>
+                    )}
+                    {w.status === "approved" && (
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: 12, padding: "2px 10px" }}
+                        onClick={() => handleExportWeeklyPDF(w.id)}
+                        title="Exportar lista semanal en PDF"
+                      >
+                        <Download size={13} /> PDF
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
