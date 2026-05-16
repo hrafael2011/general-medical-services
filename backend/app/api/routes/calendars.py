@@ -410,10 +410,11 @@ def list_weeks(
     repo = CalendarRepository(session)
     weeks = repo.list_weeks(calendar_id)
     result: list[WeekRead] = []
+    all_assignments = repo.list_assignments(weeks[0].calendar_version_id) if weeks else []
     for w in weeks:
         a_count = len([
-            a for a in repo.list_assignments(w.calendar_version_id)
-            if getattr(a, "calendar_week_id", None) == w.id
+            a for a in all_assignments
+            if w.start_date <= a.service_date <= w.end_date
         ])
         result.append(WeekRead(
             id=w.id,
