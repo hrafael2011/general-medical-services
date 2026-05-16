@@ -2,9 +2,24 @@
 
 import time
 from dataclasses import dataclass, field
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively convert datetime/date/Decimal to JSON-safe types."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
 
 
 @dataclass
@@ -17,6 +32,9 @@ class SessionState:
     last_tool_name: str | None = None
     last_agent_action: str | None = None
     last_operation: str | None = None
+    last_domain: str | None = None
+    last_period: dict[str, Any] | None = None
+    last_subject: str | None = None
     last_total: int | None = None
     last_document_format: str | None = None
     pending_selection: dict[str, Any] | None = None
@@ -62,7 +80,7 @@ class SessionStore:
         if self._telegram_repo is not None:
             self._telegram_repo.upsert_session(
                 telegram_user_id,
-                {
+                _sanitize_for_json({
                     "last_query_type": state.last_query_type,
                     "last_params": state.last_params,
                     "last_results": state.last_results,
@@ -70,11 +88,14 @@ class SessionStore:
                     "last_tool_name": state.last_tool_name,
                     "last_agent_action": state.last_agent_action,
                     "last_operation": state.last_operation,
+                    "last_domain": state.last_domain,
+                    "last_period": state.last_period,
+                    "last_subject": state.last_subject,
                     "last_total": state.last_total,
                     "last_document_format": state.last_document_format,
                     "pending_selection": state.pending_selection,
                     "created_at": state.created_at,
-                },
+                }),
             )
 
     def clear(self, telegram_user_id: str) -> None:

@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.application.telegram.sanitize import format_rows
+from backend.app.application.telegram.sanitize import display_value, format_rows
 from backend.app.application.telegram.types import AgentResult
 from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
@@ -53,7 +53,7 @@ class DoctorQueryService:
     def execute(self, user_text: str, resolved: dict[str, Any]) -> AgentResult | None:
         """Return an AgentResult when the request is a supported doctor query."""
         filters = self._filters_from_resolved(resolved)
-        if len(filters) < 2:
+        if not filters:
             return None
 
         is_export = self._is_export_request(user_text)
@@ -119,8 +119,17 @@ class DoctorQueryService:
                 "possible_duplicate_name_count": len(possible_duplicates),
             },
         )
+        response_text = format_rows(rows, columns)
+        if possible_duplicates:
+            dup_lines = "\n".join(
+                f"  - {d['name']} ({d['count']} registros)"
+                for d in possible_duplicates[:10]
+            )
+            response_text += (
+                f"\n\nPosibles duplicados por nombre ({len(possible_duplicates)}):\n{dup_lines}"
+            )
         return AgentResult(
-            response_text=format_rows(rows, columns),
+            response_text=response_text,
             agent_action="query",
             tool_name="doctor_query_service",
             tool_entities={
@@ -130,6 +139,8 @@ class DoctorQueryService:
             },
             tool_result={
                 "ok": True,
+                "source": "deterministic_doctor_query",
+                "row_count": len(rows),
                 "validated_filters": validation["validated_filters"],
                 "possible_duplicate_names": possible_duplicates,
                 "data": {"columns": columns, "rows": rows},
@@ -221,6 +232,8 @@ class DoctorQueryService:
                 },
                 tool_result={
                     "ok": True,
+                    "source": "deterministic_doctor_query",
+                    "row_count": len(rows),
                     "validated_filters": validation["validated_filters"],
                     "possible_duplicate_names": possible_duplicates,
                     "data": {"columns": columns, "rows": rows},
@@ -266,6 +279,8 @@ class DoctorQueryService:
             },
             tool_result={
                 "ok": True,
+                "source": "deterministic_doctor_query",
+                "row_count": len(rows),
                 "validated_filters": validation["validated_filters"],
                 "possible_duplicate_names": possible_duplicates,
                 "data": {"columns": columns, "rows": rows},
@@ -314,7 +329,7 @@ class DoctorQueryService:
         ]
         pdf_rows = [
             {
-                title: str(row.get(column, ""))
+                title: display_value(column, row.get(column, ""))
                 for title, column in zip(header_titles, columns, strict=True)
             }
             for row in rows
@@ -339,7 +354,7 @@ class DoctorQueryService:
             for column in columns
         ])
         for row in rows:
-            ws.append([str(row.get(column, "")) for column in columns])
+            ws.append([display_value(column, row.get(column, "")) for column in columns])
         from openpyxl.utils import get_column_letter
         for i, column in enumerate(columns, start=1):
             letter = get_column_letter(i)

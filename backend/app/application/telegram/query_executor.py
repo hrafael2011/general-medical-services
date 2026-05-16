@@ -64,6 +64,51 @@ _TABLE_DESCRIPTIONS = {
 }
 
 
+def _is_internal_identifier_column(column: str) -> bool:
+    normalized = column.lower()
+    return normalized == "id" or normalized.endswith("_id")
+
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def _is_uuid_column(rows: list[dict], column: str) -> bool:
+    """True when *column* contains only UUID values across all rows."""
+    if not rows:
+        return False
+    samples = [
+        row.get(column) for row in rows[:5]
+        if row.get(column) is not None
+    ]
+    if not samples:
+        return False
+    return all(
+        isinstance(v, str) and bool(_UUID_RE.match(v))
+        for v in samples
+    )
+
+
+def _strip_internal_identifier_columns(rows: list[dict], columns: list[str]) -> tuple[list[dict], list[str]]:
+    public_columns = [
+        column for column in columns
+        if not _is_internal_identifier_column(column)
+    ]
+    # Also remove columns whose values are all UUIDs
+    public_columns = [
+        c for c in public_columns
+        if not _is_uuid_column(rows, c)
+    ]
+    if public_columns == columns:
+        return rows, columns
+    return (
+        [{column: row.get(column) for column in public_columns} for row in rows],
+        public_columns,
+    )
+
+
 def _build_schema_summary(session: Any | None = None) -> str:
     """Build a schema description string from SQLAlchemy metadata.
 
@@ -145,6 +190,7 @@ class QueryExecutor:
         self,
         nl_query: str,
         user_text: str = "",
+        entity_hints: str = "",
     ) -> dict:
         """
         Convert a natural language query to SQL, validate, execute, return results.
@@ -153,7 +199,7 @@ class QueryExecutor:
             {"ok": True, "data": {"columns": [...], "rows": [...], "row_count": N, ...}}
             or {"ok": False, "error": "..."}
         """
-        sql = self._generate_sql(nl_query, user_text)
+        sql = self._generate_sql(nl_query, user_text, entity_hints=entity_hints)
         if not sql:
             return {"ok": False, "error": "No se pudo generar una consulta SQL."}
 
@@ -165,9 +211,16 @@ class QueryExecutor:
             return {
                 "ok": False,
                 "error": "Solo se permiten consultas SELECT.",
+                "sql": sql_clean,
+                "source": "nl_to_sql",
             }
 
-        return self._run_sql(sql_clean)
+        result = self._run_sql(sql_clean)
+        result["sql"] = sql_clean
+        result["source"] = "nl_to_sql"
+        if result.get("ok") and isinstance(result.get("data"), dict):
+            result["row_count"] = result["data"].get("row_count", 0)
+        return result
 
     def _extract_sql(self, text: str) -> str:
         """Extract SQL from markdown code blocks if present."""
@@ -180,9 +233,15 @@ class QueryExecutor:
         # No code block — assume the whole response is SQL
         return text
 
-    def _generate_sql(self, nl_query: str, user_text: str = "") -> str:
+    def _generate_sql(self, nl_query: str, user_text: str = "", entity_hints: str = "") -> str:
         """Send schema + query to LLM and extract SQL."""
         context = user_text or nl_query
+        entity_section = ""
+        if entity_hints:
+            entity_section = (
+                "ENTIDADES DETECTADAS (usa estos valores exactos en los predicados SQL):\n"
+                f"{entity_hints}\n\n"
+            )
         messages = [
             {
                 "role": "system",
@@ -196,6 +255,7 @@ class QueryExecutor:
                 "content": (
                     f"Esquema de la base de datos:\n\n"
                     f"{self._schema_summary}\n\n"
+                    f"{entity_section}"
                     f"Pregunta: {context}\n\n"
                     f"Genera una consulta SELECT de PostgreSQL para responder. "
                     f"Usa los nombres exactos de tablas y columnas. "
@@ -222,6 +282,9 @@ class QueryExecutor:
         for kw in _FORBIDDEN_KEYWORDS:
             if re.search(rf"\b{kw}\b", cleaned):
                 return False
+        for table in _EXCLUDE_TABLES:
+            if re.search(rf"\b(?:FROM|JOIN)\s+\"?{re.escape(table.upper())}\"?\b", cleaned):
+                return False
         return True
 
     def _run_sql(self, sql: str) -> dict:
@@ -247,12 +310,14 @@ class QueryExecutor:
                 rows = rows[:100]
 
             columns = list(result.keys())
+            row_dicts = [dict(zip(columns, row)) for row in rows]
+            row_dicts, columns = _strip_internal_identifier_columns(row_dicts, columns)
             return {
                 "ok": True,
                 "data": {
                     "columns": columns,
-                    "rows": [dict(zip(columns, row)) for row in rows],
-                    "row_count": len(rows),
+                    "rows": row_dicts,
+                    "row_count": len(row_dicts),
                     "truncated": truncated,
                     "elapsed_seconds": round(elapsed, 2),
                 },

@@ -243,7 +243,8 @@ class EntityResolver:
         repo = CatalogRepository(self._session)
         all_ranks = repo.list_ranks()
         name_lower = name.lower().strip()
-        matches = [r for r in all_ranks if name_lower in r.normalized_name.lower()]
+        exact = [r for r in all_ranks if r.normalized_name.lower() == name_lower]
+        matches = exact if exact else [r for r in all_ranks if name_lower in r.normalized_name.lower()]
         result = [
             {"id": m.id, "name": m.name, "normalized_name": m.normalized_name}
             for m in matches
@@ -384,30 +385,49 @@ class EntityResolver:
                     hints_parts.append(f"area_id={area.id}")
                     break
 
-        # Rank detection
+        # Rank detection — longest normalized_name wins so "sargento mayor"
+        # is preferred over plain "sargento".
         if self._session is not None:
             from backend.app.infrastructure.repositories.catalogs import CatalogRepository
             catalog_repo = CatalogRepository(self._session)
             ranks = catalog_repo.list_ranks()
+            best_rank = None
+            best_len = 0
             for rank in ranks:
                 rank_words = _normalize_text(rank.normalized_name).split()
                 if any(word in msg_normalized for word in rank_words if len(word) >= 3):
-                    resolved["rank"] = {
-                        "id": rank.id,
-                        "name": rank.name,
-                        "normalized_name": rank.normalized_name,
-                    }
-                    hints_parts.append(f"rank_id={rank.id}, rank_name='{rank.normalized_name}'")
-                    break
+                    name_len = len(rank.normalized_name)
+                    if name_len > best_len:
+                        best_rank = rank
+                        best_len = name_len
+            if best_rank is not None:
+                resolved["rank"] = {
+                    "id": best_rank.id,
+                    "name": best_rank.name,
+                    "normalized_name": best_rank.normalized_name,
+                }
+                hints_parts.append(
+                    f"rank_id={best_rank.id}, rank_name='{best_rank.normalized_name}'"
+                )
 
-        # Department detection
+        # Department detection — word-level prefix matching handles
+        # singular/plural variants ("Recurso" vs "Recursos").
         if self._session is not None:
             from backend.app.infrastructure.repositories.catalogs import CatalogRepository
             catalog_repo = CatalogRepository(self._session)
             departments = catalog_repo.list_departments()
+            msg_words_set = set(msg_normalized.split())
             for department in departments:
                 dept_name = _normalize_text(department.normalized_name)
-                if dept_name in msg_normalized:
+                dept_words = dept_name.split()
+                match_count = 0
+                for dw in dept_words:
+                    for mw in msg_words_set:
+                        if dw.startswith(mw) or mw.startswith(dw):
+                            match_count += 1
+                            break
+                # Require at least half the department words to match
+                if match_count >= max(1, len(dept_words) // 2):
                     resolved["department"] = {
                         "id": department.id,
                         "name": department.name,

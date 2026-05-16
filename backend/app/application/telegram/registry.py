@@ -126,6 +126,19 @@ DEFAULT_QUERY_TYPES = [
         "description": "Lista los medicos filtrados por rango.",
     },
     {
+        "query_type": "duplicate_doctor_names",
+        "sql_template": (
+            "SELECT name, COUNT(*) AS count "
+            "FROM doctors "
+            "WHERE active = TRUE AND service_active = TRUE "
+            "GROUP BY name "
+            "HAVING COUNT(*) > 1 "
+            "ORDER BY count DESC, name"
+        ),
+        "params_schema": {},
+        "description": "Medicos con nombres duplicados en el sistema. Usar cuando preguntan por 'duplicados', 'mismo nombre', o 'se llaman igual'.",
+    },
+    {
         "query_type": "list_active_doctors",
         "sql_template": "SELECT name, sex, availability_mode FROM doctors WHERE active = TRUE AND service_active = TRUE ORDER BY name",
         "params_schema": {},
@@ -133,9 +146,16 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "doctor_detail",
-        "sql_template": "SELECT name, sex, availability_mode, active, service_active FROM doctors WHERE name LIKE '%' || :search || '%' OR id = :search_id",
+        "sql_template": (
+            "SELECT d.name, d.sex, r.name AS rank, dep.name AS department, "
+            "d.availability_mode, d.active, d.service_active "
+            "FROM doctors d "
+            "LEFT JOIN ranks r ON d.rank_id = r.id "
+            "LEFT JOIN departments dep ON d.department_id = dep.id "
+            "WHERE d.name LIKE '%' || :search || '%' OR d.id = :search_id"
+        ),
         "params_schema": {"search": "str", "search_id": "str"},
-        "description": "Detalle de un medico por nombre o ID.",
+        "description": "Detalle completo de un medico por nombre o ID. Incluye rango y departamento.",
     },
     {
         "query_type": "doctors_pending_availability",
@@ -160,6 +180,22 @@ DEFAULT_QUERY_TYPES = [
         "sql_template": "SELECT d.name, COUNT(*) AS total FROM doctors d JOIN calendar_assignments ca ON ca.doctor_id = d.id WHERE ca.service_date BETWEEN :start_date AND :end_date GROUP BY d.name ORDER BY total DESC",
         "params_schema": {"start_date": "date", "end_date": "date"},
         "description": "Cantidad de servicios por medico en un rango de fechas.",
+    },
+    {
+        "query_type": "total_services_by_month",
+        "sql_template": (
+            "SELECT COUNT(*) AS total "
+            "FROM calendar_assignments ca "
+            "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
+            "JOIN calendars c ON cv.calendar_id = c.id "
+            "WHERE c.year = :year AND c.month = :month "
+            "AND cv.version_number = ("
+            " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
+            " WHERE cv2.calendar_id = c.id"
+            ")"
+        ),
+        "params_schema": {"year": "int", "month": "int"},
+        "description": "Total de servicios (turnos) programados en un mes. Usar cuando preguntan 'cuantos servicios hay en [mes]'.",
     },
     {
         "query_type": "count_assigned_doctors_by_month",
@@ -219,7 +255,7 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "mission_ranking",
-        "sql_template": "SELECT mcr.period_year, mcr.period_month, mcre.ranking_position, d.name AS doctor_name, mcre.total_load_score, mcre.eligible FROM mission_candidate_rankings mcr JOIN mission_candidate_ranking_entries mcre ON mcre.ranking_id = mcr.id JOIN doctors d ON mcre.doctor_id = d.id WHERE mcr.period_year = :year AND mcr.period_month = :month ORDER BY mcre.ranking_position LIMIT 20",
+        "sql_template": "SELECT mcr.year, mcr.month, mcre.ranking_position, d.name AS doctor_name, mcre.total_load_score, mcre.eligible FROM mission_candidate_rankings mcr JOIN mission_candidate_ranking_entries mcre ON mcre.mission_candidate_ranking_id = mcr.id JOIN doctors d ON mcre.doctor_id = d.id WHERE mcr.year = :year AND mcr.month = :month ORDER BY mcre.ranking_position LIMIT 20",
         "params_schema": {"year": "int", "month": "int"},
         "description": "Ranking de candidatos para misiones en un periodo.",
     },
@@ -276,5 +312,51 @@ DEFAULT_QUERY_TYPES = [
         "sql_template": "SELECT ug.service_date, sa.display_name AS area, ug.reason_code, ug.description FROM unresolved_gaps ug JOIN service_areas sa ON ug.service_area_id = sa.id JOIN calendar_versions cv ON ug.calendar_version_id = cv.id JOIN calendars c ON cv.calendar_id = c.id WHERE c.year = :year AND c.month = :month ORDER BY ug.service_date",
         "params_schema": {"year": "int", "month": "int"},
         "description": "Huecos sin medico asignado en un mes y ano especifico.",
+    },
+    {
+        "query_type": "calendar_approval_info",
+        "sql_template": (
+            "SELECT ae.action_type, ae.occurred_at AS fecha, u.name AS actor "
+            "FROM audit_events ae "
+            "JOIN users u ON ae.actor_id = u.id "
+            "JOIN calendars c ON ae.entity_id = c.id "
+            "WHERE c.year = :year AND c.month = :month "
+            "AND c.deleted_at IS NULL "
+            "ORDER BY ae.occurred_at DESC LIMIT 10"
+        ),
+        "params_schema": {"year": "int", "month": "int"},
+        "description": "Quien aprobo o hizo cambios en un calendario. Usar cuando preguntan 'quien aprobo', 'quien hizo cambios', 'auditoria del calendario' de un mes y ano.",
+    },
+    {
+        "query_type": "pending_mission_confirmation",
+        "sql_template": (
+            "SELECT d.name AS medico, mp.mission_date AS fecha_mision, mp.status AS estado "
+            "FROM mission_participants mp "
+            "JOIN doctors d ON mp.doctor_id = d.id "
+            "WHERE mp.status IN ('pending', 'sent') "
+            "ORDER BY mp.mission_date, d.name"
+        ),
+        "params_schema": {},
+        "description": "Medicos que no han confirmado su participacion en misiones.",
+    },
+    {
+        "query_type": "pending_service_confirmation",
+        "sql_template": (
+            "SELECT d.name AS medico, ca.service_date AS fecha, sa.display_name AS area "
+            "FROM calendar_assignments ca "
+            "JOIN doctors d ON ca.doctor_id = d.id "
+            "JOIN service_areas sa ON ca.service_area_id = sa.id "
+            "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
+            "JOIN calendars c ON cv.calendar_id = c.id "
+            "WHERE c.year = :year AND c.month = :month "
+            "AND ca.confirmed = FALSE "
+            "AND cv.version_number = ("
+            " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
+            " WHERE cv2.calendar_id = c.id"
+            ") "
+            "ORDER BY ca.service_date, d.name"
+        ),
+        "params_schema": {"year": "int", "month": "int"},
+        "description": "Medicos que no han confirmado servicio en un mes y ano.",
     },
 ]

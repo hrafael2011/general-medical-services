@@ -59,6 +59,7 @@ def _get_linkable_user(session: Session, user_id: str) -> UserModel:
 def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # noqa: ANN201
     from backend.app.application.telegram.agent import ConversationalAgent
     from backend.app.application.telegram.bot_client import FakeBotClient, TelegramBotClient
+    from backend.app.application.telegram.calendar_query_service import CalendarQueryService
     from backend.app.application.telegram.doctor_query_service import DoctorQueryService
     from backend.app.application.telegram.entity_resolver import EntityResolver
     from backend.app.application.telegram.intent_router import IntentRouter
@@ -87,6 +88,7 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         session_store=SessionStore(ttl_seconds=1800, telegram_repo=TelegramRepository(session)),
         entity_resolver=EntityResolver(session=session),
         doctor_query_service=DoctorQueryService(session=session),
+        calendar_query_service=CalendarQueryService(session=session),
     )
 
     return TelegramOrchestrator(

@@ -7,13 +7,14 @@ and handles execution: direct reply, database query, report export, or clarifica
 
 import io
 import logging
+import re
 from typing import Any
 
 from reportlab.lib.units import cm
 
 from sqlalchemy import text as sa_text
 
-from backend.app.application.telegram.sanitize import format_rows
+from backend.app.application.telegram.sanitize import display_value, format_rows
 from backend.app.application.telegram.types import AgentResult
 from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
 
@@ -35,6 +36,28 @@ def _is_internal_identifier_column(column: str) -> bool:
     return normalized == "id" or normalized.endswith("_id")
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def _is_uuid_column(rows: list[dict], column: str) -> bool:
+    """True when *column* contains only UUID values across all rows."""
+    if not rows:
+        return False
+    samples = [
+        row.get(column) for row in rows[:5]
+        if row.get(column) is not None
+    ]
+    if not samples:
+        return False
+    return all(
+        isinstance(v, str) and bool(_UUID_RE.match(v))
+        for v in samples
+    )
+
+
 def _public_columns(columns: list[str]) -> list[str]:
     """Columns safe to show to an operational user in Telegram/reports."""
     return [column for column in columns if not _is_internal_identifier_column(column)]
@@ -45,6 +68,11 @@ def _strip_internal_identifier_columns(
     columns: list[str],
 ) -> tuple[list[dict], list[str]]:
     public_columns = _public_columns(columns)
+    # Also remove columns whose values are all UUIDs
+    public_columns = [
+        c for c in public_columns
+        if not _is_uuid_column(rows, c)
+    ]
     if public_columns == columns:
         return rows, columns
     return (
@@ -156,14 +184,32 @@ class IntentRouter:
         try:
             rows, columns = self._execute_template(entry["sql_template"], params)
             rows, columns = _strip_internal_identifier_columns(rows, columns)
+            tool_entities = {
+                "query_type": query_type,
+                "params": params,
+                "operation": "query",
+            }
+            tool_result = {
+                "ok": True,
+                "source": "query_registry",
+                "query_type": query_type,
+                "row_count": len(rows),
+                "data": {"columns": columns, "rows": rows},
+            }
             if not rows:
                 return AgentResult(
                     response_text="No se encontraron resultados para esa consulta.",
                     agent_action="query",
+                    tool_name="query_registry",
+                    tool_entities=tool_entities,
+                    tool_result=tool_result,
                 )
             return AgentResult(
                 response_text=format_rows(rows, columns),
                 agent_action="query",
+                tool_name="query_registry",
+                tool_entities=tool_entities,
+                tool_result=tool_result,
             )
         except Exception as exc:
             logger.warning("Query '%s' failed: %s", query_type, exc)
@@ -188,13 +234,33 @@ class IntentRouter:
         try:
             rows, columns = self._execute_template(entry["sql_template"], params)
             rows, columns = _strip_internal_identifier_columns(rows, columns)
+            tool_entities = {
+                "query_type": query_type,
+                "params": params,
+                "operation": "export",
+                "export_format": fmt or "pdf",
+            }
+            tool_result = {
+                "ok": True,
+                "source": "query_registry",
+                "query_type": query_type,
+                "row_count": len(rows),
+                "data": {"columns": columns, "rows": rows},
+            }
             if not rows:
                 return AgentResult(
                     response_text="No se encontraron resultados para generar el reporte.",
                     agent_action="export",
+                    tool_name="query_registry",
+                    tool_entities=tool_entities,
+                    tool_result=tool_result,
                 )
 
-            return self._build_document(rows, columns, fmt, query_type)
+            result = self._build_document(rows, columns, fmt, query_type)
+            result.tool_name = "query_registry"
+            result.tool_entities = tool_entities
+            result.tool_result = tool_result
+            return result
         except Exception as exc:
             logger.warning("Export '%s' failed: %s", query_type, exc)
             return AgentResult(response_text=_DEFAULT_NOT_FOUND)
@@ -267,9 +333,14 @@ _EXPORT_FILENAME_MAP = {
     "doctor_history_by_name": "HISTORIAL_MEDICO.pdf",
     "assignments_by_area": "SERVICIOS_POR_AREA.pdf",
     "unresolved_gaps_month": "HUECOS_POR_MES.pdf",
+    "total_services_by_month": "SERVICIOS_POR_MES.pdf",
     "count_assigned_doctors_by_month": "MEDICOS_ASIGNADOS_MES.pdf",
     "list_assigned_doctors_by_month": "MEDICOS_ASIGNADOS_MES.pdf",
     "unassigned_doctors_by_month": "MEDICOS_NO_ASIGNADOS_MES.pdf",
+    "duplicate_doctor_names": "MEDICOS_DUPLICADOS.pdf",
+    "calendar_approval_info": "AUDITORIA_CALENDARIO.pdf",
+    "pending_mission_confirmation": "PENDIENTES_MISION.pdf",
+    "pending_service_confirmation": "PENDIENTES_SERVICIO.pdf",
 }
 
 _COLUMN_TITLE_MAP: dict[str, str] = {
@@ -295,6 +366,8 @@ _COLUMN_TITLE_MAP: dict[str, str] = {
     "end_date": "Fecha Fin",
     "period_year": "Año",
     "period_month": "Mes",
+    "year": "Año",
+    "month": "Mes",
     "ranking_position": "#",
     "total_load_score": "Carga",
     "eligible": "Elegible",
@@ -307,6 +380,12 @@ _COLUMN_TITLE_MAP: dict[str, str] = {
     "unresolved_gaps": "Huecos",
     "description": "Descripción",
     "reason_code": "Motivo",
+    "action_type": "Acción",
+    "fecha": "Fecha",
+    "fecha_mision": "Fecha Misión",
+    "actor": "Actor",
+    "medico": "Médico",
+    "estado": "Estado",
 }
 
 _DEFAULT_COLUMN_TITLE = "Columna"
@@ -353,9 +432,14 @@ def _build_pdf_from_rows(
         "doctor_history_by_name": "HISTORIAL DE SERVICIOS (60 DÍAS)",
         "assignments_by_area": "SERVICIOS POR ÁREA",
         "unresolved_gaps_month": "HUECOS SIN ASIGNAR POR MES",
+        "total_services_by_month": "TOTAL DE SERVICIOS POR MES",
         "count_assigned_doctors_by_month": "MÉDICOS ASIGNADOS POR MES",
         "list_assigned_doctors_by_month": "LISTADO DE MÉDICOS ASIGNADOS POR MES",
         "unassigned_doctors_by_month": "MÉDICOS NO ASIGNADOS POR MES",
+        "duplicate_doctor_names": "MÉDICOS CON NOMBRES DUPLICADOS",
+        "calendar_approval_info": "AUDITORÍA DE CAMBIOS DEL CALENDARIO",
+        "pending_mission_confirmation": "CONFIRMACIONES PENDIENTES DE MISIÓN",
+        "pending_service_confirmation": "CONFIRMACIONES PENDIENTES DE SERVICIO",
     }
 
     title = title_map.get(query_type, f"REPORTE - {query_type.upper()}")
@@ -366,7 +450,7 @@ def _build_pdf_from_rows(
     # Build data rows using column titles as keys (for mapping in the table)
     doctor_rows = []
     for row in rows:
-        doctor_rows.append({t: str(row.get(c, "")) for t, c in zip(header_titles, columns)})
+        doctor_rows.append({t: display_value(c, row.get(c, "")) for t, c in zip(header_titles, columns)})
 
     col_widths = [max(2.5 * cm, len(t) * 0.18 * cm) for t in header_titles]
     # Cap max width
@@ -407,7 +491,7 @@ def _build_excel_from_rows(
     ws.append(header)
 
     for row in rows:
-        ws.append([str(row.get(c, "")) for c in columns])
+        ws.append([display_value(c, row.get(c, "")) for c in columns])
 
     for i, col_title in enumerate(header):
         letter = openpyxl.utils.get_column_letter(i + 1)
