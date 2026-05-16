@@ -40,6 +40,32 @@ class CalendarVersionModel(Base):
     approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
+class CalendarWeekModel(Base):
+    __tablename__ = "calendar_weeks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    calendar_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("calendars.id"), nullable=False, index=True
+    )
+    calendar_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("calendar_versions.id"), nullable=False, index=True
+    )
+    week_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    label: Mapped[str] = mapped_column(String(20), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    previous_assignments_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CalendarAssignmentModel(Base):
     __tablename__ = "calendar_assignments"
 
@@ -63,6 +89,9 @@ class CalendarAssignmentModel(Base):
     )
     doctor_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("doctors.id"), nullable=False, index=True
+    )
+    calendar_week_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("calendar_weeks.id"), nullable=True, index=True,
     )
     assignment_source: Mapped[str] = mapped_column(
         String(20), nullable=False, default="manual"
