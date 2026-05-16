@@ -1,10 +1,12 @@
 import hashlib
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.notifications.triggers import NotificationTriggers
+from backend.app.domain.calendars.weeks import compute_weeks
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
     CalendarVersionModel,
@@ -76,6 +78,19 @@ class CalendarService:
             created_at=now,
         )
         self.repo.add_version(version)
+
+        # Create weeks for the calendar month (Monday-Sunday weeks)
+        for week in compute_weeks(year, month):
+            week_model = CalendarWeekModel(
+                id=str(uuid.uuid4()),
+                calendar_id=calendar.id,
+                calendar_version_id=version.id,
+                week_number=week[0],
+                label=week[1],
+                start_date=date(week[2], week[3], week[4]),
+                end_date=date(week[5], week[6], week[7]),
+            )
+            self.repo.add_week(week_model)
 
         if self.audit is not None:
             self.audit.log_calendar_created(actor_id=actor_id, calendar=calendar)
