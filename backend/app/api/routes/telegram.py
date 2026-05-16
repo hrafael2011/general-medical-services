@@ -41,6 +41,38 @@ _TELEGRAM_LINKABLE_ROLES = {"admin", "encargado"}
 _webhook_limiter = RateLimiter(max_requests=20, window_seconds=60)
 
 
+# ---------------------------------------------------------------------------
+# Compatibility aliases for old rate limiter API (used by tests)
+# ---------------------------------------------------------------------------
+
+_RATE_LIMIT_BUCKET: dict[str, list[float]] = {}
+
+
+def _is_rate_limited(key: str, limit_per_minute: int = 20, now=None) -> bool:
+    if now is None:
+        now = datetime.now(UTC)
+    cutoff = now.timestamp() - 60
+    bucket = _RATE_LIMIT_BUCKET.setdefault(key, [])
+    _RATE_LIMIT_BUCKET[key] = [t for t in bucket if t > cutoff]
+    bucket = _RATE_LIMIT_BUCKET[key]
+    if len(bucket) >= limit_per_minute:
+        return True
+    bucket.append(now.timestamp())
+    return False
+
+
+def _build_rate_limited_tool_response() -> dict:
+    return {
+        "ok": True,
+        "observability": {
+            "action": "discarded",
+            "route": "webhook_rate_limit",
+            "fallback_reason": "rate_limited",
+            "has_document": False,
+        },
+    }
+
+
 def _get_linkable_user(session: Session, user_id: str) -> UserModel:
     user = UserRepository(session).get_by_id(user_id)
     if user is None:
