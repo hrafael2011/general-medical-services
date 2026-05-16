@@ -562,6 +562,7 @@ class ReportService:
         year: int,
         month: int,
         calendar_version_id: str | None = None,
+        week_id: str | None = None,
     ) -> bytes:
         """Build a weekly schedule PDF from calendar data for the given period.
 
@@ -583,6 +584,20 @@ class ReportService:
             raise ValueError("Versión del calendario no encontrada")
 
         assignments = self.calendar_repo.list_assignments(version.id)
+
+        # If week_id is specified, filter to only that week's date range
+        if week_id:
+            week = self.calendar_repo.get_week_by_id(week_id)
+            if week is None:
+                raise ValueError(f"Week {week_id} not found")
+            week_label = week.label
+            week_start = week.start_date
+            week_end = week.end_date
+            assignments = [
+                a for a in assignments
+                if week_start <= a.service_date <= week_end
+            ]
+
         if not assignments:
             raise ValueError("No hay asignaciones para el período")
 
@@ -622,6 +637,85 @@ class ReportService:
         if not schedule_data:
             raise ValueError("No hay asignaciones para el período")
 
-        week_label = f"{month}/{year}"
+        if not week_id:
+            week_label = f"{month}/{year}"
         return self.generate_weekly_schedule_pdf(schedule_data, week_label, month, year)
+
+    # ------------------------------------------------------------------
+    # Full calendar grid data
+    # ------------------------------------------------------------------
+
+    def build_full_calendar(self, *, year: int, month: int) -> dict:
+        """Build full calendar grid data for single-page PDF export."""
+        from calendar import monthrange
+
+        calendar = self.calendar_repo.get_calendar_by_period(year, month)
+        if calendar is None:
+            raise ValueError(f"No calendar found for {year}-{month}")
+
+        version = self.calendar_repo.get_latest_version(calendar.id)
+        if version is None:
+            raise ValueError(f"No version found for calendar {calendar.id}")
+
+        assignments = self.calendar_repo.list_assignments(version.id)
+        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
+        area_list = self.calendar_repo.list_service_areas()
+        areas = sorted(area_list, key=lambda a: a.code)
+
+        # Build cell grid: {day: {area_code: doctor_name}}
+        cell_map: dict[int, dict[str, str]] = {}
+        for a in assignments:
+            d = a.service_date.day
+            if d not in cell_map:
+                cell_map[d] = {}
+            area_name = ""
+            for area in areas:
+                if area.id == a.service_area_id:
+                    area_name = area.code
+                    break
+            if not area_name:
+                area_name = a.service_area_id
+            cell_map[d][area_name] = doctors.get(a.doctor_id, a.doctor_id)
+
+        DAY_NAMES = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"]
+        last_day = monthrange(year, month)[1]
+        rows = []
+        area_codes = [a.code for a in areas]
+
+        for d in range(1, last_day + 1):
+            dt = date(year, month, d)
+            cells = {}
+            for area in areas:
+                cells[area.display_name] = cell_map.get(d, {}).get(area.code, "—")
+            rows.append({
+                "day": d,
+                "day_name": DAY_NAMES[dt.weekday()],
+                "cells": cells,
+            })
+
+        total_services = len(assignments)
+        unique_doctors = len(set(a.doctor_id for a in assignments))
+        total_possible = last_day * len(areas)
+        gaps = max(0, total_possible - total_services)
+        coverage = round((total_services / total_possible * 100)) if total_possible else 0
+
+        return {
+            "month": month,
+            "year": year,
+            "areas": [a.display_name for a in areas],
+            "rows": rows,
+            "summary": {
+                "total_services": total_services,
+                "gaps": gaps,
+                "active_doctors": unique_doctors,
+                "coverage_pct": coverage,
+            },
+        }
+
+    def build_full_calendar_by_id(self, calendar_id: str) -> dict:
+        """Build full calendar grid data from a calendar ID."""
+        cal = self.calendar_repo.get_calendar_by_id(calendar_id)
+        if cal is None:
+            raise ValueError(f"Calendar {calendar_id} not found")
+        return self.build_full_calendar(year=cal.year, month=cal.month)
 
