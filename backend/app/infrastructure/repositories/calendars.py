@@ -7,6 +7,7 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     CalendarModel,
     CalendarVersionModel,
+    CalendarWeekModel,
     UnresolvedGapModel,
 )
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
@@ -149,6 +150,21 @@ class CalendarRepository:
         if assignment:
             self.session.delete(assignment)
             self.session.flush()
+
+    # --- Calendar Week ---
+
+    def add_week(self, week: CalendarWeekModel) -> CalendarWeekModel:
+        self.session.add(week)
+        self.session.flush()
+        return week
+
+    def list_weeks(self, calendar_id: str) -> list[CalendarWeekModel]:
+        stmt = (
+            select(CalendarWeekModel)
+            .where(CalendarWeekModel.calendar_id == calendar_id)
+            .order_by(CalendarWeekModel.week_number)
+        )
+        return list(self.session.scalars(stmt))
 
     # --- Unresolved Gaps ---
 

@@ -116,3 +116,23 @@ class UnresolvedGapRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- Calendar Week ---
+
+class WeekRead(BaseModel):
+    id: str
+    week_number: int
+    label: str
+    start_date: str
+    end_date: str
+    status: str
+    assignment_count: int = 0
+    approved_by: str | None = None
+    approved_at: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ApproveWeekRequest(BaseModel):
+    notes: str | None = None
