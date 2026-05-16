@@ -16,6 +16,17 @@ vi.mock("../../api/calendars", () => ({
       ],
       gaps: [],
     }),
+    listWeeks: vi.fn().mockResolvedValue([
+      { id: "w1", week_number: 1, label: "Semana 1 (Abr 27 - May 3)", start_date: "2026-04-27", end_date: "2026-05-03", status: "approved", assignment_count: 5, approved_by: null, approved_at: null },
+      { id: "w2", week_number: 2, label: "Semana 2 (May 4 - May 10)", start_date: "2026-05-04", end_date: "2026-05-10", status: "approved", assignment_count: 4, approved_by: null, approved_at: null },
+      { id: "w3", week_number: 3, label: "Semana 3 (May 11 - May 17)", start_date: "2026-05-11", end_date: "2026-05-17", status: "draft", assignment_count: 3, approved_by: null, approved_at: null },
+      { id: "w4", week_number: 4, label: "Semana 4 (May 18 - May 24)", start_date: "2026-05-18", end_date: "2026-05-24", status: "draft", assignment_count: 2, approved_by: null, approved_at: null },
+      { id: "w5", week_number: 5, label: "Semana 5 (May 25 - May 31)", start_date: "2026-05-25", end_date: "2026-05-31", status: "draft", assignment_count: 0, approved_by: null, approved_at: null },
+    ]),
+    approveWeek: vi.fn(),
+    unlockWeek: vi.fn(),
+    exportWeeklyPDF: vi.fn().mockResolvedValue(new Blob()),
+    exportFullCalendarPDF: vi.fn().mockResolvedValue(new Blob()),
     generate: vi.fn(),
     approve: vi.fn(),
     unlock: vi.fn(),
@@ -134,5 +145,81 @@ describe("CalendarGrid", () => {
     expect(dashes.length).toBeGreaterThan(0);
     // "Editar calendario" button replaces "Generar" in approved mode
     expect(screen.getByRole("button", { name: /editar calendario/i })).toBeInTheDocument();
+  });
+
+  it("muestra el panel de semanas con 5 semanas", async () => {
+    renderGrid();
+    expect(await screen.findByText("Semanas")).toBeInTheDocument();
+    expect(screen.getByText(/Semana 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Semana 5/)).toBeInTheDocument();
+  });
+
+  it("muestra estados aprobada/borrador correctamente", async () => {
+    renderGrid();
+    await screen.findByText("Semanas");
+    const approvedBadges = screen.getAllByText("Aprobada");
+    const draftBadges = screen.getAllByText("Borrador");
+    expect(approvedBadges).toHaveLength(2);
+    // 3 week-level Borrador badges + 1 calendar-level Borrador badge
+    expect(draftBadges).toHaveLength(4);
+  });
+
+  it("muestra conteo de asignaciones por semana", async () => {
+    renderGrid();
+    await screen.findByText("Semanas");
+    // "5" and "4" appear as both day numbers and week assignment counts
+    expect(screen.getAllByText("5").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("4").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("muestra botón Aprobar en semanas draft cuando el calendario es draft", async () => {
+    renderGrid();
+    expect(await screen.findByText("Semanas")).toBeInTheDocument();
+    const approveButtons = screen.getAllByRole("button", { name: /aprobar/i });
+    expect(approveButtons.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("muestra botón PDF solo en semanas aprobadas", async () => {
+    renderGrid();
+    expect(await screen.findByText("Semanas")).toBeInTheDocument();
+    const pdfButtons = screen.getAllByTitle("Exportar lista semanal en PDF");
+    expect(pdfButtons).toHaveLength(2);
+  });
+
+  it("muestra botón de exportar calendario completo PDF", async () => {
+    renderGrid();
+    expect(await screen.findByText("Semanas")).toBeInTheDocument();
+    expect(screen.getByTitle("Exportar calendario completo en PDF")).toBeInTheDocument();
+  });
+
+  it("llama a exportWeeklyPDF al clickear botón PDF de semana", async () => {
+    const { calendarsApi } = await import("../../api/calendars");
+    renderGrid();
+    expect(await screen.findByText("Semanas")).toBeInTheDocument();
+    const pdfButtons = screen.getAllByTitle("Exportar lista semanal en PDF");
+    pdfButtons[0].click();
+    expect(calendarsApi.exportWeeklyPDF).toHaveBeenCalledWith("c1", "w1");
+  });
+
+  it("llama a exportFullCalendarPDF al clickear botón de calendario completo", async () => {
+    const { calendarsApi } = await import("../../api/calendars");
+    renderGrid();
+    expect(await screen.findByText("Semanas")).toBeInTheDocument();
+    screen.getByTitle("Exportar calendario completo en PDF").click();
+    expect(calendarsApi.exportFullCalendarPDF).toHaveBeenCalledWith("c1");
+  });
+
+  it("no muestra botones de aprobar semana si el calendario está aprobado", async () => {
+    vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
+      calendar: { id: "c1", year: 2026, month: 5, status: "approved", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
+      version: { id: "v1", calendar_id: "c1", version_number: 1, status: "approved", created_by: null, reason: null, created_at: "" },
+      slots: [],
+      gaps: [],
+    });
+    renderGrid();
+    expect(await screen.findByText("Semanas")).toBeInTheDocument();
+    const approveButtons = screen.queryAllByRole("button", { name: /aprobar/i });
+    expect(approveButtons).toHaveLength(0);
   });
 });
