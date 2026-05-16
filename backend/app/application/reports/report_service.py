@@ -70,7 +70,7 @@ class ReportService:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Calendario {calendar.month}/{calendar.year}"
+        ws.title = f"Calendario {calendar.month:02d}-{calendar.year}"
 
         # Header row
         ws.append(["Fecha", "Area", "Doctor ID", "Estado"])
@@ -136,7 +136,7 @@ class ReportService:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Historial {month}/{year}"
+        ws.title = f"Historial {month:02d}-{year}"
 
         ws.append(["Doctor ID", "Nombre", "Servicios Mes", "Areas"])
         for row in rows:

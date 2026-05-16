@@ -121,6 +121,8 @@ def _create_week(session, *, calendar_id: str, version_id: str, **kw) -> Calenda
         start_date=kw.get("start_date", date(2026, 5, 4)),
         end_date=kw.get("end_date", date(2026, 5, 10)),
         status=kw.get("status", "approved"),
+        created_at=kw.get("created_at", datetime.now(UTC)),
+        updated_at=kw.get("updated_at", datetime.now(UTC)),
     )
     session.add(week)
     session.flush()

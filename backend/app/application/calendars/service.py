@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -159,7 +160,16 @@ class CalendarService:
                 actor_id=actor_id, calendar=calendar, version=version
             )
 
-        if self.triggers is not None:
+        should_notify = True
+        if version.reason and version.reason.startswith("__unlock__"):
+            should_notify = False
+            # Restore original reason
+            if "__orig__" in version.reason:
+                version.reason = version.reason.split("__orig__", 1)[1]
+            else:
+                version.reason = None
+
+        if self.triggers is not None and should_notify:
             assignments = self.repo.list_assignments(version.id)
             self.triggers.on_calendar_approved(
                 actor_id=actor_id,
@@ -172,6 +182,68 @@ class CalendarService:
                 year=calendar.year,
                 month=calendar.month,
                 calendar_version_id=version.id,
+            )
+
+        return version
+
+    def unlock_calendar(
+        self,
+        *,
+        actor_id: str,
+        calendar_id: str,
+    ) -> CalendarVersionModel:
+        """Revert an approved calendar back to draft. Keeps all assignments intact."""
+        calendar = self.repo.get_calendar_by_id(calendar_id)
+        if calendar is None:
+            raise CalendarServiceError(
+                "calendar_not_found",
+                f"Calendar with id {calendar_id} not found.",
+            )
+
+        if calendar.status != "approved":
+            raise CalendarServiceError(
+                "invalid_status_transition",
+                "unlock_calendar can only be called on an approved calendar.",
+            )
+
+        versions = self.repo.list_versions(calendar_id)
+        if not versions:
+            raise CalendarServiceError(
+                "version_not_found",
+                f"No versions found for calendar {calendar_id}.",
+            )
+
+        now = datetime.now(UTC)
+        version = versions[0]  # latest version (list ordered desc)
+
+        # Snapshot hash of current assignments to detect changes on re-approval
+        current_assignments = self.repo.list_assignments(version.id)
+        snap_data = "|".join(
+            sorted(
+                f"{a.service_date}|{a.service_area_id}|{a.doctor_id}"
+                for a in current_assignments
+            )
+        )
+        snap_hash = hashlib.md5(snap_data.encode()).hexdigest()
+        original_reason = version.reason
+        version.reason = f"__unlock__{snap_hash}"
+        if original_reason:
+            version.reason += f"__orig__{original_reason}"
+
+        version.status = "draft"
+        version.approved_at = None
+        version.approved_by = None
+        self.repo.session.flush()
+
+        calendar.status = "draft"
+        calendar.updated_at = now
+        self.repo.session.flush()
+
+        if self.audit is not None:
+            self.audit.log_calendar_unlocked(
+                actor_id=actor_id,
+                calendar=calendar,
+                version=version,
             )
 
         return version
@@ -245,7 +317,7 @@ class CalendarService:
         notes: str | None = None,
     ) -> CalendarWeekModel:
         """Approve a single week's assignments and notify assigned doctors."""
-        week = self.repo.session.get(CalendarWeekModel, week_id)
+        week = self.repo.get_week_by_id(week_id)
         if week is None:
             raise CalendarServiceError(
                 "week_not_found",
@@ -259,15 +331,26 @@ class CalendarService:
             )
 
         now = datetime.now(UTC)
+        self.repo.update_week_status(
+            week_id=week_id,
+            status="approved",
+            approved_by=actor_id,
+        )
+        # Refresh so the returned object reflects the update
         week.status = "approved"
         week.approved_by = actor_id
         week.approved_at = now
-        self.repo.session.flush()
 
-        # Update calendar status to partial
+        # Update calendar status
         calendar = self.repo.get_calendar_by_id(week.calendar_id)
-        if calendar is not None and calendar.status == "draft":
-            calendar.status = "partial"
+        if calendar is not None:
+            all_weeks = self.repo.list_weeks(calendar.id)
+            if all(w.status == "approved" for w in all_weeks):
+                calendar.status = "approved"
+                calendar.approved_at = now
+                calendar.approved_by = actor_id
+            elif calendar.status == "draft":
+                calendar.status = "partial"
             calendar.updated_at = now
             self.repo.session.flush()
 
@@ -294,7 +377,7 @@ class CalendarService:
         notes: str | None = None,
     ) -> CalendarWeekModel:
         """Revert a week to draft status for editing."""
-        week = self.repo.session.get(CalendarWeekModel, week_id)
+        week = self.repo.get_week_by_id(week_id)
         if week is None:
             raise CalendarServiceError(
                 "week_not_found",
@@ -307,9 +390,38 @@ class CalendarService:
                 f"Week {week_id} is not approved, cannot unlock.",
             )
 
+        # Compute hash of current assignments before reverting
+        assignments = self.repo.list_assignments(week.calendar_version_id)
+        week_assignments = sorted(
+            [
+                a
+                for a in assignments
+                if week.start_date <= a.service_date <= week.end_date
+            ],
+            key=lambda a: (a.service_date, a.service_area_id, a.doctor_id),
+        )
+        hash_input = "|".join(
+            f"{a.doctor_id}|{a.service_date}|{a.service_area_id}"
+            for a in week_assignments
+        )
+        assignments_hash = hashlib.md5(hash_input.encode()).hexdigest()
+
+        now = datetime.now(UTC)
+        self.repo.update_week_status(
+            week_id=week_id,
+            status="draft",
+            previous_assignments_hash=assignments_hash,
+        )
         week.status = "draft"
         week.approved_by = None
         week.approved_at = None
-        self.repo.session.flush()
+        week.previous_assignments_hash = assignments_hash
+
+        # Set calendar back to partial (at least one week is now draft)
+        calendar = self.repo.get_calendar_by_id(week.calendar_id)
+        if calendar is not None and calendar.status == "approved":
+            calendar.status = "partial"
+            calendar.updated_at = now
+            self.repo.session.flush()
 
         return week
