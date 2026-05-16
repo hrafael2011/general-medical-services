@@ -14,6 +14,7 @@ from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.schemas.calendars import (
     ApproveCalendarRequest,
+    ApproveWeekRequest,
     AssignDoctorRequest,
     CalendarAssignmentRead,
     CalendarGridResponse,
@@ -23,6 +24,7 @@ from backend.app.schemas.calendars import (
     DaySlot,
     ReplaceAssignmentRequest,
     UnresolvedGapRead,
+    WeekRead,
 )
 from backend.app.schemas.generation import GenerationResponse, GenerationSlotResult
 
@@ -45,6 +47,9 @@ _ERROR_STATUS: dict[str, int] = {
     "calendar_already_approved": status.HTTP_409_CONFLICT,
     "invalid_status_transition": status.HTTP_409_CONFLICT,
     "invalid_generation_mode": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "week_not_found": status.HTTP_404_NOT_FOUND,
+    "week_already_approved": status.HTTP_409_CONFLICT,
+    "week_not_approved": status.HTTP_409_CONFLICT,
 }
 
 
@@ -388,6 +393,103 @@ def generate_calendar(
             )
             for r in summary.slot_results
         ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Week endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/{calendar_id}/weeks", response_model=list[WeekRead])
+def list_weeks(
+    calendar_id: str,
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> list[WeekRead]:
+    """List all weeks for a calendar with status and assignment count."""
+    repo = CalendarRepository(session)
+    weeks = repo.list_weeks(calendar_id)
+    result: list[WeekRead] = []
+    for w in weeks:
+        a_count = len([
+            a for a in repo.list_assignments(w.calendar_version_id)
+            if getattr(a, "calendar_week_id", None) == w.id
+        ])
+        result.append(WeekRead(
+            id=w.id,
+            week_number=w.week_number,
+            label=w.label,
+            start_date=w.start_date.isoformat(),
+            end_date=w.end_date.isoformat(),
+            status=w.status,
+            assignment_count=a_count,
+            approved_by=w.approved_by,
+            approved_at=w.approved_at.isoformat() if w.approved_at else None,
+        ))
+    return result
+
+
+@router.post("/{calendar_id}/weeks/{week_id}/approve", response_model=WeekRead)
+def approve_week(
+    calendar_id: str,
+    week_id: str,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[CalendarService, Depends(get_calendar_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+    payload: ApproveWeekRequest | None = None,
+) -> WeekRead:
+    """Approve a single week. Notifications are sent to its assigned doctors."""
+    try:
+        week = service.approve_week(
+            actor_id=current_user.id,
+            week_id=week_id,
+            notes=payload.notes if payload else None,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+    return WeekRead(
+        id=week.id,
+        week_number=week.week_number,
+        label=week.label,
+        start_date=week.start_date.isoformat(),
+        end_date=week.end_date.isoformat(),
+        status=week.status,
+        assignment_count=0,
+        approved_by=week.approved_by,
+        approved_at=week.approved_at.isoformat() if week.approved_at else None,
+    )
+
+
+@router.post("/{calendar_id}/weeks/{week_id}/unlock", response_model=WeekRead)
+def unlock_week(
+    calendar_id: str,
+    week_id: str,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[CalendarService, Depends(get_calendar_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+    payload: ApproveWeekRequest | None = None,
+) -> WeekRead:
+    """Revert a week to draft for editing."""
+    try:
+        week = service.unlock_week(
+            actor_id=current_user.id,
+            week_id=week_id,
+            notes=payload.notes if payload else None,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+    return WeekRead(
+        id=week.id,
+        week_number=week.week_number,
+        label=week.label,
+        start_date=week.start_date.isoformat(),
+        end_date=week.end_date.isoformat(),
+        status=week.status,
+        assignment_count=0,
+        approved_by=None,
+        approved_at=None,
     )
 
 

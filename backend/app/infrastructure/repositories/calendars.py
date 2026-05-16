@@ -151,6 +151,25 @@ class CalendarRepository:
             self.session.delete(assignment)
             self.session.flush()
 
+    # --- Calendar Week ---
+
+    def add_week(self, week: CalendarWeekModel) -> CalendarWeekModel:
+        self.session.add(week)
+        self.session.flush()
+        return week
+
+    def list_weeks(self, calendar_id: str) -> list[CalendarWeekModel]:
+        stmt = (
+            select(CalendarWeekModel)
+            .where(CalendarWeekModel.calendar_id == calendar_id)
+            .order_by(CalendarWeekModel.week_number)
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_week_by_id(self, week_id: str) -> CalendarWeekModel | None:
+        stmt = select(CalendarWeekModel).where(CalendarWeekModel.id == week_id)
+        return self.session.scalar(stmt)
+
     # --- Unresolved Gaps ---
 
     def add_gap(self, gap: UnresolvedGapModel) -> UnresolvedGapModel:

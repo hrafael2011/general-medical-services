@@ -4,33 +4,31 @@ Architecture:
   1. Single LLM call translates user message to {action, query_type, params}
   2. IntentRouter executes pre-registered queries (fast path)
   3. QueryExecutor fallback for unregistered questions (slow path)
-  4. Legacy call_tool handler returns graceful error
+  4. ToolGateway kept for backward compatibility with old-format responses
 """
 
 import json
 import logging
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from pydantic import ValidationError
 
-from backend.app.application.telegram.conversation_contract import format_contract_for_prompt
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
 from backend.app.application.telegram.query_executor import QueryExecutor
-from backend.app.application.telegram.sanitize import format_rows, sanitize_text
+from backend.app.application.telegram.sanitize import sanitize_text
 from backend.app.application.telegram.schemas import IntentOutput
+from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
 
 logger = logging.getLogger(__name__)
 
 # Patterns that suggest hallucinated data in reply text
 _HALLUCINATION_PATTERNS = [
-    re.compile(r"\bresultado\s*:\s*total\s*:\s*\d+\b", re.IGNORECASE),
-    re.compile(r"\btotal\s*:\s*\d+\b", re.IGNORECASE),
     # "Tienes N doctores/medicos/..." or "hay N medicos/..."
     re.compile(
         r"(?:tienes?|hay)\s+\d+\s+"
@@ -172,7 +170,7 @@ def _calendar_assignment_query_intent(text: str) -> tuple[str, dict[str, int]] |
         return None
 
     mentions_assignment = re.search(
-        r"\b(asignad[oa]s?|incluid[oa]s?|servicios?|turnos?|calendario)\b",
+        r"\b(asignad[oa]s?|servicios?|turnos?)\b",
         normalized,
         re.IGNORECASE,
     )
@@ -185,91 +183,19 @@ def _calendar_assignment_query_intent(text: str) -> tuple[str, dict[str, int]] |
 
     if re.search(r"\b(no|sin)\s+(?:fueron\s+)?asignad", normalized, re.IGNORECASE):
         return "unassigned_doctors_by_month", params
-    asks_services = re.search(r"\bservicios?\b", normalized, re.IGNORECASE)
-    asks_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-    asks_count = re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE)
-    # "cuantos servicios hay" → total shifts; "medicos de servicio" → doctors on duty
-    if asks_count and asks_services and not asks_doctors:
-        return "total_services_by_month", params
-    if asks_count:
+    if re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE):
         return "count_assigned_doctors_by_month", params
     if re.search(r"\b(lista|listado|dame|muestra|mu[eé]strame)\b", normalized, re.IGNORECASE):
         return "list_assigned_doctors_by_month", params
     return None
 
 
-def _calendar_week_query_intent(text: str) -> tuple[str, dict[str, str]] | None:
-    """Map clear weekly calendar questions to a safe date-range query."""
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-
-    mentions_calendar_work = re.search(
-        r"\b(servicios?|turnos?|calendario|asignad[oa]s?)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-    mentions_week = re.search(r"\b(primera|segunda|tercera|cuarta)\s+semana\b", normalized)
-    if not mentions_calendar_work or not mentions_doctors or mentions_week is None:
-        return None
-
-    week_starts = {
-        "primera": 1,
-        "segunda": 8,
-        "tercera": 15,
-        "cuarta": 22,
-    }
-    month, year = period
-    start_day = week_starts[mentions_week.group(1)]
-    start = date(year, month, start_day)
-    end = min(start + timedelta(days=6), _last_day_of_month(year, month))
-    return (
-        "list_calendar_assignments_by_date_range",
-        {"start_date": start.isoformat(), "end_date": end.isoformat()},
-    )
-
-
-def _mission_ranking_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-    if "ranking" not in normalized or "mision" not in normalized and "misiones" not in normalized:
-        return None
-    month, year = period
-    return "mission_ranking", {"year": year, "month": month}
-
-
-def _calendar_approval_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    """Map approval audit questions to the calendar_approval_info query."""
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-    month, year = period
-    if re.search(
-        r"\b(qui[eé]n\s+)?(aprob[oó]|autoriz[oó]|revis[oó]|cambi[oó]|modific[oó]|edit[oó]|hizo\s+cambios?)\b",
-        normalized,
-        re.IGNORECASE,
-    ) or re.search(
-        r"\b(auditor[ií]a|cambios|modificaciones|historial)\s+(del\s+)?calendario\b",
-        normalized,
-        re.IGNORECASE,
-    ) or re.search(
-        r"\bcalendario\s+(fue|ha sido)\s+(aprobado|modificado|cambiado)\b",
-        normalized,
-        re.IGNORECASE,
-    ):
-        return "calendar_approval_info", {"year": year, "month": month}
-    return None
-
-
-def _last_day_of_month(year: int, month: int) -> date:
-    if month == 12:
-        return date(year, 12, 31)
-    return date(year, month + 1, 1) - timedelta(days=1)
+def _public_columns(columns: list[str]) -> list[str]:
+    """Columns safe to show in Telegram text responses."""
+    return [
+        column for column in columns
+        if column.lower() != "id" and not column.lower().endswith("_id")
+    ]
 
 
 def _count_filter_dims(entity_hints: str) -> int:
@@ -326,7 +252,28 @@ Sin explicaciones ni markdown.
 """
 
 
-
+def _format_rows(rows: list[dict], columns: list[str]) -> str:
+    """Generate a human-readable response from query results."""
+    columns = _public_columns(columns)
+    rows = [{column: row.get(column) for column in columns} for row in rows]
+    count = len(rows)
+    if count == 0:
+        return "No se encontraron resultados."
+    if count == 1:
+        first = rows[0]
+        parts = [f"{k}: {sanitize_text(v)}" for k, v in first.items() if v is not None]
+        return "Resultado: " + " | ".join(parts)
+    if count <= 5:
+        lines = [
+            f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
+            for i, r in enumerate(rows)
+        ]
+        return f"Se encontraron {count} resultados:\n" + "\n".join(lines)
+    lines = [
+        f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
+        for i, r in enumerate(rows[:5])
+    ]
+    return f"Se encontraron {count} resultados. Los primeros:\n" + "\n".join(lines)
 
 
 class ConversationalAgent:
@@ -337,21 +284,21 @@ class ConversationalAgent:
         llm: LLMProvider,
         router: IntentRouter,
         query_executor: QueryExecutor | None = None,
+        tools: ToolGateway | None = None,
         memory: MemoryManager | None = None,
         session_store: SessionStore | None = None,
         entity_resolver = None,
         doctor_query_service = None,
-        calendar_query_service = None,
         session = None,
     ) -> None:
         self._llm = llm
         self._router = router
         self._query_executor = query_executor
+        self._tools = tools
         self._memory = memory
         self._session_store = session_store
         self._entity_resolver = entity_resolver
         self._doctor_query_service = doctor_query_service
-        self._calendar_query_service = calendar_query_service
         self._session = session
 
     # ------------------------------------------------------------------
@@ -377,7 +324,6 @@ class ConversationalAgent:
             query_types="\n".join(query_types_lines),
             rank_values=rank_vals,
         )
-        prompt += f"\n\n{format_contract_for_prompt()}"
 
         if entity_hints:
             prompt += (
@@ -447,27 +393,15 @@ class ConversationalAgent:
         except Exception:
             return None
 
-    def _fallback_to_query_db(self, user_text: str, entity_hints: str = "", telegram_user_id: str | None = None) -> AgentResult:
+    def _fallback_to_query_db(self, user_text: str, entity_hints: str = "") -> AgentResult:
         """Fallback: use QueryExecutor for NL-to-SQL."""
         if self._query_executor is None:
             return AgentResult(
                 response_text="No pude encontrar informacion sobre eso en el sistema."
             )
 
-        # Merge stored session filters when the current message has no entities
-        merged_hints = entity_hints
-        if not merged_hints and self._session_store is not None and telegram_user_id is not None:
-            state = self._session_store.get(telegram_user_id)
-            if state is not None and state.last_filters:
-                parts = []
-                for k, v in state.last_filters.items():
-                    if v is not None:
-                        parts.append(f"{k}={v}")
-                if parts:
-                    merged_hints = ", ".join(parts)
-
         start = time.perf_counter()
-        result = self._query_executor.execute(user_text, user_text, entity_hints=merged_hints)
+        result = self._query_executor.execute(user_text, user_text, entity_hints=entity_hints)
         elapsed_ms = round((time.perf_counter() - start) * 1000)
         if not result.get("ok"):
             logger.warning(
@@ -488,7 +422,6 @@ class ConversationalAgent:
         data = result["data"]
         rows = data.get("rows", [])
         columns = data.get("columns", [])
-
         if rows:
             response = self._format_nl_response(user_text, rows, columns)
         else:
@@ -511,10 +444,14 @@ class ConversationalAgent:
             tool_result=result,
         )
 
+    # ------------------------------------------------------------------
+    # NL response formatting
+    # ------------------------------------------------------------------
+
     def _format_nl_response(
         self, original_question: str, rows: list[dict], columns: list[str]
     ) -> str:
-        """Use LLM to format SQL results into conversational Spanish text."""
+        """Use LLM to format SQL results into natural Spanish text."""
         if len(rows) <= 20:
             try:
                 formatted = self._llm.chat_complete(
@@ -542,14 +479,11 @@ class ConversationalAgent:
                     temperature=0.3,
                 )
                 if formatted and len(formatted.strip()) > 20:
-                    result = formatted.strip()
-                    # Guard: reject responses that echo the prompt or are raw JSON
-                    if not result.startswith("{") and "Pregunta original" not in result:
-                        return result
+                    return formatted.strip()
             except Exception:
                 logger.warning("NL response formatting failed, falling back to format_rows")
 
-        return format_rows(rows, columns)
+        return _format_rows(rows, columns)
 
     def _format_nl_empty_response(self, original_question: str) -> str:
         """Generate a natural language explanation when no data matches."""
@@ -578,9 +512,7 @@ class ConversationalAgent:
                 temperature=0.3,
             )
             if response and len(response.strip()) > 10:
-                result = response.strip()
-                if not result.startswith("{") and "Pregunta original" not in result:
-                    return result
+                return response.strip()
         except Exception:
             logger.warning("NL empty response formatting failed")
 
@@ -622,7 +554,6 @@ class ConversationalAgent:
         if result.document_filename:
             document_format = result.document_filename.rsplit(".", 1)[-1].lower()
 
-        domain, period, subject = self._operational_context_from_query(query_type, params or {})
         state = SessionState(
             last_query_type=query_type,
             last_params=params or {},
@@ -631,9 +562,6 @@ class ConversationalAgent:
             last_tool_name=result.tool_name,
             last_agent_action=result.agent_action,
             last_operation=(result.tool_entities or {}).get("operation"),
-            last_domain=domain,
-            last_period=period,
-            last_subject=subject,
             last_total=last_total,
             last_document_format=document_format,
         )
@@ -651,104 +579,6 @@ class ConversationalAgent:
         if query_type in {"count_by_specific_sex", "doctors_by_sex"} and params.get("sex"):
             filters["sex"] = [params["sex"]]
         return filters or None
-
-    def _operational_context_from_query(
-        self,
-        query_type: str | None,
-        params: dict,
-    ) -> tuple[str | None, dict[str, Any] | None, str | None]:
-        """Infer reusable operational context from a safe query type."""
-        if not query_type:
-            return None, None, None
-
-        period = {
-            key: params[key]
-            for key in ("year", "month", "date", "start_date", "end_date")
-            if key in params and params[key] is not None
-        } or None
-
-        doctor_queries = {
-            "count_doctors_total",
-            "count_by_sex",
-            "count_by_specific_sex",
-            "doctors_by_sex",
-            "count_by_rank",
-            "count_by_specific_rank",
-            "doctors_by_rank",
-            "list_active_doctors",
-            "doctor_detail",
-            "count_doctors_by_department",
-        }
-        calendar_assignment_queries = {
-            "count_assigned_doctors_by_month",
-            "list_assigned_doctors_by_month",
-            "list_calendar_assignments_by_date_range",
-            "unassigned_doctors_by_month",
-            "doctors_working_date",
-            "assignment_count_by_date_range",
-        }
-
-        if query_type in doctor_queries:
-            subject = "doctor_count" if query_type.startswith("count") else "doctor_list"
-            return "doctors", period, subject
-        if query_type in calendar_assignment_queries:
-            if query_type == "unassigned_doctors_by_month":
-                subject = "unassigned_doctors"
-            else:
-                subject = "assigned_doctors"
-            return "calendar_assignments", period, subject
-        if query_type == "calendar_status_month":
-            return "calendar", period, "calendar_status"
-        if query_type == "mission_ranking":
-            return "mission_ranking", period, "ranking"
-        return None, period, None
-
-    def _calendar_followup_query_intent(
-        self,
-        user_text: str,
-        telegram_user_id: str | None,
-    ) -> tuple[str, dict[str, Any]] | None:
-        """Reuse the last monthly calendar assignment query for short follow-ups."""
-        if self._session_store is None or telegram_user_id is None:
-            return None
-        if not _looks_like_followup(user_text):
-            return None
-
-        period = _extract_month_year(user_text)
-        if period is None:
-            return None
-
-        state = self._session_store.get(telegram_user_id)
-        if state is None or state.last_domain != "calendar_assignments":
-            return None
-        if state.last_query_type == "list_calendar_assignments_by_date_range":
-            last_period = state.last_period or {}
-            previous_start = last_period.get("start_date")
-            previous_end = last_period.get("end_date")
-            if not previous_start or not previous_end:
-                return None
-            try:
-                start_day = date.fromisoformat(str(previous_start)).day
-                end_day = date.fromisoformat(str(previous_end)).day
-                month, year = period
-                start = date(year, month, start_day)
-                end = min(date(year, month, end_day), _last_day_of_month(year, month))
-            except ValueError:
-                return None
-            return (
-                "list_calendar_assignments_by_date_range",
-                {"start_date": start.isoformat(), "end_date": end.isoformat()},
-            )
-
-        if state.last_query_type not in {
-            "count_assigned_doctors_by_month",
-            "list_assigned_doctors_by_month",
-            "unassigned_doctors_by_month",
-        }:
-            return None
-
-        month, year = period
-        return state.last_query_type, {"year": year, "month": month}
 
     def _resolved_from_filters(self, filters: dict[str, Any]) -> dict[str, Any]:
         """Convert stored operational filters to EntityResolver-style data."""
@@ -813,9 +643,93 @@ class ConversationalAgent:
         user_text: str,
         actor_id: str | None = None,
     ) -> AgentResult:
-        """Handle legacy {action: 'call_tool', ...} — no longer supported."""
+        """Handle legacy {action: 'call_tool', tool: '...', entities: {...}}."""
+        tool_name = parsed.get("tool", "")
+        entities = dict(parsed.get("entities", {}))
+        # Inject actor_id for write operations (create_mission, etc.)
+        if actor_id:
+            entities["_actor_id"] = actor_id
+
+        if self._tools is None:
+            return AgentResult(
+                response_text="No tengo informacion sobre eso en el sistema."
+            )
+
+        result = self._tools.execute(tool_name, entities)
+
+        if not result.get("ok"):
+            error = result.get("error", "")
+            if error == "out_of_domain":
+                return AgentResult(
+                    response_text="No tengo informacion sobre eso en el sistema.",
+                    agent_action="call_tool",
+                    tool_name=tool_name,
+                    tool_entities=entities,
+                    tool_result=result,
+                )
+            return AgentResult(
+                response_text="Ocurrio un error al consultar los datos. Intenta de nuevo.",
+                agent_action="call_tool",
+                tool_name=tool_name,
+                tool_entities=entities,
+                tool_result=result,
+            )
+
+        data = result["data"]
+
+        # Two-step confirmation flow
+        if isinstance(data, dict) and data.get("requires_confirmation"):
+            return AgentResult(
+                response_text=data.get("message", "Confirma la accion para continuar."),
+                agent_action="call_tool",
+                tool_name=tool_name,
+                tool_entities=entities,
+                tool_result=result,
+            )
+
+        # Document response (PDF/Excel)
+        document_bytes = result.get("document_bytes")
+        document_filename = result.get("document_filename")
+        if document_bytes and document_filename:
+            return AgentResult(
+                response_text="Aqui tienes el reporte solicitado.",
+                document_bytes=document_bytes,
+                document_filename=document_filename,
+                agent_action="call_tool",
+                tool_name=tool_name,
+                tool_entities=entities,
+                tool_result=result,
+            )
+
+        # Plain data — format via LLM (legacy 2nd call)
+        data_str = json.dumps(data, ensure_ascii=False, default=str)
+        format_prompt = (
+            "Con los siguientes datos del sistema de turnos medicos, "
+            "genera una respuesta natural y amigable para el medico.\n\n"
+            f"DATOS:\n{data_str}\n\n"
+            f"Pregunta original: {user_text}\n\n"
+            "Responde en el mismo idioma que la pregunta original, "
+            "de forma clara y concisa."
+        )
+        format_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Eres un asistente amable que explica datos del sistema "
+                    "de turnos medicos. Responde en el mismo idioma "
+                    "de la pregunta original, de forma clara y concisa."
+                ),
+            },
+            {"role": "user", "content": format_prompt},
+        ]
+
+        response = self._llm.chat_complete(format_messages, temperature=0.3)
         return AgentResult(
-            response_text="No tengo informacion sobre eso en el sistema."
+            response_text=response.strip(),
+            agent_action="call_tool",
+            tool_name=tool_name,
+            tool_entities=entities,
+            tool_result=result,
         )
 
     # ------------------------------------------------------------------
@@ -834,7 +748,7 @@ class ConversationalAgent:
 
         1. Loads conversation history (if memory available)
         2. Calls LLM to translate message to command JSON
-        3. Routes: router (fast), query_executor (fallback), reply, or legacy call_tool handler
+        3. Routes: router (fast), query_executor (fallback), reply, or ToolGateway (legacy)
         4. Returns final response
         """
         start = time.perf_counter()
@@ -897,34 +811,9 @@ class ConversationalAgent:
                 agent_action="ambiguous",
             )
 
-        calendar_query = (
-            _calendar_week_query_intent(text)
-            or _calendar_assignment_query_intent(text)
-            or _calendar_approval_query_intent(text)
-            or self._calendar_followup_query_intent(text, telegram_user_id)
-        )
+        calendar_query = _calendar_assignment_query_intent(text)
         if calendar_query is not None:
             query_type, params = calendar_query
-            if self._calendar_query_service is not None:
-                service_result = self._calendar_query_service.execute(query_type, params)
-                if service_result is not None:
-                    self._remember_result(
-                        telegram_user_id,
-                        service_result,
-                        query_type=query_type,
-                        params=params,
-                    )
-                    logger.info(
-                        "Agent resolved via deterministic calendar query service",
-                        extra={
-                            "telegram_event": "agent_route_completed",
-                            "match_type": "deterministic_calendar_service",
-                            "agent_action": service_result.agent_action,
-                            "query_type": query_type,
-                            "latency_ms": round((time.perf_counter() - start) * 1000),
-                        },
-                    )
-                    return service_result
             router_result = self._route_via_router("query", query_type, params, text)
             if router_result is not None:
                 self._remember_result(
@@ -945,31 +834,8 @@ class ConversationalAgent:
                 )
                 return router_result
 
-        mission_ranking_query = _mission_ranking_query_intent(text)
-        if mission_ranking_query is not None:
-            query_type, params = mission_ranking_query
-            router_result = self._route_via_router("query", query_type, params, text)
-            if router_result is not None:
-                self._remember_result(
-                    telegram_user_id,
-                    router_result,
-                    query_type=query_type,
-                    params=params,
-                )
-                logger.info(
-                    "Agent resolved via deterministic mission ranking query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "deterministic_mission_ranking",
-                        "agent_action": router_result.agent_action,
-                        "query_type": query_type,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return router_result
-
-        # 2b. Doctor filter queries: deterministic path first, NL-to-SQL fallback second.
-        if _count_filter_dims(entity_hints) >= 1 and self._doctor_query_service is not None:
+        # 2b. Compound doctor queries: deterministic path first, NL-to-SQL fallback second.
+        if _count_filter_dims(entity_hints) >= 2 and self._doctor_query_service is not None:
             doctor_query_text = text
             asks_followup_count = bool(
                 re.search(r"\b\d+\s+o\s+\d+\b", text, re.IGNORECASE)
@@ -997,7 +863,7 @@ class ConversationalAgent:
             logger.info(
                 "Compound query detected (hints=%s), routing to QueryExecutor", entity_hints
             )
-            result = self._fallback_to_query_db(text, entity_hints=entity_hints, telegram_user_id=telegram_user_id)
+            result = self._fallback_to_query_db(text, entity_hints=entity_hints)
             self._remember_result(telegram_user_id, result)
             logger.info(
                 "Agent resolved via compound fallback",
@@ -1103,7 +969,7 @@ class ConversationalAgent:
             if _looks_like_data_request(text):
                 logger.warning("LLM used reply for a data request, refusing ungrounded answer")
                 if self._query_executor is not None:
-                    fallback = self._fallback_to_query_db(text, entity_hints=entity_hints, telegram_user_id=telegram_user_id)
+                    fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
                     self._remember_result(telegram_user_id, fallback)
                     return fallback
                 return AgentResult(
@@ -1178,7 +1044,7 @@ class ConversationalAgent:
 
             # Fallback for query/export action
             if action in ("query", "export"):
-                fallback = self._fallback_to_query_db(text, entity_hints=entity_hints, telegram_user_id=telegram_user_id)
+                fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
                 self._remember_result(telegram_user_id, fallback)
                 logger.info(
                     "Agent resolved via %s fallback", action,

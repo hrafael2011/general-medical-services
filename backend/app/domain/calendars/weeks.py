@@ -1,55 +1,53 @@
-"""Week-of-month calculation (Monday-Sunday, first Monday rule)."""
+"""Week calculation logic for calendar months (Monday-Sunday weeks)."""
+
 from datetime import date, timedelta
 
-_WEEK_LABELS = {
-    1: "1RA SEMANA",
-    2: "2DA SEMANA",
-    3: "3RA SEMANA",
-    4: "4TA SEMANA",
-    5: "5TA SEMANA",
+_WEEK_LABELS: dict[int, str] = {
+    1: "1RA",
+    2: "2DA",
+    3: "3RA",
+    4: "4TA",
+    5: "5TA",
 }
 
 
-def compute_weeks(year: int, month: int) -> list[tuple]:
-    """Compute calendar weeks for a month (Monday-Sunday).
+def compute_weeks(
+    year: int, month: int
+) -> list[tuple[int, str, int, int, int, int, int, int]]:
+    """Compute all Monday-Sunday weeks for a given month.
 
-    The first Monday of the month starts Week 1. Days before the first Monday
-    belong to the previous month's last week. Weeks may extend into the next
-    month if the month does not end on a Sunday.
+    Returns one tuple per Monday that falls within the month. Each tuple:
+    (week_number, label, start_year, start_month, start_day,
+     end_year, end_month, end_day)
 
-    Returns a list of tuples:
-        (week_number, label, start_year, start_month, start_day,
-         end_year, end_month, end_day)
+    Weeks that start in the previous month (i.e., the first Monday is before
+    month start) are not included — they belong to the previous month's week set.
     """
-    def _first_monday(y: int, m: int) -> date:
-        d = date(y, m, 1)
-        while d.weekday() != 0:  # Monday = 0
-            d += timedelta(days=1)
-        return d
+    first_day = date(year, month, 1)
+    # weekday(): Monday = 0, Sunday = 6
+    days_until_monday = (0 - first_day.weekday()) % 7
+    first_monday = first_day + timedelta(days=days_until_monday)
 
-    def _last_day(y: int, m: int) -> date:
-        if m == 12:
-            return date(y + 1, 1, 1) - timedelta(days=1)
-        return date(y, m + 1, 1) - timedelta(days=1)
-
-    start = _first_monday(year, month)
-    month_end = _last_day(year, month)
-
-    weeks: list[tuple] = []
-    current = start
+    weeks: list[tuple[int, str, int, int, int, int, int, int]] = []
+    current_monday = first_monday
     week_num = 1
 
-    while True:
-        week_end = current + timedelta(days=6)
-        weeks.append((
-            week_num,
-            _WEEK_LABELS[week_num],
-            current.year, current.month, current.day,
-            week_end.year, week_end.month, week_end.day,
-        ))
-        current = week_end + timedelta(days=1)
-        if current > month_end:
-            break
+    while current_monday.month == month:
+        sunday = current_monday + timedelta(days=6)
+        label = f"{_WEEK_LABELS.get(week_num, f'{week_num}TA')} SEMANA"
+        weeks.append(
+            (
+                week_num,
+                label,
+                current_monday.year,
+                current_monday.month,
+                current_monday.day,
+                sunday.year,
+                sunday.month,
+                sunday.day,
+            )
+        )
+        current_monday += timedelta(days=7)
         week_num += 1
 
     return weeks

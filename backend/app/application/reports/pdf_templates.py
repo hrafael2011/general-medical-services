@@ -649,3 +649,122 @@ def generate_dossier_pdf(data: dict) -> bytes:
     story.append(_build_signature_block())
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Full calendar single-page PDF (day x area grid)
+# ---------------------------------------------------------------------------
+
+
+def generate_full_calendar_pdf(grid_data: dict) -> bytes:
+    """Generate a single-page landscape PDF with the full month calendar grid.
+
+    Args:
+        grid_data: {
+            "month": int, "year": int,
+            "areas": list[str],
+            "rows": [{"day": int, "day_name": str, "cells": {area: doctor_name}}],
+            "summary": {"total_services": int, "gaps": int,
+                        "active_doctors": int, "coverage_pct": int},
+        }
+    """
+    month_names = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    ]
+    month_name = month_names[grid_data["month"] - 1]
+    title = f"CALENDARIO DE SERVICIOS — {month_name.upper()} {grid_data['year']}"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    # Tighter margins for the grid to fit on one page
+    tight_left = 1.2 * cm
+    tight_right = 1.2 * cm
+    tight_top = 2.0 * cm
+    tight_bottom = 1.2 * cm
+    tight_content_w = PAGE_W - tight_left - tight_right
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=landscape(A4),
+        leftMargin=tight_left,
+        rightMargin=tight_right,
+        topMargin=tight_top,
+        bottomMargin=tight_bottom,
+    )
+
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 2 * mm))
+
+    # Summary line
+    s = grid_data["summary"]
+    summary_text = (
+        f"Total Servicios: {s['total_services']} | "
+        f"Huecos: {s['gaps']} | "
+        f"Medicos Activos: {s['active_doctors']} | "
+        f"Cobertura: {s['coverage_pct']}%"
+    )
+    story.append(Paragraph(summary_text, _STYLE_SECTION))
+    story.append(Spacer(1, 2 * mm))
+
+    # Build grid
+    areas = grid_data["areas"]
+    headers = ["Dia", "Dia Sem."] + areas
+    table_rows = [headers]
+
+    for row in grid_data["rows"]:
+        day_str = str(row["day"])
+        day_name = row["day_name"][:3]  # LUN, MAR, MIE...
+        cells = [day_str, day_name]
+        for area in areas:
+            cells.append(row["cells"].get(area, "—"))
+        table_rows.append(cells)
+
+    # Dynamic column widths
+    n_areas = max(len(areas), 1)
+    area_col_w = (tight_content_w - 2.2 * cm) / n_areas
+    col_widths = [1.0 * cm, 1.2 * cm] + [area_col_w] * n_areas
+
+    # Build styled paragraphs for table
+    styled_rows: list[list[Paragraph]] = []
+    for i, row in enumerate(table_rows):
+        style = _STYLE_TABLE_HEADER if i == 0 else _STYLE_TABLE_CELL
+        styled_rows.append([Paragraph(str(c), style) for c in row])
+
+    t = Table(styled_rows, colWidths=col_widths, repeatRows=1)
+    table_style_cmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#bdc3c7")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("FONTSIZE", (0, 0), (-1, -1), 6),
+    ]
+
+    # Weekend highlighting
+    for i, row in enumerate(grid_data["rows"], start=1):
+        day_name = row.get("day_name", "")
+        if day_name in ("SABADO", "DOMINGO"):
+            table_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f0f0f0")))
+
+    # Gap highlighting
+    for i, row in enumerate(grid_data["rows"], start=1):
+        for j, area in enumerate(areas, start=2):
+            if row["cells"].get(area) == "—":
+                table_style_cmds.append(
+                    ("BACKGROUND", (j, i), (j, i), colors.HexColor("#ffeaea"))
+                )
+
+    t.setStyle(TableStyle(table_style_cmds))
+    story.append(t)
+
+    # Signature block
+    story.append(Spacer(1, 1 * cm))
+    story.append(_build_signature_block())
+
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()

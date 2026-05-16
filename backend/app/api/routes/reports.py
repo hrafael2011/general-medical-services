@@ -179,3 +179,55 @@ def get_doctor_dossier(
             headers={"Content-Disposition": f'attachment; filename="ficha_{doctor_id[:8]}.pdf"'},
         )
     return data
+
+
+@router.get("/calendar/{calendar_id}/weeks/{week_id}/pdf")
+def export_weekly_list_pdf(
+    calendar_id: str,
+    week_id: str,
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[ReportService, Depends(get_report_service)],
+) -> StreamingResponse:
+    """Export a weekly list as PDF with institutional branding."""
+    week = service.calendar_repo.get_week_by_id(week_id)
+    if week is None:
+        raise HTTPException(status_code=404, detail=f"Week {week_id} not found")
+    try:
+        pdf_bytes = service.build_weekly_schedule(
+            year=week.start_date.year,
+            month=week.start_date.month,
+            week_id=week_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=lista-semanal-{week_id[:8]}.pdf"
+        },
+    )
+
+
+@router.get("/calendar/{calendar_id}/full-pdf")
+def export_full_calendar_pdf(
+    calendar_id: str,
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[ReportService, Depends(get_report_service)],
+) -> StreamingResponse:
+    """Export the full calendar as a single-page PDF grid."""
+    try:
+        grid_data = service.build_full_calendar_by_id(calendar_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    from backend.app.application.reports.pdf_templates import generate_full_calendar_pdf
+    pdf_bytes = generate_full_calendar_pdf(grid_data)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=calendario-completo-{calendar_id[:8]}.pdf"
+        },
+    )
