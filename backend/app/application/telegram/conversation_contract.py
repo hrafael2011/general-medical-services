@@ -78,3 +78,16 @@ def format_contract_for_prompt() -> str:
             f"Significa: {concept.meaning} Regla: {concept.response_rule}"
         )
     return "\n".join(lines)
+
+
+# Domain priority rules for the conversation planner.
+# Lower number = higher priority when multiple domains match a single message.
+TERM_PRIORITY_RULES: dict[str, int] = {
+    "ranking_misiones": 1,
+    "confirmaciones": 2,
+    "auditoria": 2,
+    "misiones": 3,
+    "calendario": 4,
+    "reportes": 5,
+    "medicos": 6,
+}
