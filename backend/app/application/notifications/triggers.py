@@ -1,4 +1,6 @@
 import logging
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.templates import (
@@ -18,9 +20,24 @@ class NotificationTriggers:
         self,
         notification_service: NotificationService,
         doctor_repo: DoctorRepository,
+        confirmation_service=None,
     ) -> None:
         self.notification_service = notification_service
         self.doctor_repo = doctor_repo
+        self.confirmation_service = confirmation_service
+
+    @staticmethod
+    def _with_confirmation_instructions(message: str, token: str, confirmation_type: str) -> str:
+        suffix = (
+            f"\n\nConfirme su disponibilidad usando el token: {token}"
+            if confirmation_type == "service"
+            else f"\n\nToken de confirmación: {token}"
+        )
+        return message + suffix
+
+    @staticmethod
+    def _confirmation_due_at() -> datetime:
+        return datetime.now(UTC) + timedelta(days=3)
 
     def on_calendar_approved(
         self,
@@ -80,7 +97,7 @@ class NotificationTriggers:
                     service_area=assignment.service_area_id,
                     service_start=None,
                 )
-                self.notification_service.queue(
+                notification = self.notification_service.queue(
                     notification_type="initial_assignment",
                     idempotency_key=f"assign:{assignment.id}",
                     recipient_doctor_id=assignment.doctor_id,
@@ -89,6 +106,25 @@ class NotificationTriggers:
                     assignment_id=assignment.id,
                     created_by=actor_id,
                 )
+                if self.confirmation_service is not None:
+                    confirmation = self.confirmation_service.create_request(
+                        confirmation_type="service",
+                        idempotency_key=f"service:{assignment.id}:{assignment.doctor_id}",
+                        doctor_id=assignment.doctor_id,
+                        notification_id=notification.id,
+                        assignment_id=assignment.id,
+                        due_at=self._confirmation_due_at(),
+                        created_by=actor_id,
+                    )
+                    notification.payload = {
+                        **(notification.payload or {}),
+                        "message": self._with_confirmation_instructions(
+                            message,
+                            confirmation.response_token,
+                            "service",
+                        ),
+                        "confirmation_request_id": confirmation.id,
+                    }
                 count += 1
             except Exception:
                 logger.warning(

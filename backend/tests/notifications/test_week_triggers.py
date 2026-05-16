@@ -19,6 +19,12 @@ class FakeDoctorRepo:
         return self.doctors.get(doc_id)
 
 
+class FakeNotification:
+    def __init__(self, id):
+        self.id = id
+        self.payload = {"message": ""}
+
+
 class FakeAssignment:
     def __init__(self, id, doctor_id, service_date, service_area_id):
         self.id = id
@@ -43,6 +49,8 @@ class FakeWeek:
 def test_on_week_approved_queues_notification_per_assignment():
     """on_week_approved queues one notification per assignment in the week."""
     notif_service = MagicMock()
+    notif_service.queue.return_value = FakeNotification(id="notif-1")
+    confirmation_service = MagicMock()
     doctor_repo = FakeDoctorRepo()
     doctor_repo.doctors["doc1"] = FakeDoctor("doc1", "+18095551234")
     doctor_repo.doctors["doc2"] = FakeDoctor("doc2", "+18095554321")
@@ -50,6 +58,7 @@ def test_on_week_approved_queues_notification_per_assignment():
     triggers = NotificationTriggers(
         notification_service=notif_service,
         doctor_repo=doctor_repo,
+        confirmation_service=confirmation_service,
     )
 
     week = FakeWeek(
@@ -69,6 +78,7 @@ def test_on_week_approved_queues_notification_per_assignment():
 
     assert result == 2
     assert notif_service.queue.call_count == 2
+    assert confirmation_service.create_request.call_count == 2
     notif_service.queue.assert_has_calls([
         call(
             notification_type="initial_assignment",
