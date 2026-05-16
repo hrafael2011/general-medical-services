@@ -259,6 +259,40 @@ def test_router_export_empty_rows_returns_message(db_session) -> None:
     assert "resultados" in result.response_text.lower()
 
 
+def test_excel_export_translates_operational_values(db_session) -> None:
+    import openpyxl
+    from io import BytesIO
+
+    router = IntentRouter()
+    router.set_session(db_session)
+    router._registry.register(
+        query_type="export_translated_values",
+        sql_template=(
+            "SELECT 'Dra. Uno' AS name, 'female' AS sex, "
+            "'approved' AS status, 1 AS eligible"
+        ),
+        params_schema={},
+        description="Export valores traducidos",
+    )
+
+    result = router.handle(
+        action="export",
+        query_type="export_translated_values",
+        params={},
+        user_message="exporta valores",
+        format="excel",
+    )
+
+    assert result.document_bytes is not None
+    workbook = openpyxl.load_workbook(BytesIO(result.document_bytes))
+    sheet = workbook.active
+    values = [cell.value for cell in sheet[2]]
+    assert "female" not in values
+    assert "approved" not in values
+    assert "Femenino" in values
+    assert "Aprobado" in values
+
+
 # ---------------------------------------------------------------------------
 # _build_document con format=excel
 # ---------------------------------------------------------------------------

@@ -275,7 +275,7 @@ class TestAllQueryTypes:
         result = sqlite_router.handle(
             action="query", query_type="count_by_sex", params={}, user_message="médicos por sexo"
         )
-        assert "male" in result.response_text.lower() or "female" in result.response_text.lower() or "Resultado" in result.response_text
+        assert "masculino" in result.response_text.lower() or "femenino" in result.response_text.lower() or "Resultado" in result.response_text.lower()
 
     # ── doctors_by_sex ──
     def test_doctors_by_sex_male(self, sqlite_router) -> None:

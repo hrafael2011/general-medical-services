@@ -225,6 +225,48 @@ def test_agent_tool_response_with_data(db_session) -> None:
     assert agent.calls[0]["user_info"]["name"] == "Test User"
 
 
+def test_agent_tool_observability_is_persisted(db_session) -> None:
+    user = _new_user(db_session)
+    tg_id = f"tg-{uuid.uuid4().hex[:8]}"
+    _new_link(db_session, user_id=user.id, telegram_user_id=tg_id)
+
+    agent = StubAgent(AgentResult(
+        response_text="Resultado: total: 1",
+        agent_action="query",
+        tool_name="query_registry",
+        tool_entities={
+            "query_type": "count_doctors_total",
+            "params": {},
+            "operation": "query",
+        },
+        tool_result={
+            "ok": True,
+            "source": "query_registry",
+            "query_type": "count_doctors_total",
+            "row_count": 1,
+            "data": {"columns": ["total"], "rows": [{"total": 1}]},
+        },
+    ))
+    orchestrator = _make_orchestrator(db_session, agent=agent)
+
+    orchestrator.handle_message(
+        telegram_user_id=tg_id,
+        telegram_username="regularuser",
+        chat_id=44444,
+        text="¿Cuántos médicos activos hay?",
+    )
+
+    interaction = db_session.scalars(
+        select(TelegramInteractionModel).where(
+            TelegramInteractionModel.telegram_user_id == tg_id
+        )
+    ).one()
+    assert interaction.tool_name == "query_registry"
+    assert interaction.tool_request["query_type"] == "count_doctors_total"
+    assert interaction.tool_response["source"] == "query_registry"
+    assert interaction.tool_response["row_count"] == 1
+
+
 def test_agent_receives_user_info(db_session) -> None:
     """The agent should receive user info (name, role, id) from the orchestrator."""
     user = _new_user(db_session, role="encargado")

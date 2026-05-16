@@ -45,9 +45,33 @@ def test_format_rows_more_than_five() -> None:
     assert result.count("Dr.") == 5
 
 
-def test_format_rows_truncates_to_3_columns_per_row() -> None:
-    """En multi-fila solo muestra primeras 3 columnas por fila."""
-    rows = [{"a": "1", "b": "2", "c": "3", "d": "4"}, {"a": "5", "b": "6", "c": "7", "d": "8"}]
-    result = format_rows(rows, ["a", "b", "c", "d"])
-    assert "4" not in result  # d no se muestra en primera fila
-    assert "8" not in result  # d no se muestra en segunda fila
+def test_format_rows_truncates_to_5_columns_per_row() -> None:
+    """En multi-fila solo muestra primeras 5 columnas por fila."""
+    rows = [{"a": "1", "b": "2", "c": "3", "d": "4", "e": "5", "f": "6"},
+            {"a": "7", "b": "8", "c": "9", "d": "10", "e": "11", "f": "12"}]
+    result = format_rows(rows, ["a", "b", "c", "d", "e", "f"])
+    assert "6" not in result
+    assert "12" not in result
+
+
+def test_format_rows_translates_operational_values_to_spanish() -> None:
+    rows = [
+        {
+            "name": "Dra. Uno",
+            "sex": "female",
+            "status": "approved",
+            "eligible": True,
+            "service_active": False,
+        }
+    ]
+
+    result = format_rows(rows, ["name", "sex", "status", "eligible", "service_active"])
+
+    assert "female" not in result
+    assert "approved" not in result
+    assert "True" not in result
+    assert "False" not in result
+    assert "Femenino" in result
+    assert "Aprobado" in result
+    assert "Sí" in result
+    assert "No" in result

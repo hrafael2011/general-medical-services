@@ -99,3 +99,39 @@ def test_query_executor_run_sql_with_timeout_setting(db_session: Session) -> Non
     result = executor._run_sql("SELECT 1 AS n")
     assert result["ok"] is True
     assert result["data"]["rows"][0]["n"] == 1
+
+
+def test_execute_returns_generated_sql_for_auditing(db_session: Session) -> None:
+    llm = FakeLLMProvider(responses={
+        "cuantos": "SELECT COUNT(*) AS total FROM doctors",
+    })
+    executor = QueryExecutor(session=db_session, llm=llm)
+
+    result = executor.execute("cuantos medicos tengo")
+
+    assert result["ok"] is True
+    assert result["sql"] == "SELECT COUNT(*) AS total FROM doctors"
+    assert result["source"] == "nl_to_sql"
+
+
+def test_query_executor_validate_sql_blocks_excluded_tables(db_session: Session) -> None:
+    llm = FakeLLMProvider()
+    executor = QueryExecutor(session=db_session, llm=llm)
+
+    assert executor._validate_sql("SELECT * FROM users") is False
+    assert executor._validate_sql("SELECT * FROM telegram_interactions") is False
+    assert executor._validate_sql("SELECT * FROM audit_logs") is False
+
+
+def test_execute_strips_internal_identifier_columns(db_session: Session) -> None:
+    llm = FakeLLMProvider(responses={
+        "ids": "SELECT id, name, rank_id FROM doctors LIMIT 100",
+    })
+    executor = QueryExecutor(session=db_session, llm=llm)
+
+    result = executor.execute("dame ids de medicos")
+
+    assert result["ok"] is True
+    assert result["data"]["columns"] == ["name"]
+    assert all("id" not in row for row in result["data"]["rows"])
+    assert all("rank_id" not in row for row in result["data"]["rows"])

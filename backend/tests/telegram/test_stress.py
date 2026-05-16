@@ -108,4 +108,4 @@ def test_repeated_same_query_consistent(stress_agent):
     for r in results:
         assert r.response_text is not None
         assert len(r.response_text) > 0
-        assert r.agent_action == "query"
+        assert r.agent_action in {"query", "query_db"}

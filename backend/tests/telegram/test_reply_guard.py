@@ -2,6 +2,7 @@
 from backend.app.application.telegram.agent import ConversationalAgent
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import FakeLLMProvider
+from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.types import AgentResult
 
 
@@ -9,6 +10,18 @@ class ReplyGuardRouterStub(IntentRouter):
     """Stub that returns ok for any handle() call — we only test reply path."""
     def handle(self, **kwargs):
         return AgentResult(response_text="ok")
+
+
+class SequentialLLM:
+    name = "sequential"
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def chat_complete(self, messages, temperature=0.1, json_mode=False):
+        self.calls.append({"messages": messages, "json_mode": json_mode})
+        return self.responses.pop(0)
 
 
 def test_reply_with_hallucinated_data_is_flagged():
@@ -70,3 +83,36 @@ def test_reply_for_data_request_is_not_passed_through():
     result = agent.process("cuantos cabos masculinos hay")
     assert result.agent_action == "ambiguous"
     assert "no verificada" in result.response_text.lower()
+
+
+def test_reply_result_total_is_flagged_even_without_data_request_words():
+    """Direct replies like 'Resultado: total: 0' are never trusted as chat text."""
+    llm = FakeLLMProvider(responses={
+        "resultado": '{"action": "reply", "response_text": "Resultado: total: 0"}',
+    })
+    agent = ConversationalAgent(llm=llm, router=ReplyGuardRouterStub())
+    result = agent.process("resultado anterior")
+
+    assert result.agent_action == "reply"
+    assert "Resultado: total: 0" not in result.response_text
+    assert "Puedo ayudarte" in result.response_text
+
+
+def test_data_request_reply_uses_query_executor_when_available(db_session):
+    """If the LLM tries reply for a data request, fallback must be grounded."""
+    llm = SequentialLLM([
+        '{"action": "reply", "response_text": "Resultado: total: 0"}',
+        "SELECT COUNT(*) AS total FROM doctors",
+    ])
+    agent = ConversationalAgent(
+        llm=llm,
+        router=ReplyGuardRouterStub(),
+        query_executor=QueryExecutor(db_session, llm),
+    )
+
+    result = agent.process("cuantos medicos tengo en total")
+
+    assert result.agent_action == "query_db"
+    assert result.tool_result is not None
+    assert result.tool_result["source"] == "nl_to_sql"
+    assert "sql" in result.tool_result

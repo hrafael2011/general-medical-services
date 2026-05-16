@@ -26,6 +26,10 @@ def _rank_model(rank_id: str, name: str, normalized_name: str, abbreviation: str
     )
 
 
+def _assert_rank_hint(hints: str, rank: str) -> None:
+    assert f"rank='{rank}'" in hints or f"rank_name='{rank}'" in hints
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Unit tests — _count_filter_dims
 # ═══════════════════════════════════════════════════════════════════════════
@@ -87,7 +91,7 @@ def test_pre_process_detects_rank_and_sex(resolver_with_ranks):
     """'cuantos pasantes femeninos' → rank + sex detected."""
     result = resolver_with_ranks.pre_process("cuantos pasantes femeninos tenemos")
     hints = result["hints"]
-    assert "rank='pasante'" in hints
+    _assert_rank_hint(hints, "pasante")
     assert "sex='female'" in hints
 
 
@@ -106,7 +110,7 @@ def test_pre_process_detects_real_compound_examples(resolver_with_ranks, message
     """Real encargado phrasing → rank + sex dimensions are detected."""
     result = resolver_with_ranks.pre_process(message)
     hints = result["hints"]
-    assert f"rank='{rank}'" in hints
+    _assert_rank_hint(hints, rank)
     assert "sex=" in hints
     assert _count_filter_dims(hints) >= 2
 
@@ -133,7 +137,7 @@ def test_pre_process_detects_masculinos(resolver_with_ranks):
 def test_pre_process_detects_common_masculino_typos(resolver_with_ranks, word):
     """Common misspellings of masculino still map to doctors.sex='male'."""
     result = resolver_with_ranks.pre_process(f"exporta cabos {word}")
-    assert "rank='cabo'" in result["hints"]
+    _assert_rank_hint(result["hints"], "cabo")
     assert "sex='male'" in result["hints"]
 
 
@@ -253,8 +257,8 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
 
     assert result.agent_action == "query"
     assert result.tool_name == "doctor_query_service"
-    assert "male" in result.response_text
-    assert "female" in result.response_text
+    assert "Masculino" in result.response_text
+    assert "Femenino" in result.response_text
     assert result.tool_entities["requested_filters"] == {
         "rank": "pasante",
         "sex": ["male", "female"],
@@ -291,12 +295,182 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
     assert set(pdf_result.tool_result["validated_filters"]) == {"rank", "sex"}
     assert llm.calls == []
 
-    excel_result = agent.process("exporta en excel todos pasante masculinos")
 
-    assert excel_result.agent_action == "export"
-    assert excel_result.document_bytes is not None
-    assert excel_result.document_filename == "MEDICOS_FILTRADOS.xlsx"
+def test_single_sex_doctor_count_uses_deterministic_service(db_session):
+    """Single sex filters like 'femeninos' must not fall through to the LLM."""
+    now = datetime.now(UTC)
+    db_session.add_all([
+        DoctorModel(
+            id="doc-female-only-1",
+            name="Dra. Uno",
+            normalized_name="dra. uno",
+            sex="female",
+            active=True,
+            service_active=True,
+            availability_mode="monthly",
+            participa_misiones=True,
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            created_at=now,
+            updated_at=now,
+        ),
+        DoctorModel(
+            id="doc-male-only-1",
+            name="Dr. Dos",
+            normalized_name="dr. dos",
+            sex="male",
+            active=True,
+            service_active=True,
+            availability_mode="monthly",
+            participa_misiones=True,
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            created_at=now,
+            updated_at=now,
+        ),
+    ])
+    db_session.commit()
+
+    llm = FakeLLMProvider(responses={
+        "femeninos": '{"action": "reply", "response_text": "Resultado: total: 0"}',
+    })
+    router = IntentRouter()
+    router.set_session(db_session)
+    agent = ConversationalAgent(
+        llm=llm,
+        router=router,
+        query_executor=QueryExecutor(db_session, llm),
+        entity_resolver=EntityResolver(session=db_session),
+        doctor_query_service=DoctorQueryService(db_session),
+    )
+
+    result = agent.process("cuantos medicos femeninos tengo")
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "doctor_query_service"
+    assert result.tool_entities["requested_filters"] == {"sex": ["female"]}
+    assert result.tool_result["data"]["rows"] == [{"total": 1}]
     assert llm.calls == []
+
+
+def test_single_rank_doctor_count_uses_deterministic_service(db_session):
+    """Single rank filters like 'cabo' must be answered with real DB data."""
+    now = datetime.now(UTC)
+    rank = RankModel(
+        id="rank-cabo-single",
+        name="Cabo",
+        normalized_name="cabo",
+        abbreviation="CBO",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(rank)
+    db_session.add_all([
+        DoctorModel(
+            id="doc-cabo-1",
+            name="Dr. Cabo",
+            normalized_name="dr. cabo",
+            sex="male",
+            active=True,
+            service_active=True,
+            availability_mode="monthly",
+            participa_misiones=True,
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            rank_id=rank.id,
+            created_at=now,
+            updated_at=now,
+        ),
+        DoctorModel(
+            id="doc-no-rank-cabo",
+            name="Dr. Sin Rango",
+            normalized_name="dr. sin rango",
+            sex="male",
+            active=True,
+            service_active=True,
+            availability_mode="monthly",
+            participa_misiones=True,
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            created_at=now,
+            updated_at=now,
+        ),
+    ])
+    db_session.commit()
+
+    llm = FakeLLMProvider(responses={
+        "cabo": '{"action": "reply", "response_text": "Resultado: total: 0"}',
+    })
+    router = IntentRouter()
+    router.set_session(db_session)
+    agent = ConversationalAgent(
+        llm=llm,
+        router=router,
+        query_executor=QueryExecutor(db_session, llm),
+        entity_resolver=EntityResolver(session=db_session),
+        doctor_query_service=DoctorQueryService(db_session),
+    )
+
+    result = agent.process("cuantos medicos cabo tengo")
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "doctor_query_service"
+    assert result.tool_entities["requested_filters"] == {"rank": "cabo"}
+    assert result.tool_result["data"]["rows"] == [{"total": 1}]
+    assert llm.calls == []
+
+
+def test_doctor_query_excel_export_translates_sex_values(db_session):
+    import openpyxl
+    from io import BytesIO
+
+    now = datetime.now(UTC)
+    rank = RankModel(
+        id="rank-export-cabo",
+        name="Cabo",
+        normalized_name="cabo",
+        abbreviation="CBO",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(rank)
+    db_session.add(
+        DoctorModel(
+            id="doc-export-cabo-female",
+            name="Dra. Cabo Export",
+            normalized_name="dra. cabo export",
+            sex="female",
+            active=True,
+            service_active=True,
+            availability_mode="monthly",
+            participa_misiones=True,
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            rank_id=rank.id,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    service = DoctorQueryService(db_session)
+    result = service.execute(
+        "exporta en excel los cabos femeninos",
+        {"rank": {"normalized_name": "cabo"}, "sex": "female"},
+    )
+
+    assert result is not None
+    assert result.document_bytes is not None
+    workbook = openpyxl.load_workbook(BytesIO(result.document_bytes))
+    sheet = workbook.active
+    values = [cell.value for cell in sheet[2]]
+    assert "female" not in values
+    assert "Femenino" in values
 
 
 def test_compound_doctor_query_emits_observability_log(db_session, caplog):
