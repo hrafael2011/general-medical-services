@@ -7,6 +7,7 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     CalendarModel,
     CalendarVersionModel,
+    CalendarWeekModel,
     UnresolvedGapModel,
 )
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
@@ -179,3 +180,51 @@ class CalendarRepository:
     def list_service_areas(self) -> list[ServiceAreaModel]:
         stmt = select(ServiceAreaModel).order_by(ServiceAreaModel.code)
         return list(self.session.scalars(stmt))
+
+    # --- Calendar Week ---
+
+    def add_week(self, week: CalendarWeekModel) -> CalendarWeekModel:
+        self.session.add(week)
+        self.session.flush()
+        return week
+
+    def get_week_by_id(self, week_id: str) -> CalendarWeekModel | None:
+        return self.session.get(CalendarWeekModel, week_id)
+
+    def list_weeks(self, calendar_id: str) -> list[CalendarWeekModel]:
+        stmt = (
+            select(CalendarWeekModel)
+            .where(CalendarWeekModel.calendar_id == calendar_id)
+            .order_by(CalendarWeekModel.week_number)
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_weeks_by_version(self, version_id: str) -> list[CalendarWeekModel]:
+        stmt = (
+            select(CalendarWeekModel)
+            .where(CalendarWeekModel.calendar_version_id == version_id)
+            .order_by(CalendarWeekModel.week_number)
+        )
+        return list(self.session.scalars(stmt))
+
+    def update_week_status(
+        self, week_id: str, status: str,
+        approved_by: str | None = None,
+        previous_assignments_hash: str | None = None,
+    ) -> None:
+        values: dict = {"status": status, "updated_at": datetime.now(UTC)}
+        if status == "approved" and approved_by:
+            values["approved_by"] = approved_by
+            values["approved_at"] = datetime.now(UTC)
+        if previous_assignments_hash is not None:
+            values["previous_assignments_hash"] = previous_assignments_hash
+        self.session.execute(
+            update(CalendarWeekModel)
+            .where(CalendarWeekModel.id == week_id)
+            .values(**values)
+        )
+        self.session.flush()
+        # Expire cached instance so next read fetches fresh data
+        week = self.session.get(CalendarWeekModel, week_id)
+        if week:
+            self.session.expire(week)
