@@ -57,6 +57,48 @@ class NotificationTriggers:
                 continue
         return count
 
+    def on_week_approved(
+        self,
+        *,
+        actor_id: str,
+        assignments: list,
+        week,
+    ) -> int:
+        """Notify doctors assigned in a specific calendar week.
+
+        Called when a single week is approved (not the whole calendar).
+        Follows the same pattern as on_calendar_approved but scoped
+        to one week's assignments.
+        """
+        count = 0
+        for assignment in assignments:
+            try:
+                doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
+                phone = doctor.whatsapp_phone if doctor else None
+                message = render_initial_assignment(
+                    service_date=str(assignment.service_date),
+                    service_area=assignment.service_area_id,
+                    service_start=None,
+                )
+                self.notification_service.queue(
+                    notification_type="initial_assignment",
+                    idempotency_key=f"assign:{assignment.id}",
+                    recipient_doctor_id=assignment.doctor_id,
+                    recipient_phone=phone,
+                    payload={"message": message},
+                    assignment_id=assignment.id,
+                    created_by=actor_id,
+                )
+                count += 1
+            except Exception:
+                logger.warning(
+                    "Failed to queue week notification for assignment %s",
+                    assignment.id,
+                    exc_info=True,
+                )
+                continue
+        return count
+
     def on_mission_confirmed(
         self,
         *,
