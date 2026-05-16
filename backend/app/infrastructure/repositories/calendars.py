@@ -166,6 +166,10 @@ class CalendarRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def get_week_by_id(self, week_id: str) -> CalendarWeekModel | None:
+        stmt = select(CalendarWeekModel).where(CalendarWeekModel.id == week_id)
+        return self.session.scalar(stmt)
+
     # --- Unresolved Gaps ---
 
     def add_gap(self, gap: UnresolvedGapModel) -> UnresolvedGapModel:
