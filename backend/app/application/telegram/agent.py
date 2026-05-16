@@ -290,6 +290,7 @@ class ConversationalAgent:
         entity_resolver = None,
         doctor_query_service = None,
         session = None,
+        calendar_query_service = None,
     ) -> None:
         self._llm = llm
         self._router = router
@@ -300,6 +301,7 @@ class ConversationalAgent:
         self._entity_resolver = entity_resolver
         self._doctor_query_service = doctor_query_service
         self._session = session
+        self._calendar_query_service = calendar_query_service
 
     # ------------------------------------------------------------------
     # Prompt building
