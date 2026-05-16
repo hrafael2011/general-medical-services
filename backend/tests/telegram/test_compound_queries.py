@@ -253,8 +253,8 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
 
     assert result.agent_action == "query"
     assert result.tool_name == "doctor_query_service"
-    assert "male" in result.response_text
-    assert "female" in result.response_text
+    assert "Masculino" in result.response_text
+    assert "Femenino" in result.response_text
     assert result.tool_entities["requested_filters"] == {
         "rank": "pasante",
         "sex": ["male", "female"],

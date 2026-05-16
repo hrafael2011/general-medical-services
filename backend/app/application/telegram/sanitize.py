@@ -67,13 +67,13 @@ def display_value(column: str, value: Any) -> str:
 
 
 _UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
     re.IGNORECASE,
 )
 
 
 def _is_uuid_column(rows: list[dict[str, Any]], column: str) -> bool:
-    """True when *column* contains only UUID values across all rows."""
+    """True when *column* exposes UUID values across sampled rows."""
     if not rows:
         return False
     samples = [
@@ -83,7 +83,7 @@ def _is_uuid_column(rows: list[dict[str, Any]], column: str) -> bool:
     if not samples:
         return False
     return all(
-        isinstance(v, str) and bool(_UUID_RE.match(v))
+        isinstance(v, str) and bool(_UUID_RE.search(v))
         for v in samples
     )
 

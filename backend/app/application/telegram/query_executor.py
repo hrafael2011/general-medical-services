@@ -20,6 +20,7 @@ import backend.app.infrastructure.db.models.missions  # noqa: F401
 import backend.app.infrastructure.db.models.notifications  # noqa: F401
 import backend.app.infrastructure.db.models.telegram  # noqa: F401
 import backend.app.infrastructure.db.models.user  # noqa: F401
+from backend.app.application.telegram.sanitize import _is_uuid_column
 from backend.app.infrastructure.db.base import Base as _Base
 
 _FORBIDDEN_KEYWORDS = [
@@ -30,7 +31,10 @@ _FORBIDDEN_KEYWORDS = [
 ]
 
 # Also block CTEs that start with WITH … DELETE/UPDATE/INSERT
-_CTE_DML = re.compile(r"\bWITH\s+\w+\s+AS\s*\([^)]*\)\s*(DELETE|UPDATE|INSERT)", re.DOTALL | re.IGNORECASE)
+_CTE_DML = re.compile(
+    r"\bWITH\s+\w+\s+AS\s*\([^)]*\)\s*(DELETE|UPDATE|INSERT)",
+    re.DOTALL | re.IGNORECASE,
+)
 
 _EXCLUDE_TABLES = {
     "alembic_version",
@@ -40,6 +44,8 @@ _EXCLUDE_TABLES = {
     "audit_logs",
     "users",  # NEVER expose credentials table to LLM
 }
+
+_INTERNAL_IDENTIFIER_RE = re.compile(r"(^id$|_id$)", re.IGNORECASE)
 
 _TABLE_DESCRIPTIONS = {
     "doctors": "Medicos del sistema. Datos personales y estado.",
@@ -168,7 +174,13 @@ class QueryExecutor:
                 "error": "Solo se permiten consultas SELECT.",
             }
 
-        return self._run_sql(sql_clean)
+        result = self._run_sql(sql_clean)
+        if result.get("ok"):
+            row_count = result.get("data", {}).get("row_count", 0)
+            result["source"] = "nl_to_sql"
+            result["sql"] = sql_clean
+            result["row_count"] = row_count
+        return result
 
     def _extract_sql(self, text: str) -> str:
         """Extract SQL from markdown code blocks if present."""
@@ -232,6 +244,9 @@ class QueryExecutor:
         for kw in _FORBIDDEN_KEYWORDS:
             if re.search(rf"\b{kw}\b", cleaned):
                 return False
+        for table_name in _EXCLUDE_TABLES:
+            if re.search(rf"\b{re.escape(table_name.upper())}\b", cleaned):
+                return False
         return True
 
     def _run_sql(self, sql: str) -> dict:
@@ -256,13 +271,23 @@ class QueryExecutor:
             if truncated:
                 rows = rows[:100]
 
-            columns = list(result.keys())
+            raw_columns = list(result.keys())
+            raw_rows = [dict(zip(raw_columns, row, strict=False)) for row in rows]
+            columns = [
+                column for column in raw_columns
+                if not _INTERNAL_IDENTIFIER_RE.search(column)
+                and not _is_uuid_column(raw_rows, column)
+            ]
+            cleaned_rows = [
+                {column: row.get(column) for column in columns}
+                for row in raw_rows
+            ]
             return {
                 "ok": True,
                 "data": {
                     "columns": columns,
-                    "rows": [dict(zip(columns, row)) for row in rows],
-                    "row_count": len(rows),
+                    "rows": cleaned_rows,
+                    "row_count": len(cleaned_rows),
                     "truncated": truncated,
                     "elapsed_seconds": round(elapsed, 2),
                 },

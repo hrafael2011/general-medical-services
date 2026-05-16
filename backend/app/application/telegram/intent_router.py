@@ -7,16 +7,15 @@ and handles execution: direct reply, database query, report export, or clarifica
 
 import io
 import logging
-import re
 from typing import Any
 
 from reportlab.lib.units import cm
-
 from sqlalchemy import text as sa_text
 
+from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
+from backend.app.application.telegram.sanitize import _is_uuid_column as _contains_uuid_values
 from backend.app.application.telegram.sanitize import display_value, format_rows
 from backend.app.application.telegram.types import AgentResult
-from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
 
 # PDF generation (lazy-imported in _build_document to keep startup fast)
 
@@ -36,26 +35,9 @@ def _is_internal_identifier_column(column: str) -> bool:
     return normalized == "id" or normalized.endswith("_id")
 
 
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-    re.IGNORECASE,
-)
-
-
 def _is_uuid_column(rows: list[dict], column: str) -> bool:
     """True when *column* contains only UUID values across all rows."""
-    if not rows:
-        return False
-    samples = [
-        row.get(column) for row in rows[:5]
-        if row.get(column) is not None
-    ]
-    if not samples:
-        return False
-    return all(
-        isinstance(v, str) and bool(_UUID_RE.match(v))
-        for v in samples
-    )
+    return _contains_uuid_values(rows, column)
 
 
 def _public_columns(columns: list[str]) -> list[str]:
@@ -173,7 +155,6 @@ class IntentRouter:
         """Execute a query and return a natural-language response."""
         query_type = kwargs.get("query_type")
         params = kwargs.get("params") or {}
-        user_message = kwargs.get("user_message", "")
 
         entry = self._registry.get(query_type) if query_type else None
         if entry is None:
@@ -222,7 +203,6 @@ class IntentRouter:
         """Execute a query and return results as a PDF/Excel document."""
         query_type = kwargs.get("query_type")
         params = kwargs.get("params") or {}
-        user_message = kwargs.get("user_message", "")
         fmt = kwargs.get("format", "pdf")
 
         entry = self._registry.get(query_type) if query_type else None
@@ -296,7 +276,11 @@ class IntentRouter:
             agent_action="export",
         )
 
-    def _execute_template(self, sql_template: str, params: dict[str, Any]) -> tuple[list[dict], list[str]]:
+    def _execute_template(
+        self,
+        sql_template: str,
+        params: dict[str, Any],
+    ) -> tuple[list[dict], list[str]]:
         """Execute a parametrized SQL template and return (rows, columns)."""
         if self._session is None:
             logger.warning("No DB session set in IntentRouter")
@@ -305,7 +289,7 @@ class IntentRouter:
         try:
             result = self._session.execute(sa_text(sql_template), params)
             columns = list(result.keys())
-            rows = [dict(zip(columns, row)) for row in result.fetchall()]
+            rows = [dict(zip(columns, row, strict=False)) for row in result.fetchall()]
             return rows, columns
         except Exception as exc:
             logger.warning("SQL execution failed: %s | SQL: %s", exc, sql_template[:120])
@@ -366,8 +350,6 @@ _COLUMN_TITLE_MAP: dict[str, str] = {
     "end_date": "Fecha Fin",
     "period_year": "Año",
     "period_month": "Mes",
-    "year": "Año",
-    "month": "Mes",
     "ranking_position": "#",
     "total_load_score": "Carga",
     "eligible": "Elegible",
@@ -450,7 +432,12 @@ def _build_pdf_from_rows(
     # Build data rows using column titles as keys (for mapping in the table)
     doctor_rows = []
     for row in rows:
-        doctor_rows.append({t: display_value(c, row.get(c, "")) for t, c in zip(header_titles, columns)})
+        doctor_rows.append(
+            {
+                title: display_value(column, row.get(column, ""))
+                for title, column in zip(header_titles, columns, strict=False)
+            }
+        )
 
     col_widths = [max(2.5 * cm, len(t) * 0.18 * cm) for t in header_titles]
     # Cap max width

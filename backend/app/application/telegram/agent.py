@@ -11,16 +11,19 @@ import json
 import logging
 import re
 import time
-from datetime import datetime
+from calendar import monthrange
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import ValidationError
 
+from backend.app.application.telegram.conversation_contract import format_contract_for_prompt
+from backend.app.application.telegram.conversation_planner import build_conversation_plan
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
 from backend.app.application.telegram.query_executor import QueryExecutor
-from backend.app.application.telegram.sanitize import sanitize_text
+from backend.app.application.telegram.sanitize import format_rows as shared_format_rows
 from backend.app.application.telegram.schemas import IntentOutput
 from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
@@ -29,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Patterns that suggest hallucinated data in reply text
 _HALLUCINATION_PATTERNS = [
+    re.compile(r"\bResultado:\s*total\s*:\s*\d+\b", re.IGNORECASE),
     # "Tienes N doctores/medicos/..." or "hay N medicos/..."
     re.compile(
         r"(?:tienes?|hay)\s+\d+\s+"
@@ -104,6 +108,15 @@ _MONTH_NAME_TO_NUMBER = {
     "octubre": 10,
     "noviembre": 11,
     "diciembre": 12,
+}
+
+_WEEK_ORDINAL_TO_NUMBER = {
+    "primera": 1,
+    "primer": 1,
+    "segunda": 2,
+    "tercera": 3,
+    "cuarta": 4,
+    "quinta": 5,
 }
 
 
@@ -190,12 +203,94 @@ def _calendar_assignment_query_intent(text: str) -> tuple[str, dict[str, int]] |
     return None
 
 
-def _public_columns(columns: list[str]) -> list[str]:
-    """Columns safe to show in Telegram text responses."""
-    return [
-        column for column in columns
-        if column.lower() != "id" and not column.lower().endswith("_id")
-    ]
+def _calendar_service_query_intent(
+    text: str,
+    session_state: SessionState | None = None,
+) -> tuple[str, dict[str, Any]] | None:
+    """Map calendar questions to deterministic CalendarQueryService calls."""
+    normalized = text.lower()
+    period = _extract_month_year(normalized)
+
+    if period is not None:
+        month, year = period
+        week_match = re.search(
+            r"\b(primera|primer|segunda|tercera|cuarta|quinta)\s+semana\b",
+            normalized,
+            re.IGNORECASE,
+        )
+        mentions_calendar_assignments = re.search(
+            r"\b(calendario|servicio|servicios|turno|turnos|asignad[oa]s?|incluid[oa]s?)\b",
+            normalized,
+            re.IGNORECASE,
+        )
+        mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
+        if week_match and mentions_calendar_assignments:
+            week_number = _WEEK_ORDINAL_TO_NUMBER[week_match.group(1).lower()]
+            start_day = ((week_number - 1) * 7) + 1
+            last_day = monthrange(year, month)[1]
+            if start_day > last_day:
+                return None
+            end_day = min(start_day + 6, last_day)
+            return (
+                "list_calendar_assignments_by_date_range",
+                {
+                    "start_date": date(year, month, start_day).isoformat(),
+                    "end_date": date(year, month, end_day).isoformat(),
+                },
+            )
+        if (
+            mentions_calendar_assignments
+            and mentions_doctors
+            and re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE)
+        ):
+            return "count_assigned_doctors_by_month", {"year": year, "month": month}
+
+    if session_state is None or session_state.last_domain != "calendar_assignments":
+        return None
+    if not _looks_like_followup(normalized):
+        return None
+    period = _extract_month_year(normalized)
+    if period is None:
+        return None
+    month, detected_year = period
+    explicit_year = re.search(r"\b(20\d{2})\b", normalized)
+    previous_period = session_state.last_period or {}
+    year = detected_year if explicit_year else int(previous_period.get("year") or detected_year)
+
+    if session_state.last_query_type == "list_calendar_assignments_by_date_range":
+        start_date = previous_period.get("start_date")
+        end_date = previous_period.get("end_date")
+        if not start_date or not end_date:
+            return None
+        previous_start = date.fromisoformat(str(start_date))
+        previous_end = date.fromisoformat(str(end_date))
+        last_day = monthrange(year, month)[1]
+        start_day = min(previous_start.day, last_day)
+        end_day = min(previous_end.day, last_day)
+        return (
+            "list_calendar_assignments_by_date_range",
+            {
+                "start_date": date(year, month, start_day).isoformat(),
+                "end_date": date(year, month, end_day).isoformat(),
+            },
+        )
+    if session_state.last_query_type == "count_assigned_doctors_by_month":
+        return "count_assigned_doctors_by_month", {"year": year, "month": month}
+    return None
+
+
+def _mission_ranking_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
+    """Map mission ranking questions to the registered deterministic query."""
+    normalized = text.lower()
+    if not re.search(r"\branking\b", normalized, re.IGNORECASE):
+        return None
+    if not re.search(r"\bmision(?:es)?\b", normalized, re.IGNORECASE):
+        return None
+    period = _extract_month_year(normalized)
+    if period is None:
+        return None
+    month, year = period
+    return "mission_ranking", {"year": year, "month": month}
 
 
 def _count_filter_dims(entity_hints: str) -> int:
@@ -254,26 +349,7 @@ Sin explicaciones ni markdown.
 
 def _format_rows(rows: list[dict], columns: list[str]) -> str:
     """Generate a human-readable response from query results."""
-    columns = _public_columns(columns)
-    rows = [{column: row.get(column) for column in columns} for row in rows]
-    count = len(rows)
-    if count == 0:
-        return "No se encontraron resultados."
-    if count == 1:
-        first = rows[0]
-        parts = [f"{k}: {sanitize_text(v)}" for k, v in first.items() if v is not None]
-        return "Resultado: " + " | ".join(parts)
-    if count <= 5:
-        lines = [
-            f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
-            for i, r in enumerate(rows)
-        ]
-        return f"Se encontraron {count} resultados:\n" + "\n".join(lines)
-    lines = [
-        f"{i+1}. " + " | ".join(sanitize_text(str(r.get(c, ""))) for c in columns[:3])
-        for i, r in enumerate(rows[:5])
-    ]
-    return f"Se encontraron {count} resultados. Los primeros:\n" + "\n".join(lines)
+    return shared_format_rows(rows, columns)
 
 
 class ConversationalAgent:
@@ -326,6 +402,7 @@ class ConversationalAgent:
             query_types="\n".join(query_types_lines),
             rank_values=rank_vals,
         )
+        prompt += f"\n\n{format_contract_for_prompt()}"
 
         if entity_hints:
             prompt += (
@@ -389,7 +466,9 @@ class ConversationalAgent:
             )
             # Router returns "not found" when query_type missing or SQL fails.
             # Treat this as a fallback trigger so query_executor gets a chance.
-            if result.response_text.startswith("No pude encontrar") or result.response_text.startswith("No se encontraron resultados"):
+            if result.response_text.startswith(
+                "No pude encontrar"
+            ) or result.response_text.startswith("No se encontraron resultados"):
                 return None
             return result
         except Exception:
@@ -556,6 +635,46 @@ class ConversationalAgent:
         if result.document_filename:
             document_format = result.document_filename.rsplit(".", 1)[-1].lower()
 
+        domain = None
+        period = None
+        subject = None
+        if result.tool_name == "calendar_query_service" and result.tool_entities:
+            query_type = query_type or result.tool_entities.get("query_type")
+            period = result.tool_entities.get("period")
+            domain = "calendar_assignments"
+            subject = (
+                "assigned_doctors"
+                if query_type in {
+                    "count_assigned_doctors_by_month",
+                    "list_calendar_assignments_by_date_range",
+                }
+                else None
+            )
+        if query_type in {
+            "count_assigned_doctors_by_month",
+            "list_assigned_doctors_by_month",
+            "unassigned_doctors_by_month",
+        }:
+            domain = "calendar_assignments"
+            period = period or {
+                "year": params.get("year"),
+                "month": params.get("month"),
+            }
+            subject = (
+                "unassigned_doctors"
+                if query_type == "unassigned_doctors_by_month"
+                else "assigned_doctors"
+            )
+        elif query_type and ("doctor" in query_type or query_type.startswith("count_by_")):
+            domain = "doctors"
+        elif query_type == "mission_ranking":
+            domain = "mission_ranking"
+            period = {
+                "year": params.get("year"),
+                "month": params.get("month"),
+            }
+            subject = "mission_ranking"
+
         state = SessionState(
             last_query_type=query_type,
             last_params=params or {},
@@ -564,10 +683,48 @@ class ConversationalAgent:
             last_tool_name=result.tool_name,
             last_agent_action=result.agent_action,
             last_operation=(result.tool_entities or {}).get("operation"),
+            last_domain=domain,
+            last_period=period,
+            last_subject=subject,
             last_total=last_total,
             last_document_format=document_format,
         )
         self._session_store.set(telegram_user_id, state)
+
+    def _calendar_followup_query_intent(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+    ) -> tuple[str, dict[str, int]] | None:
+        """Reuse the previous calendar assignment question for month follow-ups."""
+        if self._session_store is None or telegram_user_id is None:
+            return None
+        try:
+            state = self._session_store.get(telegram_user_id)
+        except Exception:
+            logger.warning("Failed to load Telegram session state", exc_info=True)
+            return None
+        if state is None or state.last_domain != "calendar_assignments":
+            return None
+        if state.last_query_type not in {
+            "count_assigned_doctors_by_month",
+            "list_assigned_doctors_by_month",
+            "unassigned_doctors_by_month",
+        }:
+            return None
+
+        period = _extract_month_year(text)
+        if period is None:
+            return None
+        month, detected_year = period
+        explicit_year = re.search(r"\b(20\d{2})\b", text)
+        previous_period = state.last_period or {}
+        year = (
+            detected_year
+            if explicit_year
+            else int(previous_period.get("year") or detected_year)
+        )
+        return state.last_query_type, {"year": year, "month": month}
 
     def _filters_from_query_context(
         self,
@@ -624,7 +781,11 @@ class ConversationalAgent:
         hints_parts = [part for part in entity_hints.split(", ") if part]
         if "rank" in merged and "rank_id" not in entity_hints and "rank='" not in entity_hints:
             hints_parts.append(f"rank='{merged['rank']['normalized_name']}'")
-        if "department" in merged and "department_id" not in entity_hints and "department='" not in entity_hints:
+        if (
+            "department" in merged
+            and "department_id" not in entity_hints
+            and "department='" not in entity_hints
+        ):
             hints_parts.append(f"department='{merged['department']['normalized_name']}'")
         if "sex" in merged and "sex=" not in entity_hints:
             sex = merged["sex"]
@@ -806,6 +967,49 @@ class ConversationalAgent:
                 },
             )
 
+        session_state: SessionState | None = None
+        if self._session_store is not None and telegram_user_id is not None:
+            try:
+                session_state = self._session_store.get(telegram_user_id)
+            except Exception:
+                logger.warning("Failed to load Telegram session state", exc_info=True)
+
+        conversation_plan = build_conversation_plan(
+            text,
+            resolved_entities=resolved_entities,
+            session_state=session_state,
+        )
+        logger.info(
+            "Telegram conversation plan built",
+            extra={
+                "telegram_event": "conversation_plan_built",
+                "domain": conversation_plan.domain,
+                "action": conversation_plan.action,
+                "route": conversation_plan.route,
+                "memory_policy": conversation_plan.memory_policy,
+                "is_followup": conversation_plan.is_followup,
+                "confidence": conversation_plan.confidence,
+            },
+        )
+        if conversation_plan.route == "clarification":
+            return AgentResult(
+                response_text=(
+                    conversation_plan.clarification_question
+                    or "Necesito que me indiques que informacion del sistema quieres consultar."
+                ),
+                agent_action="ambiguous",
+                tool_entities={
+                    "conversation_plan": {
+                        "domain": conversation_plan.domain,
+                        "action": conversation_plan.action,
+                        "route": conversation_plan.route,
+                        "memory_policy": conversation_plan.memory_policy,
+                        "is_followup": conversation_plan.is_followup,
+                        "confidence": conversation_plan.confidence,
+                    }
+                },
+            )
+
         # 2a. If entity resolver found ambiguity, return it directly
         if ambiguous_entities:
             return AgentResult(
@@ -813,7 +1017,58 @@ class ConversationalAgent:
                 agent_action="ambiguous",
             )
 
-        calendar_query = _calendar_assignment_query_intent(text)
+        mission_ranking_query = _mission_ranking_query_intent(text)
+        if mission_ranking_query is not None:
+            query_type, params = mission_ranking_query
+            router_result = self._route_via_router("query", query_type, params, text)
+            if router_result is not None:
+                self._remember_result(
+                    telegram_user_id,
+                    router_result,
+                    query_type=query_type,
+                    params=params,
+                )
+                logger.info(
+                    "Agent resolved via deterministic mission ranking query",
+                    extra={
+                        "telegram_event": "agent_route_completed",
+                        "match_type": "mission_ranking",
+                        "agent_action": router_result.agent_action,
+                        "query_type": query_type,
+                        "latency_ms": round((time.perf_counter() - start) * 1000),
+                    },
+                )
+                return router_result
+
+        if self._calendar_query_service is not None:
+            service_query = _calendar_service_query_intent(text, session_state)
+            if service_query is not None:
+                query_type, params = service_query
+                result = self._calendar_query_service.execute(query_type, params)
+                if result is not None:
+                    self._remember_result(
+                        telegram_user_id,
+                        result,
+                        query_type=query_type,
+                        params=params,
+                    )
+                    logger.info(
+                        "Agent resolved via deterministic calendar query service",
+                        extra={
+                            "telegram_event": "agent_route_completed",
+                            "match_type": "calendar_query_service",
+                            "agent_action": result.agent_action,
+                            "query_type": query_type,
+                            "latency_ms": round((time.perf_counter() - start) * 1000),
+                        },
+                    )
+                    return result
+
+        calendar_query = self._calendar_followup_query_intent(text, telegram_user_id)
+        calendar_match_type = "calendar_followup" if calendar_query is not None else None
+        if calendar_query is None:
+            calendar_query = _calendar_assignment_query_intent(text)
+            calendar_match_type = "deterministic_calendar" if calendar_query is not None else None
         if calendar_query is not None:
             query_type, params = calendar_query
             router_result = self._route_via_router("query", query_type, params, text)
@@ -828,7 +1083,7 @@ class ConversationalAgent:
                     "Agent resolved via deterministic calendar assignment query",
                     extra={
                         "telegram_event": "agent_route_completed",
-                        "match_type": "deterministic_calendar",
+                        "match_type": calendar_match_type,
                         "agent_action": router_result.agent_action,
                         "query_type": query_type,
                         "latency_ms": round((time.perf_counter() - start) * 1000),
@@ -836,8 +1091,8 @@ class ConversationalAgent:
                 )
                 return router_result
 
-        # 2b. Compound doctor queries: deterministic path first, NL-to-SQL fallback second.
-        if _count_filter_dims(entity_hints) >= 2 and self._doctor_query_service is not None:
+        # 2b. Filtered doctor queries: deterministic path first, NL-to-SQL fallback second.
+        if _count_filter_dims(entity_hints) >= 1 and self._doctor_query_service is not None:
             doctor_query_text = text
             asks_followup_count = bool(
                 re.search(r"\b\d+\s+o\s+\d+\b", text, re.IGNORECASE)

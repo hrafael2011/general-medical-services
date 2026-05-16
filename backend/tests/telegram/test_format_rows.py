@@ -17,6 +17,23 @@ def test_format_rows_filters_id_columns() -> None:
     assert "count" in result
 
 
+def test_format_rows_filters_columns_containing_uuid_values() -> None:
+    """Columnas con UUIDs embebidos no deben mostrarse al encargado."""
+    rows = [
+        {
+            "dedupe_key": "service:a21bbd1c-02e8-44e5-b234-889087e6006c:4da49bc3-24b4-44c6-9bab-0ae6313577f0",
+            "doctor_name": "Dr. Seguro",
+            "status": "pending",
+        }
+    ]
+
+    result = format_rows(rows, ["dedupe_key", "doctor_name", "status"])
+
+    assert "a21bbd1c-02e8-44e5-b234-889087e6006c" not in result
+    assert "Dr. Seguro" in result
+    assert "Pendiente" in result
+
+
 def test_format_rows_single_row() -> None:
     """1 fila → muestra todos los campos no-ID con 'Resultado:'."""
     rows = [{"name": "Dr. García", "rank": "Cabo"}]
