@@ -73,6 +73,18 @@ export interface CalendarGridResponse {
   gaps: Record<string, unknown>[];
 }
 
+export interface WeekRead {
+  id: string;
+  week_number: number;
+  label: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  assignment_count: number;
+  approved_by: string | null;
+  approved_at: string | null;
+}
+
 export const calendarsApi = {
   list: () => apiFetch<CalendarRead[]>("/calendars"),
 
@@ -134,4 +146,31 @@ export const calendarsApi = {
 
   delete: (calendarId: string) =>
     apiFetch<void>(`/calendars/${calendarId}`, { method: "DELETE" }),
+
+  listWeeks: (calendarId: string) =>
+    apiFetch<WeekRead[]>(`/calendars/${calendarId}/weeks`),
+
+  approveWeek: (calendarId: string, weekId: string) =>
+    apiFetch<WeekRead>(`/calendars/${calendarId}/weeks/${weekId}/approve`, {
+      method: "POST",
+    }),
+
+  unlockWeek: (calendarId: string, weekId: string) =>
+    apiFetch<WeekRead>(`/calendars/${calendarId}/weeks/${weekId}/unlock`, {
+      method: "POST",
+    }),
+
+  exportWeeklyPDF: (calendarId: string, weekId: string) =>
+    apiFetch<Blob>(
+      `/reports/calendar/${calendarId}/weeks/${weekId}/pdf`,
+      {},
+      "blob",
+    ),
+
+  exportFullCalendarPDF: (calendarId: string) =>
+    apiFetch<Blob>(
+      `/reports/calendar/${calendarId}/full-pdf`,
+      {},
+      "blob",
+    ),
 };
