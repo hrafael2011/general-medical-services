@@ -29,7 +29,7 @@ class ReportService:
 
     def _load_signatures(self):
         """Load PDF signature config from system_settings, falling back to defaults."""
-        from backend.app.application.reports.pdf_templates import DEFAULT_SIGNATURES, SignatureConfig
+        from backend.app.application.reports.weasyprint_gen import DEFAULT_SIGNATURES, SignatureConfig
 
         if self.catalog_repo is None:
             return DEFAULT_SIGNATURES
@@ -552,7 +552,7 @@ class ReportService:
         date_str: str | None = None,
     ) -> bytes:
         """Return a PDF weekly schedule in the institutional SERVICIOS format."""
-        from backend.app.application.reports.pdf_templates import generate_weekly_schedule_pdf
+        from backend.app.application.reports.weasyprint_gen import generate_weekly_schedule_pdf
 
         return generate_weekly_schedule_pdf(schedule_data, week_label, month, year, date_str, self._load_signatures())
 

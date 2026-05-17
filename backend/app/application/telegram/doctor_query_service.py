@@ -321,7 +321,7 @@ class DoctorQueryService:
     def _build_pdf(self, rows: list[dict], columns: list[str], title: str) -> bytes:
         from reportlab.lib.units import cm
 
-        from backend.app.application.reports.pdf_templates import generate_doctor_list_pdf
+        from backend.app.application.reports.weasyprint_gen import generate_doctor_list_pdf
 
         header_titles = [
             _COLUMN_TITLES.get(column, column.replace("_", " ").title())

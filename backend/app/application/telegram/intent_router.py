@@ -389,7 +389,7 @@ def _build_pdf_from_rows(
     fmt: str,
 ) -> AgentResult:
     """Generate a real PDF document from query results using the institutional template."""
-    from backend.app.application.reports.pdf_templates import generate_doctor_list_pdf
+    from backend.app.application.reports.weasyprint_gen import generate_doctor_list_pdf
 
     if not rows:
         return AgentResult(

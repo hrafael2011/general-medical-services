@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- TITLE -->
+<div class="title-block">
+  <div class="title-text">{{ title }}</div>
+</div>
+
+<!-- TABLE -->
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        {% for col in columns %}
+        <th>{{ col }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for doc in doctors %}
+      <tr>
+        {% for col in columns %}
+          {% set key = col.lower() %}
+          <td>{{ doc.get(key, doc.get(col, "")) }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

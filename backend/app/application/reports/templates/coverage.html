@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- TITLE -->
+<div class="title-block">
+  <div class="title-text">{{ title }}</div>
+</div>
+
+<!-- RESUME -->
+<div class="section-title"><span class="gold-accent">■</span> RESUME</div>
+
+<table class="info-table">
+  <tr>
+    <td>% Cobertura General</td>
+    <td>{{ data['overall_coverage_pct'] }}%</td>
+  </tr>
+  <tr>
+    <td>Total Brechas</td>
+    <td>{{ data['total_gaps'] }}</td>
+  </tr>
+  <tr>
+    <td>Área Más Crítica</td>
+    <td>{{ data.get('most_critical_area', '—') or '—' }}</td>
+  </tr>
+  <tr>
+    <td>Día Más Débil</td>
+    <td>{{ data.get('weakest_day', '—') or '—' }}</td>
+  </tr>
+</table>
+
+<!-- COBERTURA POR AREA -->
+<div class="section-title"><span class="gold-accent">■</span> COBERTURA POR ÁREA</div>
+
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th>Área</th>
+        <th>Días Cubiertos</th>
+        <th>Días Descubiertos</th>
+        <th>% Cobertura</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for area in data.get("by_area", []) %}
+      <tr>
+        <td>{{ area["area_name"] }}</td>
+        <td>{{ area["days_covered"] }}</td>
+        <td>{{ area["days_uncovered"] }}</td>
+        <td>{{ area['coverage_pct'] }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

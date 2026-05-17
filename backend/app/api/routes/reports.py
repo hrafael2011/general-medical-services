@@ -114,7 +114,7 @@ def get_coverage(
         area=area, rank_id=rank_id, sex=sex, department_id=department_id,
     )
     if format == "pdf":
-        from backend.app.application.reports.pdf_templates import generate_coverage_pdf
+        from backend.app.application.reports.weasyprint_gen import generate_coverage_pdf
         pdf_bytes = generate_coverage_pdf(data)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
@@ -144,7 +144,7 @@ def get_workload(
         group_by=group_by, order_by=order_by,
     )
     if format == "pdf":
-        from backend.app.application.reports.pdf_templates import generate_workload_pdf
+        from backend.app.application.reports.weasyprint_gen import generate_workload_pdf
         pdf_bytes = generate_workload_pdf(data)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
@@ -171,7 +171,7 @@ def get_doctor_dossier(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     if format == "pdf":
-        from backend.app.application.reports.pdf_templates import generate_dossier_pdf
+        from backend.app.application.reports.weasyprint_gen import generate_dossier_pdf
         pdf_bytes = generate_dossier_pdf(data)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
@@ -222,7 +222,7 @@ def export_full_calendar_pdf(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    from backend.app.application.reports.pdf_templates import generate_full_calendar_pdf
+    from backend.app.application.reports.weasyprint_gen import generate_full_calendar_pdf
     pdf_bytes = generate_full_calendar_pdf(grid_data)
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

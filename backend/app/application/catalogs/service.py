@@ -76,7 +76,7 @@ class CatalogService:
                 )
                 existing_department_names.add(normalized_name)
 
-        from backend.app.application.reports.pdf_templates import DEFAULT_SIGNATURES as _sigs
+        from backend.app.application.reports.weasyprint_gen import DEFAULT_SIGNATURES as _sigs
         for key, value, description in [
             ("pdf.sig_left_name",   _sigs.left_name,   "Nombre de la firmante izquierda en PDFs institucionales."),
             ("pdf.sig_left_title1", _sigs.left_title1, "Título 1 de la firmante izquierda."),

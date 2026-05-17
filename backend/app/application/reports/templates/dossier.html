@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  /* ===================================================================
+     Same design system as base.html but Portrait A4
+     =================================================================== */
+  :root {
+    --navy: #1a2744;
+    --navy-light: #2c3e50;
+    --gold: #c9a94e;
+    --gold-light: #e4c97a;
+    --white-warm: #fafaf7;
+    --white: #ffffff;
+    --grey: #555555;
+    --grey-light: #999999;
+    --border: #e8dfc8;
+    --border-light: #f0ebd8;
+    --row-alt: #f8f6f0;
+    --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+    --font-serif: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  @page {
+    @bottom-center {
+      content: "Página " counter(page) " de " counter(pages);
+      font-family: var(--font-sans);
+      font-size: 6.5pt;
+      color: var(--grey-light);
+      margin-top: 8mm;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 210mm;
+    min-height: 297mm;
+    background: var(--white);
+    font-family: var(--font-serif);
+    font-size: 10pt;
+    color: var(--navy);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .gold-stripe-top {
+    height: 6px;
+    background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);
+  }
+  .gold-stripe-bottom {
+    height: 4px;
+    background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 14mm 18mm 26mm;
+    position: relative;
+  }
+
+  .watermark {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-25deg);
+    font-family: var(--font-sans);
+    font-size: 70pt;
+    font-weight: 900;
+    color: var(--navy);
+    opacity: 0.018;
+    pointer-events: none;
+    letter-spacing: 12px;
+    white-space: nowrap;
+    z-index: 0;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+  }
+  .header-logo {
+    width: 50px; height: 46px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--navy), var(--navy-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gold);
+    font-family: var(--font-sans);
+    font-size: 7pt;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.15;
+  }
+  .header-logo img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+  .header-text { flex: 1; text-align: center; }
+  .header-subdir {
+    font-family: var(--font-sans);
+    font-size: 6pt; font-weight: 700;
+    color: var(--navy); letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .header-hospital {
+    font-family: var(--font-sans);
+    font-size: 8pt; font-weight: 700;
+    color: var(--navy); margin-top: 1px;
+  }
+  .header-base {
+    font-family: var(--font-serif);
+    font-size: 6pt; color: var(--grey); margin-top: 1px;
+  }
+  .header-lema {
+    font-family: var(--font-serif);
+    font-size: 6.5pt; font-style: italic;
+    color: var(--gold); font-weight: 600; margin-top: 1px;
+  }
+  .header-accent {
+    width: 2px; height: 40px;
+    background: var(--gold); border-radius: 1px;
+    flex-shrink: 0;
+  }
+
+  /* Date */
+  .date-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 7pt; margin-bottom: 8px;
+    position: relative; z-index: 1;
+  }
+  .date-location {
+    font-family: var(--font-sans); font-weight: 600; color: var(--navy);
+  }
+  .date-value {
+    font-family: var(--font-serif); font-style: italic; color: var(--grey);
+  }
+
+  /* Title */
+  .title-block {
+    text-align: center;
+    padding: 7px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+    position: relative; z-index: 1;
+  }
+  .title-text {
+    font-family: var(--font-sans);
+    font-size: 9pt; font-weight: 700;
+    color: var(--navy); letter-spacing: 0.3px;
+  }
+
+  /* Tables */
+  .table-container { position: relative; z-index: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-bottom: 8px; }
+  thead th {
+    background: var(--navy); color: var(--white);
+    font-family: var(--font-sans); font-size: 7pt; font-weight: 700;
+    padding: 5px 10px; text-align: left; letter-spacing: 0.8px;
+    border-bottom: 2px solid var(--gold);
+  }
+  tbody td {
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--border-light);
+    font-family: var(--font-serif); font-size: 7.5pt;
+    vertical-align: middle;
+  }
+  tbody tr:nth-child(even) td { background: var(--row-alt); }
+
+  /* Info Table */
+  .info-table td {
+    padding: 3px 8px;
+    border: 1px solid var(--border-light);
+    font-family: var(--font-serif);
+  }
+  .info-table td:first-child {
+    font-family: var(--font-sans); font-weight: 700;
+    background: var(--navy); color: var(--white);
+    width: 35%;
+  }
+
+  /* Sections */
+  .section-title {
+    font-family: var(--font-sans);
+    font-size: 8pt; font-weight: 700;
+    color: var(--navy);
+    margin: 10px 0 5px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.5px;
+    position: relative; z-index: 1;
+  }
+
+  /* Signatures */
+  .signature-block {
+    display: flex; justify-content: space-between; gap: 36px;
+    margin-top: 16px;
+    position: relative; z-index: 1;
+  }
+  .signature { flex: 1; text-align: center; }
+  .signature-line {
+    border-top: 1px solid var(--navy);
+    width: 65%; margin: 0 auto 5px;
+    padding-top: 2px;
+  }
+  .signature-name {
+    font-family: var(--font-sans);
+    font-size: 6.5pt; font-weight: 700; color: var(--navy);
+  }
+  .signature-title {
+    font-family: var(--font-serif);
+    font-size: 6pt; color: var(--grey); line-height: 1.3;
+  }
+
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<div class="gold-stripe-top"></div>
+<div class="watermark">FARD</div>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-logo">
+      {% if logo_path %}
+      <img src="file://{{ logo_path }}" alt="Logo">
+      {% elif logo_data_uri %}
+      <img src="{{ logo_data_uri }}" alt="Logo">
+      {% else %}
+      FARD<br>HOSP
+      {% endif %}
+    </div>
+    <div class="header-text">
+      <div class="header-subdir">Subdirección de Recursos Humanos</div>
+      <div class="header-hospital">HOSPITAL MILITAR UNIVERSITARIO DOCENTE, FARD "DR. RAMÓN DE LARA"</div>
+      <div class="header-base">BASE AÉREA "SAN ISIDRO", FUERZA AÉREA DE REPÚBLICA DOMINICANA, SAN ISIDRO, SANTO DOMINGO ESTE, R.D.</div>
+      <div class="header-lema">"Todo por la Patria"</div>
+    </div>
+    <div class="header-accent"></div>
+  </div>
+
+  <!-- DATE -->
+  <div class="date-row">
+    <span class="date-location">■ SANTO DOMINGO, D.N.</span>
+    <span class="date-value">{{ date_line }}</span>
+  </div>
+
+  <!-- TITLE -->
+  <div class="title-block">
+    <div class="title-text">{{ title }}</div>
+  </div>
+
+  <!-- DATOS DEL MEDICO -->
+  <div class="section-title">■ DATOS DEL MÉDICO</div>
+
+  <table class="info-table">
+    <tr><td>Nombre</td><td>{{ data.get("name", "—") }}</td></tr>
+    <tr><td>Rango</td><td>{{ data.get("rank") or "—" }}</td></tr>
+    <tr><td>Sexo</td><td>{{ data.get("sex") or "—" }}</td></tr>
+    <tr><td>Departamento</td><td>{{ data.get("department") or "—" }}</td></tr>
+    <tr><td>Áreas Habilitadas</td><td>{{ ", ".join(data.get("areas", [])) or "—" }}</td></tr>
+    <tr><td>Período</td><td>{{ data.get("period_label", "—") }}</td></tr>
+  </table>
+
+  <!-- RESUME DEL PERIODO -->
+  <div class="section-title">■ RESUME DEL PERÍODO</div>
+
+  <table class="info-table">
+    <tr><td>Total Servicios</td><td>{{ data.get("total_services", 0) }}</td></tr>
+    <tr><td>Promedio Semanal</td><td>{{ data.get("avg_weekly", 0) }}</td></tr>
+    {% for area_name, count in data.get("services_by_area", {}).items() %}
+    <tr><td style="padding-left:16px;">— {{ area_name }}</td><td>{{ count }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <!-- DETALLE DE SERVICIOS -->
+  {% set services = data.get("services", []) %}
+  {% if services %}
+  <div class="section-title">■ DETALLE DE SERVICIOS</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr><th>Fecha</th><th>Día</th><th>Área</th></tr>
+      </thead>
+      <tbody>
+        {% for s in services %}
+        <tr>
+          <td>{{ s.get("date", "") }}</td>
+          <td>{{ s.get("day_name", "") }}</td>
+          <td>{{ s.get("area", "") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- MISIONES -->
+  {% set missions = data.get("missions", []) %}
+  {% if missions %}
+  <div class="section-title">■ MISIONES EN EL PERÍODO</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr><th>Misión</th><th>Rol</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {% for m in missions %}
+        <tr>
+          <td>{{ m.get("mission", "") }}</td>
+          <td>{{ m.get("role", "") }}</td>
+          <td>{{ m.get("status", "") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- RESTRICCIONES -->
+  {% set restrictions = data.get("restrictions", []) %}
+  {% if restrictions %}
+  <div class="section-title">■ RESTRICCIONES Y LICENCIAS</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr><th>Tipo</th><th>Fecha</th><th>Motivo</th></tr>
+      </thead>
+      <tbody>
+        {% for r in restrictions %}
+        <tr>
+          <td>{{ r.get("type", "") }}</td>
+          <td>{{ r.get("date") or "—" }}</td>
+          <td>{{ r.get("reason", "") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- DISPONIBILIDAD -->
+  {% set avail = data.get("availability", []) %}
+  {% if avail %}
+  <div class="section-title">■ DISPONIBILIDAD DECLARADA</div>
+  <p style="font-family:var(--font-serif);font-size:7.5pt;position:relative;z-index:1;">
+    {{ ", ".join(avail) }}
+  </p>
+  {% endif %}
+
+  <!-- SIGNATURES -->
+  <div class="signature-block">
+    <div class="signature">
+      <div class="signature-line"></div>
+      <div class="signature-name">{{ sig_left_name }}</div>
+      <div class="signature-title">{{ sig_left_title1 }}<br>{{ sig_left_title2 }}<br>{{ sig_left_title3 }}</div>
+    </div>
+    <div class="signature">
+      <div class="signature-line"></div>
+      <div class="signature-name">{{ sig_right_name }}</div>
+      <div class="signature-title">{{ sig_right_title1 }}<br>{{ sig_right_title2 }}<br>{{ sig_right_title3 }}</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="gold-stripe-bottom"></div>
+
+</body>
+</html>

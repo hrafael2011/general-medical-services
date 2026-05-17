@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- TITLE -->
+<div class="title-block">
+  <div class="title-text">{{ title }}</div>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary-line">
+  Total Servicios: <strong>{{ grid_data['summary']['total_services'] }}</strong>
+  &nbsp;|&nbsp; Huecos: <strong>{{ grid_data['summary']['gaps'] }}</strong>
+  &nbsp;|&nbsp; Médicos Activos: <strong>{{ grid_data['summary']['active_doctors'] }}</strong>
+  &nbsp;|&nbsp; Cobertura: <strong>{{ grid_data['summary']['coverage_pct'] }}%</strong>
+</div>
+
+<!-- CALENDAR GRID -->
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:6%;">Día</th>
+        <th style="width:6%;">Sem.</th>
+        {% for area in grid_data["areas"] %}
+        <th>{{ area }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in grid_data["rows"] %}
+      <tr class="{% if row['day_name'] in ('SABADO', 'DOMINGO') %}row-weekend{% endif %}">
+        <td style="text-align:center;">{{ row["day"] }}</td>
+        <td style="text-align:center;font-size:6.5pt;">{{ row["day_name"][:3] }}</td>
+        {% for area in grid_data["areas"] %}
+          {% set cell_val = row["cells"].get(area, "—") %}
+          <td class="{% if cell_val == '—' %}cell-gap{% endif %}">{{ cell_val }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
