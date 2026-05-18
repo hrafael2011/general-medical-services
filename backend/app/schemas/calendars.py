@@ -66,11 +66,51 @@ class AssignDoctorRequest(BaseModel):
     service_area_id: str
     doctor_id: str
     override_justification: str | None = Field(default=None, max_length=500)
+    force_warnings: list[str] | None = Field(default=None)
 
 
 class ReplaceAssignmentRequest(BaseModel):
     doctor_id: str
     override_justification: str | None = Field(default=None, max_length=500)
+    force_warnings: list[str] | None = Field(default=None)
+
+
+# --- Eligible Doctors ---
+
+class EligibleDoctorRead(BaseModel):
+    id: str
+    full_name: str
+    specialty: str | None = None
+    rank_name: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class EligibleDoctorsResponse(BaseModel):
+    doctors: list[EligibleDoctorRead]
+
+
+# --- Slot Evaluation ---
+
+class HardBlockItem(BaseModel):
+    code: str
+    description: str
+
+
+class WarningItem(BaseModel):
+    code: str
+    description: str
+
+
+class EvaluationRequest(BaseModel):
+    doctor_id: str
+    service_date: date
+    service_area_id: str
+
+
+class EvaluationResponse(BaseModel):
+    hard_blocks: list[HardBlockItem]
+    warnings: list[WarningItem]
 
 
 # --- Calendar View (grid for UI) ---
