@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Download, FileDown, Trash2, Wand2 } from "lucide-react";
+import { CheckCircle2, Download, FileDown, Loader2, Trash2, Wand2 } from "lucide-react";
 import { calendarsApi, CalendarAssignmentRead, DaySlot, WeekRead } from "../../api/calendars";
-import { doctorsApi, availabilityApi, DoctorRead, RankRead } from "../../api/doctors";
+import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
 import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
@@ -23,37 +23,44 @@ const GENERATION_MODE_LABELS = {
 
 interface AssignTarget { date: string; areaId: string; areaName: string; currentAssignmentId?: string; currentDoctorId?: string; }
 interface RemoveTarget { assignment: CalendarAssignmentRead; areaName: string; }
-interface AssignPayload { doctorId: string; overrideJustification?: string | null; }
 
 interface CalendarDay {
-  day: number | null;       // null for padding days outside month
-  dateStr: string | null;   // "2026-05-14" or null
+  day: number;
+  dateStr: string;
+  isCurrentMonth: boolean;
 }
 
+/** Same logic as backend compute_weeks: walk from the Monday of the
+ *  week containing the 1st through the Sunday of the last overlapping week,
+ *  showing real dates from adjacent months instead of padding cells. */
 function buildCalendarDays(year: number, month: number): CalendarDay[] {
-  // month is 1-indexed (1=January)
-  const daysInMonth = new Date(year, month, 0).getDate();
-  // getDay(): 0=Sun, 1=Mon, ..., 6=Sat → we want Mon-first
-  const firstDay = new Date(year, month - 1, 1).getDay();
-  // Convert JS Sunday=0 to Monday=0 offset
-  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  const firstDay = new Date(year, month - 1, 1);
+  const dow = firstDay.getDay(); // 0=Sun, 1=Mon...
+
+  // Monday of the week containing the 1st
+  const firstMonday: Date =
+    dow === 0
+      ? new Date(year, month - 1, 2) // Sunday 1st → skip to next Monday
+      : new Date(year, month - 1, 1 - (dow - 1));
 
   const days: CalendarDay[] = [];
+  const current = new Date(firstMonday);
 
-  // Padding days before month start
-  for (let i = 0; i < offset; i++) {
-    days.push({ day: null, dateStr: null });
-  }
+  const dateVal = (d: Date) =>
+    d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 
-  // Actual days of the month
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    days.push({ day: d, dateStr });
-  }
-
-  // Pad remaining cells to complete the last week
-  while (days.length % 7 !== 0) {
-    days.push({ day: null, dateStr: null });
+  while (current.getMonth() + 1 === month || dateVal(current) <= dateVal(firstDay)) {
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(current);
+      d.setDate(current.getDate() + i);
+      const m = d.getMonth() + 1;
+      days.push({
+        day: d.getDate(),
+        dateStr: `${d.getFullYear()}-${String(m).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        isCurrentMonth: m === month,
+      });
+    }
+    current.setDate(current.getDate() + 7);
   }
 
   return days;
@@ -152,12 +159,6 @@ export function CalendarGrid() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
 
-  const approveMutation = useMutation({
-    mutationFn: () => calendarsApi.approve(calendarId!),
-    onSuccess: () => { invalidate(); addToast("success", "Calendario aprobado."); },
-    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al aprobar."),
-  });
-
   const unlockMutation = useMutation({
     mutationFn: () => calendarsApi.unlock(calendarId!),
     onSuccess: () => {
@@ -191,31 +192,30 @@ export function CalendarGrid() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: ({ doctorId, overrideJustification }: AssignPayload) => {
-      if (assignTarget?.currentAssignmentId) {
-        return calendarsApi.replaceAssignment(calendarId!, data!.version.id, assignTarget.currentAssignmentId, doctorId, overrideJustification);
+    mutationFn: ({ doctorId, forceWarnings }: { doctorId: string; forceWarnings: string[] }) => {
+      if (!assignTarget) throw new Error("Missing data");
+      if (assignTarget.currentAssignmentId) {
+        return calendarsApi.replaceAssignment(
+          calendarId!, data!.version.id, assignTarget.currentAssignmentId, doctorId, null, forceWarnings.length > 0 ? forceWarnings : null
+        );
       }
       return calendarsApi.assignDoctor(calendarId!, data!.version.id, {
-        service_date: assignTarget!.date,
-        service_area_id: assignTarget!.areaId,
+        service_date: assignTarget.date,
+        service_area_id: assignTarget.areaId,
         doctor_id: doctorId,
-        override_justification: overrideJustification ?? null,
+        force_warnings: forceWarnings.length > 0 ? forceWarnings : null,
       });
     },
-    onSuccess: () => { invalidate(); setAssignTarget(null); setAssignmentWarning(null); addToast("success", "Médico asignado."); },
-    onError: (err) => {
-      if (
-        err instanceof ApiError &&
-        err.status === 422 &&
-        err.detail &&
-        typeof err.detail === "object" &&
-        "code" in err.detail &&
-        (err.detail as { code?: unknown }).code === "soft_warning"
-      ) {
-        setAssignmentWarning(err.message);
-        return;
-      }
-      addToast("error", err instanceof ApiError ? err.message : "Error al asignar.");
+    onSuccess: () => {
+      invalidate();
+      setAssignTarget(null);
+      setAssignmentWarning(null);
+      addToast("success", "Médico asignado.");
+    },
+    onError: (err: unknown) => {
+      setAssignmentWarning(
+        err instanceof ApiError ? err.message : "Error al asignar doctor."
+      );
     },
   });
 
@@ -232,11 +232,6 @@ export function CalendarGrid() {
     onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al quitar."),
   });
 
-  const { data: availableDoctorIds } = useQuery({
-    queryKey: ["available-doctors", assignTarget?.date],
-    queryFn: () => availabilityApi.availableDoctors(assignTarget!.date),
-    enabled: !!assignTarget,
-  });
 
   const { data: calendarWeeks = [] } = useQuery({
     queryKey: ["calendar-weeks", calendarId],
@@ -268,23 +263,25 @@ export function CalendarGrid() {
       addToast("error", err instanceof ApiError ? err.message : "Error al desbloquear semana."),
   });
 
-  const handleExportWeeklyPDF = async (weekId: string) => {
-    try {
-      const blob = await calendarsApi.exportWeeklyPDF(calendarId!, weekId);
+  const exportWeekPdfMutation = useMutation({
+    mutationFn: (weekId: string) => calendarsApi.exportWeeklyPDF(calendarId!, weekId),
+    onSuccess: (blob) => {
       window.open(URL.createObjectURL(blob), "_blank");
-    } catch (err) {
-      addToast("error", err instanceof ApiError ? err.message : "Error al exportar PDF semanal.");
-    }
-  };
+      addToast("success", "PDF semanal exportado.");
+    },
+    onError: (err) =>
+      addToast("error", err instanceof ApiError ? err.message : "Error al exportar PDF semanal."),
+  });
 
-  const handleExportFullCalendarPDF = async () => {
-    try {
-      const blob = await calendarsApi.exportFullCalendarPDF(calendarId!);
+  const exportFullCalendarPdfMutation = useMutation({
+    mutationFn: () => calendarsApi.exportFullCalendarPDF(calendarId!),
+    onSuccess: (blob) => {
       window.open(URL.createObjectURL(blob), "_blank");
-    } catch (err) {
-      addToast("error", err instanceof ApiError ? err.message : "Error al exportar PDF del calendario.");
-    }
-  };
+      addToast("success", "PDF del calendario exportado.");
+    },
+    onError: (err) =>
+      addToast("error", err instanceof ApiError ? err.message : "Error al exportar PDF del calendario."),
+  });
 
   if (!calendarId) return null;
   if (isLoading) return <p className="loading-text">Cargando grilla…</p>;
@@ -321,9 +318,6 @@ export function CalendarGrid() {
             <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
               <Wand2 size={15} /> {generateMutation.isPending ? "Generando…" : "Generar con reglas"}
             </button>
-            <button className="btn-primary" disabled={approveMutation.isPending} onClick={() => approveMutation.mutate()}>
-              <CheckCircle2 size={16} /> {approveMutation.isPending ? "Aprobando…" : "Aprobar"}
-            </button>
           </>
         )}
         {!isDraft && (
@@ -351,11 +345,25 @@ export function CalendarGrid() {
         {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
           <div key={d} className="calendar-grid-header">{d}</div>
         ))}
-        {weeks.flat().map((cd, idx) => {
-          if (cd.day === null || cd.dateStr === null) {
-            return <div key={`pad-${idx}`} className="calendar-cell calendar-cell--outside" />;
-          }
+        {weeks.flat().map((cd) => {
           const assignments = getDayAssignments(cd.dateStr, slots, areaMap, sortedAreaIds);
+          if (!cd.isCurrentMonth) {
+            return (
+              <div key={cd.dateStr} className="calendar-cell calendar-cell--outside">
+                <span className="calendar-day-number calendar-day-number--outside">{cd.day}</span>
+                {assignments.map((areaAss) => {
+                  const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
+                  if (!doctor) return null;
+                  return (
+                    <div key={areaAss.areaId} className="calendar-area-row" style={{ opacity: 0.5 }}>
+                      <span className="calendar-area-dot" style={{ backgroundColor: areaColor(areaAss.areaName) }} />
+                      <span>{doctor.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
           return (
             <div key={cd.dateStr} className={`calendar-cell ${isApproved ? "calendar-cell--approved" : ""}`}>
               <span className="calendar-day-number">{cd.day}</span>
@@ -414,10 +422,12 @@ export function CalendarGrid() {
             <h3 style={{ margin: 0, fontSize: 15 }}>Semanas</h3>
             <button
               className="btn-ghost"
-              onClick={handleExportFullCalendarPDF}
+              disabled={exportFullCalendarPdfMutation.isPending}
+              onClick={() => exportFullCalendarPdfMutation.mutate()}
               title="Exportar calendario completo en PDF"
             >
-              <FileDown size={15} /> Calendario completo PDF
+              {exportFullCalendarPdfMutation.isPending ? <Loader2 size={15} className="spin" /> : <FileDown size={15} />}
+              {exportFullCalendarPdfMutation.isPending ? "Exportando…" : "Calendario completo PDF"}
             </button>
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -480,10 +490,12 @@ export function CalendarGrid() {
                       <button
                         className="btn-ghost"
                         style={{ fontSize: 12, padding: "2px 10px" }}
-                        onClick={() => handleExportWeeklyPDF(w.id)}
+                        disabled={exportWeekPdfMutation.isPending}
+                        onClick={() => exportWeekPdfMutation.mutate(w.id)}
                         title="Exportar lista semanal en PDF"
                       >
-                        <Download size={13} /> PDF
+                        {exportWeekPdfMutation.isPending ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
+                        {exportWeekPdfMutation.isPending ? "Exportando…" : "PDF"}
                       </button>
                     )}
                   </td>
@@ -496,13 +508,14 @@ export function CalendarGrid() {
 
       {assignTarget && (
         <AssignDoctorModal
+          calendarId={calendarId!}
+          versionId={data!.version.id}
           date={assignTarget.date}
+          areaId={assignTarget.areaId}
           areaName={assignTarget.areaName}
-          doctors={doctorsData?.items ?? []}
           currentDoctorId={assignTarget.currentDoctorId}
-          availableDoctorIds={availableDoctorIds}
-          warningMessage={assignmentWarning}
-          onConfirm={(doctorId, overrideJustification) => assignMutation.mutate({ doctorId, overrideJustification })}
+          currentAssignmentId={assignTarget.currentAssignmentId}
+          onConfirm={(doctorId, forceWarnings) => assignMutation.mutate({ doctorId, forceWarnings })}
           onClose={() => { setAssignTarget(null); setAssignmentWarning(null); }}
           isLoading={assignMutation.isPending}
           onRemove={assignTarget.currentAssignmentId ? () => quickRemoveMutation.mutate(assignTarget.currentAssignmentId!) : undefined}

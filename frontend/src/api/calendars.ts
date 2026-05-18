@@ -167,10 +167,11 @@ export const calendarsApi = {
     assignmentId: string,
     doctorId: string,
     overrideJustification?: string | null,
+    forceWarnings?: string[] | null,
   ) =>
     apiFetch<CalendarAssignmentRead>(
       `/calendars/${calendarId}/versions/${versionId}/assignments/${assignmentId}`,
-      { method: "PATCH", body: JSON.stringify({ doctor_id: doctorId, override_justification: overrideJustification ?? null }) },
+      { method: "PATCH", body: JSON.stringify({ doctor_id: doctorId, override_justification: overrideJustification ?? null, force_warnings: forceWarnings ?? null }) },
     ),
 
   generate: (calendarId: string) =>
