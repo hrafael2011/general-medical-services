@@ -7,7 +7,7 @@ All data is pre-loaded by the service layer and passed in via GenerationContext.
 
 import calendar as cal_module
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from backend.app.domain.calendars.scoring import compute_candidate_score
 from backend.app.domain.calendars.types import (
@@ -73,15 +73,27 @@ class CalendarEngine:
         those identifiers are assigned by the service layer, not the engine.
         """
 
-        # 1. Build all slots: one per (day, area) combination
-        num_days = cal_module.monthrange(ctx.year, ctx.month)[1]
+        # 1. Build all slots: one per (day, area) combination across ALL weeks
+        #    that belong to this month (including cross-boundary days).
+        from backend.app.domain.calendars.weeks import compute_weeks
+
+        weeks = compute_weeks(ctx.year, ctx.month)
+        date_set: set[date] = set()
+        for w in weeks:
+            _, _, sy, sm, sd, ey, em, ed = w
+            d = date(sy, sm, sd)
+            end = date(ey, em, ed)
+            while d <= end:
+                date_set.add(d)
+                d += timedelta(days=1)
+
         all_slots: list[SlotRequest] = [
             SlotRequest(
-                date=date(ctx.year, ctx.month, day),
+                date=d,
                 service_area_id=area,
                 area_weight=ctx.area_weights.get(area, 1.0),
             )
-            for day in range(1, num_days + 1)
+            for d in sorted(date_set)
             for area in ctx.required_areas
         ]
 
@@ -90,7 +102,7 @@ class CalendarEngine:
         #    so that the sort order is deterministic and independent of
         #    insertion order.
         def _eligible_count(slot: SlotRequest) -> int:
-            return len(self._get_eligible_doctors(slot, ctx, []))
+            return len(self.get_eligible_doctors(slot, ctx, []))
 
         sorted_slots = sorted(all_slots, key=_eligible_count)
 
@@ -99,7 +111,7 @@ class CalendarEngine:
         slot_results: list[SlotResult] = []
 
         for slot in sorted_slots:
-            eligible = self._get_eligible_doctors(slot, ctx, current_assignments)
+            eligible = self.get_eligible_doctors(slot, ctx, current_assignments)
 
             if not eligible:
                 slot_results.append(
@@ -185,7 +197,7 @@ class CalendarEngine:
     # Hard-filter: eligible doctors for a slot
     # ------------------------------------------------------------------
 
-    def _get_eligible_doctors(
+    def get_eligible_doctors(
         self,
         slot: SlotRequest,
         ctx: GenerationContext,
