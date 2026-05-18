@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -22,8 +23,14 @@ from backend.app.schemas.calendars import (
     CalendarVersionRead,
     CreateCalendarRequest,
     DaySlot,
+    EligibleDoctorRead,
+    EligibleDoctorsResponse,
+    EvaluationRequest,
+    EvaluationResponse,
+    HardBlockItem,
     ReplaceAssignmentRequest,
     UnresolvedGapRead,
+    WarningItem,
     WeekRead,
 )
 from backend.app.schemas.generation import GenerationResponse, GenerationSlotResult
@@ -351,6 +358,85 @@ def unlock_calendar(
     return CalendarVersionRead.model_validate(version)
 
 
+@router.get(
+    "/{calendar_id}/eligible-doctors",
+    response_model=EligibleDoctorsResponse,
+)
+def get_eligible_doctors(
+    calendar_id: str,
+    date: date,
+    area_id: str,
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[AssignmentService, Depends(get_assignment_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> EligibleDoctorsResponse:
+    repo = CalendarRepository(session)
+    version = repo.get_latest_version(calendar_id)
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "version_not_found",
+                "message": f"No versions found for calendar {calendar_id}.",
+            },
+        )
+    try:
+        doctors = service.get_eligible_doctors_for_slot(
+            version_id=version.id,
+            target_date=date,
+            service_area_id=area_id,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    return EligibleDoctorsResponse(
+        doctors=[
+            EligibleDoctorRead(
+                id=d.id,
+                full_name=d.name,
+                specialty=getattr(d, "specialty", None),
+                rank_name=getattr(d, "rank_name", None),
+            )
+            for d in doctors
+        ]
+    )
+
+
+@router.post(
+    "/{calendar_id}/evaluate",
+    response_model=EvaluationResponse,
+)
+def evaluate_slot(
+    calendar_id: str,
+    payload: EvaluationRequest,
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[AssignmentService, Depends(get_assignment_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> EvaluationResponse:
+    repo = CalendarRepository(session)
+    version = repo.get_latest_version(calendar_id)
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "version_not_found",
+                "message": f"No versions found for calendar {calendar_id}.",
+            },
+        )
+    try:
+        result = service.evaluate_slot(
+            version_id=version.id,
+            doctor_id=payload.doctor_id,
+            target_date=payload.service_date,
+            service_area_id=payload.service_area_id,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    return EvaluationResponse(
+        hard_blocks=[HardBlockItem(**b) for b in result["hard_blocks"]],
+        warnings=[WarningItem(**w) for w in result["warnings"]],
+    )
+
+
 @router.post(
     "/{calendar_id}/generate",
     response_model=GenerationResponse,
@@ -519,6 +605,7 @@ def assign_doctor(
             date=payload.service_date,
             service_area_id=payload.service_area_id,
             override_justification=payload.override_justification,
+            force_warnings=payload.force_warnings,
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
@@ -567,6 +654,7 @@ def replace_assignment(
             assignment_id=assignment_id,
             new_doctor_id=payload.doctor_id,
             override_justification=payload.override_justification,
+            force_warnings=payload.force_warnings,
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
