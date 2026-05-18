@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Wand2 } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
 import { CalendarRead, calendarsApi } from "../../api/calendars";
 import { ApiError } from "../../api/client";
-import { useToast } from "../../components/Toast";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -34,7 +33,6 @@ export function CalendarList({ onSelect }: Props) {
   const [formMonth, setFormMonth] = useState(new Date().getMonth() + 1);
   const [formYear, setFormYear] = useState(currentYear);
   const [error, setError] = useState<string | null>(null);
-  const { addToast } = useToast();
 
   const { data: calendars = [], isLoading } = useQuery({
     queryKey: ["calendars"],
@@ -43,34 +41,14 @@ export function CalendarList({ onSelect }: Props) {
 
   const createMutation = useMutation({
     mutationFn: () => calendarsApi.create(formYear, formMonth),
-    onSuccess: () => {
+    onSuccess: (calendar) => {
       queryClient.invalidateQueries({ queryKey: ["calendars"] });
       setShowForm(false);
       setError(null);
-    },
-    onError: (err: unknown) => {
-      setError(err instanceof ApiError ? err.message : "Error al crear calendario.");
-    },
-  });
-
-  const autoCreateMutation = useMutation({
-    mutationFn: async () => {
-      const calendar = await calendarsApi.create(formYear, formMonth, "assisted_auto");
-      const summary = await calendarsApi.generate(calendar.id);
-      return { calendar, summary };
-    },
-    onSuccess: ({ calendar, summary }) => {
-      queryClient.invalidateQueries({ queryKey: ["calendars"] });
-      setShowForm(false);
-      setError(null);
-      addToast(
-        "success",
-        `Calendario generado: ${summary.assigned_count} asignaciones, ${summary.gap_count} huecos.`,
-      );
       onSelect(calendar.id);
     },
     onError: (err: unknown) => {
-      setError(err instanceof ApiError ? err.message : "Error al generar calendario con reglas.");
+      setError(err instanceof ApiError ? err.message : "Error al habilitar calendario.");
     },
   });
 
@@ -109,20 +87,12 @@ export function CalendarList({ onSelect }: Props) {
               />
             </label>
             <button
-              className="btn-secondary"
-              disabled={createMutation.isPending || autoCreateMutation.isPending}
+              className="btn-primary"
+              disabled={createMutation.isPending}
               onClick={() => createMutation.mutate()}
             >
               <CalendarPlus size={15} />
-              {createMutation.isPending ? "Creando…" : "Crear manualmente"}
-            </button>
-            <button
-              className="btn-primary"
-              disabled={createMutation.isPending || autoCreateMutation.isPending}
-              onClick={() => autoCreateMutation.mutate()}
-            >
-              <Wand2 size={15} />
-              {autoCreateMutation.isPending ? "Generando…" : "Generar automáticamente"}
+              {createMutation.isPending ? "Habilitando…" : "Habilitar calendario"}
             </button>
             <button className="btn-ghost" onClick={() => { setShowForm(false); setError(null); }}>
               Cancelar
