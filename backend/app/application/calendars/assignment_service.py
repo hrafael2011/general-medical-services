@@ -340,7 +340,7 @@ class AssignmentService:
         if not doctor.active or not doctor.service_active:
             hard_blocks.append({
                 "code": "doctor_inactive",
-                "reason": "El medico no esta activo",
+                "description": "El médico no está activo o no tiene servicio activo.",
             })
 
         # 3b. Area not allowed.
@@ -348,7 +348,7 @@ class AssignmentService:
         if service_area_id not in allowed_areas:
             hard_blocks.append({
                 "code": "area_not_allowed",
-                "reason": "El medico no tiene permiso para esta area",
+                "description": "El médico no tiene permiso para esta área.",
             })
 
         # 3c. Has hard-block restriction.
@@ -359,7 +359,7 @@ class AssignmentService:
             if getattr(r, "severity", None) == "hard_block":
                 hard_blocks.append({
                     "code": "has_hard_block",
-                    "reason": r.reason or "Restriccion de tipo hard block",
+                    "description": getattr(r, "reason", None) or "Restricción de tipo hard block.",
                 })
                 break
 
@@ -369,7 +369,7 @@ class AssignmentService:
         ):
             hard_blocks.append({
                 "code": "no_availability",
-                "reason": "No tiene disponibilidad para esta fecha",
+                "description": "No tiene disponibilidad para esta fecha.",
             })
 
         # 3e. Already assigned on this date.
@@ -377,7 +377,7 @@ class AssignmentService:
         if any(a.doctor_id == doctor_id for a in existing_today):
             hard_blocks.append({
                 "code": "already_assigned_today",
-                "reason": "Ya tiene un turno asignado en esta fecha",
+                "description": "Ya tiene un turno asignado en esta fecha.",
             })
 
         # 3f. Monthly max exceeded.
@@ -393,7 +393,7 @@ class AssignmentService:
         if len(monthly_for_doctor) >= monthly_max:
             hard_blocks.append({
                 "code": "monthly_max_exceeded",
-                "reason": f"Ya alcanzo el maximo mensual ({monthly_max})",
+                "description": f"Ya alcanzó el máximo mensual ({monthly_max}) servicios.",
             })
 
         # 3g. Slot occupied by another doctor.
@@ -403,7 +403,7 @@ class AssignmentService:
         if existing_slot is not None and existing_slot.doctor_id != doctor_id:
             hard_blocks.append({
                 "code": "slot_occupied",
-                "reason": "El turno ya esta ocupado por otro medico",
+                "description": "El turno ya está ocupado por otro médico.",
             })
 
         # Return early if any hard blocks found.
@@ -448,7 +448,7 @@ class AssignmentService:
             area_weight=1.0,
         )
 
-        warnings = evaluate_soft_warnings(
+        raw_warnings = evaluate_soft_warnings(
             doctor_id=doctor_id,
             slot=slot,
             monthly_assignments=monthly_dicts,
@@ -456,7 +456,11 @@ class AssignmentService:
             mission_assignments=mission_dicts,
         )
 
-        return {"hard_blocks": hard_blocks, "warnings": warnings}
+        warning_items = [
+            {"code": w, "description": w} for w in raw_warnings
+        ]
+
+        return {"hard_blocks": hard_blocks, "warnings": warning_items}
 
     # ------------------------------------------------------------------
     # Public methods
