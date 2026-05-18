@@ -85,6 +85,38 @@ export interface WeekRead {
   approved_at: string | null;
 }
 
+export interface EligibleDoctorRead {
+  id: string;
+  full_name: string;
+  specialty: string | null;
+  rank_name: string | null;
+}
+
+export interface EligibleDoctorsResponse {
+  doctors: EligibleDoctorRead[];
+}
+
+export interface HardBlockItem {
+  code: string;
+  description: string;
+}
+
+export interface WarningItem {
+  code: string;
+  description: string;
+}
+
+export interface EvaluationRequest {
+  doctor_id: string;
+  service_date: string;
+  service_area_id: string;
+}
+
+export interface EvaluationResponse {
+  hard_blocks: HardBlockItem[];
+  warnings: WarningItem[];
+}
+
 export const calendarsApi = {
   list: () => apiFetch<CalendarRead[]>("/calendars"),
 
@@ -116,7 +148,7 @@ export const calendarsApi = {
   assignDoctor: (
     calendarId: string,
     versionId: string,
-    payload: { service_date: string; service_area_id: string; doctor_id: string; override_justification?: string | null },
+    payload: { service_date: string; service_area_id: string; doctor_id: string; override_justification?: string | null; force_warnings?: string[] | null },
   ) =>
     apiFetch<CalendarAssignmentRead>(
       `/calendars/${calendarId}/versions/${versionId}/assignments`,
@@ -146,6 +178,17 @@ export const calendarsApi = {
 
   delete: (calendarId: string) =>
     apiFetch<void>(`/calendars/${calendarId}`, { method: "DELETE" }),
+
+  eligibleDoctors: (calendarId: string, date: string, areaId: string) =>
+    apiFetch<EligibleDoctorsResponse>(
+      `/calendars/${calendarId}/eligible-doctors?date=${date}&area_id=${areaId}`,
+    ),
+
+  evaluate: (calendarId: string, payload: EvaluationRequest) =>
+    apiFetch<EvaluationResponse>(`/calendars/${calendarId}/evaluate`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   listWeeks: (calendarId: string) =>
     apiFetch<WeekRead[]>(`/calendars/${calendarId}/weeks`),
