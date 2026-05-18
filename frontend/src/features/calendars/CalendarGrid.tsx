@@ -316,7 +316,7 @@ export function CalendarGrid() {
         {isDraft && (
           <>
             <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
-              <Wand2 size={15} /> {generateMutation.isPending ? "Generando…" : "Generar con reglas"}
+              <Wand2 size={15} /> {generateMutation.isPending ? "Creando…" : "Crear con reglas"}
             </button>
           </>
         )}
@@ -337,7 +337,7 @@ export function CalendarGrid() {
 
       {generateSummary && (
         <p style={{ color: "#065f46", fontSize: 13, marginBottom: 8 }}>
-          Generación con reglas completada — {generateSummary}
+          Calendario creado con reglas — {generateSummary}
         </p>
       )}
 
