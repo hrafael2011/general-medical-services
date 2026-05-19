@@ -44,7 +44,21 @@ El endpoint de semanas debe devolver:
 - total de asignaciones por semana;
 - conteo por médico dentro de esa semana.
 
+La UI debe mostrar solo el total de asignaciones por semana. No debe listar nombres de médicos en la columna de asignaciones semanales.
+
 La UI debe refrescar esos conteos después de generar, asignar, reemplazar, quitar, aprobar o desbloquear.
+
+## Semanas Cruzadas
+
+Cada semana operativa tiene exactamente 7 días, de lunes a domingo.
+
+Una semana pertenece al mes en el que cae su domingo. Esto evita duplicidad entre meses consecutivos.
+
+Ejemplo: la semana lunes 2026-04-27 a domingo 2026-05-03 pertenece a mayo 2026, no a abril 2026.
+
+En la UI y en el documento semanal, los días que pertenezcan a otro mes deben etiquetarse con el mes para evitar confusión, por ejemplo `abr 27` en la grilla y `abril 27` en el PDF semanal.
+
+Los límites y conteos operativos de generación se evalúan contra el mes operativo definido por esta regla, no solo contra el mes civil del día.
 
 ## Tests Esperados
 
@@ -55,5 +69,7 @@ La UI debe refrescar esos conteos después de generar, asignar, reemplazar, quit
 - No se puede asignar, reemplazar ni quitar en semana aprobada.
 - El frontend no abre asignación en semanas aprobadas.
 - Las semanas devuelven conteos por médico.
-- El frontend muestra conteos por médico.
+- El frontend muestra solo el total de asignaciones semanales, sin nombres de médicos.
 - Generar falla si alguna semana está aprobada.
+- Las semanas cruzadas son lunes-domingo, no se duplican entre meses y pertenecen al mes de su domingo.
+- El PDF semanal etiqueta fechas cruzadas con el nombre del mes.

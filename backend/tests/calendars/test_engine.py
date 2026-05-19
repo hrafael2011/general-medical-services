@@ -17,7 +17,8 @@ from backend.app.domain.calendars.scoring import AREA_WEIGHTS
 
 REQUIRED_AREAS = ["emergencia", "pista", "disponible"]
 
-# February 2026 has exactly 28 days.
+# February 2026 has exactly 28 operational days by Sunday ownership:
+# Jan 26-Feb 1, Feb 2-8, Feb 9-15, Feb 16-22.
 _YEAR = 2026
 _MONTH = 2
 _DAYS_IN_MONTH = 28
@@ -127,7 +128,7 @@ def test_generate_creates_gap_when_no_doctor() -> None:
 
 
 def test_generate_respects_hard_block() -> None:
-    """A doctor with a hard_block restriction spanning the full month must not
+    """A doctor with a hard_block restriction spanning the full operational month must not
     be assigned to any slot.  All slots must become gaps.
 
     The restriction uses datetime objects for starts_at (open-ended via
@@ -135,10 +136,10 @@ def test_generate_respects_hard_block() -> None:
     """
     doctor = _make_doctor("doc-1")
 
-    # Restriction starts on the first day of the month, ends_at=None → open-ended
+    # Restriction starts on the first operational day, ends_at=None → open-ended
     block = SimpleNamespace(
         severity="hard_block",
-        starts_at=datetime.datetime(_YEAR, _MONTH, 1, 0, 0, 0),
+        starts_at=datetime.datetime(2026, 1, 26, 0, 0, 0),
         ends_at=None,
     )
 

@@ -23,7 +23,8 @@
     <tbody class="{% if loop.index is odd %}day-white{% else %}day-accent{% endif %}">
       {% set day_name = day.get("day_name", "") %}
       {% set day_number = day.get("day_number", "") %}
-      {% set day_label = (day_name ~ " " ~ day_number) if day_number else day_name %}
+      {% set date_label = day.get("date_label", day_number) %}
+      {% set day_label = (day_name ~ " " ~ date_label) if date_label else day_name %}
       {% set outer_loop = loop %}
       {% for assgn in day.get("assignments", []) %}
       <tr class="{% if loop.last and not outer_loop.last %}day-divider{% endif %}">

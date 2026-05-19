@@ -14,15 +14,32 @@ def test_generate_creates_weeks():
     """After generate(), CalendarWeek rows should be created for the month."""
     # Verify compute_weeks works correctly for the integration test
     weeks = compute_weeks(year=2026, month=5)
-    assert len(weeks) == 4
+    assert len(weeks) == 5
     assert weeks[0][1] == "1RA SEMANA"
+    assert weeks[0][2:8] == (2026, 4, 27, 2026, 5, 3)
 
 
 def test_week_for_date():
     """Verify a service_date falls into the correct week."""
     weeks = compute_weeks(year=2026, month=5)
-    # May 5, 2026 is in Week 1 (May 4-10)
+    # May 5, 2026 is in Week 2 because Week 1 is Apr 27-May 3.
     test_date = date(2026, 5, 5)
+    found_week = None
+    for w in weeks:
+        w_start = date(w[2], w[3], w[4])
+        w_end = date(w[5], w[6], w[7])
+        if w_start <= test_date <= w_end:
+            found_week = w
+            break
+    assert found_week is not None
+    assert found_week[0] == 2  # week_number 2
+
+
+def test_week_for_date_cross_month():
+    """Verify cross-month dates are assigned to the month where Sunday falls."""
+    weeks = compute_weeks(year=2026, month=5)
+    # May 1, 2026 is in May's Week 1 (Apr 27 - May 3)
+    test_date = date(2026, 5, 1)
     found_week = None
     for w in weeks:
         w_start = date(w[2], w[3], w[4])
@@ -33,21 +50,11 @@ def test_week_for_date():
     assert found_week is not None
     assert found_week[0] == 1  # week_number 1
 
-
-def test_week_for_date_cross_month():
-    """Verify date in next month is correctly assigned to previous month's last week."""
-    weeks = compute_weeks(year=2026, month=4)
-    # May 1, 2026 is in April's Week 4 (Apr 27 - May 3)
-    test_date = date(2026, 5, 1)
-    found_week = None
-    for w in weeks:
-        w_start = date(w[2], w[3], w[4])
-        w_end = date(w[5], w[6], w[7])
-        if w_start <= test_date <= w_end:
-            found_week = w
-            break
-    assert found_week is not None
-    assert found_week[0] == 4  # week_number 4
+    april_weeks = compute_weeks(year=2026, month=4)
+    assert all(
+        not (date(w[2], w[3], w[4]) <= test_date <= date(w[5], w[6], w[7]))
+        for w in april_weeks
+    )
 
 
 def test_generate_creates_weeks_in_service():

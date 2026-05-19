@@ -610,13 +610,16 @@ class ReportService:
             area_list = self.calendar_repo.list_service_areas()
             areas = {a.id: a.display_name for a in area_list}
 
-        # Group assignments by day number
+        # Group assignments by exact date to avoid collisions in cross-month weeks.
         DAY_NAMES = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
-        day_assignments: dict[int, list[dict]] = {}
+        MONTH_NAMES_LOWER = [
+            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+        ]
+        day_assignments: dict[date, list[dict]] = {}
 
         for a in assignments:
-            day = a.service_date.day
-            day_assignments.setdefault(day, []).append({
+            day_assignments.setdefault(a.service_date, []).append({
                 "rank_name": doctors.get(a.doctor_id, a.doctor_id),
                 "location": areas.get(a.service_area_id, a.service_area_id),
             })
@@ -627,24 +630,26 @@ class ReportService:
         if week_id and week:
             current = week.start_date
             while current <= week.end_date:
-                if current.day in day_assignments:
+                if current in day_assignments:
                     day_name = DAY_NAMES[current.weekday()]
                     schedule_data.append({
                         "day_name": day_name,
                         "day_number": current.day,
-                        "assignments": day_assignments[current.day],
+                        "date_label": f"{MONTH_NAMES_LOWER[current.month - 1]} {current.day}",
+                        "assignments": day_assignments[current],
                     })
                 current += timedelta(days=1)
         else:
             last_day = monthrange(year, month)[1]
             for day in range(1, last_day + 1):
-                if day in day_assignments:
-                    date_obj = date(year, month, day)
+                date_obj = date(year, month, day)
+                if date_obj in day_assignments:
                     day_name = DAY_NAMES[date_obj.weekday()]
                     schedule_data.append({
                         "day_name": day_name,
                         "day_number": day,
-                        "assignments": day_assignments[day],
+                        "date_label": f"{MONTH_NAMES_LOWER[date_obj.month - 1]} {day}",
+                        "assignments": day_assignments[date_obj],
                     })
 
         if not schedule_data:
@@ -787,4 +792,3 @@ class ReportService:
         if cal is None:
             raise ValueError(f"Calendar {calendar_id} not found")
         return self.build_full_calendar(year=cal.year, month=cal.month)
-

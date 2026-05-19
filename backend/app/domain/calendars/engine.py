@@ -127,7 +127,7 @@ class CalendarEngine:
             # Score each eligible doctor; combine monthly + historical data.
             monthly_assignments = [
                 a for a in current_assignments
-                if _is_same_month(a["service_date"], ctx.year, ctx.month)
+                if _belongs_to_calendar_month(a["service_date"], ctx.year, ctx.month)
             ]
 
             scores: list[CandidateScore] = [
@@ -250,7 +250,7 @@ class CalendarEngine:
             monthly_count_so_far = sum(
                 1 for a in current_assignments
                 if a["doctor_id"] == doctor.id
-                and _is_same_month(a["service_date"], ctx.year, ctx.month)
+                and _belongs_to_calendar_month(a["service_date"], ctx.year, ctx.month)
             )
             if monthly_count_so_far >= monthly_max:
                 continue
@@ -370,6 +370,7 @@ class CalendarEngine:
 # ---------------------------------------------------------------------------
 
 
-def _is_same_month(d: date, year: int, month: int) -> bool:
-    """Return True if *d* falls in the given year/month."""
-    return d.year == year and d.month == month
+def _belongs_to_calendar_month(d: date, year: int, month: int) -> bool:
+    """Return True if *d* belongs to the calendar month by Sunday ownership."""
+    sunday = d + timedelta(days=6 - d.weekday())
+    return sunday.year == year and sunday.month == month

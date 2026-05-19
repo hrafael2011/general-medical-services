@@ -149,6 +149,13 @@ describe("CalendarGrid", () => {
     expect(grid?.children[11]?.querySelector(".calendar-day-number")?.textContent).toBe("1");
   });
 
+  it("etiqueta los días de otro mes en semanas cruzadas", async () => {
+    const { container } = renderGrid();
+    await screen.findByText("abr 27");
+    const grid = container.querySelector(".calendar-grid");
+    expect(grid?.children[7]?.querySelector(".calendar-day-number")?.textContent).toBe("abr 27");
+  });
+
   it("muestra las áreas con colores correctos", async () => {
     const { container } = renderGrid();
     await screen.findByText("1");

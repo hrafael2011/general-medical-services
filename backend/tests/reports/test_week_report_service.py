@@ -63,6 +63,58 @@ def test_build_weekly_schedule_with_week_id():
     assert len(result) > 0
 
 
+def test_build_weekly_schedule_labels_cross_month_dates():
+    """Weekly PDF data labels dates with month names across month boundaries."""
+    from backend.app.application.reports.report_service import ReportService
+
+    calendar_repo = MagicMock()
+    notification_repo = MagicMock()
+    doctor_repo = MagicMock()
+
+    service = ReportService(
+        calendar_repo=calendar_repo,
+        notification_repo=notification_repo,
+        doctor_repo=doctor_repo,
+    )
+    service.generate_weekly_schedule_pdf = MagicMock(return_value=b"%PDF-1.4 test")
+
+    week = MagicMock()
+    week.id = "week1"
+    week.week_number = 1
+    week.label = "1RA SEMANA"
+    week.start_date = date(2026, 4, 27)
+    week.end_date = date(2026, 5, 3)
+    calendar_repo.get_week_by_id.return_value = week
+
+    cal = MagicMock()
+    cal.id = "cal1"
+    cal.month = 5
+    cal.year = 2026
+    calendar_repo.get_calendar_by_period.return_value = cal
+    calendar_repo.get_latest_version.return_value = MagicMock(id="ver1")
+
+    april_assignment = MagicMock()
+    april_assignment.doctor_id = "doc1"
+    april_assignment.service_date = date(2026, 4, 27)
+    april_assignment.service_area_id = "area1"
+
+    may_assignment = MagicMock()
+    may_assignment.doctor_id = "doc1"
+    may_assignment.service_date = date(2026, 5, 1)
+    may_assignment.service_area_id = "area1"
+
+    calendar_repo.list_assignments.return_value = [april_assignment, may_assignment]
+    calendar_repo.list_service_areas.return_value = [
+        MagicMock(id="area1", code="EMERG", display_name="EMERGENCIA"),
+    ]
+    doctor_repo.list_all.return_value = [MagicMock(id="doc1", name="LOPEZ, JUAN")]
+
+    service.build_weekly_schedule(year=2026, month=5, week_id="week1")
+
+    schedule_data = service.generate_weekly_schedule_pdf.call_args.args[0]
+    assert [day["date_label"] for day in schedule_data] == ["abril 27", "mayo 1"]
+
+
 def test_build_full_calendar_returns_grid_data():
     """build_full_calendar produces grid_data dict for the full month."""
     from backend.app.application.reports.report_service import ReportService

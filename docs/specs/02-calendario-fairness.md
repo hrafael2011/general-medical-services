@@ -43,6 +43,8 @@ Operational update 2026-05-19:
 - Rule-based generation is an explicit action from the calendar view, not part of enabling.
 - Approval and unlocking are weekly operations.
 - Approved weeks are locked for manual assignment, replacement, removal, and regeneration.
+- Operational weeks are always 7 days, Monday through Sunday, and belong to the month where their Sunday falls.
+- Cross-month dates must be labeled with their month in the calendar UI and weekly PDF.
 - See `docs/specs/2026-05-19-calendario-habilitacion-manual-aprobacion-semanal.md`.
 
 ## Pre-Generation Validations
@@ -98,6 +100,7 @@ Monthly limits:
 
 - Default normal target: 3 services per doctor per month.
 - Default normal maximum: 3 services per doctor per month.
+- For generation, "per month" means the operational calendar month defined by Sunday-owned Monday-Sunday weeks, including cross-month days that belong to that calendar.
 - The monthly target and maximum must be configurable per doctor by the encargado.
 - Doctor-specific monthly values override system defaults.
 - Doctor-specific monthly limits, such as "1 service per month", are warn-only by default and may be exceeded by the encargado with justification and audit.
