@@ -40,7 +40,7 @@ export function CalendarList({ onSelect }: Props) {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => calendarsApi.create(formYear, formMonth),
+    mutationFn: () => calendarsApi.create(formYear, formMonth, "manual"),
     onSuccess: (calendar) => {
       queryClient.invalidateQueries({ queryKey: ["calendars"] });
       setShowForm(false);

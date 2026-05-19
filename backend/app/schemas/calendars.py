@@ -150,6 +150,12 @@ class UnresolvedGapRead(BaseModel):
 
 # --- Calendar Week ---
 
+class DoctorAssignmentCountRead(BaseModel):
+    doctor_id: str
+    doctor_name: str
+    count: int
+
+
 class WeekRead(BaseModel):
     id: str
     week_number: int
@@ -158,6 +164,7 @@ class WeekRead(BaseModel):
     end_date: str
     status: str
     assignment_count: int = 0
+    doctor_assignment_counts: list[DoctorAssignmentCountRead] = Field(default_factory=list)
     approved_by: str | None = None
     approved_at: str | None = None
 

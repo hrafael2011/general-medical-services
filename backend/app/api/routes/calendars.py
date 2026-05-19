@@ -23,6 +23,7 @@ from backend.app.schemas.calendars import (
     CalendarVersionRead,
     CreateCalendarRequest,
     DaySlot,
+    DoctorAssignmentCountRead,
     EligibleDoctorRead,
     EligibleDoctorsResponse,
     EvaluationRequest,
@@ -34,6 +35,7 @@ from backend.app.schemas.calendars import (
     WeekRead,
 )
 from backend.app.schemas.generation import GenerationResponse, GenerationSlotResult
+from backend.app.infrastructure.db.models.doctors import DoctorModel
 
 router = APIRouter(prefix="/calendars", tags=["calendars"])
 
@@ -57,6 +59,7 @@ _ERROR_STATUS: dict[str, int] = {
     "week_not_found": status.HTTP_404_NOT_FOUND,
     "week_already_approved": status.HTTP_409_CONFLICT,
     "week_not_approved": status.HTTP_409_CONFLICT,
+    "week_locked": status.HTTP_409_CONFLICT,
 }
 
 
@@ -206,6 +209,7 @@ def create_calendar(
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
+
     session.commit()
     return CalendarRead.model_validate(calendar)
 
@@ -498,10 +502,23 @@ def list_weeks(
     result: list[WeekRead] = []
     all_assignments = repo.list_assignments(weeks[0].calendar_version_id) if weeks else []
     for w in weeks:
-        a_count = len([
+        week_assignments = [
             a for a in all_assignments
             if w.start_date <= a.service_date <= w.end_date
-        ])
+        ]
+        counts_by_doctor: dict[str, int] = {}
+        for assignment in week_assignments:
+            counts_by_doctor[assignment.doctor_id] = (
+                counts_by_doctor.get(assignment.doctor_id, 0) + 1
+            )
+        doctor_counts: list[DoctorAssignmentCountRead] = []
+        for doctor_id, count in counts_by_doctor.items():
+            doctor = session.get(DoctorModel, doctor_id)
+            doctor_counts.append(DoctorAssignmentCountRead(
+                doctor_id=doctor_id,
+                doctor_name=doctor.name if doctor is not None else doctor_id,
+                count=count,
+            ))
         result.append(WeekRead(
             id=w.id,
             week_number=w.week_number,
@@ -509,7 +526,8 @@ def list_weeks(
             start_date=w.start_date.isoformat(),
             end_date=w.end_date.isoformat(),
             status=w.status,
-            assignment_count=a_count,
+            assignment_count=len(week_assignments),
+            doctor_assignment_counts=doctor_counts,
             approved_by=w.approved_by,
             approved_at=w.approved_at.isoformat() if w.approved_at else None,
         ))

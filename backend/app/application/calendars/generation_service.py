@@ -87,6 +87,17 @@ class GenerationService:
                 "Cannot generate into an approved version. Create a new version first.",
             )
 
+        approved_weeks = [
+            week
+            for week in self.calendar_repo.list_weeks_by_version(version.id)
+            if week.status == "approved"
+        ]
+        if approved_weeks:
+            raise CalendarServiceError(
+                "week_locked",
+                "No se puede generar con reglas porque hay semanas aprobadas. Desbloquea las semanas primero.",
+            )
+
         # Build code↔uuid mapper so the domain engine works with logical codes
         mapper = _AreaMapper(self.calendar_repo.session)
 

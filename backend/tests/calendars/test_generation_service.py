@@ -8,10 +8,14 @@ Follows the ORM-direct pattern from test_assignment_service.py.
 import datetime
 from uuid import uuid4
 
+import pytest
+
+from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
     CalendarVersionModel,
+    CalendarWeekModel,
 )
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.db.models.doctors import (
@@ -113,6 +117,28 @@ def _create_calendar_and_version(db_session) -> tuple[CalendarModel, CalendarVer
     return calendar, version
 
 
+def _create_week(
+    db_session,
+    calendar: CalendarModel,
+    version: CalendarVersionModel,
+    *,
+    status: str,
+) -> CalendarWeekModel:
+    week = CalendarWeekModel(
+        id=str(uuid4()),
+        calendar_id=calendar.id,
+        calendar_version_id=version.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=datetime.date(_YEAR, _MONTH, 2),
+        end_date=datetime.date(_YEAR, _MONTH, 8),
+        status=status,
+    )
+    db_session.add(week)
+    db_session.flush()
+    return week
+
+
 def _create_doctor(
     db_session,
     *,
@@ -206,6 +232,20 @@ def test_generate_does_not_create_mission_ranking_before_approval(db_session) ->
 
     ranking = MissionRepository(db_session).get_ranking_by_period(_YEAR, _MONTH)
     assert ranking is None
+
+
+def test_generate_fails_when_any_week_is_approved(db_session) -> None:
+    """Generation must not overwrite assignments once a week is approved."""
+    _seed_service_areas(db_session)
+    calendar, version = _create_calendar_and_version(db_session)
+    _create_week(db_session, calendar, version, status="approved")
+
+    service = _make_generation_service(db_session)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    assert exc_info.value.code == "week_locked"
 
 
 # ---------------------------------------------------------------------------

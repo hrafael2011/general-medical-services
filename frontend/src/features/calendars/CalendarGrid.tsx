@@ -104,6 +104,10 @@ function areaColor(areaName: string): string {
   return AREA_COLOR_MAP[areaName] ?? "#6b7280";
 }
 
+function findWeekForDate(dateStr: string, weeks: WeekRead[]): WeekRead | null {
+  return weeks.find((week) => week.start_date <= dateStr && dateStr <= week.end_date) ?? null;
+}
+
 function rankDisplayName(rankName: string): string {
   return rankName.toUpperCase();
 }
@@ -159,17 +163,6 @@ export function CalendarGrid() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
 
-  const unlockMutation = useMutation({
-    mutationFn: () => calendarsApi.unlock(calendarId!),
-    onSuccess: () => {
-      invalidate();
-      qc.invalidateQueries({ queryKey: ["calendars"] });
-      addToast("success", "Calendario desbloqueado. Ahora puedes editarlo.");
-    },
-    onError: (err) =>
-      addToast("error", err instanceof ApiError ? err.message : "Error al desbloquear calendario."),
-  });
-
   const deleteCalendarMutation = useMutation({
     mutationFn: () => calendarsApi.delete(calendarId!),
     onSuccess: () => {
@@ -185,6 +178,8 @@ export function CalendarGrid() {
     mutationFn: () => calendarsApi.generate(calendarId!),
     onSuccess: (result) => {
       invalidate();
+      qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
+      qc.invalidateQueries({ queryKey: ["calendars"] });
       setGenerateSummary(`Asignados: ${result.assigned_count} / Huecos: ${result.gap_count} / Pendiente de aprobación`);
       addToast("success", result.review_required ? "Calendario generado y pendiente de revisión." : "Calendario generado.");
     },
@@ -289,10 +284,21 @@ export function CalendarGrid() {
 
   const { calendar, version, slots } = data;
   const isDraft = version.status === "draft";
+  const hasApprovedWeeks = calendarWeeks.some((week) => week.status === "approved");
+  const calendarStatusLabel = calendar.status === "approved"
+    ? "Aprobado"
+    : calendar.status === "partial"
+      ? "Parcial"
+      : "Borrador";
+  const calendarStatusStyle = calendar.status === "approved"
+    ? { background: "#d1fae5", color: "#065f46" }
+    : calendar.status === "partial"
+      ? { background: "#fef3c7", color: "#92400e" }
+      : { background: "#f3f4f6", color: "#6b7280" };
 
   const calendarDays = buildCalendarDays(calendar.year, calendar.month);
   const weeks = chunkIntoWeeks(calendarDays);
-  const isApproved = version.status === "approved";
+  const isApproved = calendar.status === "approved" || version.status === "approved";
 
   return (
     <div>
@@ -308,22 +314,16 @@ export function CalendarGrid() {
         </div>
         <span style={{
           padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700,
-          background: version.status === "approved" ? "#d1fae5" : "#f3f4f6",
-          color: version.status === "approved" ? "#065f46" : "#6b7280",
+          ...calendarStatusStyle,
         }}>
-          {version.status === "approved" ? "Aprobado" : "Borrador"}
+          {calendarStatusLabel}
         </span>
-        {isDraft && (
+        {isDraft && !hasApprovedWeeks && (
           <>
             <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
-              <Wand2 size={15} /> {generateMutation.isPending ? "Creando…" : "Crear con reglas"}
+              <Wand2 size={15} /> {generateMutation.isPending ? "Generando…" : "Generar calendario con reglas"}
             </button>
           </>
-        )}
-        {!isDraft && (
-          <button className="btn-ghost" disabled={unlockMutation.isPending} onClick={() => unlockMutation.mutate()}>
-            🔓 {unlockMutation.isPending ? "Desbloqueando…" : "Editar calendario"}
-          </button>
         )}
         <button
           className="btn-ghost btn-danger"
@@ -365,14 +365,19 @@ export function CalendarGrid() {
             );
           }
           return (
-            <div key={cd.dateStr} className={`calendar-cell ${isApproved ? "calendar-cell--approved" : ""}`}>
+            <div
+              key={cd.dateStr}
+              className={`calendar-cell ${isApproved ? "calendar-cell--approved" : ""} ${findWeekForDate(cd.dateStr, calendarWeeks)?.status === "approved" ? "calendar-cell--approved-week" : ""}`}
+            >
               <span className="calendar-day-number">{cd.day}</span>
               {assignments.map((areaAss) => {
                 const color = areaColor(areaAss.areaName);
                 const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
                 const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
+                const week = findWeekForDate(cd.dateStr, calendarWeeks);
+                const isEditableSlot = isDraft && week?.status !== "approved";
                 const handleAreaClick = () => {
-                  if (!isDraft) return;
+                  if (!isEditableSlot) return;
                   if (areaAss.slot?.assignment) {
                     setAssignTarget({
                       date: cd.dateStr!,
@@ -388,7 +393,7 @@ export function CalendarGrid() {
                   }
                 };
                 return (
-                  <div key={areaAss.areaId} className={`calendar-area-row${isDraft ? " calendar-area-row--clickable" : ""}${!doctor && isDraft ? " calendar-area-row--empty" : ""}`}
+                  <div key={areaAss.areaId} className={`calendar-area-row${isEditableSlot ? " calendar-area-row--clickable" : ""}${!doctor && isEditableSlot ? " calendar-area-row--empty" : ""}`}
                     role="button" tabIndex={0}
                     onClick={handleAreaClick}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleAreaClick(); } }}
@@ -396,7 +401,7 @@ export function CalendarGrid() {
                     <span className={`calendar-area-dot ${doctor ? "" : "calendar-area-dot--empty"}`} style={{ backgroundColor: color }} />
                     {doctor ? (
                       <span>{rank ? rankDisplayName(rank.name) + " " : ""}{doctor.name}</span>
-                    ) : isDraft ? (
+                    ) : isEditableSlot ? (
                       <span className="calendar-assign-label">+ Asignar médico</span>
                     ) : (
                       <span style={{ color: "#e2e8f0" }}>—</span>

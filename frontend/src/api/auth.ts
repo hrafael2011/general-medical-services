@@ -34,6 +34,10 @@ export interface SetPasswordValidateResponse {
 }
 
 export const authApi = {
+  me() {
+    return apiFetch<UserRead>("/auth/me");
+  },
+
   validateSetPasswordToken(token: string) {
     return apiFetch<SetPasswordValidateResponse>(
       `/auth/set-password?token=${encodeURIComponent(token)}`,

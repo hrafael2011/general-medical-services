@@ -149,6 +149,24 @@ def test_create_calendar_success(client, mock_calendar_service):
     assert resp.json()["month"] == 6
 
 
+def test_create_calendar_does_not_auto_generate_or_approve(
+    client, mock_calendar_service, mock_generation_service
+):
+    mock_calendar_service.create_calendar.return_value = _make_calendar(
+        month=6,
+        generation_mode="assisted_auto",
+    )
+
+    resp = client.post(
+        "/api/calendars",
+        json={"month": 6, "year": 2026, "generation_mode": "assisted_auto"},
+    )
+
+    assert resp.status_code == 201
+    mock_generation_service.generate.assert_not_called()
+    mock_calendar_service.approve_version.assert_not_called()
+
+
 def test_create_calendar_conflict(client, mock_calendar_service):
     mock_calendar_service.create_calendar.side_effect = CalendarServiceError(
         "calendar_already_exists", "Calendar exists"

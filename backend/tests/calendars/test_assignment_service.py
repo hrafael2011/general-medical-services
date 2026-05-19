@@ -6,7 +6,11 @@ import pytest
 from backend.app.application.calendars.assignment_service import AssignmentService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.doctors.service import DoctorService
-from backend.app.infrastructure.db.models.calendars import CalendarModel, CalendarVersionModel
+from backend.app.infrastructure.db.models.calendars import (
+    CalendarModel,
+    CalendarVersionModel,
+    CalendarWeekModel,
+)
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
@@ -88,6 +92,28 @@ def _create_calendar_and_version(db_session) -> tuple[CalendarModel, CalendarVer
     return calendar, version
 
 
+def _create_week(
+    db_session,
+    calendar: CalendarModel,
+    version: CalendarVersionModel,
+    *,
+    status: str,
+) -> CalendarWeekModel:
+    week = CalendarWeekModel(
+        id=str(uuid4()),
+        calendar_id=calendar.id,
+        calendar_version_id=version.id,
+        week_number=3,
+        label="3RA SEMANA",
+        start_date=datetime.date(2026, 5, 11),
+        end_date=datetime.date(2026, 5, 17),
+        status=status,
+    )
+    db_session.add(week)
+    db_session.flush()
+    return week
+
+
 # ---------------------------------------------------------------------------
 # test_assign_doctor_to_slot
 # ---------------------------------------------------------------------------
@@ -139,6 +165,24 @@ def test_assign_to_approved_version_raises(db_session) -> None:
     assert exc_info.value.code == "version_is_approved"
 
 
+def test_assign_to_approved_week_raises(db_session) -> None:
+    calendar, version = _create_calendar_and_version(db_session)
+    _create_week(db_session, calendar, version, status="approved")
+    doctor = _create_doctor(db_session)
+    service = _make_assignment_service(db_session)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.assign_doctor(
+            actor_id="actor-001",
+            version_id=version.id,
+            doctor_id=doctor.id,
+            date=datetime.date(2026, 5, 15),
+            service_area_id=_AREA_ID,
+        )
+
+    assert exc_info.value.code == "week_locked"
+
+
 # ---------------------------------------------------------------------------
 # test_remove_assignment
 # ---------------------------------------------------------------------------
@@ -162,6 +206,28 @@ def test_remove_assignment(db_session) -> None:
     service.remove_assignment(actor_id="actor-001", assignment_id=assignment_id)
 
     assert cal_repo.get_assignment_by_id(assignment_id) is None
+
+
+def test_remove_assignment_from_approved_week_raises(db_session) -> None:
+    calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session)
+    service = _make_assignment_service(db_session)
+    cal_repo = CalendarRepository(db_session)
+
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+    )
+    _create_week(db_session, calendar, version, status="approved")
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.remove_assignment(actor_id="actor-001", assignment_id=assignment.id)
+
+    assert exc_info.value.code == "week_locked"
+    assert cal_repo.get_assignment_by_id(assignment.id) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +276,47 @@ def test_replace_assignment(db_session) -> None:
     )
 
     assert updated.doctor_id == doctor_b.id
+
+
+def test_replace_assignment_from_approved_week_raises(db_session) -> None:
+    calendar, version = _create_calendar_and_version(db_session)
+    doctor_a = _create_doctor(db_session)
+    doctor_svc = DoctorService(DoctorRepository(db_session))
+    doctor_b = doctor_svc.create_doctor(
+        actor_id="actor-001",
+        name="Dr. B",
+        sex="female",
+        rank_id=None,
+        department_id=None,
+        phone=None,
+        notes=None,
+        participa_misiones=True,
+        whatsapp_phone=None,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        availability_mode="monthly",
+        allowed_area_ids=[_AREA_ID],
+    )
+    service = _make_assignment_service(db_session)
+
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor_a.id,
+        date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+    )
+    _create_week(db_session, calendar, version, status="approved")
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.replace_assignment(
+            actor_id="actor-001",
+            assignment_id=assignment.id,
+            new_doctor_id=doctor_b.id,
+        )
+
+    assert exc_info.value.code == "week_locked"
 
 
 # ---------------------------------------------------------------------------

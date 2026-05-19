@@ -226,6 +226,16 @@ class CalendarRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def get_week_for_date(
+        self, version_id: str, service_date: date
+    ) -> CalendarWeekModel | None:
+        stmt = select(CalendarWeekModel).where(
+            CalendarWeekModel.calendar_version_id == version_id,
+            CalendarWeekModel.start_date <= service_date,
+            CalendarWeekModel.end_date >= service_date,
+        )
+        return self.session.scalar(stmt)
+
     def update_week_status(
         self, week_id: str, status: str,
         approved_by: str | None = None,

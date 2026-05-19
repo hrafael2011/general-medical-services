@@ -32,12 +32,18 @@ Weekends and holidays count the same as weekdays for fairness unless future rule
 
 ## Calendar States
 
-- draft
-- preview
-- pending_approval
-- official
-- manually_modified
-- closed
+- `draft`: calendar enabled and editable; weeks are not all approved.
+- `partial`: at least one week is approved and at least one week remains editable.
+- `approved`: all weeks are approved.
+- `preview`, `pending_approval`, `official`, `manually_modified`, and `closed` remain future workflow states unless a later ADR reintroduces them.
+
+Operational update 2026-05-19:
+
+- Enabling a calendar only creates an empty draft calendar with draft weeks.
+- Rule-based generation is an explicit action from the calendar view, not part of enabling.
+- Approval and unlocking are weekly operations.
+- Approved weeks are locked for manual assignment, replacement, removal, and regeneration.
+- See `docs/specs/2026-05-19-calendario-habilitacion-manual-aprobacion-semanal.md`.
 
 ## Pre-Generation Validations
 
@@ -202,8 +208,9 @@ Recommended non-disableable baseline:
 - Advanced: OR-Tools CP-SAT for better global optimization
 - If no feasible result, expose gaps/conflicts explicitly
 - Automatic generation creates `draft` or `preview` calendars only.
-- The encargado approves the calendar and makes it official.
-- Modifying an official calendar creates a new version with justification and audit.
+- The encargado approves weeks individually; approving the final week marks the calendar as `approved`.
+- Rule-based generation must fail when any week is already approved, unless a future partial-regeneration workflow is explicitly designed.
+- Modifying an approved week requires unlocking that week first, with audit.
 
 ## Service Area Identity in Generation
 

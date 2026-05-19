@@ -20,10 +20,12 @@ from backend.app.infrastructure.db.models import notifications as _notifications
 from backend.app.infrastructure.db.models import telegram as _telegram  # noqa: F401
 from backend.app.infrastructure.db.models import user as _user  # noqa: F401
 from backend.app.infrastructure.db.models.calendars import (
+    CalendarAssignmentModel,
     CalendarModel,
     CalendarVersionModel,
     CalendarWeekModel,
 )
+from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
 
@@ -131,6 +133,50 @@ def _create_week(session, *, calendar_id: str, version_id: str, **kw) -> Calenda
     return week
 
 
+def _create_doctor(session, *, doctor_id: str, name: str) -> DoctorModel:
+    now = datetime.now(UTC)
+    doctor = DoctorModel(
+        id=doctor_id,
+        name=name,
+        normalized_name=name.lower(),
+        sex="male",
+        active=True,
+        service_active=True,
+        participa_misiones=True,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        availability_mode="monthly",
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(doctor)
+    session.flush()
+    return doctor
+
+
+def _create_assignment(
+    session,
+    *,
+    version_id: str,
+    doctor_id: str,
+    service_date: date,
+    area_id: str,
+) -> CalendarAssignmentModel:
+    assignment = CalendarAssignmentModel(
+        id=f"a-{uuid4().hex[:8]}",
+        calendar_version_id=version_id,
+        service_date=service_date,
+        service_area_id=area_id,
+        doctor_id=doctor_id,
+        assignment_source="manual",
+        created_at=datetime.now(UTC),
+    )
+    session.add(assignment)
+    session.flush()
+    return assignment
+
+
 def test_list_weeks_returns_weeks(client, session):
     """GET /calendars/{id}/weeks returns week list with statuses."""
     cal, ver = _create_calendar_version(session, calendar_id="cal-w1")
@@ -153,6 +199,53 @@ def test_list_weeks_returns_weeks(client, session):
     assert len(data) == 1
     assert data[0]["label"] == "1RA SEMANA"
     assert data[0]["status"] == "draft"
+
+
+def test_list_weeks_returns_doctor_assignment_counts(client, session):
+    cal, ver = _create_calendar_version(session, calendar_id="cal-week-counts")
+    _create_week(
+        session,
+        id="w-counts",
+        calendar_id=cal.id,
+        version_id=ver.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=date(2026, 5, 4),
+        end_date=date(2026, 5, 10),
+        status="draft",
+    )
+    _create_doctor(session, doctor_id="doc-a", name="Dr. A")
+    _create_doctor(session, doctor_id="doc-b", name="Dr. B")
+    _create_assignment(
+        session,
+        version_id=ver.id,
+        doctor_id="doc-a",
+        service_date=date(2026, 5, 4),
+        area_id="area-1",
+    )
+    _create_assignment(
+        session,
+        version_id=ver.id,
+        doctor_id="doc-a",
+        service_date=date(2026, 5, 5),
+        area_id="area-1",
+    )
+    _create_assignment(
+        session,
+        version_id=ver.id,
+        doctor_id="doc-b",
+        service_date=date(2026, 5, 6),
+        area_id="area-1",
+    )
+
+    response = client.get("/api/calendars/cal-week-counts/weeks")
+
+    assert response.status_code == 200
+    counts = response.json()[0]["doctor_assignment_counts"]
+    assert counts == [
+        {"doctor_id": "doc-a", "doctor_name": "Dr. A", "count": 2},
+        {"doctor_id": "doc-b", "doctor_name": "Dr. B", "count": 1},
+    ]
 
 
 def test_approve_week_endpoint(client, session):

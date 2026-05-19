@@ -1,10 +1,18 @@
 const configuredBase = import.meta.env.VITE_API_URL;
 const BASE = configuredBase || `${window.location.protocol}//${window.location.hostname}:8999`;
+const TOKEN_STORAGE_KEY = "auth_token";
 
-let token: string | null = null;
+let token: string | null = localStorage.getItem(TOKEN_STORAGE_KEY);
 
-export function setToken(t: string | null) { token = t; }
-export function getToken() { return token; }
+export function setToken(t: string | null) {
+  token = t;
+  if (t) localStorage.setItem(TOKEN_STORAGE_KEY, t);
+  else localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+export function getToken() {
+  token = token ?? localStorage.getItem(TOKEN_STORAGE_KEY);
+  return token;
+}
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}, responseType?: "blob"): Promise<T> {
   const headers: Record<string, string> = {

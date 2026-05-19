@@ -502,6 +502,7 @@ class AssignmentService:
                 "version_is_approved",
                 "Cannot modify an approved calendar version.",
             )
+        self._ensure_week_is_editable(version_id=version_id, service_date=date)
 
         # 3. Load doctor.
         doctor = self.doctor_repo.get_by_id(doctor_id)
@@ -582,6 +583,10 @@ class AssignmentService:
                 "version_is_approved",
                 "Cannot modify an approved calendar version.",
             )
+        self._ensure_week_is_editable(
+            version_id=assignment.calendar_version_id,
+            service_date=assignment.service_date,
+        )
 
         service_area_name = self._service_area_name(assignment.service_area_id)
         should_notify = self._is_unlocked_approved_version(version)
@@ -632,6 +637,10 @@ class AssignmentService:
                 "version_is_approved",
                 "Cannot modify an approved calendar version.",
             )
+        self._ensure_week_is_editable(
+            version_id=assignment.calendar_version_id,
+            service_date=assignment.service_date,
+        )
 
         # Load new doctor.
         doctor = self.doctor_repo.get_by_id(new_doctor_id)
@@ -700,6 +709,14 @@ class AssignmentService:
             if area.id == service_area_id or area.code == service_area_id:
                 return area.display_name
         return service_area_id
+
+    def _ensure_week_is_editable(self, *, version_id: str, service_date: date) -> None:
+        week = self.calendar_repo.get_week_for_date(version_id, service_date)
+        if week is not None and week.status == "approved":
+            raise CalendarServiceError(
+                "week_locked",
+                "No se puede modificar una semana aprobada. Desbloquea la semana primero.",
+            )
 
     def _notify_assignment_added(
         self,

@@ -13,7 +13,7 @@ export interface GenerationResponse {
   calendar_id: string;
   month: number;
   year: number;
-  calendar_status: "draft" | "approved";
+  calendar_status: "draft" | "partial" | "approved";
   generation_mode: CalendarRead["generation_mode"];
   review_required: boolean;
   total_slots: number;
@@ -26,7 +26,7 @@ export interface CalendarRead {
   id: string;
   year: number;
   month: number;
-  status: "draft" | "approved";
+  status: "draft" | "partial" | "approved";
   generation_mode: "manual" | "assisted_auto" | "scheduled_auto";
   created_by: string | null;
   approved_by: string | null;
@@ -81,6 +81,7 @@ export interface WeekRead {
   end_date: string;
   status: string;
   assignment_count: number;
+  doctor_assignment_counts: { doctor_id: string; doctor_name: string; count: number }[];
   approved_by: string | null;
   approved_at: string | null;
 }
