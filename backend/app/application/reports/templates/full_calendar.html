@@ -1,45 +1,267 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4 landscape; margin: 0; }
 
-{% block content %}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-<!-- TITLE -->
-<div class="title-block">
-  <div class="title-text">{{ title }}</div>
-</div>
+  html, body {
+    width: 297mm; height: 210mm;
+    background: #ffffff;
+    font-family: Arial, 'Helvetica Neue', sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    overflow: hidden;
+  }
 
-<!-- SUMMARY -->
-<div class="summary-line">
-  Total Servicios: <strong>{{ grid_data['summary']['total_services'] }}</strong>
-  &nbsp;|&nbsp; Huecos: <strong>{{ grid_data['summary']['gaps'] }}</strong>
-  &nbsp;|&nbsp; Médicos Activos: <strong>{{ grid_data['summary']['active_doctors'] }}</strong>
-  &nbsp;|&nbsp; Cobertura: <strong>{{ grid_data['summary']['coverage_pct'] }}%</strong>
-</div>
+  .page { overflow: visible; }
 
-<!-- CALENDAR GRID -->
-<div class="table-container">
-  <table>
+  .stripe-top { height: 2px; background: #1a4a7a; }
+  .stripe-bottom {
+    height: 3px; background: #1a4a7a;
+    position: fixed; bottom: 0; left: 0; right: 0;
+  }
+
+  .page {
+    width: 297mm; height: 210mm;
+    padding: 0.3mm 4mm 0.3mm;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 1px;
+    border-bottom: 1px solid #c8d6e0;
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+  .header-logo {
+    width: 96px; height: 80px;
+    flex-shrink: 0;
+  }
+  .header-logo img { width: 100%; height: 100%; object-fit: contain; }
+  .header-text { flex: 1; text-align: center; }
+  .header-subdir {
+    font-size: 8pt; font-weight: 700;
+    color: #1a2744; letter-spacing: 2.5px;
+    text-transform: uppercase;
+  }
+  .header-hospital {
+    font-size: 12pt; font-weight: 700;
+    color: #1a2744;
+  }
+
+  /* TITLE */
+  .title-block {
+    text-align: center;
+    padding: 1px 0;
+    border-bottom: 1px solid #c8d6e0;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+  }
+  .title-text {
+    font-size: 11pt; font-weight: 700;
+    color: #1a2744; letter-spacing: 0.5px;
+  }
+
+  /* CALENDAR TABLE */
+  table.cal {
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  table.cal thead th {
+    background: #1a2744;
+    color: #ffffff;
+    font-size: 9pt;
+    font-weight: 700;
+    text-align: center;
+    padding: 1px 0;
+    border: 1px solid #2c3e50;
+    letter-spacing: 0.8px;
+  }
+  table.cal tbody td {
+    border: 1px solid #c8d6e0;
+    padding: 1px 2px;
+    font-size: 9pt;
+    vertical-align: top;
+    width: 14.28%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  table.cal tbody td.weekend { background: #f8f6f0; }
+  table.cal tbody td.outside-month { background: #fafaf9; }
+
+  .day-num {
+    font-size: 13pt;
+    font-weight: 700;
+    color: #1a2744;
+    margin-bottom: 0;
+  }
+  .day-num--outside {
+    color: #cbd5e1;
+    font-size: 11pt;
+  }
+  .weekend .day-num { color: #8b7e6b; }
+  .weekend .day-num--outside { color: #cbd5e1; }
+
+  .assignment {
+    font-size: 9pt;
+    line-height: 1.15;
+    color: #555555;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Colored bullet */
+  .area-dot {
+    display: inline-block;
+    width: 7pt; height: 7pt;
+    border-radius: 50%;
+    margin-right: 2px;
+    vertical-align: middle;
+  }
+  .cal-gap { color: #c0392b; font-style: italic; }
+  .area-dot--empty { opacity: 0.3; }
+  .rank-label {
+    font-size: 7.5pt;
+    font-weight: 600;
+    color: #1a2744;
+    display: inline;
+  }
+
+  /* LEGEND */
+  .legend-bar {
+    text-align: center;
+    padding: 2px 0 1px;
+    font-size: 8pt;
+    color: #555555;
+    border-top: 1px solid #c8d6e0;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .legend-item {
+    display: inline-block;
+    margin: 0 8px;
+    white-space: nowrap;
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 10pt; height: 10pt;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .legend-label {
+    vertical-align: middle;
+    font-size: 8pt;
+    color: #555555;
+  }
+
+  /* SUMMARY */
+  .footer-bar {
+    text-align: center;
+    padding: 2px 0 1px;
+    font-size: 8.5pt;
+    color: #555555;
+    border-top: 1px solid #c8d6e0;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+  .footer-bar span { margin: 0 12px; }
+  .footer-bar strong { color: #1a2744; }
+  .footer-date { color: #999999; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="stripe-top"></div>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-logo">
+      {% if logo_path %}
+      <img src="file://{{ logo_path }}" alt="Logo">
+      {% elif logo_data_uri %}
+      <img src="{{ logo_data_uri }}" alt="Logo">
+      {% endif %}
+    </div>
+    <div class="header-text">
+      <div class="header-subdir">Subdirección de Recursos Humanos</div>
+      <div class="header-hospital">HOSPITAL MILITAR UNIVERSITARIO DOCENTE, FARD "DR. RAMÓN DE LARA"</div>
+    </div>
+  </div>
+
+  <!-- TITLE -->
+  <div class="title-block">
+    <div class="title-text">{{ title }}</div>
+  </div>
+
+  <!-- CALENDAR TABLE -->
+  <table class="cal">
     <thead>
       <tr>
-        <th style="width:6%;">Día</th>
-        <th style="width:6%;">Sem.</th>
-        {% for area in grid_data["areas"] %}
-        <th>{{ area }}</th>
+        {% for day_name in day_names %}
+        <th>{{ day_name }}</th>
         {% endfor %}
       </tr>
     </thead>
     <tbody>
-      {% for row in grid_data["rows"] %}
-      <tr class="{% if row['day_name'] in ('SABADO', 'DOMINGO') %}row-weekend{% endif %}">
-        <td style="text-align:center;">{{ row["day"] }}</td>
-        <td style="text-align:center;font-size:6.5pt;">{{ row["day_name"][:3] }}</td>
-        {% for area in grid_data["areas"] %}
-          {% set cell_val = row["cells"].get(area, "—") %}
-          <td class="{% if cell_val == '—' %}cell-gap{% endif %}">{{ cell_val }}</td>
+      {% for week in calendar_weeks %}
+      <tr>
+        {% for day_data in week %}
+          <td class="{% if day_data['day_name'] in ('SÁBADO', 'DOMINGO') %}weekend{% endif %}{% if not day_data.get('is_current_month', true) %} outside-month{% endif %}">
+            <div class="day-num{% if not day_data.get('is_current_month', true) %} day-num--outside{% endif %}">{{ day_data['day'] }}</div>
+            {% for assgn in day_data['assignments'] %}
+            {% if day_data.get('is_current_month', true) or assgn['doctor'] != '—' %}
+            <div class="assignment{% if assgn['doctor'] == '—' %} cal-gap{% endif %}">
+              <span class="area-dot{% if assgn['doctor'] == '—' %} area-dot--empty{% endif %}" style="background-color: {{ area_colors.get(assgn['area'], '#6b7280') }};"></span>
+              {% if assgn['doctor'] != '—' %}<span class="rank-label">{{ assgn['doctor_rank'] }} </span>{% endif %}
+              {{ assgn['doctor'] }}
+            </div>
+            {% endif %}
+            {% endfor %}
+          </td>
         {% endfor %}
       </tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <!-- LEGEND -->
+  <div class="legend-bar">
+    {% for area_name in areas %}
+    <span class="legend-item">
+      <span class="legend-dot" style="background-color: {{ area_colors.get(area_name, '#6b7280') }};"></span>
+      <span class="legend-label">{{ area_name }}</span>
+    </span>
+    {% endfor %}
+  </div>
+
+  <!-- SUMMARY -->
+  {% if summary %}
+  <div class="footer-bar">
+    <span>Servicios: <strong>{{ summary.get('total_services', '-') }}</strong></span>
+    <span>Huecos: <strong>{{ summary.get('gaps', '-') }}</strong></span>
+    <span>Médicos: <strong>{{ summary.get('active_doctors', '-') }}</strong></span>
+    <span>Cobertura: <strong>{{ summary.get('coverage_pct', '-') }}%</strong></span>
+    <span class="footer-date">{{ date_line }}</span>
+  </div>
+  {% endif %}
+
 </div>
 
-{% endblock %}
+<div class="stripe-bottom"></div>
+
+</body>
+</html>

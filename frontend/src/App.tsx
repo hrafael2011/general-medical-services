@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { FormEvent, useState } from "react";
-import { KeyRound, LogIn, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LogIn, ShieldCheck } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { changePassword } from "./api/auth";
 import { Sidebar } from "./components/Sidebar";
@@ -66,6 +66,7 @@ function LoginPage() {
   const [email, setEmail] = useState("admin@turnos.com");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("Ingresa con tu usuario asignado.");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -124,14 +125,14 @@ function LoginPage() {
         {step === "login" && (
           <form className="auth-form" onSubmit={handleLogin}>
             <label>Correo<input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" /></label>
-            <label>Contraseña<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /></label>
+            <label>Contraseña<span className="password-wrapper"><input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /><button type="button" className="password-toggle" onClick={() => setShowPassword(p => !p)} tabIndex={-1} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
             <button type="submit" disabled={isLoading}><LogIn size={18} />{isLoading ? "Entrando…" : "Entrar"}</button>
           </form>
         )}
 
         {step === "change-password" && (
           <form className="auth-form" onSubmit={handlePasswordChange}>
-            <label>Nueva contraseña<input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" /></label>
+            <label>Nueva contraseña<span className="password-wrapper"><input type={showPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" /><button type="button" className="password-toggle" onClick={() => setShowPassword(p => !p)} tabIndex={-1} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
             <button type="submit" disabled={isLoading}><KeyRound size={18} />{isLoading ? "Cambiando…" : "Cambiar contraseña"}</button>
           </form>
         )}

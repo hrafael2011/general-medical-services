@@ -10,7 +10,7 @@ import base64
 import io
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -226,22 +226,170 @@ def generate_workload_pdf(data: dict) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# Calendar grid helper
+# ---------------------------------------------------------------------------
+
+
+def _build_calendar_weeks(grid_data: dict) -> list[list[dict | None]]:
+    """Build a calendar matrix: list of weeks, each week is 7 day slots (Mon-Sun).
+
+    Uses the same logic as compute_weeks: walks from the Monday of the week
+    containing the 1st through the Sunday of the last overlapping week,
+    showing real dates from adjacent months instead of padding cells.
+
+    Each day slot is either None or:
+    {
+        "day": int,
+        "day_name": str,
+        "assignments": [{"area": str, "doctor": str, "doctor_rank": str}, ...],
+        "is_current_month": bool,
+    }
+    """
+    from calendar import monthrange
+    from datetime import timedelta
+
+    month = grid_data["month"]
+    year = grid_data["year"]
+    last_day = monthrange(year, month)[1]
+
+    # Build lookup: day_number -> {day_name, cells}
+    rows_by_day: dict[int, dict] = {}
+    for row in grid_data["rows"]:
+        rows_by_day[row["day"]] = row
+
+    areas = grid_data.get("areas", [])
+    area_codes = grid_data.get("area_codes", [])
+    adjacent_cells = grid_data.get("adjacent_cells", {})  # "YYYY-MM-DD" -> area_code -> doctor_info
+
+    # English-to-Spanish day name mapping for adjacent-month days
+    _DAY_ES = {
+        "MONDAY": "LUNES", "TUESDAY": "MARTES", "WEDNESDAY": "MIÉRCOLES",
+        "THURSDAY": "JUEVES", "FRIDAY": "VIERNES", "SATURDAY": "SÁBADO", "SUNDAY": "DOMINGO",
+    }
+
+    # Determine the Monday of the week containing the 1st
+    first_day_dt = date(year, month, 1)
+    dow = first_day_dt.weekday()  # Monday=0 ... Sunday=6
+    if dow == 0:
+        first_monday = first_day_dt
+    elif dow == 6:
+        # Sunday 1st → skip to next Monday
+        first_monday = first_day_dt + timedelta(days=1)
+    else:
+        first_monday = first_day_dt - timedelta(days=dow)
+
+    weeks: list[list[dict | None]] = []
+    current = first_monday
+
+    def date_val(d: date) -> int:
+        return d.year * 10000 + d.month * 100 + d.day
+
+    while current.month == month or date_val(current) <= date_val(first_day_dt):
+        week_days: list[dict | None] = []
+        for i in range(7):
+            d = current + timedelta(days=i)
+            is_current = d.month == month
+            if is_current and 1 <= d.day <= last_day:
+                row = rows_by_day.get(d.day, {"day": d.day, "day_name": "", "cells": {}})
+                cells = row.get("cells", {})
+                assignments = []
+                for area in areas:
+                    cell_value = cells.get(area, {"name": "—", "rank": ""})
+                    if isinstance(cell_value, str):
+                        cell_value = {"name": cell_value, "rank": ""}
+                    assignments.append({
+                        "area": area,
+                        "doctor": cell_value["name"],
+                        "doctor_rank": cell_value["rank"],
+                    })
+                week_days.append({
+                    "day": d.day,
+                    "day_name": row.get("day_name", d.strftime("%A").upper()),
+                    "assignments": assignments,
+                    "is_current_month": True,
+                })
+            else:
+                # Adjacent-month day: look up real assignments from the adjacent month's calendar
+                date_str = d.isoformat()
+                day_cells = adjacent_cells.get(date_str, {})
+                adjacent_assignments = []
+                for idx, area in enumerate(areas):
+                    area_code = area_codes[idx] if idx < len(area_codes) else area
+                    cell_value = day_cells.get(area_code)
+                    if cell_value:
+                        adjacent_assignments.append({
+                            "area": area,
+                            "doctor": cell_value["name"],
+                            "doctor_rank": cell_value["rank"],
+                        })
+                    else:
+                        adjacent_assignments.append({
+                            "area": area,
+                            "doctor": "—",
+                            "doctor_rank": "",
+                        })
+                week_days.append({
+                    "day": d.day,
+                    "day_name": _DAY_ES.get(d.strftime("%A").upper(), d.strftime("%A").upper()),
+                    "assignments": adjacent_assignments,
+                    "is_current_month": False,
+                })
+        weeks.append(week_days)
+        current += timedelta(days=7)
+
+    return weeks
+
+
+# ---------------------------------------------------------------------------
+# Area color mapping (mirrors frontend AREA_COLOR_MAP)
+# ---------------------------------------------------------------------------
+
+_AREA_COLORS: dict[str, str] = {
+    "Emergencia": "#dc2626",
+    "Pista": "#2563eb",
+    "Disponible": "#16a34a",
+}
+
+
+def _resolve_area_color(area_name: str) -> str:
+    """Return the color for a given area display name."""
+    return _AREA_COLORS.get(area_name, "#6b7280")
+
+
+# ---------------------------------------------------------------------------
 # Full Calendar PDF
 # ---------------------------------------------------------------------------
 
 
 def generate_full_calendar_pdf(grid_data: dict) -> bytes:
-    """Generate full month calendar grid PDF with premium styling."""
+    """Generate full month calendar grid PDF with premium styling.
+
+    Renders a real calendar layout (7 columns Mon-Sun) with doctor
+    assignments in each day cell. No signature block.
+    """
     date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
     month_name = MONTH_NAMES[grid_data["month"] - 1]
     title = f"CALENDARIO DE SERVICIOS — {month_name.upper()} {grid_data['year']}"
 
+    calendar_weeks = _build_calendar_weeks(grid_data)
+    areas = grid_data.get("areas", [])
+    summary = grid_data.get("summary", {})
+
+    # Build color map for all areas in this calendar
+    area_colors = {a: _resolve_area_color(a) for a in areas}
+
     context = {
         "date_line": date_line,
         "title": title,
-        "grid_data": grid_data,
+        "calendar_weeks": calendar_weeks,
+        "areas": areas,
+        "area_colors": area_colors,
+        "summary": summary,
+        "month": grid_data["month"],
+        "year": grid_data["year"],
         "logo_data_uri": _get_logo_data_uri(),
-        **_signature_context(),
+        "logo_path": _get_logo_path(),
+        "day_names": ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"],
     }
 
     return _render_to_pdf("full_calendar.html", context)

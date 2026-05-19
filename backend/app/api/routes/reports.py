@@ -192,10 +192,14 @@ def export_weekly_list_pdf(
     week = service.calendar_repo.get_week_by_id(week_id)
     if week is None:
         raise HTTPException(status_code=404, detail=f"Week {week_id} not found")
+    # Get the calendar's actual month (week.start_date may be in adjacent month)
+    cal = service.calendar_repo.get_calendar_by_id(calendar_id)
+    if cal is None:
+        raise HTTPException(status_code=404, detail=f"Calendar {calendar_id} not found")
     try:
         pdf_bytes = service.build_weekly_schedule(
-            year=week.start_date.year,
-            month=week.start_date.month,
+            year=cal.year,
+            month=cal.month,
             week_id=week_id,
         )
     except ValueError as exc:

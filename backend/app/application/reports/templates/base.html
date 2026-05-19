@@ -39,15 +39,15 @@
   :root {
     --navy: #1a2744;
     --navy-light: #2c3e50;
-    --gold: #c9a94e;
-    --gold-light: #e4c97a;
+    --accent: #1a4a7a;
+    --accent-light: #2a6a9a;
     --white-warm: #fafaf7;
     --white: #ffffff;
     --grey: #555555;
     --grey-light: #999999;
-    --border: #e8dfc8;
-    --border-light: #f0ebd8;
-    --row-alt: #f8f6f0;
+    --border: #c8d6e0;
+    --border-light: #dce6ee;
+    --row-alt: #f0f4f8;
     --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
     --font-serif: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
   }
@@ -90,12 +90,12 @@
      Gold Stripes
      =================================================================== */
   .gold-stripe-top {
-    height: 6px;
-    background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-light) 50%, var(--accent) 100%);
   }
   .gold-stripe-bottom {
-    height: 4px;
-    background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-light) 50%, var(--accent) 100%);
     position: fixed;
     bottom: 0;
     left: 0;
@@ -108,7 +108,7 @@
   .page {
     width: 297mm;
     min-height: 210mm;
-    padding: 12mm 18mm 24mm;
+    padding: 4mm 12mm 14mm;
     position: relative;
   }
 
@@ -137,34 +137,39 @@
   .header {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding-bottom: 10px;
+    gap: 10px;
+    padding-bottom: 2px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 8px;
+    margin-bottom: 2px;
     position: relative;
     z-index: 1;
   }
   .header-logo {
-    width: 58px;
-    height: 54px;
+    width: 148px;
+    height: 128px;
     flex-shrink: 0;
-    border-radius: 6px;
-    background: linear-gradient(135deg, var(--navy), var(--navy-light));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--gold);
-    font-family: var(--font-sans);
-    font-size: 8pt;
-    font-weight: 700;
-    text-align: center;
-    line-height: 1.15;
+    overflow: hidden;
   }
   .header-logo img {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    border-radius: 6px;
+    border-radius: 4px;
+  }
+  .header-logo-placeholder {
+    width: 148px; height: 128px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, var(--navy), var(--navy-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 7pt;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.15;
+    flex-shrink: 0;
   }
   .header-text {
     flex: 1;
@@ -172,7 +177,7 @@
   }
   .header-subdir {
     font-family: var(--font-sans);
-    font-size: 6.5pt;
+    font-size: 8pt;
     font-weight: 700;
     color: var(--navy);
     letter-spacing: 2.5px;
@@ -180,29 +185,26 @@
   }
   .header-hospital {
     font-family: var(--font-sans);
-    font-size: 9pt;
+    font-size: 12pt;
     font-weight: 700;
     color: var(--navy);
-    margin-top: 1px;
   }
   .header-base {
     font-family: var(--font-serif);
-    font-size: 6.5pt;
+    font-size: 7pt;
     color: var(--grey);
-    margin-top: 1px;
   }
   .header-lema {
     font-family: var(--font-serif);
     font-size: 7pt;
     font-style: italic;
-    color: var(--gold);
+    color: var(--accent);
     font-weight: 600;
-    margin-top: 2px;
   }
   .header-accent {
     width: 2px;
-    height: 48px;
-    background: var(--gold);
+    height: 72px;
+    background: var(--accent);
     border-radius: 1px;
     flex-shrink: 0;
   }
@@ -214,8 +216,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 7pt;
-    margin-bottom: 8px;
+    font-size: 6.5pt;
+    margin-bottom: 2px;
     position: relative;
     z-index: 1;
   }
@@ -224,8 +226,8 @@
     font-weight: 600;
     color: var(--navy);
   }
-  .date-location .gold-bullet {
-    color: var(--gold);
+  .date-location .accent-bullet {
+    color: var(--accent);
     margin-right: 4px;
   }
   .date-value {
@@ -235,20 +237,20 @@
   }
   .title-block {
     text-align: center;
-    padding: 8px 0;
+    padding: 2px 0;
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
-    margin-bottom: 10px;
+    margin-bottom: 3px;
     position: relative;
     z-index: 1;
   }
   .title-text {
     font-family: var(--font-sans);
-    font-size: 8.5pt;
+    font-size: 7.5pt;
     font-weight: 700;
     color: var(--navy);
     letter-spacing: 0.3px;
-    line-height: 1.35;
+    line-height: 1.25;
   }
 
   /* ===================================================================
@@ -257,6 +259,12 @@
   .table-container {
     position: relative;
     z-index: 1;
+  }
+  .bordered-table tbody td {
+    border-bottom: 1px solid var(--border-light);
+  }
+  .bordered-table tbody tr:nth-child(even) td {
+    background: var(--row-alt);
   }
   table {
     width: 100%;
@@ -269,26 +277,30 @@
     font-family: var(--font-sans);
     font-size: 7pt;
     font-weight: 700;
-    padding: 5px 10px;
+    padding: 4px 8px;
     text-align: left;
-    letter-spacing: 0.8px;
-    border-bottom: 2px solid var(--gold);
+    letter-spacing: 0.6px;
+    border-bottom: 2px solid var(--accent);
   }
   tbody td {
-    padding: 4px 10px;
-    border-bottom: 1px solid var(--border-light);
+    padding: 3px 8px;
     font-family: var(--font-serif);
     font-size: 7.5pt;
     vertical-align: middle;
-  }
-  tbody tr:nth-child(even) td {
-    background: var(--row-alt);
   }
   .day-cell {
     font-family: var(--font-sans);
     font-weight: 700;
     color: var(--navy);
-    border-right: 1px solid var(--border);
+    font-size: 8pt;
+    border-right: 1px solid var(--border-light);
+  }
+
+  /* Day-grouped alternating backgrounds — no inner lines, only between days */
+  .day-white td { background: #ffffff; }
+  .day-accent td { background: #eaf0f8; }
+  .day-divider td {
+    border-bottom: 1px solid var(--accent) !important;
   }
 
   /* ===================================================================
@@ -297,8 +309,8 @@
   .signature-block {
     display: flex;
     justify-content: space-between;
-    gap: 40px;
-    margin-top: 18px;
+    gap: 36px;
+    margin-top: 70px;
     position: relative;
     z-index: 1;
   }
@@ -309,8 +321,8 @@
   .signature-line {
     border-top: 1px solid var(--navy);
     width: 65%;
-    margin: 0 auto 5px;
-    padding-top: 2px;
+    margin: 0 auto 4px;
+    padding-top: 1px;
   }
   .signature-name {
     font-family: var(--font-sans);
@@ -338,8 +350,8 @@
     border-bottom: 1px solid var(--border);
     letter-spacing: 0.5px;
   }
-  .section-title .gold-accent {
-    color: var(--gold);
+  .section-title .accent-mark {
+    color: var(--accent);
   }
 
   /* ===================================================================
@@ -354,7 +366,7 @@
     z-index: 1;
   }
   .summary-line strong {
-    color: var(--gold);
+    color: var(--accent);
   }
 
   /* ===================================================================
@@ -408,15 +420,13 @@
 
   <!-- HEADER -->
   <div class="header">
-    <div class="header-logo">
-      {% if logo_path %}
-      <img src="file://{{ logo_path }}" alt="Logo">
-      {% elif logo_data_uri %}
-      <img src="{{ logo_data_uri }}" alt="Logo">
-      {% else %}
-      FARD<br>HOSP
-      {% endif %}
-    </div>
+    {% if logo_path %}
+    <div class="header-logo"><img src="file://{{ logo_path }}" alt="Logo"></div>
+    {% elif logo_data_uri %}
+    <div class="header-logo"><img src="{{ logo_data_uri }}" alt="Logo"></div>
+    {% else %}
+    <div class="header-logo-placeholder">FARD<br>HOSP</div>
+    {% endif %}
     <div class="header-text">
       <div class="header-subdir">Subdirección de Recursos Humanos</div>
       <div class="header-hospital">HOSPITAL MILITAR UNIVERSITARIO DOCENTE, FARD "DR. RAMÓN DE LARA"</div>
@@ -428,7 +438,7 @@
 
   <!-- DATE ROW -->
   <div class="date-row">
-    <span class="date-location"><span class="gold-bullet">■</span> SANTO DOMINGO, D.N.</span>
+    <span class="date-location"><span class="accent-bullet">■</span> SANTO DOMINGO, D.N.</span>
     <span class="date-value">{{ date_line }}</span>
   </div>
 

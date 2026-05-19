@@ -94,6 +94,39 @@ input {
   font: inherit;
 }
 
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-wrapper input {
+  padding-right: 40px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+  min-height: unset;
+}
+
+.password-toggle:hover {
+  color: #334155;
+  background: #f1f5f9;
+}
+
 textarea {
   width: 100%;
   min-height: 84px;
@@ -1172,6 +1205,11 @@ select {
   margin-bottom: 2px;
 }
 
+.calendar-day-number--outside {
+  color: #cbd5e1;
+  font-size: 0.72rem;
+}
+
 .calendar-area-row {
   display: flex;
   align-items: baseline;
@@ -1398,4 +1436,13 @@ select {
 
 .av-recurring-chip--selected:hover {
   background: #1d4ed8;
+}
+
+/* ===== Spin animation for loading icons ===== */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 1s linear infinite;
 }

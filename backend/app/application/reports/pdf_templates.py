@@ -72,8 +72,8 @@ def _get_logo() -> Image | None:
     path = os.path.abspath(_LOGO_PATH)
     if os.path.isfile(path):
         try:
-            img = Image(path, width=3.2 * cm, height=2.8 * cm)
-            img.hAlign = "LEFT"
+            img = Image(path, width=4.8 * cm, height=4.5 * cm)
+            img.hAlign = "CENTER"
             return img
         except Exception:
             return None
@@ -111,36 +111,37 @@ _STYLE_SUBDIR = ParagraphStyle(
 
 _STYLE_INSTITUCION = ParagraphStyle(
     "Institucion", parent=_styles["Normal"],
-    fontSize=9, leading=11, alignment=TA_CENTER,
+    fontSize=10, leading=12, alignment=TA_CENTER,
     fontName="Helvetica-Bold",
 )
 
 _STYLE_LEMA = ParagraphStyle(
     "Lema", parent=_styles["Normal"],
-    fontSize=8, leading=10, alignment=TA_CENTER,
+    fontSize=9, leading=11, alignment=TA_CENTER,
+    fontName="Helvetica-Oblique",
 )
 
 _STYLE_DATE = ParagraphStyle(
     "DateLine", parent=_styles["Normal"],
-    fontSize=8, leading=10, alignment=TA_LEFT,
+    fontSize=9, leading=12, alignment=TA_LEFT,
 )
 
 _STYLE_TITLE = ParagraphStyle(
     "ReportTitle", parent=_styles["Normal"],
-    fontSize=10, leading=13, alignment=TA_CENTER,
+    fontSize=11, leading=14, alignment=TA_CENTER,
     fontName="Helvetica-Bold",
-    spaceBefore=4, spaceAfter=8,
+    spaceBefore=4, spaceAfter=10,
 )
 
 _STYLE_TABLE_HEADER = ParagraphStyle(
     "TableHeader", parent=_styles["Normal"],
-    fontSize=7.5, leading=9,
+    fontSize=8, leading=10,
     fontName="Helvetica-Bold",
 )
 
 _STYLE_TABLE_CELL = ParagraphStyle(
     "TableCell", parent=_styles["Normal"],
-    fontSize=7.5, leading=9,
+    fontSize=8, leading=10,
 )
 
 _STYLE_SECTION = ParagraphStyle(
@@ -194,19 +195,35 @@ def _build_header_story(date_line: str, title: str) -> list[object]:
     """Build the institutional header: logo + text block + date + title."""
     story: list[object] = []
 
+    logo_col = 5.5 * cm
+
     # Top area: logo on left, header text centered
     logo = _get_logo()
     if logo:
-        # We create a table with logo on left and header text on right
-        header_text = (
-            f"<b>{_HEADER_SUBDIR}</b><br/>"
-            f"<b>{_HEADER_HOSPITAL}</b><br/>"
-            f"<b>{_HEADER_BASE}</b><br/>"
-            f"{_HEADER_LEMA}"
+        # Build header text with separate styled paragraphs
+        header_paras: list[Paragraph] = [
+            Paragraph(_HEADER_SUBDIR, _STYLE_SUBDIR),
+            Paragraph(_HEADER_HOSPITAL, _STYLE_INSTITUCION),
+            Paragraph(_HEADER_BASE, _STYLE_INSTITUCION),
+            Paragraph(_HEADER_LEMA, _STYLE_LEMA),
+        ]
+        # Nested table to stack the header paragraphs vertically
+        header_text_table = Table(
+            [[p] for p in header_paras],
+            colWidths=[CONTENT_W - logo_col],
         )
+        header_text_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 1),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ]))
+
         header_table = Table(
-            [[logo, Paragraph(header_text, _STYLE_INSTITUCION)]],
-            colWidths=[3.8 * cm, CONTENT_W - 3.8 * cm],
+            [[logo, header_text_table]],
+            colWidths=[logo_col, CONTENT_W - logo_col],
         )
         header_table.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -352,7 +369,7 @@ def generate_weekly_schedule_pdf(
 
     title = (
         f"LISTA DEL PERSONAL MEDICO GENERAL, QUE SE ENCUENTRA DE SERVICIO "
-        f"LOS DÍAS INDICADOS AL LADO DE SUS RESPECTIVOS NOMBRE:"
+        f"LOS DÍAS INDICADOS AL LADO DE SUS RESPECTIVOS NOMBRE: "
         f"DEL MES DE {month_name.upper()} DEL AÑO {year}"
     )
 
@@ -380,7 +397,7 @@ def generate_weekly_schedule_pdf(
             else:
                 schedule_rows.append(["", rank_name, location])
 
-    col_widths = [3.2 * cm, 7.5 * cm, 4.5 * cm]
+    col_widths = [3.5 * cm, 8.5 * cm, 5.0 * cm]
     story.append(_make_table(schedule_rows, col_widths))
 
     # Signature block
@@ -742,7 +759,7 @@ def generate_full_calendar_pdf(grid_data: dict) -> bytes:
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("FONTSIZE", (0, 0), (-1, -1), 6),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
     ]
 
     # Weekend highlighting

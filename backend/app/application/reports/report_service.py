@@ -3,7 +3,7 @@ ReportService — generates Excel, JSON and PDF reports.
 Reads from existing repos; no writes to DB.
 """
 import io
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
@@ -621,18 +621,31 @@ class ReportService:
                 "location": areas.get(a.service_area_id, a.service_area_id),
             })
 
-        # Build schedule_data in day order
+        # Build schedule_data — if week_id is given, walk the full Mon-Sun date range
+        # to include cross-boundary days from adjacent months
         schedule_data: list[dict] = []
-        last_day = monthrange(year, month)[1]
-        for day in range(1, last_day + 1):
-            if day in day_assignments:
-                date_obj = date(year, month, day)
-                day_name = DAY_NAMES[date_obj.weekday()]
-                schedule_data.append({
-                    "day_name": day_name,
-                    "day_number": day,
-                    "assignments": day_assignments[day],
-                })
+        if week_id and week:
+            current = week.start_date
+            while current <= week.end_date:
+                if current.day in day_assignments:
+                    day_name = DAY_NAMES[current.weekday()]
+                    schedule_data.append({
+                        "day_name": day_name,
+                        "day_number": current.day,
+                        "assignments": day_assignments[current.day],
+                    })
+                current += timedelta(days=1)
+        else:
+            last_day = monthrange(year, month)[1]
+            for day in range(1, last_day + 1):
+                if day in day_assignments:
+                    date_obj = date(year, month, day)
+                    day_name = DAY_NAMES[date_obj.weekday()]
+                    schedule_data.append({
+                        "day_name": day_name,
+                        "day_number": day,
+                        "assignments": day_assignments[day],
+                    })
 
         if not schedule_data:
             raise ValueError("No hay asignaciones para el período")
@@ -658,12 +671,25 @@ class ReportService:
             raise ValueError(f"No version found for calendar {calendar.id}")
 
         assignments = self.calendar_repo.list_assignments(version.id)
-        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
+
+        # Load doctor info (name + rank)
+        rank_map: dict[str, str] = {}
+        if self.catalog_repo:
+            for r in self.catalog_repo.list_ranks():
+                rank_map[r.id] = r.abbreviation or r.name
+
+        doctor_info: dict[str, dict[str, str]] = {}
+        for d in self.doctor_repo.list_all():
+            doctor_info[d.id] = {
+                "name": d.name,
+                "rank": rank_map.get(d.rank_id, "") if d.rank_id else "",
+            }
+
         area_list = self.calendar_repo.list_service_areas()
         areas = sorted(area_list, key=lambda a: a.code)
 
-        # Build cell grid: {day: {area_code: doctor_name}}
-        cell_map: dict[int, dict[str, str]] = {}
+        # Build cell grid: {day: {area_code: {name: str, rank: str}}}
+        cell_map: dict[int, dict[str, dict]] = {}
         for a in assignments:
             d = a.service_date.day
             if d not in cell_map:
@@ -675,9 +701,50 @@ class ReportService:
                     break
             if not area_name:
                 area_name = a.service_area_id
-            cell_map[d][area_name] = doctors.get(a.doctor_id, a.doctor_id)
+            info = doctor_info.get(a.doctor_id, {"name": a.doctor_id, "rank": ""})
+            cell_map[d][area_name] = info
 
-        DAY_NAMES = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"]
+        # Load assignments from adjacent months for cross-boundary days
+        adjacent_cells: dict[str, dict[str, dict]] = {}  # "YYYY-MM-DD" -> area_code -> doctor_info
+
+        def _load_month_assignments(y: int, m: int) -> None:
+            adj_cal = self.calendar_repo.get_calendar_by_period(y, m)
+            if adj_cal is None:
+                return
+            adj_version = self.calendar_repo.get_latest_version(adj_cal.id)
+            if adj_version is None:
+                return
+            for a in self.calendar_repo.list_assignments(adj_version.id):
+                date_str = a.service_date.isoformat()
+                if date_str not in adjacent_cells:
+                    adjacent_cells[date_str] = {}
+                area_code = ""
+                for area in areas:
+                    if area.id == a.service_area_id:
+                        area_code = area.code
+                        break
+                if not area_code:
+                    area_code = a.service_area_id
+                info = doctor_info.get(a.doctor_id, {"name": a.doctor_id, "rank": ""})
+                adjacent_cells[date_str][area_code] = info
+
+        # Previous month
+        prev_m = month - 1
+        prev_y = year
+        if prev_m == 0:
+            prev_m = 12
+            prev_y -= 1
+        _load_month_assignments(prev_y, prev_m)
+
+        # Next month
+        next_m = month + 1
+        next_y = year
+        if next_m == 13:
+            next_m = 1
+            next_y += 1
+        _load_month_assignments(next_y, next_m)
+
+        DAY_NAMES = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
         last_day = monthrange(year, month)[1]
         rows = []
         area_codes = [a.code for a in areas]
@@ -686,7 +753,7 @@ class ReportService:
             dt = date(year, month, d)
             cells = {}
             for area in areas:
-                cells[area.display_name] = cell_map.get(d, {}).get(area.code, "—")
+                cells[area.display_name] = cell_map.get(d, {}).get(area.code, {"name": "—", "rank": ""})
             rows.append({
                 "day": d,
                 "day_name": DAY_NAMES[dt.weekday()],
@@ -703,7 +770,9 @@ class ReportService:
             "month": month,
             "year": year,
             "areas": [a.display_name for a in areas],
+            "area_codes": [a.code for a in areas],
             "rows": rows,
+            "adjacent_cells": adjacent_cells,
             "summary": {
                 "total_services": total_services,
                 "gaps": gaps,
