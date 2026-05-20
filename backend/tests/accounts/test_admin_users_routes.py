@@ -23,6 +23,7 @@ from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.users import UserRepository
 from backend.app.main import create_app
+from backend.app.core.config import settings
 
 
 @pytest.fixture()
@@ -165,6 +166,7 @@ def test_reset_nonexistent_user_returns_404(client):
     assert response.status_code == 404
 
 
+@pytest.mark.skipif(not settings.feature_telegram, reason="Telegram feature disabled")
 def test_telegram_link_token_allows_encargado(client, session):
     user = _create_user(session, role="encargado")
     session.commit()
@@ -178,6 +180,7 @@ def test_telegram_link_token_allows_encargado(client, session):
     assert response.json()["deep_link_url"]
 
 
+@pytest.mark.skipif(not settings.feature_telegram, reason="Telegram feature disabled")
 def test_telegram_link_token_rejects_non_internal_role(client, session):
     user = _create_user(session, role="doctor")
     session.commit()
@@ -190,6 +193,7 @@ def test_telegram_link_token_rejects_non_internal_role(client, session):
     assert response.status_code == 400
 
 
+@pytest.mark.skipif(not settings.feature_telegram, reason="Telegram feature disabled")
 def test_telegram_manual_link_rejects_non_internal_role(client, session):
     user = _create_user(session, role="doctor")
     session.commit()

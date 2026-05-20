@@ -6,6 +6,7 @@ import {
   ClipboardList, ShieldCheck, LogOut, UserPlus,
 } from "lucide-react";
 import { actionAlertsApi } from "../api/actionAlerts";
+import { fetchFeatureFlags } from "../api/featureFlags";
 import { useAuth } from "../context/AuthContext";
 
 const SHARED_ITEMS = [
@@ -15,10 +16,6 @@ const SHARED_ITEMS = [
   { to: "/missions",  icon: Target,            label: "Misiones" },
 ];
 
-const SYSTEM_ITEMS = [
-  { to: "/notifications", icon: Bell,          label: "Notificaciones" },
-  { to: "/telegram",      icon: MessageCircle, label: "Telegram" },
-];
 
 export function Sidebar() {
   const { currentUser, logout } = useAuth();
@@ -26,6 +23,11 @@ export function Sidebar() {
     queryKey: ["action-alerts-summary"],
     queryFn: actionAlertsApi.summary,
     staleTime: 60 * 1000,
+  });
+  const { data: featureFlags } = useQuery({
+    queryKey: ["feature-flags"],
+    queryFn: fetchFeatureFlags,
+    staleTime: 5 * 60 * 1000,
   });
 
   const isEncargadoPlus = currentUser && (currentUser.role === "encargado" || currentUser.role === "admin");
@@ -105,26 +107,38 @@ export function Sidebar() {
           </div>
         )}
 
-        <div className="sidebar-group">
-          <span className="sidebar-group-label">NOTIFICACIONES</span>
-          {SYSTEM_ITEMS.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
-              }
-            >
-              <Icon size={16} />
-              <span className="sidebar-link-label">{label}</span>
-              {to === "/notifications" && (alertCounts.notifications ?? 0) > 0 && (
-                <span className="sidebar-badge" aria-label={`${alertCounts.notifications} alertas en notificaciones`}>
-                  {alertCounts.notifications}
-                </span>
-              )}
-            </NavLink>
-          ))}
-        </div>
+        {(featureFlags?.notifications || featureFlags?.telegram) && (
+          <div className="sidebar-group">
+            <span className="sidebar-group-label">NOTIFICACIONES</span>
+            {featureFlags?.notifications && (
+              <NavLink
+                to="/notifications"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <Bell size={16} />
+                <span className="sidebar-link-label">Notificaciones</span>
+                {(alertCounts.notifications ?? 0) > 0 && (
+                  <span className="sidebar-badge" aria-label={`${alertCounts.notifications} alertas en notificaciones`}>
+                    {alertCounts.notifications}
+                  </span>
+                )}
+              </NavLink>
+            )}
+            {featureFlags?.telegram && (
+              <NavLink
+                to="/telegram"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <MessageCircle size={16} />
+                <span className="sidebar-link-label">Telegram</span>
+              </NavLink>
+            )}
+          </div>
+        )}
       </nav>
 
       <div className="sidebar-footer">

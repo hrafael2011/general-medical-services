@@ -18,6 +18,7 @@ from backend.app.infrastructure.db.models.notifications import NotificationEvent
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
+from backend.app.core.config import settings
 
 
 @pytest.fixture
@@ -92,6 +93,7 @@ def client(session_local, user, seed_data, mock_service):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not settings.feature_notifications, reason="Notifications feature disabled")
 def test_list_notifications_returns_all(client):
     resp = client.get("/api/notifications")
     assert resp.status_code == 200
@@ -99,6 +101,7 @@ def test_list_notifications_returns_all(client):
     assert data["total"] == 2
 
 
+@pytest.mark.skipif(not settings.feature_notifications, reason="Notifications feature disabled")
 def test_list_notifications_filter_by_type(client):
     resp = client.get("/api/notifications?notification_type=reminder")
     assert resp.status_code == 200
@@ -107,6 +110,7 @@ def test_list_notifications_filter_by_type(client):
     assert data["items"][0]["notification_type"] == "reminder"
 
 
+@pytest.mark.skipif(not settings.feature_notifications, reason="Notifications feature disabled")
 def test_list_notifications_no_match(client):
     resp = client.get("/api/notifications?notification_type=unknown")
     assert resp.status_code == 200
@@ -118,6 +122,7 @@ def test_list_notifications_no_match(client):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not settings.feature_notifications, reason="Notifications feature disabled")
 def test_process_notifications_success(client, mock_service):
     mock_service.process_pending.return_value = {"sent": 2, "failed": 0, "skipped": 1, "errors": []}
 

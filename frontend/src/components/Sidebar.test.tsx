@@ -14,6 +14,10 @@ vi.mock("../api/actionAlerts", () => ({
   },
 }));
 
+vi.mock("../api/featureFlags", () => ({
+  fetchFeatureFlags: vi.fn().mockResolvedValue({ notifications: true, telegram: true }),
+}));
+
 function renderSidebar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -31,12 +35,12 @@ describe("Sidebar", () => {
     expect(screen.getByText(/sistema de turnos/i)).toBeInTheDocument();
   });
 
-  it("muestra los tres grupos de navegación", () => {
+  it("muestra los tres grupos de navegación", async () => {
     renderSidebar();
     expect(screen.getByText("OPERACIONES")).toBeInTheDocument();
     expect(screen.getByText("ADMINISTRACIÓN")).toBeInTheDocument();
     expect(screen.getByText("SEGURIDAD")).toBeInTheDocument();
-    expect(screen.getByText("NOTIFICACIONES")).toBeInTheDocument();
+    expect(await screen.findByText("NOTIFICACIONES")).toBeInTheDocument();
   });
 
   it("muestra el nombre del usuario actual", () => {
@@ -44,7 +48,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("Dr. Admin")).toBeInTheDocument();
   });
 
-  it("muestra los links de navegación principales", () => {
+  it("muestra los links de navegación principales", async () => {
     renderSidebar();
     expect(screen.getByRole("link", { name: /calendarios/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /médicos/i })).toBeInTheDocument();
@@ -52,8 +56,8 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: /reportes/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /auditoría/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /usuarios/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /notificaciones/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /telegram/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /notificaciones/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /telegram/i })).toBeInTheDocument();
   });
 
   it("muestra badge de misiones con alertas pendientes", async () => {
