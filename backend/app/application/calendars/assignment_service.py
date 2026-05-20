@@ -5,7 +5,7 @@ from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.notifications.triggers import NotificationTriggers
 from backend.app.domain.doctors.eligibility import EligibilityChecker, EligibilityResult
-from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel
+from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel, UnresolvedGapModel
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
@@ -13,9 +13,23 @@ from backend.app.infrastructure.repositories.missions import MissionRepository
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import evaluate_soft_warnings
 from backend.app.domain.calendars.types import SlotRequest
+from backend.app.domain.availability_rules import belongs_to_operational_month
 
 # Codes that indicate a hard block — cannot be overridden.
 _HARD_BLOCK_CODES = {"doctor_inactive", "area_not_allowed", "has_hard_block"}
+
+
+class _MonthlyLimitWarning:
+    code = "monthly_max_exceeded"
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+
+class _SoftRuleWarning:
+    def __init__(self, code: str, reason: str) -> None:
+        self.code = code
+        self.reason = reason
 
 
 class AssignmentService:
@@ -41,7 +55,10 @@ class AssignmentService:
         self, doctor_id: str, target_date: date, year: int, month: int
     ) -> bool:
         """Check if doctor is available on target_date (same logic as engine)."""
-        weekly = self.availability_repo.list_weekly_fixed_for_doctor(doctor_id)
+        weekly = [
+            record for record in self.availability_repo.list_availability_for_doctor(doctor_id)
+            if record.availability_type in ("weekly_fixed", "recurring")
+        ]
         monthly_var = self.availability_repo.list_monthly_variable_for_period(doctor_id, year, month)
         records = weekly + monthly_var
 
@@ -106,7 +123,10 @@ class AssignmentService:
         active_restrictions = self.availability_repo.list_active_restrictions_for_doctor(
             doctor.id, target_date
         )
-        weekly_availability = self.availability_repo.list_weekly_fixed_for_doctor(doctor.id)
+        weekly_availability = [
+            record for record in self.availability_repo.list_availability_for_doctor(doctor.id)
+            if record.availability_type in ("weekly_fixed", "recurring")
+        ]
         monthly_availability = self.availability_repo.list_monthly_variable_for_period(
             doctor.id, target_date.year, target_date.month
         )
@@ -150,7 +170,10 @@ class AssignmentService:
         active_restrictions = self.availability_repo.list_active_restrictions_for_doctor(
             doctor.id, target_date
         )
-        weekly_availability = self.availability_repo.list_weekly_fixed_for_doctor(doctor.id)
+        weekly_availability = [
+            record for record in self.availability_repo.list_availability_for_doctor(doctor.id)
+            if record.availability_type in ("weekly_fixed", "recurring")
+        ]
         monthly_availability = self.availability_repo.list_monthly_variable_for_period(
             doctor.id, target_date.year, target_date.month
         )
@@ -180,6 +203,169 @@ class AssignmentService:
             raise CalendarServiceError("soft_warning", f"Falta confirmar: {unacknowledged[0].reason}")
 
         return soft_warnings
+
+    def _check_monthly_limit(
+        self,
+        *,
+        version_id: str,
+        doctor,
+        target_date: date,
+        exclude_assignment_id: str | None = None,
+    ) -> _MonthlyLimitWarning | None:
+        version = self.calendar_repo.get_version_by_id(version_id)
+        if version is None:
+            return None
+        calendar = self.calendar_repo.get_calendar_by_id(version.calendar_id)
+        if calendar is None:
+            return None
+
+        current_count = sum(
+            1
+            for assignment in self.calendar_repo.list_assignments(version_id)
+            if assignment.doctor_id == doctor.id
+            and assignment.id != exclude_assignment_id
+            and belongs_to_operational_month(assignment.service_date, calendar.year, calendar.month)
+        )
+        monthly_max = getattr(doctor, "monthly_service_max", 3) or 3
+        if current_count < monthly_max:
+            return None
+
+        reason = f"Ya alcanzó el máximo mensual ({monthly_max}) servicios."
+        if getattr(doctor, "monthly_service_limit_mode", "warn_only") == "hard_limit":
+            raise CalendarServiceError("hard_block", reason)
+        return _MonthlyLimitWarning(reason)
+
+    def _apply_monthly_limit(
+        self,
+        *,
+        version_id: str,
+        doctor,
+        target_date: date,
+        force_warnings: list[str] | None,
+        soft_warnings: list,
+        exclude_assignment_id: str | None = None,
+    ) -> list:
+        monthly_warning = self._check_monthly_limit(
+            version_id=version_id,
+            doctor=doctor,
+            target_date=target_date,
+            exclude_assignment_id=exclude_assignment_id,
+        )
+        if monthly_warning is None:
+            return soft_warnings
+        if force_warnings is not None and monthly_warning.code in force_warnings:
+            return [*soft_warnings, monthly_warning]
+        raise CalendarServiceError("soft_warning", monthly_warning.reason)
+
+    def _collect_scoring_warnings(
+        self,
+        *,
+        version_id: str,
+        doctor_id: str,
+        target_date: date,
+        service_area_id: str,
+        exclude_assignment_id: str | None = None,
+    ) -> list[_SoftRuleWarning]:
+        version = self.calendar_repo.get_version_by_id(version_id)
+        if version is None:
+            return []
+        calendar = self.calendar_repo.get_calendar_by_id(version.calendar_id)
+        if calendar is None:
+            return []
+
+        monthly_assignments = [
+            {
+                "doctor_id": assignment.doctor_id,
+                "service_date": assignment.service_date,
+                "service_area_id": assignment.service_area_id,
+            }
+            for assignment in self.calendar_repo.list_assignments(version_id)
+            if assignment.id != exclude_assignment_id
+            and assignment.doctor_id == doctor_id
+            and belongs_to_operational_month(assignment.service_date, calendar.year, calendar.month)
+        ]
+
+        history_start = target_date - timedelta(days=60)
+        history_end = target_date - timedelta(days=1)
+        historical_assignments = [
+            {
+                "doctor_id": assignment.doctor_id,
+                "service_date": assignment.service_date,
+                "service_area_id": assignment.service_area_id,
+            }
+            for assignment in self.calendar_repo.list_assignments_in_date_range(
+                history_start,
+                history_end,
+            )
+            if assignment.id != exclude_assignment_id
+        ]
+
+        mission_repo = MissionRepository(self.calendar_repo.session)
+        confirmed_missions = mission_repo.list_confirmed_in_range(history_start, history_end)
+        mission_assignments: list[dict] = []
+        for mission, participants in confirmed_missions:
+            for participant in participants:
+                mission_assignments.append({
+                    "doctor_id": participant.doctor_id,
+                    "mission_date": mission.mission_date,
+                })
+
+        area_weights, strong_uuids = self._build_area_metadata()
+        slot = SlotRequest(
+            date=target_date,
+            service_area_id=service_area_id,
+            area_weight=area_weights.get(service_area_id, 1.0),
+        )
+        return [
+            _SoftRuleWarning(code=warning, reason=warning)
+            for warning in evaluate_soft_warnings(
+                doctor_id=doctor_id,
+                slot=slot,
+                monthly_assignments=monthly_assignments,
+                historical_assignments=historical_assignments,
+                mission_assignments=mission_assignments,
+                area_weights=area_weights,
+                strong_area_ids=strong_uuids,
+            )
+        ]
+
+    def _apply_scoring_warnings(
+        self,
+        *,
+        version_id: str,
+        doctor_id: str,
+        target_date: date,
+        service_area_id: str,
+        force_warnings: list[str] | None,
+        override_justification: str | None,
+        soft_warnings: list,
+        exclude_assignment_id: str | None = None,
+    ) -> list:
+        scoring_warnings = self._collect_scoring_warnings(
+            version_id=version_id,
+            doctor_id=doctor_id,
+            target_date=target_date,
+            service_area_id=service_area_id,
+            exclude_assignment_id=exclude_assignment_id,
+        )
+        if not scoring_warnings:
+            return soft_warnings
+
+        if override_justification:
+            return [*soft_warnings, *scoring_warnings]
+
+        if force_warnings is not None:
+            unacknowledged = [
+                warning for warning in scoring_warnings if warning.code not in force_warnings
+            ]
+            if unacknowledged:
+                raise CalendarServiceError(
+                    "soft_warning",
+                    f"Falta confirmar: {unacknowledged[0].reason}",
+                )
+            return [*soft_warnings, *scoring_warnings]
+
+        raise CalendarServiceError("soft_warning", scoring_warnings[0].reason)
 
     def get_eligible_doctors_for_slot(
         self,
@@ -264,10 +450,13 @@ class AssignmentService:
                     "mission_date": _mission.mission_date,
                 })
 
-        # 9. Build GenerationContext for the engine.
+        # 9. Build area metadata from DB for UUID-native scoring.
+        area_weights, strong_uuids = self._build_area_metadata()
+
+        # 10. Build GenerationContext for the engine.
         ctx = GenerationContext(
-            year=target_date.year,
-            month=target_date.month,
+            year=calendar.year,
+            month=calendar.month,
             doctors=doctors,
             allowed_areas=allowed_areas,
             availability=availability,
@@ -276,16 +465,17 @@ class AssignmentService:
             historical_assignments=historical_dicts,
             mission_assignments=mission_dicts,
             required_areas=[],
-            area_weights={},
+            area_weights=area_weights,
+            strong_area_ids=strong_uuids,
             monthly_service_targets={d.id: getattr(d, "monthly_service_target", 3) for d in doctors},
             monthly_service_maxes={d.id: getattr(d, "monthly_service_max", 3) for d in doctors},
         )
 
-        # 10. Build SlotRequest.
+        # 11. Build SlotRequest.
         slot = SlotRequest(
             date=target_date,
             service_area_id=service_area_id,
-            area_weight=1.0,
+            area_weight=area_weights.get(service_area_id, 1.0),
         )
 
         # 11. Delegate to the domain engine.
@@ -386,15 +576,16 @@ class AssignmentService:
             a
             for a in monthly_assignments_all
             if a.doctor_id == doctor_id
-            and a.service_date.year == target_date.year
-            and a.service_date.month == target_date.month
+            and belongs_to_operational_month(a.service_date, calendar.year, calendar.month)
         ]
         monthly_max = getattr(doctor, "monthly_service_max", 3) or 3
         if len(monthly_for_doctor) >= monthly_max:
-            hard_blocks.append({
+            limit_item = {
                 "code": "monthly_max_exceeded",
                 "description": f"Ya alcanzó el máximo mensual ({monthly_max}) servicios.",
-            })
+            }
+            if getattr(doctor, "monthly_service_limit_mode", "warn_only") == "hard_limit":
+                hard_blocks.append(limit_item)
 
         # 3g. Slot occupied by another doctor.
         existing_slot = self.calendar_repo.get_assignment_for_slot(
@@ -410,55 +601,20 @@ class AssignmentService:
         if hard_blocks:
             return {"hard_blocks": hard_blocks, "warnings": []}
 
-        # 4. Build scoring context for soft-warning evaluation.
-        history_start = target_date - timedelta(days=60)
-        history_end = target_date - timedelta(days=1)
-        historical = self.calendar_repo.list_assignments_in_date_range(history_start, history_end)
-        historical_dicts = [
-            {
-                "doctor_id": a.doctor_id,
-                "service_date": a.service_date,
-                "service_area_id": a.service_area_id,
-            }
-            for a in historical
-        ]
-
-        mission_repo = MissionRepository(self.calendar_repo.session)
-        confirmed_missions = mission_repo.list_confirmed_in_range(history_start, history_end)
-        mission_dicts: list[dict] = []
-        for _mission, participants in confirmed_missions:
-            for p in participants:
-                mission_dicts.append({
-                    "doctor_id": p.doctor_id,
-                    "mission_date": _mission.mission_date,
-                })
-
-        monthly_dicts = [
-            {
-                "doctor_id": a.doctor_id,
-                "service_date": a.service_date,
-                "service_area_id": a.service_area_id,
-            }
-            for a in monthly_for_doctor
-        ]
-
-        slot = SlotRequest(
-            date=target_date,
-            service_area_id=service_area_id,
-            area_weight=1.0,
-        )
-
-        raw_warnings = evaluate_soft_warnings(
-            doctor_id=doctor_id,
-            slot=slot,
-            monthly_assignments=monthly_dicts,
-            historical_assignments=historical_dicts,
-            mission_assignments=mission_dicts,
-        )
-
         warning_items = [
-            {"code": w, "description": w} for w in raw_warnings
+            {"code": warning.code, "description": warning.reason}
+            for warning in self._collect_scoring_warnings(
+                version_id=version_id,
+                doctor_id=doctor_id,
+                target_date=target_date,
+                service_area_id=service_area_id,
+            )
         ]
+        if len(monthly_for_doctor) >= monthly_max:
+            warning_items.append({
+                "code": "monthly_max_exceeded",
+                "description": f"Ya alcanzó el máximo mensual ({monthly_max}) servicios.",
+            })
 
         return {"hard_blocks": hard_blocks, "warnings": warning_items}
 
@@ -527,6 +683,22 @@ class AssignmentService:
                 target_date=date,
                 override_justification=override_justification,
             )
+        soft_warnings_raw = self._apply_monthly_limit(
+            version_id=version_id,
+            doctor=doctor,
+            target_date=date,
+            force_warnings=force_warnings,
+            soft_warnings=soft_warnings_raw,
+        )
+        soft_warnings_raw = self._apply_scoring_warnings(
+            version_id=version_id,
+            doctor_id=doctor_id,
+            target_date=date,
+            service_area_id=service_area_id,
+            force_warnings=force_warnings,
+            override_justification=override_justification,
+            soft_warnings=soft_warnings_raw,
+        )
 
         # 5. Persist assignment.
         stored_justification = override_justification if override_justification else None
@@ -548,6 +720,18 @@ class AssignmentService:
             created_at=datetime.now(UTC),
         )
         assignment = self.calendar_repo.add_assignment(assignment)
+
+        # 5b. Resolve any matching gap — a manual assignment fills the slot.
+        from sqlalchemy import delete as sql_delete
+
+        self.calendar_repo.session.execute(
+            sql_delete(UnresolvedGapModel).where(
+                UnresolvedGapModel.calendar_version_id == version_id,
+                UnresolvedGapModel.service_date == date,
+                UnresolvedGapModel.service_area_id == service_area_id,
+            )
+        )
+        self.calendar_repo.session.flush()
 
         # 6. Audit.
         if self.audit is not None:
@@ -665,6 +849,24 @@ class AssignmentService:
                 target_date=assignment.service_date,
                 override_justification=override_justification,
             )
+        soft_warnings_raw = self._apply_monthly_limit(
+            version_id=assignment.calendar_version_id,
+            doctor=doctor,
+            target_date=assignment.service_date,
+            force_warnings=force_warnings,
+            soft_warnings=soft_warnings_raw,
+            exclude_assignment_id=assignment.id,
+        )
+        soft_warnings_raw = self._apply_scoring_warnings(
+            version_id=assignment.calendar_version_id,
+            doctor_id=new_doctor_id,
+            target_date=assignment.service_date,
+            service_area_id=assignment.service_area_id,
+            force_warnings=force_warnings,
+            override_justification=override_justification,
+            soft_warnings=soft_warnings_raw,
+            exclude_assignment_id=assignment.id,
+        )
 
         old_doctor_id = assignment.doctor_id
         should_notify = self._is_unlocked_approved_version(version)
@@ -704,9 +906,17 @@ class AssignmentService:
     def _is_unlocked_approved_version(self, version) -> bool:
         return bool(version and version.reason and version.reason.startswith("__unlock__"))
 
+    def _build_area_metadata(self) -> tuple[dict[str, float], set[str]]:
+        """Return (area_weights_by_uuid, strong_area_uuids) from the DB."""
+        areas = self.calendar_repo.list_service_areas()
+        weights = {a.id: float(a.load_weight) for a in areas}
+        strong_codes = {"emergencia", "pista"}
+        strong_uuids = {a.id for a in areas if a.code in strong_codes}
+        return weights, strong_uuids
+
     def _service_area_name(self, service_area_id: str) -> str:
         for area in self.calendar_repo.list_service_areas():
-            if area.id == service_area_id or area.code == service_area_id:
+            if area.id == service_area_id:
                 return area.display_name
         return service_area_id
 
@@ -733,7 +943,7 @@ class AssignmentService:
         )
 
 
-def _manual_rationale(soft_warnings: list[EligibilityResult]) -> dict | None:
+def _manual_rationale(soft_warnings: list) -> dict | None:
     if not soft_warnings:
         return None
     return {

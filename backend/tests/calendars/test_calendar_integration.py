@@ -298,11 +298,8 @@ def test_generation_is_deterministic(db_session) -> None:
 def test_manual_assignment_fills_generated_gap(db_session) -> None:
     """Generate with 1 doctor, then manually assign to fill a gap.
 
-    NOTE: assign_doctor() does NOT currently delete the matching gap row.
-    The assignment is created but the UnresolvedGapModel persists.
-    This test documents the current behavior — the assignment exists alongside
-    the gap, and the UI/report layer is expected to treat gaps as
-    "no assignment at this slot" rather than authoritative.
+    The gap row must be automatically deleted when a manual assignment
+    covers its (date, area) slot.
     """
     _seed_service_areas(db_session)
     calendar, version = _create_calendar_and_version(db_session)
@@ -345,6 +342,7 @@ def test_manual_assignment_fills_generated_gap(db_session) -> None:
     assert stored is not None
     assert stored.doctor_id == doctor2.id
 
-    # NOTE: The gap row is NOT automatically deleted by assign_doctor().
-    # This is a known behavior — re-generation clears gaps, but manual
-    # assignment does not. The frontend/report layer handles dedup.
+    # The gap MUST be deleted — manual assignment resolves the gap.
+    gaps_after = cal_repo.list_gaps(version.id)
+    gap_ids = {g.id for g in gaps_after}
+    assert gap.id not in gap_ids, "Gap must be deleted when a manual assignment covers its slot"
