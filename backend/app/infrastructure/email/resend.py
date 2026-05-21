@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 def send_email(*, to: str, subject: str, html: str) -> None:
-    """Send email via Resend in production, log to console in local/dev."""
-    if settings.app_env == "local":
-        logger.info("--- EMAIL (local mode) ---")
+    """Send email via Resend. Falls back to console logging when no API key is configured."""
+    if not settings.resend_api_key:
+        logger.info("--- EMAIL (no API key configured) ---")
         logger.info("To: %s", to)
         logger.info("Subject: %s", subject)
         logger.info("Body: %s", html)
