@@ -13,7 +13,10 @@ from backend.app.infrastructure.repositories.missions import MissionRepository
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import evaluate_soft_warnings
 from backend.app.domain.calendars.types import SlotRequest
-from backend.app.domain.availability_rules import belongs_to_operational_month
+from backend.app.domain.availability_rules import (
+    belongs_to_operational_month,
+    matches_recurring_monthly_rule,
+)
 
 # Codes that indicate a hard block — cannot be overridden.
 _HARD_BLOCK_CODES = {"doctor_inactive", "area_not_allowed", "has_hard_block"}
@@ -101,6 +104,14 @@ class AssignmentService:
                 if days_of_week is None:
                     days_of_week = []
                 if target_date.weekday() in days_of_week:
+                    return True
+
+            elif availability_type == "recurring":
+                if matches_recurring_monthly_rule(
+                    target_date,
+                    getattr(record, "weekday", None),
+                    getattr(record, "week_number", None),
+                ):
                     return True
 
         return False

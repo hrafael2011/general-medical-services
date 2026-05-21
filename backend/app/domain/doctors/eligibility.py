@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import date
 
+from backend.app.domain.availability_rules import matches_recurring_monthly_rule
+
 
 @dataclass
 class EligibilityResult:
@@ -108,10 +110,18 @@ class AvailabilitySpec:
         if mode == "fixed":
             weekday = target_date.weekday()  # Monday=0
             for record in weekly_availability:
-                if record.availability_type != "weekly_fixed":
-                    continue
-                days = record.days_of_week or []
-                if weekday not in days:
+                if record.availability_type == "weekly_fixed":
+                    days = record.days_of_week or []
+                    if weekday not in days:
+                        continue
+                elif record.availability_type == "recurring":
+                    if not matches_recurring_monthly_rule(
+                        target_date,
+                        record.weekday,
+                        record.week_number,
+                    ):
+                        continue
+                else:
                     continue
                 # Respect effective_from / effective_to when set
                 if record.effective_from and target_date < record.effective_from:
@@ -122,7 +132,7 @@ class AvailabilitySpec:
                     passed=True,
                     code="available",
                     reason=(
-                        f"Doctor '{doctor.name}' has a weekly-fixed availability record "
+                        f"Doctor '{doctor.name}' has an availability record "
                         f"covering weekday {weekday} on {target_date}."
                     ),
                 )
@@ -130,7 +140,7 @@ class AvailabilitySpec:
                 passed=False,
                 code="not_available",
                 reason=(
-                    f"Doctor '{doctor.name}' (mode=fixed) has no weekly-fixed availability "
+                    f"Doctor '{doctor.name}' (mode=fixed) has no fixed availability "
                     f"record that covers weekday {weekday} on {target_date}."
                 ),
             )

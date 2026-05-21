@@ -42,6 +42,8 @@ def compute_candidate_score(
     historical_assignments: list[dict],
     mission_assignments: list[dict],
     monthly_service_target: int = 3,
+    area_weights: dict[str, float] | None = None,
+    strong_area_ids: set[str] | None = None,
 ) -> CandidateScore:
     """Compute a scheduling score for one doctor on one slot.
 
@@ -77,15 +79,16 @@ def compute_candidate_score(
     # ------------------------------------------------------------------
     # 2. Monthly load (weighted)
     # ------------------------------------------------------------------
-    monthly_load: float = sum(
-        AREA_WEIGHTS.get(a["service_area_id"], 1.0) for a in doctor_monthly
-    )
+    weights = area_weights or AREA_WEIGHTS
+    strong_areas = strong_area_ids or STRONG_AREAS
+
+    monthly_load: float = sum(weights.get(a["service_area_id"], 1.0) for a in doctor_monthly)
 
     # ------------------------------------------------------------------
     # 3. Historical load (weighted assignments + mission weight)
     # ------------------------------------------------------------------
     historical_load: float = (
-        sum(AREA_WEIGHTS.get(a["service_area_id"], 1.0) for a in doctor_historical)
+        sum(weights.get(a["service_area_id"], 1.0) for a in doctor_historical)
         + len(doctor_missions) * MISSION_WEIGHT
     )
 
@@ -113,7 +116,7 @@ def compute_candidate_score(
     strong_service_dates: list[date] = [
         a["service_date"]
         for a in doctor_monthly + doctor_historical
-        if a["service_area_id"] in STRONG_AREAS
+        if a["service_area_id"] in strong_areas
     ]
 
     if strong_service_dates:
@@ -135,7 +138,7 @@ def compute_candidate_score(
     slot_area = slot.service_area_id
 
     # Strong-area spacing
-    if slot_area in STRONG_AREAS:
+    if slot_area in strong_areas:
         if days_since_strong < MIN_SPACING_STRONG:
             warnings.append("spacing < 14 días desde último turno fuerte")
     elif slot_area == "disponible":
@@ -145,7 +148,7 @@ def compute_candidate_score(
     # Mission-based spacing
     if last_mission_date is not None:
         days_since_mission = max(0, (slot.date - last_mission_date).days)
-        if slot_area in STRONG_AREAS and days_since_mission < MIN_SPACING_AFTER_MISSION_STRONG:
+        if slot_area in strong_areas and days_since_mission < MIN_SPACING_AFTER_MISSION_STRONG:
             warnings.append("spacing < 7 días desde misión")
         elif slot_area == "disponible" and days_since_mission < MIN_SPACING_AFTER_MISSION_DISPONIBLE:
             warnings.append("spacing < 5 días desde misión")
@@ -210,6 +213,8 @@ def evaluate_soft_warnings(
     monthly_assignments: list[dict],
     historical_assignments: list[dict],
     mission_assignments: list[dict],
+    area_weights: dict[str, float] | None = None,
+    strong_area_ids: set[str] | None = None,
 ) -> list[str]:
     """Return soft-rule warnings for a doctor+slot combination.
 
@@ -223,5 +228,7 @@ def evaluate_soft_warnings(
         monthly_assignments=monthly_assignments,
         historical_assignments=historical_assignments,
         mission_assignments=mission_assignments,
+        area_weights=area_weights,
+        strong_area_ids=strong_area_ids,
     )
     return result.warnings

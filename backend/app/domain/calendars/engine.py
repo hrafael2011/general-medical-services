@@ -9,6 +9,7 @@ import calendar as cal_module
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from backend.app.domain.availability_rules import matches_recurring_monthly_rule
 from backend.app.domain.calendars.scoring import compute_candidate_score
 from backend.app.domain.calendars.types import (
     CandidateScore,
@@ -308,6 +309,8 @@ class CalendarEngine:
           target_date.day is in available_days (or available_dates).
         - ``weekly_fixed`` record: matches when target_date.weekday() is in
           days_of_week.
+        - ``recurring`` record: matches when target_date is the configured
+          nth weekday of its month.
         - Either record type must also be within its effective date range
           (None boundaries are treated as unbounded).
         - If records exist but none match → False.
@@ -357,6 +360,14 @@ class CalendarEngine:
                 if days_of_week is None:
                     days_of_week = []
                 if target_date.weekday() in days_of_week:
+                    return True
+
+            elif availability_type == "recurring":
+                if matches_recurring_monthly_rule(
+                    target_date,
+                    getattr(record, "weekday", None),
+                    getattr(record, "week_number", None),
+                ):
                     return True
 
             # Unknown availability_type → skip (fail safe)
