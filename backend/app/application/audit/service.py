@@ -183,6 +183,24 @@ class AuditService:
             metadata={"email_hint": email[:3] + "***", "locked": locked},
         )
 
+    def log_user_updated(self, *, actor_id: str, user, changed_fields: dict) -> AuditEventModel:
+        return self._create(
+            actor_id=actor_id,
+            action_type="user_updated",
+            entity_type="user",
+            entity_id=user.id,
+            after=changed_fields,
+        )
+
+    def log_user_deleted(self, *, actor_id: str, user) -> AuditEventModel:
+        return self._create(
+            actor_id=actor_id,
+            action_type="user_deleted",
+            entity_type="user",
+            entity_id=user.id,
+            before={"name": user.name, "email": user.email, "role": user.role},
+        )
+
     # --- Calendar events ---
 
     def log_calendar_created(self, *, actor_id: str, calendar) -> AuditEventModel:
