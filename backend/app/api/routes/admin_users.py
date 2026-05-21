@@ -21,6 +21,7 @@ from backend.app.schemas.accounts import (
     CreateEncargadoRequest,
     ResetPasswordRequest,
     TemporaryPasswordResponse,
+    UpdateUserRequest,
     UserRead,
 )
 
@@ -152,3 +153,55 @@ def send_reset_email(
     service.create_reset(user=user, created_by=admin)
     session.commit()
     return {"message": "Reset email sent", "email": user.email}
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: str,
+    admin: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[AccountService, Depends(get_account_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.soft_delete_user(actor=admin, user_id=user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "user_not_found", "message": "User not found"},
+        ) from exc
+    except PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "permission_denied", "message": "Cannot delete this user"},
+        ) from exc
+    session.commit()
+
+
+@router.patch("/{user_id}", response_model=UserRead)
+def update_user(
+    user_id: str,
+    payload: UpdateUserRequest,
+    admin: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[AccountService, Depends(get_account_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> UserRead:
+    try:
+        updated = service.update_user(
+            actor=admin,
+            user_id=user_id,
+            name=payload.name,
+            role=payload.role,
+            active=payload.active,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "user_not_found", "message": "User not found"},
+        ) from exc
+    except PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "permission_denied", "message": "Cannot update this user"},
+        ) from exc
+    session.commit()
+    return UserRead.model_validate(updated)
