@@ -27,7 +27,9 @@ export function UsersView() {
   const createMutation = useMutation({
     mutationFn: () => adminApi.createEncargado(newName, newEmail),
     onSuccess: (res) => {
-      adminApi.inviteUser(res.user.id).catch(() => {});
+      adminApi.inviteUser(res.user.id).catch(() => {
+        addToast("error", "Usuario creado, pero no se pudo enviar la invitación. Verifica la configuración de correo.");
+      });
       addToast("success", `Usuario creado. Se ha enviado una invitación a ${newEmail}.`);
       setShowCreate(false);
       setNewName("");
