@@ -1,12 +1,16 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.user import PasswordHistoryModel, UserModel
 
 PASSWORD_HISTORY_DEPTH = 5
+
+
+def _not_deleted() -> tuple:
+    return (UserModel.deleted_at.is_(None),)
 
 
 class UserRepository:
@@ -19,16 +23,52 @@ class UserRepository:
         return user
 
     def get_by_id(self, user_id: str) -> UserModel | None:
-        return self.session.get(UserModel, user_id)
+        stmt = select(UserModel).where(
+            UserModel.id == user_id, *_not_deleted()
+        )
+        return self.session.scalars(stmt).first()
 
     def get_by_email(self, email: str) -> UserModel | None:
         normalized_email = email.strip().lower()
-        statement = select(UserModel).where(UserModel.email == normalized_email)
+        statement = select(UserModel).where(
+            UserModel.email == normalized_email, *_not_deleted()
+        )
         return self.session.scalar(statement)
 
     def list_by_role(self, role: str) -> list[UserModel]:
-        statement = select(UserModel).where(UserModel.role == role).order_by(UserModel.name)
+        statement = (
+            select(UserModel)
+            .where(UserModel.role == role, *_not_deleted())
+            .order_by(UserModel.name)
+        )
         return list(self.session.scalars(statement))
+
+    def list_all(self) -> list[UserModel]:
+        statement = (
+            select(UserModel)
+            .where(*_not_deleted())
+            .order_by(UserModel.name)
+        )
+        return list(self.session.scalars(statement))
+
+    def soft_delete(self, user_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id)
+            .values(deleted_at=now, updated_at=now)
+        )
+        self.session.flush()
+
+    def update(self, user_id: str, **fields: object) -> None:
+        now = datetime.now(UTC)
+        values = {**fields, "updated_at": now}
+        self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id)
+            .values(**values)
+        )
+        self.session.flush()
 
     # --- Password History ---
 
