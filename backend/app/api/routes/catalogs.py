@@ -1,10 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_ready_user
-from backend.app.application.catalogs.service import CatalogService
+from backend.app.api.dependencies import require_admin, require_ready_user
+from backend.app.application.catalogs.service import CatalogError, CatalogService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
@@ -15,6 +15,8 @@ from backend.app.schemas.catalogs import (
     DepartmentRead,
     RankRead,
     ServiceAreaRead,
+    UpdateDepartmentRequest,
+    UpdateRankRequest,
 )
 
 router = APIRouter(prefix="/catalogs", tags=["catalogs"])
@@ -24,9 +26,9 @@ def get_catalog_service(session: Annotated[Session, Depends(get_db_session)]) ->
     return CatalogService(CatalogRepository(session))
 
 
-@router.post("/seed", status_code=204)
+@router.post("/seed", status_code=status.HTTP_204_NO_CONTENT)
 def seed_catalogs(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _user: Annotated[UserModel, Depends(require_admin)],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
@@ -66,16 +68,57 @@ def list_ranks(
     return [RankRead.model_validate(rank) for rank in ranks]
 
 
-@router.post("/ranks", response_model=RankRead, status_code=201)
+@router.post("/ranks", response_model=RankRead, status_code=status.HTTP_201_CREATED)
 def create_rank(
     payload: CreateRankRequest,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _user: Annotated[UserModel, Depends(require_admin)],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> RankRead:
     rank = service.create_rank(payload.name, payload.abbreviation)
     session.commit()
     return RankRead.model_validate(rank)
+
+
+@router.patch("/ranks/{rank_id}", response_model=RankRead)
+def update_rank(
+    rank_id: str,
+    payload: UpdateRankRequest,
+    _user: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> RankRead:
+    try:
+        rank = service.update_rank(
+            rank_id,
+            name=payload.name,
+            abbreviation=payload.abbreviation,
+            active=payload.active,
+        )
+    except CatalogError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    session.commit()
+    return RankRead.model_validate(rank)
+
+
+@router.delete("/ranks/{rank_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_rank(
+    rank_id: str,
+    _user: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.soft_delete_rank(rank_id)
+    except CatalogError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    session.commit()
 
 
 @router.get("/departments", response_model=list[DepartmentRead])
@@ -87,13 +130,53 @@ def list_departments(
     return [DepartmentRead.model_validate(department) for department in departments]
 
 
-@router.post("/departments", response_model=DepartmentRead, status_code=201)
+@router.post("/departments", response_model=DepartmentRead, status_code=status.HTTP_201_CREATED)
 def create_department(
     payload: CreateDepartmentRequest,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _user: Annotated[UserModel, Depends(require_admin)],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DepartmentRead:
     department = service.create_department(payload.name)
     session.commit()
     return DepartmentRead.model_validate(department)
+
+
+@router.patch("/departments/{department_id}", response_model=DepartmentRead)
+def update_department(
+    department_id: str,
+    payload: UpdateDepartmentRequest,
+    _user: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> DepartmentRead:
+    try:
+        department = service.update_department(
+            department_id,
+            name=payload.name,
+            active=payload.active,
+        )
+    except CatalogError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    session.commit()
+    return DepartmentRead.model_validate(department)
+
+
+@router.delete("/departments/{department_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_department(
+    department_id: str,
+    _user: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.soft_delete_department(department_id)
+    except CatalogError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    session.commit()

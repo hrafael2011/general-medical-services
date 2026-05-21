@@ -50,3 +50,14 @@ class CreateRankRequest(BaseModel):
 
 class CreateDepartmentRequest(BaseModel):
     name: str = Field(min_length=1, max_length=160)
+
+
+class UpdateRankRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    abbreviation: str | None = Field(default=None, min_length=1, max_length=40)
+    active: bool | None = None
+
+
+class UpdateDepartmentRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    active: bool | None = None

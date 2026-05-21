@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.catalogs import (
@@ -8,6 +10,14 @@ from backend.app.infrastructure.db.models.catalogs import (
     ServiceAreaModel,
     SystemSettingModel,
 )
+
+
+def _not_deleted_rank() -> tuple:
+    return (RankModel.deleted_at.is_(None),)
+
+
+def _not_deleted_department() -> tuple:
+    return (DepartmentModel.deleted_at.is_(None),)
 
 
 class CatalogRepository:
@@ -66,14 +76,35 @@ class CatalogRepository:
         return rank
 
     def get_rank_by_id(self, rank_id: str) -> RankModel | None:
-        return self.session.get(RankModel, rank_id)
+        stmt = select(RankModel).where(RankModel.id == rank_id, *_not_deleted_rank())
+        return self.session.scalars(stmt).first()
 
     def get_department_by_id(self, department_id: str) -> DepartmentModel | None:
-        return self.session.get(DepartmentModel, department_id)
+        stmt = select(DepartmentModel).where(
+            DepartmentModel.id == department_id, *_not_deleted_department()
+        )
+        return self.session.scalars(stmt).first()
 
     def list_ranks(self) -> list[RankModel]:
-        statement = select(RankModel).order_by(RankModel.name)
+        statement = select(RankModel).where(*_not_deleted_rank()).order_by(RankModel.name)
         return list(self.session.scalars(statement))
+
+    def soft_delete_rank(self, rank_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(RankModel)
+            .where(RankModel.id == rank_id)
+            .values(deleted_at=now, updated_at=now)
+        )
+        self.session.flush()
+
+    def update_rank(self, rank_id: str, **fields: object) -> None:
+        now = datetime.now(UTC)
+        values = {**fields, "updated_at": now}
+        self.session.execute(
+            update(RankModel).where(RankModel.id == rank_id).values(**values)
+        )
+        self.session.flush()
 
     def add_department(self, department: DepartmentModel) -> DepartmentModel:
         self.session.add(department)
@@ -81,8 +112,31 @@ class CatalogRepository:
         return department
 
     def list_departments(self) -> list[DepartmentModel]:
-        statement = select(DepartmentModel).order_by(DepartmentModel.name)
+        statement = (
+            select(DepartmentModel)
+            .where(*_not_deleted_department())
+            .order_by(DepartmentModel.name)
+        )
         return list(self.session.scalars(statement))
+
+    def soft_delete_department(self, department_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(DepartmentModel)
+            .where(DepartmentModel.id == department_id)
+            .values(deleted_at=now, updated_at=now)
+        )
+        self.session.flush()
+
+    def update_department(self, department_id: str, **fields: object) -> None:
+        now = datetime.now(UTC)
+        values = {**fields, "updated_at": now}
+        self.session.execute(
+            update(DepartmentModel)
+            .where(DepartmentModel.id == department_id)
+            .values(**values)
+        )
+        self.session.flush()
 
     def upsert_setting(self, setting: SystemSettingModel) -> SystemSettingModel:
         existing = self.session.get(SystemSettingModel, setting.key)
