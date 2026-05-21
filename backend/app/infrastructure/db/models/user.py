@@ -29,6 +29,9 @@ class UserModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deactivated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
 
 class LoginAttemptModel(Base):
