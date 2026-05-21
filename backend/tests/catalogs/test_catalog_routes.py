@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.app.api.dependencies import require_ready_user
+from backend.app.api.dependencies import require_admin, require_ready_user
 from backend.app.api.routes.catalogs import get_catalog_service
 from backend.app.application.catalogs.service import CatalogService
 from backend.app.infrastructure.db.base import Base
@@ -76,6 +76,7 @@ def client(session_local, user, seed_data, mock_service):
 
     app.dependency_overrides[get_db_session] = _get_session
     app.dependency_overrides[require_ready_user] = lambda: user
+    app.dependency_overrides[require_admin] = lambda: user
     app.dependency_overrides[get_catalog_service] = lambda: mock_service
     return TestClient(app)
 
@@ -222,3 +223,106 @@ def test_seed_catalogs_success(client, mock_service):
     resp = client.post("/api/catalogs/seed")
     assert resp.status_code == 204
     mock_service.seed_initial_catalogs.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/catalogs/ranks/{rank_id}
+# ---------------------------------------------------------------------------
+
+
+def test_update_rank_success(client, mock_service):
+    from backend.app.infrastructure.db.models.catalogs import RankModel
+
+    rank = RankModel(
+        id="r-1", name="Cabo Actualizado", normalized_name="cabo actualizado",
+        abbreviation="CB.", active=True,
+    )
+    mock_service.update_rank.return_value = rank
+
+    resp = client.patch(
+        "/api/catalogs/ranks/r-1",
+        json={"name": "Cabo Actualizado", "active": True},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Cabo Actualizado"
+    mock_service.update_rank.assert_called_once_with(
+        "r-1", name="Cabo Actualizado", abbreviation=None, active=True,
+    )
+
+
+def test_update_rank_not_found(client, mock_service):
+    from backend.app.application.catalogs.service import CatalogError
+    mock_service.update_rank.side_effect = CatalogError("rank_not_found", "Rank not found")
+
+    resp = client.patch("/api/catalogs/ranks/nonexistent", json={"name": "X"})
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/catalogs/ranks/{rank_id}
+# ---------------------------------------------------------------------------
+
+
+def test_delete_rank_success(client, mock_service):
+    resp = client.delete("/api/catalogs/ranks/r-1")
+    assert resp.status_code == 204
+    mock_service.soft_delete_rank.assert_called_once_with("r-1")
+
+
+def test_delete_rank_not_found(client, mock_service):
+    from backend.app.application.catalogs.service import CatalogError
+    mock_service.soft_delete_rank.side_effect = CatalogError("rank_not_found", "Rank not found")
+
+    resp = client.delete("/api/catalogs/ranks/nonexistent")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/catalogs/departments/{department_id}
+# ---------------------------------------------------------------------------
+
+
+def test_update_department_success(client, mock_service):
+    from backend.app.infrastructure.db.models.catalogs import DepartmentModel
+
+    dept = DepartmentModel(
+        id="d-1", name="Nuevo Dept", normalized_name="nuevo dept", active=True,
+    )
+    mock_service.update_department.return_value = dept
+
+    resp = client.patch(
+        "/api/catalogs/departments/d-1",
+        json={"name": "Nuevo Dept", "active": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Nuevo Dept"
+    mock_service.update_department.assert_called_once_with(
+        "d-1", name="Nuevo Dept", active=False,
+    )
+
+
+def test_update_department_not_found(client, mock_service):
+    from backend.app.application.catalogs.service import CatalogError
+    mock_service.update_department.side_effect = CatalogError("department_not_found", "Department not found")
+
+    resp = client.patch("/api/catalogs/departments/nonexistent", json={"name": "X"})
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/catalogs/departments/{department_id}
+# ---------------------------------------------------------------------------
+
+
+def test_delete_department_success(client, mock_service):
+    resp = client.delete("/api/catalogs/departments/d-1")
+    assert resp.status_code == 204
+    mock_service.soft_delete_department.assert_called_once_with("d-1")
+
+
+def test_delete_department_not_found(client, mock_service):
+    from backend.app.application.catalogs.service import CatalogError
+    mock_service.soft_delete_department.side_effect = CatalogError("department_not_found", "Department not found")
+
+    resp = client.delete("/api/catalogs/departments/nonexistent")
+    assert resp.status_code == 404
