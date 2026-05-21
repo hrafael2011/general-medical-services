@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from_email: str | None = None
 
+    # Gmail API email provider (HTTPS; works when outbound SMTP is unavailable)
+    gmail_client_id: str | None = None
+    gmail_client_secret: str | None = None
+    gmail_refresh_token: str | None = None
+    gmail_from_email: str | None = None
+
     # Feature flags for partial deployment
     feature_notifications: bool = False
     feature_telegram: bool = False
