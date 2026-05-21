@@ -4,6 +4,7 @@ from backend.app.application.accounts.errors import (
     InvalidCredentialsError,
     InvalidPasswordChangeError,
     PermissionDeniedError,
+    UserNotFoundError,
 )
 from backend.app.application.accounts.service import AccountService
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -136,4 +137,102 @@ def test_failed_logins_lock_account(db_session) -> None:
     user = UserRepository(db_session).get_by_email("admin@example.local")
     assert user is not None
     assert user.locked_until is not None
+
+
+def test_soft_delete_user_hides_from_queries(db_session) -> None:
+    service = AccountService(UserRepository(db_session))
+    admin = service.ensure_admin_password(
+        email="admin@example.local",
+        name="Admin",
+        temporary_password="Temporary123!",
+    ).user
+    service.change_own_password(
+        user=admin,
+        current_password="Temporary123!",
+        new_password="Permanent123!",
+    )
+    encargado = service.create_encargado(
+        actor=admin,
+        name="ToDelete",
+        email="todelete@example.local",
+        temporary_password="TempEnc123!",
+    ).user
+    db_session.commit()
+
+    service.soft_delete_user(actor=admin, user_id=encargado.id)
+    db_session.commit()
+
+    repo = UserRepository(db_session)
+    assert repo.get_by_id(encargado.id) is None
+    users = repo.list_by_role("encargado")
+    assert encargado.id not in [u.id for u in users]
+
+
+def test_soft_delete_nonexistent_user_raises(db_session) -> None:
+    service = AccountService(UserRepository(db_session))
+    admin = service.ensure_admin_password(
+        email="admin@example.local",
+        name="Admin",
+        temporary_password="Temporary123!",
+    ).user
+    service.change_own_password(
+        user=admin,
+        current_password="Temporary123!",
+        new_password="Permanent123!",
+    )
+    db_session.commit()
+
+    with pytest.raises(UserNotFoundError):
+        service.soft_delete_user(actor=admin, user_id="nonexistent")
+
+
+def test_update_user_changes_fields(db_session) -> None:
+    service = AccountService(UserRepository(db_session))
+    admin = service.ensure_admin_password(
+        email="admin@example.local",
+        name="Admin",
+        temporary_password="Temporary123!",
+    ).user
+    service.change_own_password(
+        user=admin,
+        current_password="Temporary123!",
+        new_password="Permanent123!",
+    )
+    encargado = service.create_encargado(
+        actor=admin,
+        name="Original",
+        email="original@example.local",
+        temporary_password="TempEnc123!",
+    ).user
+    db_session.commit()
+
+    updated = service.update_user(
+        actor=admin,
+        user_id=encargado.id,
+        name="Updated Name",
+        role="admin",
+        active=False,
+    )
+
+    assert updated.name == "Updated Name"
+    assert updated.role == "admin"
+    assert updated.active is False
+
+
+def test_update_nonexistent_user_raises(db_session) -> None:
+    service = AccountService(UserRepository(db_session))
+    admin = service.ensure_admin_password(
+        email="admin@example.local",
+        name="Admin",
+        temporary_password="Temporary123!",
+    ).user
+    service.change_own_password(
+        user=admin,
+        current_password="Temporary123!",
+        new_password="Permanent123!",
+    )
+    db_session.commit()
+
+    with pytest.raises(UserNotFoundError):
+        service.update_user(actor=admin, user_id="nonexistent", name="Ghost")
 

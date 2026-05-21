@@ -208,3 +208,65 @@ def test_telegram_manual_link_rejects_non_internal_role(client, session):
     )
 
     assert response.status_code == 400
+
+
+def test_delete_user_returns_204(client, session):
+    user = _create_user(session, role="encargado")
+    session.commit()
+
+    response = client.delete(f"/api/admin/users/{user.id}")
+    assert response.status_code == 204
+
+    list_resp = client.get("/api/admin/users")
+    assert list_resp.status_code == 200
+    user_ids = [u["id"] for u in list_resp.json()]
+    assert user.id not in user_ids
+
+
+def test_delete_nonexistent_user_returns_404(client):
+    response = client.delete("/api/admin/users/nonexistent-uuid")
+    assert response.status_code == 404
+
+
+def test_update_user_name_returns_200(client, session):
+    user = _create_user(session, role="encargado")
+    session.commit()
+
+    response = client.patch(
+        f"/api/admin/users/{user.id}",
+        json={"name": "Nuevo Nombre"},
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Nuevo Nombre"
+
+
+def test_update_user_role_returns_200(client, session):
+    user = _create_user(session, role="encargado")
+    session.commit()
+
+    response = client.patch(
+        f"/api/admin/users/{user.id}",
+        json={"role": "admin"},
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "admin"
+
+
+def test_update_user_active_returns_200(client, session):
+    user = _create_user(session, role="encargado")
+    session.commit()
+
+    response = client.patch(
+        f"/api/admin/users/{user.id}",
+        json={"active": False},
+    )
+    assert response.status_code == 200
+    assert response.json()["active"] is False
+
+
+def test_update_nonexistent_user_returns_404(client):
+    response = client.patch(
+        "/api/admin/users/nonexistent-uuid",
+        json={"name": "Ghost"},
+    )
+    assert response.status_code == 404
