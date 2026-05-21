@@ -93,15 +93,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
     }
   }, [availabilityData, doctor?.availability_mode]);
 
-  const deleteDoctor = useMutation({
-    mutationFn: () => doctorsApi.delete(doctor!.id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["doctors"] });
-      onClose();
-    },
-    onError: (err: Error) => setError(err.message),
-  });
-
   const save = useMutation({
     mutationFn: (payload: CreateDoctorPayload) =>
       isEdit ? doctorsApi.update(doctor!.id, payload) : doctorsApi.create(payload),
@@ -341,20 +332,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
           <div className="form-footer">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-            {isEdit && (
-              <button
-                type="button"
-                className="btn-ghost btn-danger"
-                disabled={deleteDoctor.isPending}
-                onClick={() => {
-                  if (window.confirm("¿Eliminar este médico permanentemente?")) {
-                    deleteDoctor.mutate();
-                  }
-                }}
-              >
-                {deleteDoctor.isPending ? "Eliminando…" : "Eliminar médico"}
-              </button>
-            )}
             <button type="submit" className="btn-primary" disabled={save.isPending}>
               <Save size={16} />
               {save.isPending ? "Guardando…" : "Guardar"}
