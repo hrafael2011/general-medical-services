@@ -45,6 +45,9 @@ class _AreaMapper:
     def weighted_uuids(self) -> dict[str, float]:
         return {self._code_to_uuid[c]: w for c, w in AREA_WEIGHTS.items()}
 
+    def missing_required_codes(self) -> list[str]:
+        return [code for code in REQUIRED_AREA_CODES if code not in self._code_to_uuid]
+
 
 class GenerationService:
     def __init__(
@@ -80,6 +83,13 @@ class GenerationService:
 
         # Build code↔uuid mapper so the domain engine works with logical codes
         mapper = _AreaMapper(self.calendar_repo.session)
+        missing_area_codes = mapper.missing_required_codes()
+        if missing_area_codes:
+            raise CalendarServiceError(
+                "generation_configuration_incomplete",
+                "No se puede generar con reglas porque faltan áreas de servicio "
+                f"requeridas en el catálogo: {', '.join(missing_area_codes)}.",
+            )
 
         # Load all service-active doctors
         doctors = self.doctor_repo.list_service_active()

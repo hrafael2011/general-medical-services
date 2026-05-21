@@ -8,6 +8,9 @@ Follows the ORM-direct pattern from test_assignment_service.py.
 import datetime
 from uuid import uuid4
 
+import pytest
+
+from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
@@ -186,6 +189,18 @@ def test_generate_assigns_doctors(db_session) -> None:
     version = cal_repo.get_latest_version(calendar.id)
     assignments = cal_repo.list_assignments(version.id)
     assert len(assignments) == summary.assigned_count
+
+
+def test_generate_reports_missing_required_service_areas(db_session) -> None:
+    calendar, _version = _create_calendar_and_version(db_session)
+
+    service = _make_generation_service(db_session)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    assert exc_info.value.code == "generation_configuration_incomplete"
+    assert "emergencia" in exc_info.value.message
 
 
 # ---------------------------------------------------------------------------
