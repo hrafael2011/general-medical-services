@@ -118,6 +118,24 @@ def test_no_audit_event_without_audit_service(db_session) -> None:
     assert len(events) == 0
 
 
+def test_audit_event_for_doctor_deletion(db_session) -> None:
+    audit = make_audit_service(db_session)
+    doctor_service = make_doctor_service(db_session, audit_service=audit)
+
+    doctor = create_doctor(db_session, doctor_service, name="Dr. DeleteMe")
+    doctor_service.soft_delete_doctor(doctor.id, actor_id="actor-1")
+
+    events = audit.repo.list()
+    action_types = [e.action_type for e in events]
+    assert "doctor_deleted" in action_types
+
+    delete_event = next(e for e in events if e.action_type == "doctor_deleted")
+    assert delete_event.entity_type == "doctor"
+    assert delete_event.entity_id == doctor.id
+    assert delete_event.before_snapshot["name"] == "Dr. DeleteMe"
+    assert delete_event.before_snapshot["sex"] == "male"
+
+
 # ---------------------------------------------------------------------------
 # Append-only / ordering
 # ---------------------------------------------------------------------------

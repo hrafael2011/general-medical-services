@@ -162,3 +162,20 @@ def reactivate_service(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": exc.code, "message": exc.message}) from exc
     session.commit()
     return _to_read(doctor, DoctorRepository(session))
+
+
+@router.delete("/{doctor_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_doctor(
+    doctor_id: str,
+    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[DoctorService, Depends(get_doctor_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.soft_delete_doctor(doctor_id, actor_id=current_user.id)
+    except DoctorServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    session.commit()

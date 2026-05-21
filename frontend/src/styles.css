@@ -694,6 +694,7 @@ select {
   font-weight: 600; font-size: 0.9rem; cursor: pointer;
 }
 .check-label input { width: auto; min-height: auto; }
+.check-label-disabled { opacity: 0.4; cursor: not-allowed; }
 
 .form-error { color: #b91c1c; font-size: 0.88rem; font-weight: 600; }
 

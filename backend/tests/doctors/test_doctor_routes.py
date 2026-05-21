@@ -250,3 +250,26 @@ def test_reactivate_service_not_found(client, mock_service):
 
     resp = client.post("/api/doctors/non-existent/reactivate-service")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/doctors/{doctor_id}
+# ---------------------------------------------------------------------------
+
+
+def test_delete_doctor_success(client, mock_service):
+    mock_service.soft_delete_doctor.return_value = None
+
+    resp = client.delete("/api/doctors/some-id")
+    assert resp.status_code == 204
+    mock_service.soft_delete_doctor.assert_called_once_with("some-id", actor_id="test-user")
+
+
+def test_delete_doctor_not_found(client, mock_service):
+    mock_service.soft_delete_doctor.side_effect = DoctorServiceError(
+        "doctor_not_found", "Doctor with id non-existent not found"
+    )
+
+    resp = client.delete("/api/doctors/non-existent")
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "doctor_not_found"

@@ -265,6 +265,14 @@ class DoctorService:
 
         return doctor
 
+    def soft_delete_doctor(self, doctor_id: str, *, actor_id: str) -> None:
+        doctor = self.doctors.get_by_id(doctor_id)
+        if doctor is None:
+            raise DoctorServiceError("doctor_not_found", f"Doctor with id {doctor_id} not found")
+        self.doctors.soft_delete(doctor_id)
+        if self.audit is not None:
+            self.audit.log_doctor_deleted(actor_id=actor_id, doctor=doctor)
+
     def _create_mission_replacement_alerts_for_deactivated_doctor(
         self,
         doctor: DoctorModel,

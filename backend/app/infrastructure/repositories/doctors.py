@@ -1,7 +1,13 @@
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.doctors import DoctorAllowedAreaModel, DoctorModel
+
+
+def _not_deleted() -> tuple:
+    return (DoctorModel.deleted_at.is_(None),)
 
 
 class DoctorRepository:
@@ -14,14 +20,19 @@ class DoctorRepository:
         return doctor
 
     def get_by_id(self, doctor_id: str) -> DoctorModel | None:
-        return self.session.get(DoctorModel, doctor_id)
+        stmt = select(DoctorModel).where(
+            DoctorModel.id == doctor_id, *_not_deleted()
+        )
+        return self.session.scalars(stmt).first()
 
     def get_by_normalized_name(self, name: str) -> DoctorModel | None:
-        stmt = select(DoctorModel).where(DoctorModel.normalized_name == name)
+        stmt = select(DoctorModel).where(
+            DoctorModel.normalized_name == name, *_not_deleted()
+        )
         return self.session.scalars(stmt).first()
 
     def list_all(self, *, active_only: bool = False) -> list[DoctorModel]:
-        stmt = select(DoctorModel)
+        stmt = select(DoctorModel).where(*_not_deleted())
         if active_only:
             stmt = stmt.where(DoctorModel.active.is_(True), DoctorModel.service_active.is_(True))
         return list(self.session.scalars(stmt.order_by(DoctorModel.name)))
@@ -29,6 +40,7 @@ class DoctorRepository:
     def list_service_active(self) -> list[DoctorModel]:
         stmt = (
             select(DoctorModel)
+            .where(*_not_deleted())
             .where(DoctorModel.active.is_(True))
             .where(DoctorModel.service_active.is_(True))
             .order_by(DoctorModel.name)
@@ -43,7 +55,7 @@ class DoctorRepository:
         department_id: str | None = None,
         active_only: bool = True,
     ) -> list[DoctorModel]:
-        stmt = select(DoctorModel)
+        stmt = select(DoctorModel).where(*_not_deleted())
         if active_only:
             stmt = stmt.where(DoctorModel.active.is_(True))
         if rank_id:
@@ -78,4 +90,13 @@ class DoctorRepository:
         ).delete()
         for area_id in area_ids:
             self.session.add(DoctorAllowedAreaModel(doctor_id=doctor_id, service_area_id=area_id))
+        self.session.flush()
+
+    def soft_delete(self, doctor_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(DoctorModel)
+            .where(DoctorModel.id == doctor_id)
+            .values(deleted_at=now, updated_at=now)
+        )
         self.session.flush()

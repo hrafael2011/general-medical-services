@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class SetWeeklyAvailabilityRequest(BaseModel):
-    days_of_week: list[int] = Field(min_length=1, description="Weekdays 0=Monday to 6=Sunday")
+    days_of_week: list[int] = Field(min_length=1, max_length=2, description="Weekdays 0=Monday to 6=Sunday, max 2")
     effective_from: date | None = None
     effective_to: date | None = None
 

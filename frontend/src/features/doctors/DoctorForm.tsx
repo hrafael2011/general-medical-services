@@ -23,6 +23,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [departmentId, setDepartmentId] = useState<string>(doctor?.department_id ?? "");
   const [allowedAreaIds, setAllowedAreaIds] = useState<string[]>(doctor?.allowed_area_ids ?? []);
 
+  const MAX_WEEKLY_DAYS = 2;
   const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
   const DAY_TO_BACKEND = [6, 0, 1, 2, 3, 4, 5];
   const WEEK_LABELS = ["1ra", "2da", "3ra", "4ta", "Última"];
@@ -37,9 +38,11 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<number>(-1);
 
   function toggleDay(backendDay: number) {
-    setSelectedDays(prev =>
-      prev.includes(backendDay) ? prev.filter(d => d !== backendDay) : [...prev, backendDay]
-    );
+    setSelectedDays(prev => {
+      if (prev.includes(backendDay)) return prev.filter(d => d !== backendDay);
+      if (prev.length >= MAX_WEEKLY_DAYS) return prev;
+      return [...prev, backendDay];
+    });
   }
 
   function toggleDate(day: number) {
@@ -89,6 +92,15 @@ export function DoctorForm({ doctor, onClose }: Props) {
       setSelectedDates(monthly.available_dates ?? []);
     }
   }, [availabilityData, doctor?.availability_mode]);
+
+  const deleteDoctor = useMutation({
+    mutationFn: () => doctorsApi.delete(doctor!.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["doctors"] });
+      onClose();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
 
   const save = useMutation({
     mutationFn: (payload: CreateDoctorPayload) =>
@@ -244,11 +256,13 @@ export function DoctorForm({ doctor, onClose }: Props) {
                   {DAY_LABELS.map((label, i) => {
                     const backendDay = DAY_TO_BACKEND[i];
                     const selected = selectedDays.includes(backendDay);
+                    const atLimit = selectedDays.length >= MAX_WEEKLY_DAYS && !selected;
                     return (
-                      <label key={label} className="check-label">
+                      <label key={label} className={`check-label${atLimit ? " check-label-disabled" : ""}`}>
                         <input
                           type="checkbox"
                           checked={selected}
+                          disabled={atLimit}
                           onChange={() => toggleDay(backendDay)}
                         />
                         {label}
@@ -327,6 +341,20 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
           <div className="form-footer">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+            {isEdit && (
+              <button
+                type="button"
+                className="btn-ghost btn-danger"
+                disabled={deleteDoctor.isPending}
+                onClick={() => {
+                  if (window.confirm("¿Eliminar este médico permanentemente?")) {
+                    deleteDoctor.mutate();
+                  }
+                }}
+              >
+                {deleteDoctor.isPending ? "Eliminando…" : "Eliminar médico"}
+              </button>
+            )}
             <button type="submit" className="btn-primary" disabled={save.isPending}>
               <Save size={16} />
               {save.isPending ? "Guardando…" : "Guardar"}

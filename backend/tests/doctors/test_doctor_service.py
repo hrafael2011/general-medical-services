@@ -1,15 +1,19 @@
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
+import pytest
+
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.doctors.service import DoctorService
 from backend.app.application.catalogs.service import CatalogService
+from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.missions import (
     MissionAssignmentModel,
     MissionParticipantModel,
 )
 from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+from backend.app.application.doctors.errors import DoctorServiceError
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
@@ -340,3 +344,72 @@ def test_deactivate_service_does_not_duplicate_replacement_alert(db_session) -> 
     service.deactivate_service(doctor.id, actor_id="a", reason_id="r1", detail=None)
 
     assert len(alerts.list_all(status="open", section="missions")) == 1
+
+
+# ---------------------------------------------------------------------------
+# Soft delete
+# ---------------------------------------------------------------------------
+
+
+def test_soft_delete_doctor_marks_deleted_at(db_session) -> None:
+    service = _make_service(db_session)
+    repo = DoctorRepository(db_session)
+
+    doctor = service.create_doctor(
+        actor_id="a", name="Dr. To Delete", sex="male", rank_id=None, department_id=None,
+        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        monthly_service_target=3, monthly_service_max=3,
+        monthly_service_limit_mode="warn_only", availability_mode="monthly",
+        allowed_area_ids=[],
+    )
+
+    service.soft_delete_doctor(doctor.id, actor_id="a")
+
+    deleted = repo.session.get(DoctorModel, doctor.id)
+    assert deleted.deleted_at is not None
+
+
+def test_soft_delete_doctor_hides_from_queries(db_session) -> None:
+    service = _make_service(db_session)
+    repo = DoctorRepository(db_session)
+
+    doctor = service.create_doctor(
+        actor_id="a", name="Dr. Hidden", sex="female", rank_id=None, department_id=None,
+        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        monthly_service_target=3, monthly_service_max=3,
+        monthly_service_limit_mode="warn_only", availability_mode="monthly",
+        allowed_area_ids=[],
+    )
+    service.soft_delete_doctor(doctor.id, actor_id="a")
+
+    assert repo.get_by_id(doctor.id) is None
+    assert doctor.name not in [d.name for d in repo.list_all()]
+    assert doctor.name not in [d.name for d in repo.list_service_active()]
+    assert doctor.name not in [d.name for d in repo.list_with_filters(active_only=False)]
+
+
+def test_soft_delete_doctor_not_found(db_session) -> None:
+    service = _make_service(db_session)
+
+    with pytest.raises(DoctorServiceError) as exc_info:
+        service.soft_delete_doctor("nonexistent-id", actor_id="a")
+    assert exc_info.value.code == "doctor_not_found"
+
+
+def test_soft_delete_doctor_updates_updated_at(db_session) -> None:
+    service = _make_service(db_session)
+    repo = DoctorRepository(db_session)
+
+    doctor = service.create_doctor(
+        actor_id="a", name="Dr. Timestamp", sex="male", rank_id=None, department_id=None,
+        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        monthly_service_target=3, monthly_service_max=3,
+        monthly_service_limit_mode="warn_only", availability_mode="monthly",
+        allowed_area_ids=[],
+    )
+    original_updated_at = doctor.updated_at
+
+    service.soft_delete_doctor(doctor.id, actor_id="a")
+
+    deleted = repo.session.get(DoctorModel, doctor.id)
+    assert deleted.updated_at > original_updated_at

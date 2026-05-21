@@ -96,6 +96,15 @@ class AuditService:
             after={"service_active": True},
         )
 
+    def log_doctor_deleted(self, *, actor_id: str, doctor) -> AuditEventModel:
+        return self._create(
+            actor_id=actor_id,
+            action_type="doctor_deleted",
+            entity_type="doctor",
+            entity_id=doctor.id,
+            before={"name": doctor.name, "sex": doctor.sex, "service_active": doctor.service_active},
+        )
+
     # --- Availability events ---
 
     def log_availability_set(self, *, actor_id: str, availability) -> AuditEventModel:

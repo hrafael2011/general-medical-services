@@ -60,6 +60,8 @@ export const doctorsApi = {
     apiFetch<DoctorRead>("/doctors", { method: "POST", body: JSON.stringify(payload) }),
   update: (id: string, payload: Partial<CreateDoctorPayload>) =>
     apiFetch<DoctorRead>(`/doctors/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    apiFetch<void>(`/doctors/${id}`, { method: "DELETE" }),
   deactivateService: (id: string, reason_id: string, detail?: string) =>
     apiFetch<DoctorRead>(`/doctors/${id}/deactivate-service`, {
       method: "POST", body: JSON.stringify({ reason_id, detail }),

@@ -191,7 +191,7 @@ def test_set_weekly_success(client, seed_data, mock_service):
 
     record = DoctorAvailabilityModel(
         id=str(uuid4()), doctor_id=seed_data["doctor_id"],
-        availability_type="weekly", days_of_week=[0, 2, 4],
+        availability_type="weekly", days_of_week=[0, 2],
         source="manual", review_status="approved",
         created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
     )
@@ -199,7 +199,7 @@ def test_set_weekly_success(client, seed_data, mock_service):
 
     resp = client.post(
         f"/api/availability/doctors/{seed_data['doctor_id']}/weekly",
-        json={"days_of_week": [0, 2, 4]},
+        json={"days_of_week": [0, 2]},
     )
     assert resp.status_code == 201
     assert resp.json()["availability_type"] == "weekly"
