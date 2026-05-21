@@ -92,6 +92,7 @@ def get_generation_service(
     from backend.app.application.audit.service import AuditService
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.infrastructure.repositories.missions import MissionRepository
 
