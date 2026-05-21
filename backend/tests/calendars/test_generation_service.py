@@ -220,6 +220,18 @@ def test_generate_assigns_doctors(db_session) -> None:
     assert version.status == "draft"
 
 
+def test_generate_reports_missing_required_service_areas(db_session) -> None:
+    calendar, _version = _create_calendar_and_version(db_session)
+
+    service = _make_generation_service(db_session)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    assert exc_info.value.code == "generation_configuration_incomplete"
+    assert "emergencia" in exc_info.value.message
+
+
 def test_generate_does_not_create_mission_ranking_before_approval(db_session) -> None:
     """Calendar generation must not create mission rankings for draft calendars."""
     _seed_service_areas(db_session)

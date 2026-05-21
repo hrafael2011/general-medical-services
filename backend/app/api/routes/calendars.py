@@ -56,6 +56,7 @@ _ERROR_STATUS: dict[str, int] = {
     "calendar_already_approved": status.HTTP_409_CONFLICT,
     "invalid_status_transition": status.HTTP_409_CONFLICT,
     "invalid_generation_mode": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "generation_configuration_incomplete": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "week_not_found": status.HTTP_404_NOT_FOUND,
     "week_already_approved": status.HTTP_409_CONFLICT,
     "week_not_approved": status.HTTP_409_CONFLICT,
