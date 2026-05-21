@@ -43,4 +43,15 @@ export const adminApi = {
       method: "POST",
     });
   },
+
+  deleteUser(id: string) {
+    return apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" });
+  },
+
+  updateUser(id: string, payload: { name?: string; role?: string; active?: boolean }) {
+    return apiFetch<UserRead>(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
 };
