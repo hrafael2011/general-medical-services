@@ -30,6 +30,7 @@ build/
 .pytest_cache/
 .ruff_cache/
 coverage.xml
+.coverage
 htmlcov/
 frontend/.vite/
 *.tsbuildinfo
@@ -44,3 +45,4 @@ frontend/.vite/
 spect-extra-improve.md
 docs/superpowers/
 .superpowers/
+.vercel/
