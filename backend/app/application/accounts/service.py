@@ -263,6 +263,17 @@ class AccountService:
             self.audit.log_user_updated(actor_id=actor.id, user=user, changed_fields=changed)
         return user
 
+    def initiate_password_recovery(self, *, email: str) -> UserModel | None:
+        """Look up user by email for password recovery. Returns None if not found or inactive."""
+        user = self.users.get_by_email(email)
+        if user is None:
+            return None
+        if not user.active:
+            return None
+        if user.role not in (UserRole.ENCARGADO.value, UserRole.ADMIN.value):
+            return None
+        return user
+
     def _require_admin(self, actor: UserModel) -> None:
         if actor.role != UserRole.ADMIN.value or not actor.active or actor.must_change_password:
             raise PermissionDeniedError

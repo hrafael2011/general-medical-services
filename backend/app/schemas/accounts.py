@@ -47,3 +47,7 @@ class UpdateUserRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     role: str | None = Field(default=None, pattern=r"^(admin|encargado)$")
     active: bool | None = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr

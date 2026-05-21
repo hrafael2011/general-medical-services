@@ -12,13 +12,20 @@ from backend.app.application.accounts.errors import (
     InactiveUserError,
     InvalidCredentialsError,
     InvalidPasswordChangeError,
+    RecoveryRateLimitedError,
 )
 from backend.app.application.accounts.service import AccountService
-from backend.app.infrastructure.db.models.user import LoginAttemptModel, UserModel
+from backend.app.core.config import settings
+from backend.app.infrastructure.db.models.user import (
+    LoginAttemptModel,
+    PasswordRecoveryAttemptModel,
+    UserModel,
+)
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.users import UserRepository
 from backend.app.schemas.accounts import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
     UserRead,
@@ -29,6 +36,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 _LOGIN_RATE_LIMIT = 20
 _LOGIN_WINDOW_SECONDS = 900  # 15 minutes
+
+_RECOVERY_EMAIL_LIMIT = 3
+_RECOVERY_IP_LIMIT = 5
+_RECOVERY_WINDOW_SECONDS = 3600  # 1 hour
 
 
 class SetPasswordRequest(BaseModel):
@@ -77,6 +88,52 @@ def _check_login_rate_limit(session: Session, client_ip: str) -> None:
         success=False,
     )
     session.add(attempt)
+
+
+def _check_recovery_rate_limit(session: Session, email: str, client_ip: str) -> None:
+    now = datetime.now(UTC)
+    cutoff = now.timestamp() - _RECOVERY_WINDOW_SECONDS
+    cutoff_dt = datetime.fromtimestamp(cutoff, tz=UTC)
+
+    # Prune old attempts
+    old = session.query(PasswordRecoveryAttemptModel).filter(
+        PasswordRecoveryAttemptModel.attempted_at < cutoff_dt,
+    )
+    for a in old:
+        session.delete(a)
+
+    # Check per-email limit
+    email_count = (
+        session.query(PasswordRecoveryAttemptModel)
+        .filter(
+            PasswordRecoveryAttemptModel.email == email,
+            PasswordRecoveryAttemptModel.attempted_at >= cutoff_dt,
+        )
+        .count()
+    )
+    if email_count >= _RECOVERY_EMAIL_LIMIT:
+        raise RecoveryRateLimitedError
+
+    # Check per-IP limit
+    ip_count = (
+        session.query(PasswordRecoveryAttemptModel)
+        .filter(
+            PasswordRecoveryAttemptModel.ip_address == client_ip,
+            PasswordRecoveryAttemptModel.attempted_at >= cutoff_dt,
+        )
+        .count()
+    )
+    if ip_count >= _RECOVERY_IP_LIMIT:
+        raise RecoveryRateLimitedError
+
+    session.add(
+        PasswordRecoveryAttemptModel(
+            id=str(uuid4()),
+            email=email,
+            ip_address=client_ip,
+            attempted_at=now,
+        )
+    )
 
 
 def get_account_service(session: Annotated[Session, Depends(get_db_session)]) -> AccountService:
@@ -145,6 +202,19 @@ def change_password(
             detail="Invalid password change",
         ) from exc
     session.commit()
+
+    from backend.app.infrastructure.email.resend import send_email
+    from backend.app.infrastructure.email.templates.password_changed import (
+        render_password_changed_email,
+    )
+    send_email(
+        to=user.email,
+        subject="Contrasena cambiada — Sistema de Turnos Medicos",
+        html=render_password_changed_email(
+            name=user.name, origin=settings.frontend_origin
+        ),
+    )
+
     return UserRead.model_validate(user)
 
 
@@ -243,6 +313,69 @@ def set_password(
     user.updated_at = datetime.now(UTC)
 
     service.mark_used(token_record)
+
+    # Log audit for self-service recovery (created_by == user's own ID)
+    if token_record.created_by == user.id:
+        from backend.app.application.audit.service import AuditService
+        from backend.app.infrastructure.repositories.audit import AuditRepository
+        audit = AuditService(AuditRepository(session))
+        audit.log_password_recovery_completed(user=user)
+
     session.commit()
 
+    from backend.app.infrastructure.email.resend import send_email
+    from backend.app.infrastructure.email.templates.password_changed import (
+        render_password_changed_email,
+    )
+    send_email(
+        to=user.email,
+        subject="Contrasena cambiada — Sistema de Turnos Medicos",
+        html=render_password_changed_email(name=user.name, origin=settings.frontend_origin),
+    )
+
     return {"message": "Contraseña creada exitosamente. Ahora puedes iniciar sesión."}
+
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> dict[str, str]:
+    """Initiate self-service password recovery. Always returns 200 to prevent email enumeration."""
+    from backend.app.application.accounts.invitation_service import InvitationService
+    from backend.app.infrastructure.repositories.set_password_tokens import (
+        SetPasswordTokenRepository,
+    )
+    from backend.app.infrastructure.repositories.users import UserRepository
+
+    client_ip = request.client.host if request.client else "unknown"
+    email = payload.email.strip().lower()
+
+    try:
+        _check_recovery_rate_limit(session, email, client_ip)
+    except RecoveryRateLimitedError:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiadas solicitudes. Intenta de nuevo en una hora.",
+        )
+
+    service = AccountService(UserRepository(session))
+    user = service.initiate_password_recovery(email=email)
+
+    if user is not None:
+        from backend.app.application.audit.service import AuditService
+        from backend.app.infrastructure.repositories.audit import AuditRepository
+
+        audit = AuditService(AuditRepository(session))
+        audit.log_password_recovery_requested(email=email)
+
+        token_repo = SetPasswordTokenRepository(session)
+        invitation_service = InvitationService(token_repo)
+        invitation_service.create_self_service_recovery(user=user)
+
+    session.commit()
+
+    return {
+        "message": "Si el email existe en nuestro sistema, recibiras un enlace para restablecer tu contrasena."
+    }

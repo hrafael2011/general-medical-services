@@ -45,6 +45,17 @@ class LoginAttemptModel(Base):
     success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class PasswordRecoveryAttemptModel(Base):
+    __tablename__ = "password_recovery_attempts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    ip_address: Mapped[str] = mapped_column(String(45), nullable=False, index=True)
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+
 class PasswordHistoryModel(Base):
     __tablename__ = "password_history"
 

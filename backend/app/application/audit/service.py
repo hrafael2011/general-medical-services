@@ -201,6 +201,24 @@ class AuditService:
             before={"name": user.name, "email": user.email, "role": user.role},
         )
 
+    def log_password_recovery_requested(self, *, email: str) -> AuditEventModel:
+        return self._create(
+            actor_id=None,
+            action_type="password_recovery_requested",
+            entity_type="user",
+            entity_id=None,
+            metadata={"email_hint": email[:3] + "***"},
+        )
+
+    def log_password_recovery_completed(self, *, user) -> AuditEventModel:
+        return self._create(
+            actor_id=user.id,
+            action_type="password_recovery_completed",
+            entity_type="user",
+            entity_id=user.id,
+            after={"must_change_password": False},
+        )
+
     # --- Calendar events ---
 
     def log_calendar_created(self, *, actor_id: str, calendar) -> AuditEventModel:

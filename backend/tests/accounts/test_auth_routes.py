@@ -286,3 +286,199 @@ def test_set_password_weak_password(client):
         "password": "short",
     })
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/forgot-password
+# ---------------------------------------------------------------------------
+
+
+def _seed_user(session, **kwargs):
+    from backend.app.infrastructure.db.models.user import UserModel as UM
+
+    defaults = {
+        "id": "test-user",
+        "email": "user@test.com",
+        "password_hash": "hash",
+        "name": "Test User",
+        "role": "encargado",
+        "active": True,
+        "must_change_password": False,
+        "token_version": 1,
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
+    }
+    defaults.update(kwargs)
+    user = UM(**defaults)
+    session.add(user)
+    session.commit()
+    return user
+
+
+def _make_forgot_password_client(session_factory, user_override=None):
+    """Create a TestClient for forgot-password tests with a seeded session."""
+    app = create_app()
+
+    def _get_session():
+        s = session_factory()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    app.dependency_overrides[get_db_session] = _get_session
+    if user_override is not None:
+        app.dependency_overrides[get_current_user] = lambda: user_override
+    return TestClient(app)
+
+
+def test_forgot_password_returns_200_for_known_email():
+    """Always returns 200 with a generic message — even if email exists."""
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+    sess = SessionLocal()
+    _seed_user(sess)
+
+    client = _make_forgot_password_client(SessionLocal)
+    resp = client.post("/api/auth/forgot-password", json={"email": "user@test.com"})
+    assert resp.status_code == 200
+    assert "mensaje" in resp.json()["message"].lower() or "enlace" in resp.json()["message"].lower()
+
+
+def test_forgot_password_returns_200_for_unknown_email():
+    """Returns 200 with same generic message — does NOT reveal whether email exists."""
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+
+    client = _make_forgot_password_client(SessionLocal)
+    resp = client.post("/api/auth/forgot-password", json={"email": "no-existe@test.com"})
+    assert resp.status_code == 200
+    assert "mensaje" in resp.json()["message"].lower() or "enlace" in resp.json()["message"].lower()
+
+
+def test_forgot_password_rate_limit_by_email():
+    """Returns 429 after exceeding 3 requests per email in 1 hour."""
+    from backend.app.infrastructure.db.models.user import PasswordRecoveryAttemptModel
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+
+    # Pre-seed 3 recovery attempts for the same email
+    sess = SessionLocal()
+    now = datetime.now(UTC)
+    for i in range(3):
+        sess.add(PasswordRecoveryAttemptModel(
+            id=f"att-{i}",
+            email="rate@test.com",
+            ip_address=f"192.168.1.{i}",
+            attempted_at=now,
+        ))
+    sess.commit()
+
+    client = _make_forgot_password_client(SessionLocal)
+    resp = client.post("/api/auth/forgot-password", json={"email": "rate@test.com"})
+    assert resp.status_code == 429
+
+
+def test_forgot_password_rate_limit_by_ip():
+    """Returns 429 after exceeding 5 requests per IP in 1 hour."""
+    from backend.app.infrastructure.db.models.user import PasswordRecoveryAttemptModel
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+
+    # Pre-seed 5 recovery attempts from the TestClient's IP
+    sess = SessionLocal()
+    now = datetime.now(UTC)
+    for i in range(5):
+        sess.add(PasswordRecoveryAttemptModel(
+            id=f"att-{i}",
+            email=f"user{i}@test.com",
+            ip_address="testclient",
+            attempted_at=now,
+        ))
+    sess.commit()
+
+    client = _make_forgot_password_client(SessionLocal)
+    resp = client.post("/api/auth/forgot-password", json={"email": "new@test.com"})
+    assert resp.status_code == 429
+
+
+def test_forgot_password_creates_token_for_active_user():
+    """Creates a set-password token for an active user."""
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+
+    sess = SessionLocal()
+    user = _seed_user(sess, email="active@test.com", active=True)
+
+    client = _make_forgot_password_client(SessionLocal)
+    resp = client.post("/api/auth/forgot-password", json={"email": "active@test.com"})
+    assert resp.status_code == 200
+
+    # Token should have been created for this user
+    s2 = SessionLocal()
+    tokens = s2.query(SetPasswordTokenModel).filter(
+        SetPasswordTokenModel.user_id == user.id,
+    ).all()
+    assert len(tokens) == 1
+    assert tokens[0].email == "active@test.com"
+    # Self-service recovery tokens expire in 30 minutes
+    expires = tokens[0].expires_at.replace(tzinfo=UTC)
+    assert expires <= datetime.now(UTC) + timedelta(minutes=30)
+
+
+def test_forgot_password_does_not_create_token_for_inactive_user():
+    """Does NOT create a token for an inactive user, but still returns 200."""
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+
+    sess = SessionLocal()
+    user = _seed_user(sess, email="inactive@test.com", active=False)
+
+    client = _make_forgot_password_client(SessionLocal)
+    resp = client.post("/api/auth/forgot-password", json={"email": "inactive@test.com"})
+    assert resp.status_code == 200
+
+    # No token should have been created
+    s2 = SessionLocal()
+    tokens = s2.query(SetPasswordTokenModel).filter(
+        SetPasswordTokenModel.user_id == user.id,
+    ).all()
+    assert len(tokens) == 0
+
+
+def test_forgot_password_invalid_email_format(client):
+    """Returns 422 for invalid email format."""
+    resp = client.post("/api/auth/forgot-password", json={"email": "not-an-email"})
+    assert resp.status_code == 422

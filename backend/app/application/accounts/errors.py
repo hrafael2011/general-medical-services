@@ -33,3 +33,7 @@ class UserNotFoundError(AccountError):
 class InvalidPasswordChangeError(AccountError):
     """Raised when password change is invalid."""
 
+
+class RecoveryRateLimitedError(AccountError):
+    """Raised when too many password recovery requests are made."""
+
