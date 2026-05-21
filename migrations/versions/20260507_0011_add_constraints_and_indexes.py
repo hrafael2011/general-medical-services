@@ -31,6 +31,11 @@ def _index_exists(table_name: str, index_name: str) -> bool:
 
 
 def _create_index_if_missing(index_name: str, table_name: str, columns: list[str]) -> None:
+    if not _is_sqlite():
+        quoted_columns = ", ".join(f'"{column}"' for column in columns)
+        op.execute(sa.text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ({quoted_columns})'))
+        return
+
     if not _index_exists(table_name, index_name):
         op.create_index(index_name, table_name, columns)
 
@@ -89,6 +94,14 @@ def _drop_old_ranking_constraint() -> None:
     )
 
 
+def _unique_constraint_exists(table_name: str, constraint_name: str) -> bool:
+    inspector = sa.inspect(op.get_bind())
+    return any(
+        constraint["name"] == constraint_name
+        for constraint in inspector.get_unique_constraints(table_name)
+    )
+
+
 def upgrade() -> None:
     # ------------------------------------------------------------------
     # mission_candidate_rankings: add new UC with version_id
@@ -117,11 +130,12 @@ def upgrade() -> None:
             "    AND da2.id < da.id "
             ")"
         )
-        op.create_unique_constraint(
-            "uq_doctor_availability_monthly",
-            "doctor_availability",
-            ["doctor_id", "month", "year", "availability_type"],
-        )
+        if not _unique_constraint_exists("doctor_availability", "uq_doctor_availability_monthly"):
+            op.create_unique_constraint(
+                "uq_doctor_availability_monthly",
+                "doctor_availability",
+                ["doctor_id", "month", "year", "availability_type"],
+            )
 
     # ------------------------------------------------------------------
     # Missing FK indexes

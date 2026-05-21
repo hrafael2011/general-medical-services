@@ -2,7 +2,7 @@
 set -e
 
 echo "=== Running database migrations ==="
-python -m alembic upgrade heads
+python -m alembic upgrade head
 
 echo "=== Starting uvicorn ==="
 exec uvicorn backend.app.main:app \

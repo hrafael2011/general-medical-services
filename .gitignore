@@ -45,3 +45,4 @@ frontend/.vite/
 spect-extra-improve.md
 docs/superpowers/
 .superpowers/
+.vercel/
