@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.app.application.accounts.errors import (
     AccountLockedError,
+    DeletedEmailConflictError,
     DuplicateEmailError,
     InactiveUserError,
     InvalidCredentialsError,
@@ -81,6 +82,12 @@ class AccountService:
     ) -> TemporaryPasswordResult:
         self._require_admin(actor)
         password = temporary_password or generate_temporary_password()
+        existing_user = self.users.get_by_email_including_deleted(email)
+        if existing_user is not None:
+            if existing_user.deleted_at is not None:
+                raise DeletedEmailConflictError
+            raise DuplicateEmailError
+
         now = datetime.now(UTC)
         user = UserModel(
             id=str(uuid4()),
@@ -277,4 +284,3 @@ class AccountService:
     def _require_admin(self, actor: UserModel) -> None:
         if actor.role != UserRole.ADMIN.value or not actor.active or actor.must_change_password:
             raise PermissionDeniedError
-

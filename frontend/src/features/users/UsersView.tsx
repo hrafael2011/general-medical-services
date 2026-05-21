@@ -36,7 +36,10 @@ export function UsersView() {
       setNewEmail("");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: () => addToast("error", "Error al crear usuario."),
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Error al crear usuario.";
+      addToast("error", message || "Error al crear usuario.");
+    },
   });
 
   const resetMutation = useMutation({

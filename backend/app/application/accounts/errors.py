@@ -26,6 +26,10 @@ class DuplicateEmailError(AccountError):
     """Raised when email already exists."""
 
 
+class DeletedEmailConflictError(AccountError):
+    """Raised when email belongs to a soft-deleted user."""
+
+
 class UserNotFoundError(AccountError):
     """Raised when user does not exist."""
 
@@ -36,4 +40,3 @@ class InvalidPasswordChangeError(AccountError):
 
 class RecoveryRateLimitedError(AccountError):
     """Raised when too many password recovery requests are made."""
-

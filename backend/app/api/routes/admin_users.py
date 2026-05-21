@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
 from backend.app.application.accounts.errors import (
+    DeletedEmailConflictError,
     DuplicateEmailError,
     PermissionDeniedError,
     UserNotFoundError,
@@ -70,7 +71,18 @@ def create_encargado(
     except DuplicateEmailError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already exists",
+            detail={
+                "code": "email_exists",
+                "message": "Este correo ya existe. Usa otro correo o edita el usuario existente.",
+            },
+        ) from exc
+    except DeletedEmailConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "email_belongs_to_deleted_user",
+                "message": "Este correo pertenece a un usuario eliminado. Usa otro correo o restaura el usuario eliminado.",
+            },
         ) from exc
     session.commit()
     return TemporaryPasswordResponse(
