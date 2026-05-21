@@ -217,6 +217,52 @@ class AccountService:
             user.updated_at = now
         return TemporaryPasswordResult(user=user, temporary_password=password)
 
+    def soft_delete_user(self, *, actor: UserModel, user_id: str) -> None:
+        self._require_admin(actor)
+        user = self.users.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError
+        if user.role not in (UserRole.ENCARGADO.value, UserRole.ADMIN.value):
+            raise PermissionDeniedError
+        self.users.soft_delete(user_id)
+        if self.audit is not None:
+            self.audit.log_user_deleted(actor_id=actor.id, user=user)
+
+    def update_user(
+        self,
+        *,
+        actor: UserModel,
+        user_id: str,
+        name: str | None = None,
+        role: str | None = None,
+        active: bool | None = None,
+    ) -> UserModel:
+        self._require_admin(actor)
+        user = self.users.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError
+        if user.role not in (UserRole.ENCARGADO.value, UserRole.ADMIN.value):
+            raise PermissionDeniedError
+
+        changed: dict[str, object] = {}
+        if name is not None:
+            user.name = name.strip()
+            changed["name"] = user.name
+        if role is not None:
+            user.role = role
+            changed["role"] = role
+        if active is not None:
+            user.active = active
+            changed["active"] = active
+
+        if not changed:
+            return user
+
+        self.users.update(user_id, **changed)
+        if self.audit is not None:
+            self.audit.log_user_updated(actor_id=actor.id, user=user, changed_fields=changed)
+        return user
+
     def _require_admin(self, actor: UserModel) -> None:
         if actor.role != UserRole.ADMIN.value or not actor.active or actor.must_change_password:
             raise PermissionDeniedError
