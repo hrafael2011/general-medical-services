@@ -1,6 +1,7 @@
-import { Ban, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Users, X, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Trash2, Users, X, XCircle } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   availabilityApi,
   AvailabilityRead,
@@ -83,6 +84,18 @@ export function DoctorList({ onAdd, onEdit }: Props) {
       setReasonId("");
       setDetail("");
       setActionError("");
+      qc.invalidateQueries({ queryKey: ["doctors"] });
+    },
+    onError: (err: Error) => setActionError(err.message),
+  });
+
+  const [deleteTarget, setDeleteTarget] = useState<DoctorRead | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => doctorsApi.delete(id),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      setSelectedDoctor(null);
       qc.invalidateQueries({ queryKey: ["doctors"] });
     },
     onError: (err: Error) => setActionError(err.message),
@@ -237,6 +250,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
           actionError={actionError}
           isDeactivating={deactivate.isPending}
           isReactivating={reactivate.isPending}
+          onDelete={() => setDeleteTarget(selectedDoctor)}
           onClose={() => setSelectedDoctor(null)}
           onEdit={() => {
             onEdit(selectedDoctor);
@@ -251,6 +265,19 @@ export function DoctorList({ onAdd, onEdit }: Props) {
           onReactivate={() => reactivate.mutate(selectedDoctor.id)}
         />
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Eliminar médico"
+        message={`¿Estás seguro de eliminar a ${deleteTarget?.name}?`}
+        confirmLabel="Sí, eliminar"
+        variant="danger"
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }
@@ -270,6 +297,7 @@ interface DoctorProfileModalProps {
   isReactivating: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onDelete: () => void;
   onReasonChange: (reasonId: string) => void;
   onDetailChange: (detail: string) => void;
   onDeactivate: () => void;
@@ -291,6 +319,7 @@ function DoctorProfileModal({
   isReactivating,
   onClose,
   onEdit,
+  onDelete,
   onReasonChange,
   onDetailChange,
   onDeactivate,
@@ -357,6 +386,10 @@ function DoctorProfileModal({
             <button className="btn-secondary" onClick={onEdit}>
               <Edit size={16} />
               Editar médico
+            </button>
+            <button className="btn-ghost btn-danger" onClick={onDelete}>
+              <Trash2 size={16} />
+              Eliminar médico
             </button>
             {doctor.service_active ? (
               <div className="deactivation-box">
