@@ -70,7 +70,27 @@ export const doctorsApi = {
     apiFetch<DoctorRead>(`/doctors/${id}/reactivate-service`, { method: "POST" }),
   listServiceAreas: () => apiFetch<ServiceAreaRead[]>("/catalogs/service-areas"),
   listRanks: () => apiFetch<RankRead[]>("/catalogs/ranks"),
+  createRank: (name: string, abbreviation: string) =>
+    apiFetch<RankRead>("/catalogs/ranks", {
+      method: "POST", body: JSON.stringify({ name, abbreviation }),
+    }),
+  updateRank: (id: string, payload: { name?: string; abbreviation?: string; active?: boolean }) =>
+    apiFetch<RankRead>(`/catalogs/ranks/${id}`, {
+      method: "PATCH", body: JSON.stringify(payload),
+    }),
+  deleteRank: (id: string) =>
+    apiFetch<void>(`/catalogs/ranks/${id}`, { method: "DELETE" }),
   listDepartments: () => apiFetch<DepartmentRead[]>("/catalogs/departments"),
+  createDepartment: (name: string) =>
+    apiFetch<DepartmentRead>("/catalogs/departments", {
+      method: "POST", body: JSON.stringify({ name }),
+    }),
+  updateDepartment: (id: string, payload: { name?: string; active?: boolean }) =>
+    apiFetch<DepartmentRead>(`/catalogs/departments/${id}`, {
+      method: "PATCH", body: JSON.stringify(payload),
+    }),
+  deleteDepartment: (id: string) =>
+    apiFetch<void>(`/catalogs/departments/${id}`, { method: "DELETE" }),
   listDeactivationReasons: (sex?: string) =>
     apiFetch<DeactivationReasonRead[]>(
       `/catalogs/deactivation-reasons${sex ? `?sex=${sex}` : ""}`
