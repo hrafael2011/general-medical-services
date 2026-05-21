@@ -16,6 +16,15 @@ def test_seed_initial_catalogs_creates_mvp_service_areas(db_session) -> None:
     assert repository.get_service_area_by_code("pista").load_weight == 2
     assert repository.get_service_area_by_code("disponible").load_weight == 1
 
+    department_names = {department.name for department in repository.list_departments()}
+    assert department_names == {
+        "Licencias Médicas",
+        "Enseñanza",
+        "Evaluaciones Médicas",
+        "Subdirección",
+        "Recursos Humanos",
+    }
+
 
 def test_seed_initial_catalogs_is_idempotent(db_session) -> None:
     repository = CatalogRepository(db_session)
@@ -25,7 +34,8 @@ def test_seed_initial_catalogs_is_idempotent(db_session) -> None:
     service.seed_initial_catalogs()
 
     assert len(repository.list_service_areas()) == 3
-    assert len(repository.list_deactivation_reasons()) == 8
+    assert len(repository.list_deactivation_reasons()) == 9
+    assert len(repository.list_departments()) == 5
 
 
 def test_pregnancy_reason_only_applies_to_female_doctors(db_session) -> None:
@@ -39,16 +49,6 @@ def test_pregnancy_reason_only_applies_to_female_doctors(db_session) -> None:
 
     assert "pregnancy" in female_codes
     assert "pregnancy" not in male_codes
-
-
-def test_seed_initial_catalogs_sets_generation_day(db_session) -> None:
-    repository = CatalogRepository(db_session)
-
-    CatalogService(repository).seed_initial_catalogs()
-
-    setting = repository.get_setting("calendar_generation_day")
-    assert setting is not None
-    assert setting.value == "27"
 
 
 def test_create_rank_and_department(db_session) -> None:

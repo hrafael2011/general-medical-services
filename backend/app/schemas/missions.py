@@ -8,12 +8,15 @@ class MissionParticipantRead(BaseModel):
     id: str
     mission_assignment_id: str
     doctor_id: str
+    doctor_name: str | None = None
     selection_source: str
     ranking_position: int | None
     score: float | None
     reasons: dict | None
     warnings: list | None
     created_at: datetime
+    requires_replacement: bool = False
+    replacement_reason: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -35,9 +38,17 @@ class MissionAssignmentRead(BaseModel):
     confirmed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    deleted_at: datetime | None = None
     participants: list[MissionParticipantRead] = []
+    has_replacement_warnings: bool = False
+    replacement_warning_count: int = 0
 
     model_config = {"from_attributes": True}
+
+
+class MissionReplacementAlertSummary(BaseModel):
+    mission_count: int
+    participant_count: int
 
 
 class CreateMissionRequest(BaseModel):
@@ -48,11 +59,21 @@ class CreateMissionRequest(BaseModel):
     mission_start_at: datetime | None = None
 
 
+class UpdateMissionRequest(BaseModel):
+    mission_date: date | None = None
+    participant_count: int | None = Field(default=None, ge=1)
+    location: str | None = Field(default=None, max_length=200)
+    description: str | None = None
+    mission_start_at: datetime | None = None
+    mission_end_at: datetime | None = None
+
+
 # --- Mission Candidate Ranking ---
 
 class MissionCandidateRankingEntryRead(BaseModel):
     id: str
     doctor_id: str
+    doctor_name: str | None = None
     ranking_position: int
     total_load_score: float
     monthly_service_load: float
@@ -94,9 +115,32 @@ class MissionCandidateResponse(BaseModel):
     alternates: list[MissionCandidateRankingEntryRead]
 
 
+class MissionCandidateDateRankingEntryRead(BaseModel):
+    id: str
+    doctor_id: str
+    doctor_name: str | None = None
+    ranking_position: int
+    adjusted_position: int
+    recommendation_status: str
+    selectable: bool
+    total_load_score: float
+    monthly_service_load: float
+    recent_service_load: float
+    monthly_mission_load: float
+    eligible: bool
+    reasons: list[str]
+    warnings: list[str]
+
+
+class MissionCandidateDateRankingResponse(BaseModel):
+    mission_date: date
+    month: int
+    year: int
+    entries: list[MissionCandidateDateRankingEntryRead]
+
+
 # --- Mission Confirmation ---
 
 class ConfirmMissionRequest(BaseModel):
     """Confirm selected doctors for a mission."""
-    mission_id: str
     doctor_ids: list[str]

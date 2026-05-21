@@ -137,6 +137,53 @@ class AvailabilityService:
             self.audit.log_availability_set(actor_id=actor_id, availability=result)
         return result
 
+    def set_recurring_availability(
+        self,
+        doctor_id: str,
+        *,
+        weekday: int,
+        week_number: int,
+        actor_id: str,
+    ) -> DoctorAvailabilityModel:
+        """Set a recurring availability pattern (e.g., "last Friday of each month")."""
+        doctor = self.doctors.get_by_id(doctor_id)
+        if doctor is None:
+            raise AvailabilityError("doctor_not_found", f"Doctor {doctor_id} not found")
+        if doctor.availability_mode != "fixed":
+            raise AvailabilityError(
+                "mode_mismatch",
+                "Recurring availability requires doctor availability_mode = 'fixed'.",
+            )
+        if not 0 <= weekday <= 6:
+            raise AvailabilityError("invalid_weekday", "weekday must be 0 (Monday) to 6 (Sunday).")
+        if week_number not in (-1, 0, 1, 2, 3):
+            raise AvailabilityError("invalid_week_number", "week_number must be -1 (last) or 0-3.")
+
+        now = datetime.now(UTC)
+        record = DoctorAvailabilityModel(
+            id=str(uuid.uuid4()),
+            doctor_id=doctor_id,
+            availability_type="recurring",
+            days_of_week=None,
+            available_dates=None,
+            weekday=weekday,
+            week_number=week_number,
+            year=None,
+            month=None,
+            submitted_at=None,
+            effective_from=None,
+            effective_to=None,
+            source="manual",
+            review_status="approved",
+            created_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        result = self.availability.add_availability(record)
+        if self.audit:
+            self.audit.log_availability_set(actor_id=actor_id, availability=result)
+        return result
+
     def add_restriction(
         self,
         doctor_id: str,
@@ -200,3 +247,22 @@ class AvailabilityService:
         """Check if a doctor has submitted monthly availability for a given period."""
         records = self.availability.list_monthly_variable_for_period(doctor_id, year, month)
         return len(records) > 0
+
+    def get_available_doctor_ids(self, target_date: date) -> list[str]:
+        """Return IDs of service-active doctors available on the given date."""
+        from backend.app.domain.doctors.eligibility import AvailabilitySpec
+
+        doctors = self.doctors.list_service_active()
+        spec = AvailabilitySpec()
+        available: list[str] = []
+
+        for doctor in doctors:
+            weekly = self.availability.list_weekly_fixed_for_doctor(doctor.id)
+            monthly = self.availability.list_monthly_variable_for_period(
+                doctor.id, target_date.year, target_date.month,
+            )
+            result = spec.check(doctor, target_date, weekly, monthly)
+            if result.passed:
+                available.append(doctor.id)
+
+        return available

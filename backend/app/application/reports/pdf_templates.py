@@ -55,11 +55,11 @@ DEFAULT_SIGNATURES = SignatureConfig(
     left_name='Dra. MIGUELINA A. ACOSTA RAMOS',
     left_title1='Sargento Médico FARD.',
     left_title2='Encargada de los Servicios de los Médicos Generales',
-    left_title3='del Hosp. Mil. Univ. Doc. FARD, “DRL”.',
+    left_title3='del Hosp. Mil. Univ. Doc. FARD, "DRL".',
     right_name='ING. CARLOS J. ENCARNACION GONZALEZ',
     right_title1='1er Tt. Ingeniero en Sistema FARD.',
     right_title2='Encargado del Departamento Administrativo de la',
-    right_title3='Sub Dirección de Recursos Humanos del Hosp. Mil. Univ. Doc. FARD, “DRL”.',
+    right_title3='Sub Dirección de Recursos Humanos del Hosp. Mil. Univ. Doc. FARD, "DRL".',
 )
 
 
@@ -72,8 +72,8 @@ def _get_logo() -> Image | None:
     path = os.path.abspath(_LOGO_PATH)
     if os.path.isfile(path):
         try:
-            img = Image(path, width=3.2 * cm, height=2.8 * cm)
-            img.hAlign = "LEFT"
+            img = Image(path, width=4.8 * cm, height=4.5 * cm)
+            img.hAlign = "CENTER"
             return img
         except Exception:
             return None
@@ -87,14 +87,14 @@ def _get_logo() -> Image | None:
 _HEADER_SUBDIR = "SUBDIRECCIÓN DE RECURSOS HUMANOS"
 _HEADER_HOSPITAL = (
     "HOSPITAL MILITAR UNIVERSITARIO DOCENTE, FARD "
-    "“DR. RAMÓN DE LARA”"
+    '"DR. RAMÓN DE LARA"'
 )
 _HEADER_BASE = (
-    "BASE AÉREA “SAN ISIDRO”, "
+    'BASE AÉREA "SAN ISIDRO", '
     "FUERZA AÉREA DE REPÚBLICA DOMINICANA, "
     "SAN ISIDRO, SANTO DOMINGO ESTE, R.D."
 )
-_HEADER_LEMA = "“Todo por la Patria”"
+_HEADER_LEMA = '"Todo por la Patria"'
 
 
 # ---------------------------------------------------------------------------
@@ -111,36 +111,37 @@ _STYLE_SUBDIR = ParagraphStyle(
 
 _STYLE_INSTITUCION = ParagraphStyle(
     "Institucion", parent=_styles["Normal"],
-    fontSize=9, leading=11, alignment=TA_CENTER,
+    fontSize=10, leading=12, alignment=TA_CENTER,
     fontName="Helvetica-Bold",
 )
 
 _STYLE_LEMA = ParagraphStyle(
     "Lema", parent=_styles["Normal"],
-    fontSize=8, leading=10, alignment=TA_CENTER,
+    fontSize=9, leading=11, alignment=TA_CENTER,
+    fontName="Helvetica-Oblique",
 )
 
 _STYLE_DATE = ParagraphStyle(
     "DateLine", parent=_styles["Normal"],
-    fontSize=8, leading=10, alignment=TA_LEFT,
+    fontSize=9, leading=12, alignment=TA_LEFT,
 )
 
 _STYLE_TITLE = ParagraphStyle(
     "ReportTitle", parent=_styles["Normal"],
-    fontSize=10, leading=13, alignment=TA_CENTER,
+    fontSize=11, leading=14, alignment=TA_CENTER,
     fontName="Helvetica-Bold",
-    spaceBefore=4, spaceAfter=8,
+    spaceBefore=4, spaceAfter=10,
 )
 
 _STYLE_TABLE_HEADER = ParagraphStyle(
     "TableHeader", parent=_styles["Normal"],
-    fontSize=7.5, leading=9,
+    fontSize=8, leading=10,
     fontName="Helvetica-Bold",
 )
 
 _STYLE_TABLE_CELL = ParagraphStyle(
     "TableCell", parent=_styles["Normal"],
-    fontSize=7.5, leading=9,
+    fontSize=8, leading=10,
 )
 
 _STYLE_SECTION = ParagraphStyle(
@@ -194,19 +195,35 @@ def _build_header_story(date_line: str, title: str) -> list[object]:
     """Build the institutional header: logo + text block + date + title."""
     story: list[object] = []
 
+    logo_col = 5.5 * cm
+
     # Top area: logo on left, header text centered
     logo = _get_logo()
     if logo:
-        # We create a table with logo on left and header text on right
-        header_text = (
-            f"<b>{_HEADER_SUBDIR}</b><br/>"
-            f"<b>{_HEADER_HOSPITAL}</b><br/>"
-            f"<b>{_HEADER_BASE}</b><br/>"
-            f"{_HEADER_LEMA}"
+        # Build header text with separate styled paragraphs
+        header_paras: list[Paragraph] = [
+            Paragraph(_HEADER_SUBDIR, _STYLE_SUBDIR),
+            Paragraph(_HEADER_HOSPITAL, _STYLE_INSTITUCION),
+            Paragraph(_HEADER_BASE, _STYLE_INSTITUCION),
+            Paragraph(_HEADER_LEMA, _STYLE_LEMA),
+        ]
+        # Nested table to stack the header paragraphs vertically
+        header_text_table = Table(
+            [[p] for p in header_paras],
+            colWidths=[CONTENT_W - logo_col],
         )
+        header_text_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 1),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ]))
+
         header_table = Table(
-            [[logo, Paragraph(header_text, _STYLE_INSTITUCION)]],
-            colWidths=[3.8 * cm, CONTENT_W - 3.8 * cm],
+            [[logo, header_text_table]],
+            colWidths=[logo_col, CONTENT_W - logo_col],
         )
         header_table.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -317,165 +334,7 @@ def _build_doc(title: str, subtitle: str) -> tuple[SimpleDocTemplate, io.BytesIO
 
 
 # ---------------------------------------------------------------------------
-# Public generators
-# ---------------------------------------------------------------------------
-
-
-def generate_calendar_pdf(
-    assignments: list[dict],
-    month: int,
-    year: int,
-    signatures: SignatureConfig | None = None,
-) -> bytes:
-    """Generate a PDF report of calendar assignments (institutional style)."""
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ][month - 1]
-
-    date_line = f"{month_name.upper()} {year}"
-    title = f"CALENDARIO DE TURNOS - {month_name.upper()} {year}"
-
-    headers = ["Fecha", "Área", "Médico", "Fuente"]
-    col_widths = [3.2 * cm, 4.5 * cm, 6 * cm, 3 * cm]
-    rows = [headers]
-    for a in assignments:
-        rows.append([
-            str(a.get("service_date", "")),
-            str(a.get("service_area_name", a.get("service_area_id", ""))),
-            str(a.get("doctor_name", a.get("doctor_id", ""))),
-            str(a.get("assignment_source", "")),
-        ])
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph(
-        f"Asignaciones ({len(assignments)} total)", _STYLE_SECTION
-    ))
-    story.append(_make_table(rows, col_widths))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-def generate_doctor_history_pdf(
-    doctor_data: list[dict],
-    month: int,
-    year: int,
-    signatures: SignatureConfig | None = None,
-) -> bytes:
-    """Generate a PDF report of doctor service history."""
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ][month - 1]
-
-    date_line = f"{month_name.upper()} {year}"
-    title = f"HISTORIAL DE SERVICIOS - {month_name.upper()} {year}"
-
-    headers = ["Médico", "Servicios", "Áreas", "Carga"]
-    col_widths = [5.5 * cm, 2.5 * cm, 5.5 * cm, 2.5 * cm]
-    rows = [headers]
-    for d in doctor_data:
-        rows.append([
-            str(d.get("name", d.get("doctor_id", ""))),
-            str(d.get("count", 0)),
-            str(d.get("areas", "")),
-            str(d.get("load", "")),
-        ])
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph(
-        f"Resumen por Médico ({len(doctor_data)} médicos)", _STYLE_SECTION
-    ))
-    story.append(_make_table(rows, col_widths))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-def generate_operational_summary_pdf(summary: dict, signatures: SignatureConfig | None = None) -> bytes:
-    """Generate a PDF report of the operational summary."""
-    period = summary.get("period", {})
-    month_num = period.get("month", 1)
-    year = period.get("year", datetime.now().year)
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ]
-    month_str = month_name[month_num - 1] if isinstance(month_num, int) and 1 <= month_num <= 12 else str(month_num)
-
-    date_line = f"{month_str.upper()} {year}"
-    title = "RESUMEN OPERATIVO"
-
-    rows = [
-        ["Indicador", "Valor"],
-        ["Médicos Activos", str(summary.get("active_doctors", 0))],
-        [
-            "Estado del Calendario",
-            str(summary.get("calendar_status", "Sin calendario")),
-        ],
-        ["Asignaciones", str(summary.get("total_assignments", 0))],
-        ["Huecos sin Resolver", str(summary.get("unresolved_gaps", 0))],
-    ]
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph("Indicadores del Período", _STYLE_SECTION))
-    story.append(_make_table(rows, col_widths=[5 * cm, 10 * cm]))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-def generate_mission_ranking_pdf(
-    entries: list[dict],
-    month: int,
-    year: int,
-    signatures: SignatureConfig | None = None,
-) -> bytes:
-    """Generate a PDF report of mission candidate rankings."""
-    month_name = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ][month - 1]
-
-    date_line = f"{month_name.upper()} {year}"
-    title = f"RANKING DE CANDIDATOS - {month_name.upper()} {year}"
-
-    headers = ["#", "Médico", "Carga Total", "Elegible"]
-    col_widths = [1.5 * cm, 7 * cm, 3.5 * cm, 2.5 * cm]
-    rows = [headers]
-    for e in entries:
-        rows.append([
-            str(e.get("position", "")),
-            str(e.get("doctor_name", e.get("doctor_id", ""))),
-            f"{float(e.get('total_load_score', 0)):.1f}",
-            "Sí" if e.get("eligible", False) else "No",
-        ])
-
-    doc, buf = _build_doc(title, date_line)
-    story = _build_header_story(date_line, title)
-    story.append(Spacer(1, 3 * mm))
-    story.append(Paragraph(
-        f"Ranking ({len(entries)} candidatos)", _STYLE_SECTION
-    ))
-    story.append(_make_table(rows, col_widths))
-    story.append(Spacer(1, 1.5 * cm))
-    story.append(_build_signature_block(signatures))
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    return buf.getvalue()
-
-
-# ---------------------------------------------------------------------------
-# NEW: Weekly schedule report (formato SERVICIOS)
+# Weekly schedule report (formato SERVICIOS)
 # ---------------------------------------------------------------------------
 
 def generate_weekly_schedule_pdf(
@@ -510,7 +369,7 @@ def generate_weekly_schedule_pdf(
 
     title = (
         f"LISTA DEL PERSONAL MEDICO GENERAL, QUE SE ENCUENTRA DE SERVICIO "
-        f"LOS DÍAS INDICADOS AL LADO DE SUS RESPECTIVOS NOMBRE:"
+        f"LOS DÍAS INDICADOS AL LADO DE SUS RESPECTIVOS NOMBRE: "
         f"DEL MES DE {month_name.upper()} DEL AÑO {year}"
     )
 
@@ -538,7 +397,7 @@ def generate_weekly_schedule_pdf(
             else:
                 schedule_rows.append(["", rank_name, location])
 
-    col_widths = [3.2 * cm, 7.5 * cm, 4.5 * cm]
+    col_widths = [3.5 * cm, 8.5 * cm, 5.0 * cm]
     story.append(_make_table(schedule_rows, col_widths))
 
     # Signature block
@@ -549,7 +408,7 @@ def generate_weekly_schedule_pdf(
 
 
 # ---------------------------------------------------------------------------
-# NEW: Generic doctor listing (like MEDICOS GENERALES MILITARES.pdf)
+# Generic doctor listing (used by Telegram for query-to-PDF conversion)
 # ---------------------------------------------------------------------------
 
 def generate_doctor_list_pdf(
@@ -560,11 +419,11 @@ def generate_doctor_list_pdf(
     col_widths: list[float] | None = None,
     signatures: SignatureConfig | None = None,
 ) -> bytes:
-    """Generate a generic doctor listing PDF.
+    """Generate a generic doctor listing PDF (used by Telegram exports).
 
     Args:
         doctors: List of dicts with keys matching *columns*.
-        title: Report title (e.g. "MEDICOS GENERALES Y AREAS DONDE LABORAN").
+        title: Report title.
         subtitle: Optional subtitle/date line.
         columns: Column header names. Defaults to ["#", "RANGO", "NOMBRE", "Área"].
         col_widths: Column widths. Defaults proportional to page width.
@@ -590,5 +449,339 @@ def generate_doctor_list_pdf(
     story.append(_make_table(rows, col_widths))
     story.append(Spacer(1, 1.5 * cm))
     story.append(_build_signature_block(signatures))
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Coverage report PDF
+# ---------------------------------------------------------------------------
+
+
+def generate_coverage_pdf(data: dict) -> bytes:
+    """Generate a PDF report of coverage and gaps."""
+    title = f"REPORTE DE COBERTURA - {data['period_label']}"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+
+    summary_data = [
+        ["Indicador", "Valor"],
+        ["% Cobertura General", f"{data['overall_coverage_pct']}%"],
+        ["Total Brechas", str(data['total_gaps'])],
+        ["Área Más Crítica", data.get('most_critical_area', '—') or '—'],
+        ["Día Más Débil", data.get('weakest_day', '—') or '—'],
+    ]
+    story.append(Paragraph("RESUMEN", _STYLE_SECTION))
+    story.append(_make_table(summary_data, col_widths=[6 * cm, 10 * cm]))
+    story.append(Spacer(1, 4 * mm))
+
+    headers = ["Área", "Días Cubiertos", "Días Descubiertos", "% Cobertura"]
+    col_widths = [4 * cm, 3.5 * cm, 3.5 * cm, 3 * cm]
+    rows = [headers]
+    for area in data.get("by_area", []):
+        rows.append([
+            area["area_name"],
+            str(area["days_covered"]),
+            str(area["days_uncovered"]),
+            f"{area['coverage_pct']}%",
+        ])
+
+    story.append(Paragraph("COBERTURA POR ÁREA", _STYLE_SECTION))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block())
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Workload report PDF
+# ---------------------------------------------------------------------------
+
+
+def generate_workload_pdf(data: dict) -> bytes:
+    """Generate a PDF report of doctor workload."""
+    title = f"CARGA DE TRABAJO - {data['period_label']}"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    doc, buf = _build_doc(title, date_line)
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 3 * mm))
+
+    summary_data = [
+        ["Indicador", "Valor"],
+        ["Total Servicios", str(data['total_services'])],
+        ["Médicos Activos", str(data['active_doctors'])],
+        ["Promedio por Médico", str(data['avg_per_doctor'])],
+        ["Mayor Carga",
+         f"{((data.get('most_load') or {}).get('name', '—'))} ({((data.get('most_load') or {}).get('total', 0))})"],
+        ["Menor Carga",
+         f"{((data.get('least_load') or {}).get('name', '—'))} ({((data.get('least_load') or {}).get('total', 0))})"],
+    ]
+    story.append(Paragraph("RESUMEN", _STYLE_SECTION))
+    story.append(_make_table(summary_data, col_widths=[6 * cm, 10 * cm]))
+    story.append(Spacer(1, 4 * mm))
+
+    headers = ["Médico", "Rango", "Sexo", "Depto", "Emerg", "Pista", "Disp.", "Total"]
+    col_widths = [4 * cm, 2.5 * cm, 1.5 * cm, 2.5 * cm, 1.8 * cm, 1.5 * cm, 1.8 * cm, 1.8 * cm]
+    rows = [headers]
+    for entry in data.get("entries", []):
+        rows.append([
+            entry["name"],
+            entry.get("rank") or "—",
+            _sex_label(entry.get("sex")) or "—",
+            entry.get("department") or "—",
+            str(entry.get("emergencia", 0)),
+            str(entry.get("pista", 0)),
+            str(entry.get("disponible", 0)),
+            str(entry["total"]),
+        ])
+
+    story.append(Paragraph("DETALLE POR MÉDICO", _STYLE_SECTION))
+    story.append(_make_table(rows, col_widths))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(_build_signature_block())
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+def _sex_label(value: str | None) -> str | None:
+    if value == "male":
+        return "Masculino"
+    if value == "female":
+        return "Femenino"
+    return value
+
+
+# ---------------------------------------------------------------------------
+# Doctor dossier PDF (portrait A4)
+# ---------------------------------------------------------------------------
+
+
+def generate_dossier_pdf(data: dict) -> bytes:
+    """Generate a PDF with full medical dossier (portrait A4)."""
+    from reportlab.lib.pagesizes import A4
+
+    title = "FICHA DE SERVICIO MÉDICO"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=LEFT_M,
+        rightMargin=RIGHT_M,
+        topMargin=TOP_M,
+        bottomMargin=BOTTOM_M,
+    )
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 4 * mm))
+
+    section = ParagraphStyle("SectionA4", parent=_STYLE_SECTION, fontSize=10, leading=12)
+    cell = ParagraphStyle("CellA4", parent=_STYLE_TABLE_CELL, fontSize=8, leading=10)
+
+    doc_data = [
+        ["Nombre", data.get("name", "—")],
+        ["Rango", data.get("rank") or "—"],
+        ["Sexo", data.get("sex") or "—"],
+        ["Departamento", data.get("department") or "—"],
+        ["Áreas Habilitadas", ", ".join(data.get("areas", [])) or "—"],
+        ["Período", data.get("period_label", "—")],
+    ]
+    t = Table(
+        [[Paragraph(c[0], cell), Paragraph(c[1], cell)] for c in doc_data],
+        colWidths=[4 * cm, 12 * cm],
+    )
+    t.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#bdc3c7")),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story.append(Paragraph("DATOS DEL MÉDICO", section))
+    story.append(t)
+    story.append(Spacer(1, 4 * mm))
+
+    services_by_area = data.get("services_by_area", {})
+    total = data.get("total_services", 0)
+    avg = data.get("avg_weekly", 0)
+    summary_rows = [
+        ["Total Servicios", str(total)],
+        ["Promedio Semanal", str(avg)],
+    ]
+    for area_name, count in services_by_area.items():
+        summary_rows.append([f"  - {area_name}", str(count)])
+
+    story.append(Paragraph("RESUMEN DEL PERÍODO", section))
+    st = Table(
+        [[Paragraph(r[0], cell), Paragraph(r[1], cell)] for r in summary_rows],
+        colWidths=[8 * cm, 4 * cm],
+    )
+    st.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#bdc3c7")),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    story.append(st)
+    story.append(Spacer(1, 4 * mm))
+
+    services = data.get("services", [])
+    if services:
+        svc_headers = ["Fecha", "Día", "Área"]
+        svc_rows = [svc_headers]
+        for s in services:
+            svc_rows.append([str(s.get("date", "")), str(s.get("day_name", "")), str(s.get("area", ""))])
+        story.append(Paragraph("DETALLE DE SERVICIOS", section))
+        story.append(_make_table(svc_rows, col_widths=[3.5 * cm, 3.5 * cm, 5 * cm]))
+        story.append(Spacer(1, 4 * mm))
+
+    missions = data.get("missions", [])
+    if missions:
+        miss_headers = ["Misión", "Rol", "Estado"]
+        miss_rows = [miss_headers]
+        for m in missions:
+            miss_rows.append([str(m.get("mission", "")), str(m.get("role", "")), str(m.get("status", ""))])
+        story.append(Paragraph("MISIONES EN EL PERÍODO", section))
+        story.append(_make_table(miss_rows, col_widths=[5 * cm, 3.5 * cm, 3 * cm]))
+        story.append(Spacer(1, 4 * mm))
+
+    restrictions = data.get("restrictions", [])
+    if restrictions:
+        rest_headers = ["Tipo", "Fecha", "Motivo"]
+        rest_rows = [rest_headers]
+        for r in restrictions:
+            rest_rows.append([str(r.get("type", "")), str(r.get("date") or "—"), str(r.get("reason", ""))])
+        story.append(Paragraph("RESTRICCIONES Y LICENCIAS", section))
+        story.append(_make_table(rest_rows, col_widths=[3.5 * cm, 3.5 * cm, 5 * cm]))
+        story.append(Spacer(1, 4 * mm))
+
+    avail = data.get("availability", [])
+    if avail:
+        story.append(Paragraph(f"DISPONIBILIDAD DECLARADA: {', '.join(avail)}", section))
+
+    story.append(Spacer(1, 1 * cm))
+    story.append(_build_signature_block())
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Full calendar single-page PDF (day x area grid)
+# ---------------------------------------------------------------------------
+
+
+def generate_full_calendar_pdf(grid_data: dict) -> bytes:
+    """Generate a single-page landscape PDF with the full month calendar grid.
+
+    Args:
+        grid_data: {
+            "month": int, "year": int,
+            "areas": list[str],
+            "rows": [{"day": int, "day_name": str, "cells": {area: doctor_name}}],
+            "summary": {"total_services": int, "gaps": int,
+                        "active_doctors": int, "coverage_pct": int},
+        }
+    """
+    month_names = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    ]
+    month_name = month_names[grid_data["month"] - 1]
+    title = f"CALENDARIO DE SERVICIOS — {month_name.upper()} {grid_data['year']}"
+    date_line = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    # Tighter margins for the grid to fit on one page
+    tight_left = 1.2 * cm
+    tight_right = 1.2 * cm
+    tight_top = 2.0 * cm
+    tight_bottom = 1.2 * cm
+    tight_content_w = PAGE_W - tight_left - tight_right
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=landscape(A4),
+        leftMargin=tight_left,
+        rightMargin=tight_right,
+        topMargin=tight_top,
+        bottomMargin=tight_bottom,
+    )
+
+    story = _build_header_story(date_line, title)
+    story.append(Spacer(1, 2 * mm))
+
+    # Summary line
+    s = grid_data["summary"]
+    summary_text = (
+        f"Total Servicios: {s['total_services']} | "
+        f"Huecos: {s['gaps']} | "
+        f"Medicos Activos: {s['active_doctors']} | "
+        f"Cobertura: {s['coverage_pct']}%"
+    )
+    story.append(Paragraph(summary_text, _STYLE_SECTION))
+    story.append(Spacer(1, 2 * mm))
+
+    # Build grid
+    areas = grid_data["areas"]
+    headers = ["Dia", "Dia Sem."] + areas
+    table_rows = [headers]
+
+    for row in grid_data["rows"]:
+        day_str = str(row["day"])
+        day_name = row["day_name"][:3]  # LUN, MAR, MIE...
+        cells = [day_str, day_name]
+        for area in areas:
+            cells.append(row["cells"].get(area, "—"))
+        table_rows.append(cells)
+
+    # Dynamic column widths
+    n_areas = max(len(areas), 1)
+    area_col_w = (tight_content_w - 2.2 * cm) / n_areas
+    col_widths = [1.0 * cm, 1.2 * cm] + [area_col_w] * n_areas
+
+    # Build styled paragraphs for table
+    styled_rows: list[list[Paragraph]] = []
+    for i, row in enumerate(table_rows):
+        style = _STYLE_TABLE_HEADER if i == 0 else _STYLE_TABLE_CELL
+        styled_rows.append([Paragraph(str(c), style) for c in row])
+
+    t = Table(styled_rows, colWidths=col_widths, repeatRows=1)
+    table_style_cmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#bdc3c7")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+    ]
+
+    # Weekend highlighting
+    for i, row in enumerate(grid_data["rows"], start=1):
+        day_name = row.get("day_name", "")
+        if day_name in ("SABADO", "DOMINGO"):
+            table_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f0f0f0")))
+
+    # Gap highlighting
+    for i, row in enumerate(grid_data["rows"], start=1):
+        for j, area in enumerate(areas, start=2):
+            if row["cells"].get(area) == "—":
+                table_style_cmds.append(
+                    ("BACKGROUND", (j, i), (j, i), colors.HexColor("#ffeaea"))
+                )
+
+    t.setStyle(TableStyle(table_style_cmds))
+    story.append(t)
+
+    # Signature block
+    story.append(Spacer(1, 1 * cm))
+    story.append(_build_signature_block())
+
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()

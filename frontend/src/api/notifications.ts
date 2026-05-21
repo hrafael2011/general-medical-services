@@ -11,7 +11,6 @@ export interface NotificationEventRead {
   recipient_phone: string | null;
   assignment_id: string | null;
   mission_id: string | null;
-  idempotency_key: string;
   scheduled_for: string | null;
   sent_at: string | null;
   status: string; // pending | sent | failed | cancelled

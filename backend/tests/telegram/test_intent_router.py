@@ -259,6 +259,40 @@ def test_router_export_empty_rows_returns_message(db_session) -> None:
     assert "resultados" in result.response_text.lower()
 
 
+def test_excel_export_translates_operational_values(db_session) -> None:
+    import openpyxl
+    from io import BytesIO
+
+    router = IntentRouter()
+    router.set_session(db_session)
+    router._registry.register(
+        query_type="export_translated_values",
+        sql_template=(
+            "SELECT 'Dra. Uno' AS name, 'female' AS sex, "
+            "'approved' AS status, 1 AS eligible"
+        ),
+        params_schema={},
+        description="Export valores traducidos",
+    )
+
+    result = router.handle(
+        action="export",
+        query_type="export_translated_values",
+        params={},
+        user_message="exporta valores",
+        format="excel",
+    )
+
+    assert result.document_bytes is not None
+    workbook = openpyxl.load_workbook(BytesIO(result.document_bytes))
+    sheet = workbook.active
+    values = [cell.value for cell in sheet[2]]
+    assert "female" not in values
+    assert "approved" not in values
+    assert "Femenino" in values
+    assert "Aprobado" in values
+
+
 # ---------------------------------------------------------------------------
 # _build_document con format=excel
 # ---------------------------------------------------------------------------
@@ -315,17 +349,17 @@ def test_router_export_excel_format(db_session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _format_rows en IntentRouter (distintos tamaños)
+# format_rows (ahora en sanitize)
 # ---------------------------------------------------------------------------
 
 
 def test_router_format_rows_single_row() -> None:
     """1 fila → 'Resultado:' con los pares clave:valor."""
-    router = IntentRouter()
-    result = router._format_rows(
+    from backend.app.application.telegram.sanitize import format_rows
+
+    result = format_rows(
         rows=[{"name": "Dr. Test", "count": 7}],
         columns=["name", "count"],
-        user_message="cuántos hay",
     )
     assert "Resultado:" in result
     assert "Test" in result
@@ -333,18 +367,20 @@ def test_router_format_rows_single_row() -> None:
 
 def test_router_format_rows_five_rows() -> None:
     """5 filas → lista numerada completa incluyendo '5.'."""
-    router = IntentRouter()
+    from backend.app.application.telegram.sanitize import format_rows
+
     rows = [{"name": f"Dr. {i}", "sex": "M", "area": "E"} for i in range(5)]
-    result = router._format_rows(rows, ["name", "sex", "area"], "test")
+    result = format_rows(rows, ["name", "sex", "area"])
     assert "5 resultados" in result
     assert "5." in result
 
 
 def test_router_format_rows_more_than_five() -> None:
     """6+ filas → solo primeros 5 mostrados, '6.' no aparece."""
-    router = IntentRouter()
+    from backend.app.application.telegram.sanitize import format_rows
+
     rows = [{"name": f"Dr. {i}"} for i in range(8)]
-    result = router._format_rows(rows, ["name"], "test")
+    result = format_rows(rows, ["name"])
     assert "8 resultados" in result
     assert "6." not in result
 
@@ -376,3 +412,149 @@ def test_registry_duplicate_registration_does_not_overwrite() -> None:
 
     entry = registry.get("dup")
     assert "original" in entry["sql_template"].lower()
+
+
+# ---------------------------------------------------------------------------
+# _handle_ambiguous with response_text
+# ---------------------------------------------------------------------------
+
+
+def test_router_ambiguous_uses_llm_response_text() -> None:
+    """Cuando el LLM envía response_text, se usa en vez del default."""
+    router = IntentRouter()
+    result = router.handle(
+        action="ambiguous",
+        query_type=None,
+        params={},
+        user_message="asigna a Pérez",
+        response_text="¿En qué área querés asignar a Pérez: Emergencia o Pista?",
+    )
+
+    assert "Emergencia" in result.response_text
+    assert "Pista" in result.response_text
+
+
+def test_router_ambiguous_falls_back_to_default() -> None:
+    """Sin response_text del LLM, usa el mensaje default."""
+    router = IntentRouter()
+    result = router.handle(
+        action="ambiguous",
+        query_type=None,
+        params={},
+        user_message="no sé",
+    )
+
+    assert "específico" in result.response_text.lower()
+
+
+# ---------------------------------------------------------------------------
+# M5: All required query types are registered
+# ---------------------------------------------------------------------------
+
+
+_REQUIRED_QUERY_TYPES = [
+    "count_doctors_total",
+    "count_by_sex",
+    "doctors_by_sex",
+    "count_by_rank",
+    "count_by_specific_rank",
+    "doctors_by_rank",
+    "list_active_doctors",
+    "doctor_detail",
+    "doctors_pending_availability",
+    "calendar_status_month",
+    "doctors_working_date",
+    "assignment_count_by_date_range",
+    "count_assigned_doctors_by_month",
+    "list_assigned_doctors_by_month",
+    "unassigned_doctors_by_month",
+    "mission_ranking",
+    "operational_summary",
+    "doctor_history_60d",
+    "count_doctors_by_department",
+    "count_by_specific_sex",
+    "doctor_history_by_name",
+    "assignments_by_area",
+    "unresolved_gaps_month",
+]
+
+
+def test_all_required_query_types_are_registered() -> None:
+    """Todos los query_types esperados estan registrados al iniciar IntentRouter."""
+    router = IntentRouter()
+    for qt in _REQUIRED_QUERY_TYPES:
+        entry = router.registry.get(qt)
+        assert entry is not None, f"Falta query_type: {qt}"
+        assert entry["sql_template"], f"sql_template vacio para {qt}"
+
+
+def test_router_hides_internal_ids_in_text_response(db_session) -> None:
+    """Las respuestas operativas no deben exponer UUID/IDs técnicos."""
+    registry = QueryRegistry()
+    registry.register(
+        query_type="unsafe_id_projection",
+        sql_template="SELECT 'doctor-uuid' AS id, 'Ana Perez' AS name",
+        params_schema={},
+    )
+    router = IntentRouter(registry=registry)
+    router.set_session(db_session)
+
+    result = router.handle(
+        action="query",
+        query_type="unsafe_id_projection",
+        params={},
+        user_message="dame el id",
+    )
+
+    assert "doctor-uuid" not in result.response_text
+    assert "Ana Perez" in result.response_text
+
+
+def test_router_export_excel_with_30_columns_does_not_crash(db_session) -> None:
+    """Export con 30 columnas no debe crashear por chr() > Z."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, UTC
+
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+    doc = DoctorModel(
+        id=str(_uuid.uuid4()),
+        name="Dr. Wide",
+        normalized_name="dr. wide",
+        sex="male",
+        active=True,
+        service_active=True,
+        availability_mode="variable",
+        participa_misiones=True,
+        whatsapp_phone=None,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        rank_id=None,
+        department_id=None,
+        created_at=_dt.now(UTC),
+        updated_at=_dt.now(UTC),
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    router = IntentRouter()
+    router.set_session(db_session)
+    cols = ", ".join(["name AS col" + str(i) for i in range(30)])
+    router._registry.register(
+        query_type="wide_export",
+        sql_template=f"SELECT {cols} FROM doctors WHERE active = 1 AND service_active = 1",
+        params_schema={},
+        description="30 columnas",
+    )
+
+    result = router.handle(
+        action="export",
+        query_type="wide_export",
+        params={},
+        user_message="exporta en excel con muchas columnas",
+        format="excel",
+    )
+
+    assert result.document_bytes is not None
+    assert result.document_filename is not None

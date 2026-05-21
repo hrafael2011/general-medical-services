@@ -10,11 +10,12 @@ import logging
 from typing import Any
 
 from reportlab.lib.units import cm
-
 from sqlalchemy import text as sa_text
 
-from backend.app.application.telegram.types import AgentResult
 from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
+from backend.app.application.telegram.sanitize import _is_uuid_column as _contains_uuid_values
+from backend.app.application.telegram.sanitize import display_value, format_rows
+from backend.app.application.telegram.types import AgentResult
 
 # PDF generation (lazy-imported in _build_document to keep startup fast)
 
@@ -26,6 +27,43 @@ _DEFAULT_AMBIGUOUS = (
     "¿Podrías ser más específico?"
 )
 _DEFAULT_EXPORT_OK = "Aquí tienes el reporte solicitado."
+
+
+def _is_internal_identifier_column(column: str) -> bool:
+    """Return True for technical identifier columns that should not be shown."""
+    normalized = column.lower()
+    return normalized == "id" or normalized.endswith("_id")
+
+
+def _is_uuid_column(rows: list[dict], column: str) -> bool:
+    """True when *column* contains only UUID values across all rows."""
+    return _contains_uuid_values(rows, column)
+
+
+def _public_columns(columns: list[str]) -> list[str]:
+    """Columns safe to show to an operational user in Telegram/reports."""
+    return [column for column in columns if not _is_internal_identifier_column(column)]
+
+
+def _strip_internal_identifier_columns(
+    rows: list[dict],
+    columns: list[str],
+) -> tuple[list[dict], list[str]]:
+    public_columns = _public_columns(columns)
+    # Also remove columns whose values are all UUIDs
+    public_columns = [
+        c for c in public_columns
+        if not _is_uuid_column(rows, c)
+    ]
+    if public_columns == columns:
+        return rows, columns
+    return (
+        [
+            {column: row.get(column) for column in public_columns}
+            for row in rows
+        ],
+        public_columns,
+    )
 
 
 class IntentRouter:
@@ -106,8 +144,9 @@ class IntentRouter:
         self,
         **kwargs: Any,
     ) -> AgentResult:
-        """Ask for clarification."""
-        return AgentResult(response_text=_DEFAULT_AMBIGUOUS)
+        """Ask for clarification, using LLM-provided text if available."""
+        text = kwargs.get("response_text") or _DEFAULT_AMBIGUOUS
+        return AgentResult(response_text=text)
 
     def _handle_query(
         self,
@@ -116,7 +155,6 @@ class IntentRouter:
         """Execute a query and return a natural-language response."""
         query_type = kwargs.get("query_type")
         params = kwargs.get("params") or {}
-        user_message = kwargs.get("user_message", "")
 
         entry = self._registry.get(query_type) if query_type else None
         if entry is None:
@@ -126,14 +164,33 @@ class IntentRouter:
 
         try:
             rows, columns = self._execute_template(entry["sql_template"], params)
+            rows, columns = _strip_internal_identifier_columns(rows, columns)
+            tool_entities = {
+                "query_type": query_type,
+                "params": params,
+                "operation": "query",
+            }
+            tool_result = {
+                "ok": True,
+                "source": "query_registry",
+                "query_type": query_type,
+                "row_count": len(rows),
+                "data": {"columns": columns, "rows": rows},
+            }
             if not rows:
                 return AgentResult(
                     response_text="No se encontraron resultados para esa consulta.",
                     agent_action="query",
+                    tool_name="query_registry",
+                    tool_entities=tool_entities,
+                    tool_result=tool_result,
                 )
             return AgentResult(
-                response_text=self._format_rows(rows, columns, user_message),
+                response_text=format_rows(rows, columns),
                 agent_action="query",
+                tool_name="query_registry",
+                tool_entities=tool_entities,
+                tool_result=tool_result,
             )
         except Exception as exc:
             logger.warning("Query '%s' failed: %s", query_type, exc)
@@ -146,7 +203,6 @@ class IntentRouter:
         """Execute a query and return results as a PDF/Excel document."""
         query_type = kwargs.get("query_type")
         params = kwargs.get("params") or {}
-        user_message = kwargs.get("user_message", "")
         fmt = kwargs.get("format", "pdf")
 
         entry = self._registry.get(query_type) if query_type else None
@@ -157,13 +213,34 @@ class IntentRouter:
 
         try:
             rows, columns = self._execute_template(entry["sql_template"], params)
+            rows, columns = _strip_internal_identifier_columns(rows, columns)
+            tool_entities = {
+                "query_type": query_type,
+                "params": params,
+                "operation": "export",
+                "export_format": fmt or "pdf",
+            }
+            tool_result = {
+                "ok": True,
+                "source": "query_registry",
+                "query_type": query_type,
+                "row_count": len(rows),
+                "data": {"columns": columns, "rows": rows},
+            }
             if not rows:
                 return AgentResult(
                     response_text="No se encontraron resultados para generar el reporte.",
                     agent_action="export",
+                    tool_name="query_registry",
+                    tool_entities=tool_entities,
+                    tool_result=tool_result,
                 )
 
-            return self._build_document(rows, columns, fmt, query_type)
+            result = self._build_document(rows, columns, fmt, query_type)
+            result.tool_name = "query_registry"
+            result.tool_entities = tool_entities
+            result.tool_result = tool_result
+            return result
         except Exception as exc:
             logger.warning("Export '%s' failed: %s", query_type, exc)
             return AgentResult(response_text=_DEFAULT_NOT_FOUND)
@@ -199,7 +276,11 @@ class IntentRouter:
             agent_action="export",
         )
 
-    def _execute_template(self, sql_template: str, params: dict[str, Any]) -> tuple[list[dict], list[str]]:
+    def _execute_template(
+        self,
+        sql_template: str,
+        params: dict[str, Any],
+    ) -> tuple[list[dict], list[str]]:
         """Execute a parametrized SQL template and return (rows, columns)."""
         if self._session is None:
             logger.warning("No DB session set in IntentRouter")
@@ -208,35 +289,18 @@ class IntentRouter:
         try:
             result = self._session.execute(sa_text(sql_template), params)
             columns = list(result.keys())
-            rows = [dict(zip(columns, row)) for row in result.fetchall()]
+            rows = [dict(zip(columns, row, strict=False)) for row in result.fetchall()]
             return rows, columns
         except Exception as exc:
             logger.warning("SQL execution failed: %s | SQL: %s", exc, sql_template[:120])
+            self._session.rollback()
             return [], []
-
-    def _format_rows(self, rows: list[dict], columns: list[str], user_message: str) -> str:
-        """Generate a natural-language response from query results."""
-        count = len(rows)
-        if count == 0:
-            return "No se encontraron resultados."
-        if count == 1:
-            first = rows[0]
-            parts = [f"{k}: {v}" for k, v in first.items() if v is not None]
-            return "Resultado: " + " | ".join(parts)
-        if count <= 5:
-            lines = [f"{i+1}. " + " | ".join(
-                str(r.get(c, "")) for c in columns[:3]
-            ) for i, r in enumerate(rows)]
-            return f"Se encontraron {count} resultados:\n" + "\n".join(lines)
-        return f"Se encontraron {count} resultados. Los primeros:\n" + "\n".join(
-            f"{i+1}. " + " | ".join(str(r.get(c, "")) for c in columns[:3])
-            for i, r in enumerate(rows[:5])
-        )
 
 _EXPORT_FILENAME_MAP = {
     "list_active_doctors": "LISTADO_MEDICOS_ACTIVOS.pdf",
     "count_by_sex": "MEDICOS_POR_SEXO.pdf",
     "count_by_rank": "MEDICOS_POR_RANGO.pdf",
+    "count_by_specific_rank": "MEDICOS_POR_RANGO.pdf",
     "doctors_by_sex": "MEDICOS_POR_SEXO.pdf",
     "doctors_by_rank": "MEDICOS_POR_RANGO.pdf",
     "doctor_detail": "DETALLE_MEDICO.pdf",
@@ -244,11 +308,25 @@ _EXPORT_FILENAME_MAP = {
     "calendar_status_month": "ESTADO_CALENDARIO.pdf",
     "assignment_count_by_date_range": "SERVICIOS_POR_MEDICO.pdf",
     "mission_ranking": "RANKING_MISIONES.pdf",
+    "list_active_missions": "MISIONES_ACTIVAS.pdf",
     "operational_summary": "RESUMEN_OPERATIVO.pdf",
     "doctors_pending_availability": "MEDICOS_SIN_DISPONIBILIDAD.pdf",
     "count_doctors_total": "TOTAL_MEDICOS.pdf",
     "doctor_history_60d": "HISTORIAL_MEDICO.pdf",
     "count_doctors_by_department": "MEDICOS_POR_DEPARTAMENTO.pdf",
+    "count_by_specific_sex": "MEDICOS_POR_SEXO.pdf",
+    "doctor_history_by_name": "HISTORIAL_MEDICO.pdf",
+    "assignments_by_area": "SERVICIOS_POR_AREA.pdf",
+    "unresolved_gaps_month": "HUECOS_POR_MES.pdf",
+    "total_services_by_month": "SERVICIOS_POR_MES.pdf",
+    "count_assigned_doctors_by_month": "MEDICOS_ASIGNADOS_MES.pdf",
+    "list_assigned_doctors_by_month": "MEDICOS_ASIGNADOS_MES.pdf",
+    "unassigned_doctors_by_month": "MEDICOS_NO_ASIGNADOS_MES.pdf",
+    "duplicate_doctor_names": "MEDICOS_DUPLICADOS.pdf",
+    "calendar_approval_info": "AUDITORIA_CALENDARIO.pdf",
+    "pending_mission_confirmation": "PENDIENTES_MISION.pdf",
+    "pending_service_confirmation": "PENDIENTES_SERVICIO.pdf",
+    "list_calendar_assignments_by_date_range": "SERVICIOS_CALENDARIO.pdf",
 }
 
 _COLUMN_TITLE_MAP: dict[str, str] = {
@@ -280,6 +358,20 @@ _COLUMN_TITLE_MAP: dict[str, str] = {
     "department": "Departamento",
     "doctor_id": "ID Médico",
     "id": "ID",
+    "active_doctors": "Médicos Activos",
+    "calendar_status": "Estado Calendario",
+    "total_assignments": "Total Servicios",
+    "unresolved_gaps": "Huecos",
+    "description": "Descripción",
+    "reason_code": "Motivo",
+    "action_type": "Acción",
+    "fecha": "Fecha",
+    "fecha_mision": "Fecha Misión",
+    "actor": "Actor",
+    "medico": "Médico",
+    "estado": "Estado",
+    "lugar": "Lugar",
+    "descripcion": "Descripción",
 }
 
 _DEFAULT_COLUMN_TITLE = "Columna"
@@ -296,16 +388,8 @@ def _build_pdf_from_rows(
     query_type: str,
     fmt: str,
 ) -> AgentResult:
-    """Generate a real PDF document from query results using the institutional template.
-
-    Uses generate_doctor_list_pdf for generic tabular data.
-    Specialised templates are used for known report types.
-    """
-    from backend.app.application.reports.pdf_templates import (
-        generate_doctor_list_pdf,
-        generate_mission_ranking_pdf,
-        generate_operational_summary_pdf,
-    )
+    """Generate a real PDF document from query results using the institutional template."""
+    from backend.app.application.reports.weasyprint_gen import generate_doctor_list_pdf
 
     if not rows:
         return AgentResult(
@@ -317,6 +401,7 @@ def _build_pdf_from_rows(
         "list_active_doctors": "LISTADO DE MÉDICOS ACTIVOS",
         "count_by_sex": "MÉDICOS POR SEXO",
         "count_by_rank": "MÉDICOS POR RANGO",
+        "count_by_specific_rank": "MÉDICOS POR RANGO",
         "doctors_by_sex": "LISTADO DE MÉDICOS POR SEXO",
         "doctors_by_rank": "LISTADO DE MÉDICOS POR RANGO",
         "doctor_detail": "DETALLE DE MÉDICO",
@@ -324,51 +409,28 @@ def _build_pdf_from_rows(
         "calendar_status_month": "ESTADO DEL CALENDARIO",
         "assignment_count_by_date_range": "SERVICIOS POR MÉDICO",
         "mission_ranking": "RANKING DE CANDIDATOS PARA MISIONES",
+        "list_active_missions": "MISIONES ACTIVAS",
         "operational_summary": "RESUMEN OPERATIVO",
         "doctors_pending_availability": "MÉDICOS SIN DISPONIBILIDAD",
         "count_doctors_total": "TOTAL DE MÉDICOS",
         "doctor_history_60d": "HISTORIAL DE SERVICIOS (60 DÍAS)",
         "count_doctors_by_department": "MÉDICOS POR DEPARTAMENTO",
+        "count_by_specific_sex": "MÉDICOS POR SEXO",
+        "doctor_history_by_name": "HISTORIAL DE SERVICIOS (60 DÍAS)",
+        "assignments_by_area": "SERVICIOS POR ÁREA",
+        "unresolved_gaps_month": "HUECOS SIN ASIGNAR POR MES",
+        "total_services_by_month": "TOTAL DE SERVICIOS POR MES",
+        "count_assigned_doctors_by_month": "MÉDICOS ASIGNADOS POR MES",
+        "list_assigned_doctors_by_month": "LISTADO DE MÉDICOS ASIGNADOS POR MES",
+        "unassigned_doctors_by_month": "MÉDICOS NO ASIGNADOS POR MES",
+        "duplicate_doctor_names": "MÉDICOS CON NOMBRES DUPLICADOS",
+        "calendar_approval_info": "AUDITORÍA DE CAMBIOS DEL CALENDARIO",
+        "pending_mission_confirmation": "CONFIRMACIONES PENDIENTES DE MISIÓN",
+        "pending_service_confirmation": "CONFIRMACIONES PENDIENTES DE SERVICIO",
+        "list_calendar_assignments_by_date_range": "SERVICIOS DEL CALENDARIO",
     }
 
     title = title_map.get(query_type, f"REPORTE - {query_type.upper()}")
-
-    # Special case: operational summary
-    if query_type == "operational_summary":
-        summary = {"period": {}, "active_doctors": 0, "calendar_status": "N/A",
-                    "total_assignments": 0, "unresolved_gaps": 0}
-        for row in rows:
-            summary["active_doctors"] = row.get("active_doctors", 0)
-            summary["calendar_status"] = row.get("calendar_status", "N/A")
-            summary["total_assignments"] = row.get("total_assignments", 0)
-        pdf_bytes = generate_operational_summary_pdf(summary)
-        filename = _EXPORT_FILENAME_MAP.get(query_type, "REPORTE.pdf")
-        return AgentResult(
-            response_text=f"{_DEFAULT_EXPORT_OK} ({len(rows)} registros, PDF).",
-            document_bytes=pdf_bytes,
-            document_filename=filename,
-            agent_action="export",
-        )
-
-    # Special case: mission ranking
-    if query_type == "mission_ranking" and "ranking_position" in columns:
-        entries = [
-            {
-                "position": r.get("ranking_position", i + 1),
-                "doctor_name": r.get("doctor_name", r.get("name", "")),
-                "total_load_score": r.get("total_load_score", 0),
-                "eligible": r.get("eligible", False),
-            }
-            for i, r in enumerate(rows)
-        ]
-        pdf_bytes = generate_mission_ranking_pdf(entries, 1, 2026)
-        filename = _EXPORT_FILENAME_MAP.get(query_type, "REPORTE.pdf")
-        return AgentResult(
-            response_text=f"{_DEFAULT_EXPORT_OK} ({len(entries)} registros, PDF).",
-            document_bytes=pdf_bytes,
-            document_filename=filename,
-            agent_action="export",
-        )
 
     # Generic: use generate_doctor_list_pdf with SQL column titles
     header_titles = [_column_title(c) for c in columns]
@@ -376,7 +438,12 @@ def _build_pdf_from_rows(
     # Build data rows using column titles as keys (for mapping in the table)
     doctor_rows = []
     for row in rows:
-        doctor_rows.append({t: str(row.get(c, "")) for t, c in zip(header_titles, columns)})
+        doctor_rows.append(
+            {
+                title: display_value(column, row.get(column, ""))
+                for title, column in zip(header_titles, columns, strict=False)
+            }
+        )
 
     col_widths = [max(2.5 * cm, len(t) * 0.18 * cm) for t in header_titles]
     # Cap max width
@@ -417,10 +484,11 @@ def _build_excel_from_rows(
     ws.append(header)
 
     for row in rows:
-        ws.append([str(row.get(c, "")) for c in columns])
+        ws.append([display_value(c, row.get(c, "")) for c in columns])
 
-    for i, _ in enumerate(header):
-        ws.column_dimensions[chr(65 + i)].width = max(12, len(header[i]) + 4)
+    for i, col_title in enumerate(header):
+        letter = openpyxl.utils.get_column_letter(i + 1)
+        ws.column_dimensions[letter].width = max(12, len(col_title) + 4)
 
     buf = io.BytesIO()
     wb.save(buf)

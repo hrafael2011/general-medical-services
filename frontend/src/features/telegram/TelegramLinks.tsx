@@ -84,8 +84,14 @@ export function TelegramLinks() {
   });
 
   const { data: users } = useQuery({
-    queryKey: ["users"],
-    queryFn: () => adminApi.listUsers("doctor"),
+    queryKey: ["telegram-linkable-users"],
+    queryFn: async () => {
+      const [admins, encargados] = await Promise.all([
+        adminApi.listUsers("admin"),
+        adminApi.listUsers("encargado"),
+      ]);
+      return [...admins, ...encargados].sort((a, b) => a.name.localeCompare(b.name));
+    },
   });
 
   const { data: linkTokens } = useQuery({

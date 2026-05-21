@@ -1,9 +1,10 @@
 """Tests for MemoryManager — conversation history loading."""
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from backend.app.application.telegram.memory import MemoryManager
+from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
 from backend.app.infrastructure.db.models.telegram import TelegramInteractionModel
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 
@@ -98,11 +99,117 @@ def test_load_history_ignores_other_users(db_session) -> None:
     """Las interacciones de otro telegram_user_id no aparecen en el historial."""
     tg_id_a = f"tg-{uuid.uuid4().hex[:8]}"
     tg_id_b = f"tg-{uuid.uuid4().hex[:8]}"
-    _add_interaction(db_session, telegram_user_id=tg_id_a, input_text="A habla", response_text="A resp")
-    _add_interaction(db_session, telegram_user_id=tg_id_b, input_text="B habla", response_text="B resp")
+    _add_interaction(
+        db_session,
+        telegram_user_id=tg_id_a,
+        input_text="A habla",
+        response_text="A resp",
+    )
+    _add_interaction(
+        db_session,
+        telegram_user_id=tg_id_b,
+        input_text="B habla",
+        response_text="B resp",
+    )
 
     memory = MemoryManager(TelegramRepository(db_session))
     history_a = memory.load_history(tg_id_a)
 
     assert len(history_a) == 2
     assert history_a[0]["content"] == "A habla"
+
+
+# ---------------------------------------------------------------------------
+# SessionStore tests
+# ---------------------------------------------------------------------------
+
+def test_session_store_set_and_get() -> None:
+    """SessionStore guarda y recupera estado por telegram_user_id."""
+    store = SessionStore(ttl_seconds=3600)
+    state = SessionState(
+        last_query_type="count_doctors_total",
+        last_params={},
+        last_results=[{"name": "Dr. Test"}],
+    )
+    store.set("tg-abc", state)
+    retrieved = store.get("tg-abc")
+    assert retrieved is not None
+    assert retrieved.last_query_type == "count_doctors_total"
+    assert retrieved.last_results == [{"name": "Dr. Test"}]
+
+
+def test_session_store_get_nonexistent() -> None:
+    """Usuario sin sesión → None."""
+    store = SessionStore()
+    assert store.get("tg-ghost") is None
+
+
+def test_session_store_ttl_expiry() -> None:
+    """Sesión expirada → None."""
+    store = SessionStore(ttl_seconds=0)  # expire immediately
+    state = SessionState(last_query_type="q")
+    store.set("tg-xyz", state)
+    time.sleep(0.01)  # let TTL pass
+    assert store.get("tg-xyz") is None
+
+
+def test_session_store_overwrite() -> None:
+    """Segundo set() sobreescribe el estado anterior."""
+    store = SessionStore()
+    s1 = SessionState(last_query_type="q1")
+    s2 = SessionState(last_query_type="q2")
+    store.set("tg-a", s1)
+    store.set("tg-a", s2)
+    assert store.get("tg-a").last_query_type == "q2"
+
+
+def test_session_store_clear_user() -> None:
+    """clear() elimina la sesión de un usuario."""
+    store = SessionStore()
+    store.set("tg-b", SessionState(last_query_type="q"))
+    store.clear("tg-b")
+    assert store.get("tg-b") is None
+
+
+def test_session_store_cleanup_expired() -> None:
+    """cleanup_expired() elimina sesiones expiradas."""
+    store = SessionStore(ttl_seconds=0)
+    store.set("tg-old", SessionState(last_query_type="q"))
+    time.sleep(0.01)
+    store.cleanup_expired()
+    assert store.get("tg-old") is None
+
+
+# ---------------------------------------------------------------------------
+# MemoryManager filtering tests
+# ---------------------------------------------------------------------------
+
+
+def test_memory_load_history_filters_formatted_responses(db_session) -> None:
+    """Tool responses are skipped so internal summaries never leak to the LLM."""
+    tg_id = f"tg-{uuid.uuid4().hex[:8]}"
+    interaction = TelegramInteractionModel(
+        id=str(uuid.uuid4()),
+        telegram_user_id=tg_id,
+        matched_user_id=None,
+        user_role=None,
+        intent_id="test",
+        input_text="cuántos médicos hay",
+        extracted_entities=None,
+        intent_confidence=None,
+        tool_name="count_doctors_total",
+        tool_request=None,
+        tool_response=None,
+        response_text="Se encontraron 15 resultados:\n1. Dr. A\n2. Dr. B",
+        cache_status=None,
+        fallback_reason=None,
+        status="completed",
+        created_at=datetime.now(UTC),
+    )
+    db_session.add(interaction)
+    db_session.flush()
+
+    memory = MemoryManager(TelegramRepository(db_session))
+    history = memory.load_history(tg_id)
+
+    assert history == []

@@ -15,6 +15,7 @@ from backend.app.application.calendars.generation_service import GenerationServi
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
     CalendarVersionModel,
+    CalendarWeekModel,
 )
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.db.models.doctors import (
@@ -91,6 +92,7 @@ def _create_calendar_and_version(db_session) -> tuple[CalendarModel, CalendarVer
         year=_YEAR,
         month=_MONTH,
         status="draft",
+        generation_mode="manual",
         created_by="actor-001",
         approved_by=None,
         created_at=now,
@@ -113,6 +115,28 @@ def _create_calendar_and_version(db_session) -> tuple[CalendarModel, CalendarVer
     db_session.flush()
 
     return calendar, version
+
+
+def _create_week(
+    db_session,
+    calendar: CalendarModel,
+    version: CalendarVersionModel,
+    *,
+    status: str,
+) -> CalendarWeekModel:
+    week = CalendarWeekModel(
+        id=str(uuid4()),
+        calendar_id=calendar.id,
+        calendar_version_id=version.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=datetime.date(_YEAR, _MONTH, 2),
+        end_date=datetime.date(_YEAR, _MONTH, 8),
+        status=status,
+    )
+    db_session.add(week)
+    db_session.flush()
+    return week
 
 
 def _create_doctor(
@@ -190,6 +214,51 @@ def test_generate_assigns_doctors(db_session) -> None:
     assignments = cal_repo.list_assignments(version.id)
     assert len(assignments) == summary.assigned_count
 
+    updated_calendar = cal_repo.get_calendar_by_id(calendar.id)
+    assert updated_calendar.generation_mode == "assisted_auto"
+    assert updated_calendar.status == "draft"
+    assert version.status == "draft"
+
+
+def test_generate_reports_missing_required_service_areas(db_session) -> None:
+    calendar, _version = _create_calendar_and_version(db_session)
+
+    service = _make_generation_service(db_session)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    assert exc_info.value.code == "generation_configuration_incomplete"
+    assert "emergencia" in exc_info.value.message
+
+
+def test_generate_does_not_create_mission_ranking_before_approval(db_session) -> None:
+    """Calendar generation must not create mission rankings for draft calendars."""
+    _seed_service_areas(db_session)
+    calendar, _version = _create_calendar_and_version(db_session)
+
+    _create_doctor(db_session, name="Dr. Emergencia", allowed_area_ids=[_AREA_EMERGENCIA])
+
+    service = _make_generation_service(db_session)
+    service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    ranking = MissionRepository(db_session).get_ranking_by_period(_YEAR, _MONTH)
+    assert ranking is None
+
+
+def test_generate_fails_when_any_week_is_approved(db_session) -> None:
+    """Generation must not overwrite assignments once a week is approved."""
+    _seed_service_areas(db_session)
+    calendar, version = _create_calendar_and_version(db_session)
+    _create_week(db_session, calendar, version, status="approved")
+
+    service = _make_generation_service(db_session)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    assert exc_info.value.code == "week_locked"
+
 
 def test_generate_reports_missing_required_service_areas(db_session) -> None:
     calendar, _version = _create_calendar_and_version(db_session)
@@ -261,3 +330,144 @@ def test_generate_clears_previous_assignments(db_session) -> None:
     assert len(gaps_in_db) == summary_second.gap_count
     # Sanity: totals add up correctly.
     assert len(assignments_in_db) + len(gaps_in_db) == summary_second.total_slots
+
+
+# ---------------------------------------------------------------------------
+# test_generate_respects_monthly_max_hard_limit
+# ---------------------------------------------------------------------------
+
+
+def test_generate_respects_monthly_max_hard_limit(db_session) -> None:
+    """A doctor with monthly_service_max=2 (hard_limit) gets at most 2 assignments."""
+    _seed_service_areas(db_session)
+    calendar, _version = _create_calendar_and_version(db_session)
+    _create_week(db_session, calendar, _version, status="draft")
+
+    doctor = _create_doctor(
+        db_session, name="Dr. Limited",
+        allowed_area_ids=[_AREA_EMERGENCIA, _AREA_PISTA, _AREA_DISPONIBLE],
+    )
+    doctor.monthly_service_max = 2
+    doctor.monthly_service_limit_mode = "hard_limit"
+    db_session.flush()
+
+    service = _make_generation_service(db_session)
+    summary = service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    doctor_assignments = [
+        r for r in summary.slot_results
+        if r.assigned_doctor_id == doctor.id
+    ]
+    assert len(doctor_assignments) == 2, (
+        f"Expected 2 assignments (max=2 hard_limit), got {len(doctor_assignments)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# test_generate_distributes_across_doctors_in_same_area
+# ---------------------------------------------------------------------------
+
+
+def test_generate_distributes_across_doctors_in_same_area(db_session) -> None:
+    """With 2 doctors for the same area, both should get assignments."""
+    _seed_service_areas(db_session)
+    calendar, _version = _create_calendar_and_version(db_session)
+    _create_week(db_session, calendar, _version, status="draft")
+
+    doctor_a = _create_doctor(
+        db_session, name="Dr. A", allowed_area_ids=[_AREA_EMERGENCIA],
+    )
+    doctor_b = _create_doctor(
+        db_session, name="Dr. B", allowed_area_ids=[_AREA_EMERGENCIA],
+    )
+
+    service = _make_generation_service(db_session)
+    summary = service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    count_a = sum(1 for r in summary.slot_results if r.assigned_doctor_id == doctor_a.id)
+    count_b = sum(1 for r in summary.slot_results if r.assigned_doctor_id == doctor_b.id)
+
+    assert count_a > 0, f"Doctor A got 0 assignments — unfair distribution"
+    assert count_b > 0, f"Doctor B got 0 assignments — unfair distribution"
+
+
+# ---------------------------------------------------------------------------
+# test_generate_respects_hard_block
+# ---------------------------------------------------------------------------
+
+
+def test_generate_respects_hard_block(db_session) -> None:
+    """A doctor with a hard_block restriction gets 0 assignments."""
+    from backend.app.infrastructure.db.models.availability import DoctorRestrictionModel
+
+    _seed_service_areas(db_session)
+    calendar, _version = _create_calendar_and_version(db_session)
+    _create_week(db_session, calendar, _version, status="draft")
+
+    doctor = _create_doctor(
+        db_session, name="Dr. Blocked",
+        allowed_area_ids=[_AREA_EMERGENCIA, _AREA_PISTA, _AREA_DISPONIBLE],
+    )
+
+    now = datetime.datetime.now(datetime.UTC)
+    db_session.add(DoctorRestrictionModel(
+        id=str(uuid4()),
+        doctor_id=doctor.id,
+        restriction_type="licencia",
+        severity="hard_block",
+        starts_at=datetime.date(2026, 1, 26),
+        ends_at=None,
+        lifted_at=None,
+        description="Test block",
+        source="manual",
+        created_by="actor-001",
+        created_at=now,
+        updated_at=now,
+    ))
+    db_session.flush()
+
+    service = _make_generation_service(db_session)
+    summary = service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    doctor_assignments = [
+        r for r in summary.slot_results
+        if r.assigned_doctor_id == doctor.id
+    ]
+    assert len(doctor_assignments) == 0, (
+        f"Doctor with hard_block should have 0 assignments, got {len(doctor_assignments)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# test_generate_with_partial_area_coverage
+# ---------------------------------------------------------------------------
+
+
+def test_generate_with_partial_area_coverage(db_session) -> None:
+    """When doctors only cover 2 of 3 areas, the uncovered area is all gaps."""
+    _seed_service_areas(db_session)
+    calendar, _version = _create_calendar_and_version(db_session)
+    _create_week(db_session, calendar, _version, status="draft")
+
+    _create_doctor(
+        db_session, name="Dr. Emergencia",
+        allowed_area_ids=[_AREA_EMERGENCIA],
+    )
+    _create_doctor(
+        db_session, name="Dr. Pista",
+        allowed_area_ids=[_AREA_PISTA],
+    )
+
+    service = _make_generation_service(db_session)
+    summary = service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    disponible_gaps = sum(
+        1 for r in summary.slot_results
+        if r.slot.service_area_id == _AREA_DISPONIBLE and r.assigned_doctor_id is None
+    )
+    emergencia_assigned = sum(
+        1 for r in summary.slot_results
+        if r.slot.service_area_id == _AREA_EMERGENCIA and r.assigned_doctor_id is not None
+    )
+    assert disponible_gaps > 0, "Disponible should have gaps (no doctor covers it)"
+    assert emergencia_assigned > 0, "Emergencia should have assignments"

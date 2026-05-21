@@ -9,10 +9,13 @@ import pytest
 from backend.app.application.telegram.llm import DeepSeekProvider
 from backend.app.core.config import settings
 
-pytestmark = pytest.mark.skipif(
-    not settings.deepseek_api_key,
-    reason="DEEPSEEK_API_KEY no configurada",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not settings.deepseek_api_key,
+        reason="DEEPSEEK_API_KEY no configurada",
+    ),
+]
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +44,13 @@ def test_chat_complete_with_history(llm: DeepSeekProvider) -> None:
     messages = [
         {"role": "system", "content": "Eres un asistente médico conciso."},
         {"role": "user", "content": "¿Qué es un turno de guardia?"},
-        {"role": "assistant", "content": "Es un período de trabajo en el que el médico cubre el servicio de urgencias."},
+        {
+            "role": "assistant",
+            "content": (
+                "Es un período de trabajo en el que el médico cubre "
+                "el servicio de urgencias."
+            ),
+        },
         {"role": "user", "content": "¿Cuántas horas suele durar?"},
     ]
     result = llm.chat_complete(messages)

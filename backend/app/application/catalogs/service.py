@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from backend.app.domain.catalogs import INITIAL_DEACTIVATION_REASONS, INITIAL_SERVICE_AREAS
+from backend.app.domain.catalogs import (
+    INITIAL_DEACTIVATION_REASONS,
+    INITIAL_DEPARTMENTS,
+    INITIAL_SERVICE_AREAS,
+)
 from backend.app.infrastructure.db.models.catalogs import (
     DeactivationReasonModel,
     DepartmentModel,
@@ -53,16 +57,26 @@ class CatalogService:
                     )
                 )
 
-        self.catalogs.upsert_setting(
-            SystemSettingModel(
-                key="calendar_generation_day",
-                value="27",
-                description="Default day of month to generate next calendar draft.",
-                updated_at=now,
-            )
-        )
+        existing_department_names = {
+            department.normalized_name
+            for department in self.catalogs.list_departments()
+        }
+        for item in INITIAL_DEPARTMENTS:
+            normalized_name = normalize_name(item["name"])
+            if normalized_name not in existing_department_names:
+                self.catalogs.add_department(
+                    DepartmentModel(
+                        id=str(uuid4()),
+                        name=item["name"],
+                        normalized_name=normalized_name,
+                        active=True,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                existing_department_names.add(normalized_name)
 
-        from backend.app.application.reports.pdf_templates import DEFAULT_SIGNATURES as _sigs
+        from backend.app.application.reports.weasyprint_gen import DEFAULT_SIGNATURES as _sigs
         for key, value, description in [
             ("pdf.sig_left_name",   _sigs.left_name,   "Nombre de la firmante izquierda en PDFs institucionales."),
             ("pdf.sig_left_title1", _sigs.left_title1, "Título 1 de la firmante izquierda."),
@@ -101,4 +115,3 @@ class CatalogService:
             updated_at=now,
         )
         return self.catalogs.add_department(department)
-

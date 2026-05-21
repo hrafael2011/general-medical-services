@@ -1,14 +1,21 @@
-from datetime import date
+from datetime import UTC, datetime, date
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     CalendarModel,
     CalendarVersionModel,
+    CalendarWeekModel,
     UnresolvedGapModel,
 )
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+
+
+def _not_deleted() -> tuple:
+    """Return filter expressions to exclude soft-deleted records."""
+    return (CalendarModel.deleted_at.is_(None),)
 
 
 class CalendarRepository:
@@ -23,18 +30,36 @@ class CalendarRepository:
         return calendar
 
     def get_calendar_by_id(self, calendar_id: str) -> CalendarModel | None:
-        return self.session.get(CalendarModel, calendar_id)
+        stmt = select(CalendarModel).where(
+            CalendarModel.id == calendar_id,
+            *_not_deleted(),
+        )
+        return self.session.scalar(stmt)
 
     def get_calendar_by_period(self, year: int, month: int) -> CalendarModel | None:
         stmt = select(CalendarModel).where(
             CalendarModel.year == year,
             CalendarModel.month == month,
+            *_not_deleted(),
         )
         return self.session.scalar(stmt)
 
     def list_calendars(self) -> list[CalendarModel]:
-        stmt = select(CalendarModel).order_by(CalendarModel.year.desc(), CalendarModel.month.desc())
+        stmt = (
+            select(CalendarModel)
+            .where(*_not_deleted())
+            .order_by(CalendarModel.year.desc(), CalendarModel.month.desc())
+        )
         return list(self.session.scalars(stmt))
+
+    def soft_delete_calendar(self, calendar_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(CalendarModel)
+            .where(CalendarModel.id == calendar_id)
+            .values(deleted_at=now, updated_at=now)
+        )
+        self.session.flush()
 
     # --- Calendar Version ---
 
@@ -58,6 +83,26 @@ class CalendarRepository:
         stmt = (
             select(CalendarVersionModel)
             .where(CalendarVersionModel.calendar_id == calendar_id)
+            .order_by(CalendarVersionModel.version_number.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def get_approved_version_by_period(
+        self,
+        year: int,
+        month: int,
+    ) -> CalendarVersionModel | None:
+        stmt = (
+            select(CalendarVersionModel)
+            .join(CalendarModel, CalendarVersionModel.calendar_id == CalendarModel.id)
+            .where(
+                CalendarModel.year == year,
+                CalendarModel.month == month,
+                CalendarModel.status == "approved",
+                CalendarVersionModel.status == "approved",
+                *_not_deleted(),
+            )
             .order_by(CalendarVersionModel.version_number.desc())
             .limit(1)
         )
@@ -106,6 +151,25 @@ class CalendarRepository:
             self.session.delete(assignment)
             self.session.flush()
 
+    # --- Calendar Week ---
+
+    def add_week(self, week: CalendarWeekModel) -> CalendarWeekModel:
+        self.session.add(week)
+        self.session.flush()
+        return week
+
+    def list_weeks(self, calendar_id: str) -> list[CalendarWeekModel]:
+        stmt = (
+            select(CalendarWeekModel)
+            .where(CalendarWeekModel.calendar_id == calendar_id)
+            .order_by(CalendarWeekModel.week_number)
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_week_by_id(self, week_id: str) -> CalendarWeekModel | None:
+        stmt = select(CalendarWeekModel).where(CalendarWeekModel.id == week_id)
+        return self.session.scalar(stmt)
+
     # --- Unresolved Gaps ---
 
     def add_gap(self, gap: UnresolvedGapModel) -> UnresolvedGapModel:
@@ -131,3 +195,65 @@ class CalendarRepository:
             .where(CalendarAssignmentModel.service_date <= end_date)
         )
         return list(self.session.scalars(stmt))
+
+    def list_service_areas(self) -> list[ServiceAreaModel]:
+        stmt = select(ServiceAreaModel).order_by(ServiceAreaModel.code)
+        return list(self.session.scalars(stmt))
+
+    # --- Calendar Week ---
+
+    def add_week(self, week: CalendarWeekModel) -> CalendarWeekModel:
+        self.session.add(week)
+        self.session.flush()
+        return week
+
+    def get_week_by_id(self, week_id: str) -> CalendarWeekModel | None:
+        return self.session.get(CalendarWeekModel, week_id)
+
+    def list_weeks(self, calendar_id: str) -> list[CalendarWeekModel]:
+        stmt = (
+            select(CalendarWeekModel)
+            .where(CalendarWeekModel.calendar_id == calendar_id)
+            .order_by(CalendarWeekModel.week_number)
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_weeks_by_version(self, version_id: str) -> list[CalendarWeekModel]:
+        stmt = (
+            select(CalendarWeekModel)
+            .where(CalendarWeekModel.calendar_version_id == version_id)
+            .order_by(CalendarWeekModel.week_number)
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_week_for_date(
+        self, version_id: str, service_date: date
+    ) -> CalendarWeekModel | None:
+        stmt = select(CalendarWeekModel).where(
+            CalendarWeekModel.calendar_version_id == version_id,
+            CalendarWeekModel.start_date <= service_date,
+            CalendarWeekModel.end_date >= service_date,
+        )
+        return self.session.scalar(stmt)
+
+    def update_week_status(
+        self, week_id: str, status: str,
+        approved_by: str | None = None,
+        previous_assignments_hash: str | None = None,
+    ) -> None:
+        values: dict = {"status": status, "updated_at": datetime.now(UTC)}
+        if status == "approved" and approved_by:
+            values["approved_by"] = approved_by
+            values["approved_at"] = datetime.now(UTC)
+        if previous_assignments_hash is not None:
+            values["previous_assignments_hash"] = previous_assignments_hash
+        self.session.execute(
+            update(CalendarWeekModel)
+            .where(CalendarWeekModel.id == week_id)
+            .values(**values)
+        )
+        self.session.flush()
+        # Expire cached instance so next read fetches fresh data
+        week = self.session.get(CalendarWeekModel, week_id)
+        if week:
+            self.session.expire(week)

@@ -65,6 +65,12 @@ class CatalogRepository:
         self.session.flush()
         return rank
 
+    def get_rank_by_id(self, rank_id: str) -> RankModel | None:
+        return self.session.get(RankModel, rank_id)
+
+    def get_department_by_id(self, department_id: str) -> DepartmentModel | None:
+        return self.session.get(DepartmentModel, department_id)
+
     def list_ranks(self) -> list[RankModel]:
         statement = select(RankModel).order_by(RankModel.name)
         return list(self.session.scalars(statement))

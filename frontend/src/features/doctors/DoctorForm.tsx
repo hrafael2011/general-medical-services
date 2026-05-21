@@ -1,7 +1,7 @@
+import { FormEvent, useEffect, useState } from "react";
 import { Save, X } from "lucide-react";
-import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { doctorsApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
+import { doctorsApi, availabilityApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
 
 interface Props {
   doctor?: DoctorRead;
@@ -16,12 +16,37 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [sex, setSex] = useState(doctor?.sex ?? "male");
   const [phone, setPhone] = useState(doctor?.phone ?? "");
   const [participaMisiones, setParticipaMisiones] = useState(doctor?.participa_misiones ?? true);
-  const [availabilityMode, setAvailabilityMode] = useState(doctor?.availability_mode ?? "monthly");
   const [target, setTarget] = useState(String(doctor?.monthly_service_target ?? 3));
   const [max, setMax] = useState(String(doctor?.monthly_service_max ?? 3));
   const [limitMode, setLimitMode] = useState(doctor?.monthly_service_limit_mode ?? "warn_only");
   const [rankId, setRankId] = useState<string>(doctor?.rank_id ?? "");
+  const [departmentId, setDepartmentId] = useState<string>(doctor?.department_id ?? "");
   const [allowedAreaIds, setAllowedAreaIds] = useState<string[]>(doctor?.allowed_area_ids ?? []);
+
+  const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const DAY_TO_BACKEND = [6, 0, 1, 2, 3, 4, 5];
+  const WEEK_LABELS = ["1ra", "2da", "3ra", "4ta", "Última"];
+  const WEEK_VALUES = [0, 1, 2, 3, -1];
+
+  const [avMode, setAvMode] = useState<"weekly" | "monthly" | "recurring">(
+    doctor?.availability_mode === "monthly" ? "monthly" : "weekly"
+  );
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [selectedDates, setSelectedDates] = useState<number[]>([]);
+  const [selectedWeekday, setSelectedWeekday] = useState<number>(4);
+  const [selectedWeekNumber, setSelectedWeekNumber] = useState<number>(-1);
+
+  function toggleDay(backendDay: number) {
+    setSelectedDays(prev =>
+      prev.includes(backendDay) ? prev.filter(d => d !== backendDay) : [...prev, backendDay]
+    );
+  }
+
+  function toggleDate(day: number) {
+    setSelectedDates(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  }
   const [error, setError] = useState("");
 
   const { data: serviceAreas } = useQuery({
@@ -34,10 +59,62 @@ export function DoctorForm({ doctor, onClose }: Props) {
     queryFn: doctorsApi.listRanks,
   });
 
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: doctorsApi.listDepartments,
+  });
+
+  const { data: availabilityData } = useQuery({
+    queryKey: ["doctor-availability", doctor?.id],
+    queryFn: () => availabilityApi.list(doctor!.id),
+    enabled: isEdit,
+  });
+
+  useEffect(() => {
+    if (!availabilityData || availabilityData.length === 0) return;
+
+    const weekly = availabilityData.find(a => a.availability_type === "weekly_fixed");
+    const recurring = availabilityData.find(a => a.availability_type === "recurring");
+    const monthly = availabilityData.find(a => a.availability_type === "monthly_variable");
+
+    if (weekly && doctor?.availability_mode !== "monthly") {
+      setAvMode("weekly");
+      setSelectedDays(weekly.days_of_week ?? []);
+    } else if (recurring) {
+      setAvMode("recurring");
+      setSelectedWeekday(recurring.weekday ?? 4);
+      setSelectedWeekNumber(recurring.week_number ?? -1);
+    } else if (monthly) {
+      setAvMode("monthly");
+      setSelectedDates(monthly.available_dates ?? []);
+    }
+  }, [availabilityData, doctor?.availability_mode]);
+
   const save = useMutation({
     mutationFn: (payload: CreateDoctorPayload) =>
       isEdit ? doctorsApi.update(doctor!.id, payload) : doctorsApi.create(payload),
-    onSuccess: () => {
+    onSuccess: async (savedDoctor) => {
+      const doctorId = savedDoctor.id;
+      try {
+        if (avMode === "weekly" && selectedDays.length > 0) {
+          await availabilityApi.setWeekly(doctorId, { days_of_week: selectedDays });
+        } else if (avMode === "monthly" && selectedDates.length > 0) {
+          const now = new Date();
+          await availabilityApi.setMonthly(doctorId, {
+            year: now.getFullYear(),
+            month: now.getMonth() + 1,
+            available_dates: selectedDates,
+          });
+        } else if (avMode === "recurring") {
+          await availabilityApi.setRecurring(doctorId, {
+            weekday: selectedWeekday,
+            week_number: selectedWeekNumber,
+          });
+        }
+      } catch {
+        setError("Médico guardado, pero no se pudo configurar la disponibilidad.");
+        return;
+      }
       qc.invalidateQueries({ queryKey: ["doctors"] });
       onClose();
     },
@@ -50,9 +127,16 @@ export function DoctorForm({ doctor, onClose }: Props) {
     const t = parseInt(target, 10);
     const m = parseInt(max, 10);
     if (isNaN(t) || isNaN(m)) { setError("Meta y máximo deben ser números."); return; }
+
+    if (avMode === "weekly" && selectedDays.length === 0) { setError("Selecciona al menos un día de la semana."); return; }
+    if (avMode === "monthly" && selectedDates.length === 0) { setError("Selecciona al menos un día del mes."); return; }
+
+    const availabilityMode = avMode === "monthly" ? "monthly" : "fixed";
+
     save.mutate({
       name, sex, phone: phone || null, participa_misiones: participaMisiones,
       rank_id: rankId || null,
+      department_id: departmentId || null,
       availability_mode: availabilityMode,
       monthly_service_target: t, monthly_service_max: m,
       monthly_service_limit_mode: limitMode,
@@ -100,6 +184,18 @@ export function DoctorForm({ doctor, onClose }: Props) {
               </select>
             </label>
             <label>
+              Departamento
+              <select value={departmentId} onChange={e => setDepartmentId(e.target.value)}>
+                <option value="">— Sin departamento —</option>
+                {(departments ?? []).filter(d => d.active).map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="form-row">
+            <label>
               Teléfono
               <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Opcional" />
             </label>
@@ -124,13 +220,82 @@ export function DoctorForm({ doctor, onClose }: Props) {
           </div>
 
           <div className="form-row">
-            <label>
-              Modo disponibilidad
-              <select value={availabilityMode} onChange={e => setAvailabilityMode(e.target.value)}>
-                <option value="monthly">Variable mensual</option>
-                <option value="fixed">Fijo semanal</option>
-              </select>
-            </label>
+            <fieldset className="field-group">
+              <legend>Disponibilidad</legend>
+              <div className="av-toggle-group">
+                <button type="button"
+                  className={`av-toggle-btn${avMode === "weekly" ? " av-toggle-btn--active" : ""}`}
+                  onClick={() => setAvMode("weekly")}>
+                  Mismos días<br />todas las semanas
+                </button>
+                <button type="button"
+                  className={`av-toggle-btn${avMode === "monthly" ? " av-toggle-btn--active" : ""}`}
+                  onClick={() => setAvMode("monthly")}>
+                  Avisa sus días<br />cada mes
+                </button>
+                <button type="button"
+                  className={`av-toggle-btn${avMode === "recurring" ? " av-toggle-btn--active" : ""}`}
+                  onClick={() => setAvMode("recurring")}>
+                  Día fijo<br />al mes
+                </button>
+              </div>
+              {avMode === "weekly" && (
+                <div className="av-day-checks">
+                  {DAY_LABELS.map((label, i) => {
+                    const backendDay = DAY_TO_BACKEND[i];
+                    const selected = selectedDays.includes(backendDay);
+                    return (
+                      <label key={label} className="check-label">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleDay(backendDay)}
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {avMode === "monthly" && (
+                <div className="av-month-grid">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                    <button key={day} type="button"
+                      className={`av-month-day${selectedDates.includes(day) ? " av-month-day--selected" : ""}`}
+                      onClick={() => toggleDate(day)}>
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {avMode === "recurring" && (
+                <div className="av-recurring-row">
+                  <div className="av-recurring-col">
+                    <span className="av-recurring-label">Día</span>
+                    {DAY_LABELS.map((label, i) => {
+                      const backendDay = DAY_TO_BACKEND[i];
+                      return (
+                        <button key={label} type="button"
+                          className={`av-recurring-chip${selectedWeekday === backendDay ? " av-recurring-chip--selected" : ""}`}
+                          onClick={() => setSelectedWeekday(backendDay)}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="av-recurring-col">
+                    <span className="av-recurring-label">Semana</span>
+                    {WEEK_LABELS.map((label, i) => (
+                      <button key={label} type="button"
+                        className={`av-recurring-chip${selectedWeekNumber === WEEK_VALUES[i] ? " av-recurring-chip--selected" : ""}`}
+                        onClick={() => setSelectedWeekNumber(WEEK_VALUES[i])}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </fieldset>
           </div>
 
           <fieldset className="field-group">

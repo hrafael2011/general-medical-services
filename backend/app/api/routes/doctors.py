@@ -22,12 +22,17 @@ router = APIRouter(prefix="/doctors", tags=["doctors"])
 
 
 def get_doctor_service(session: Annotated[Session, Depends(get_db_session)]) -> DoctorService:
+    from backend.app.application.action_alerts.service import ActionAlertService
     from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
     from backend.app.infrastructure.repositories.audit import AuditRepository
+    from backend.app.infrastructure.repositories.missions import MissionRepository
     return DoctorService(
         DoctorRepository(session),
         catalog_repo=CatalogRepository(session),
         audit=AuditService(AuditRepository(session)),
+        mission_repo=MissionRepository(session),
+        action_alerts=ActionAlertService(ActionAlertRepository(session)),
     )
 
 
@@ -103,23 +108,12 @@ def update_doctor(
     service: Annotated[DoctorService, Depends(get_doctor_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DoctorRead:
+    update_fields = payload.model_dump(exclude_unset=True)
     try:
         doctor = service.update_doctor(
             doctor_id,
             actor_id=current_user.id,
-            name=payload.name,
-            sex=payload.sex,
-            rank_id=payload.rank_id,
-            department_id=payload.department_id,
-            phone=payload.phone,
-            notes=payload.notes,
-            participa_misiones=payload.participa_misiones,
-            whatsapp_phone=payload.whatsapp_phone,
-            monthly_service_target=payload.monthly_service_target,
-            monthly_service_max=payload.monthly_service_max,
-            monthly_service_limit_mode=payload.monthly_service_limit_mode,
-            availability_mode=payload.availability_mode,
-            allowed_area_ids=payload.allowed_area_ids,
+            **update_fields,
         )
     except DoctorServiceError as exc:
         status_code = (

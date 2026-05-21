@@ -50,12 +50,3 @@ class CreateRankRequest(BaseModel):
 
 class CreateDepartmentRequest(BaseModel):
     name: str = Field(min_length=1, max_length=160)
-
-
-class SystemSettingRead(BaseModel):
-    key: str
-    value: str
-    description: str | None
-
-    model_config = {"from_attributes": True}
-

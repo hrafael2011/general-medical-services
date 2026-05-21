@@ -41,4 +41,3 @@ class TemporaryPasswordResponse(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     temporary_password: str | None = Field(default=None, min_length=10)
-

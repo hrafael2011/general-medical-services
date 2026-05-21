@@ -23,7 +23,7 @@ class DoctorRepository:
     def list_all(self, *, active_only: bool = False) -> list[DoctorModel]:
         stmt = select(DoctorModel)
         if active_only:
-            stmt = stmt.where(DoctorModel.active.is_(True))
+            stmt = stmt.where(DoctorModel.active.is_(True), DoctorModel.service_active.is_(True))
         return list(self.session.scalars(stmt.order_by(DoctorModel.name)))
 
     def list_service_active(self) -> list[DoctorModel]:
@@ -34,6 +34,25 @@ class DoctorRepository:
             .order_by(DoctorModel.name)
         )
         return list(self.session.scalars(stmt))
+
+    def list_with_filters(
+        self,
+        *,
+        rank_id: str | None = None,
+        sex: str | None = None,
+        department_id: str | None = None,
+        active_only: bool = True,
+    ) -> list[DoctorModel]:
+        stmt = select(DoctorModel)
+        if active_only:
+            stmt = stmt.where(DoctorModel.active.is_(True))
+        if rank_id:
+            stmt = stmt.where(DoctorModel.rank_id == rank_id)
+        if sex:
+            stmt = stmt.where(DoctorModel.sex == sex)
+        if department_id:
+            stmt = stmt.where(DoctorModel.department_id == department_id)
+        return list(self.session.scalars(stmt.order_by(DoctorModel.name)))
 
     def get_allowed_areas(self, doctor_id: str) -> list[str]:
         stmt = select(DoctorAllowedAreaModel.service_area_id).where(

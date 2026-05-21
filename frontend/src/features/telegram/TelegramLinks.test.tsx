@@ -72,6 +72,8 @@ describe("TelegramLinks", () => {
         telegram_username: "@test",
         user_id: "u1",
         linked_at: "2026-01-01T00:00:00",
+        linked_by: null,
+        last_used_at: null,
         active: true,
       },
     ]);

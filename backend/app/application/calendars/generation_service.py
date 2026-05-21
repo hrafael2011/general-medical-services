@@ -1,4 +1,3 @@
-import logging
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
@@ -7,6 +6,7 @@ from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import AREA_WEIGHTS
 from backend.app.domain.calendars.types import GenerationSummary
+from backend.app.application.calendars.service import CALENDAR_GENERATION_MODES
 from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     UnresolvedGapModel,
@@ -18,9 +18,6 @@ from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
 REQUIRED_AREA_CODES = ["emergencia", "pista", "disponible"]
-
-logger = logging.getLogger(__name__)
-
 
 class _AreaMapper:
     """Maps between service area codes (domain) and UUIDs (persistence)."""
@@ -66,7 +63,19 @@ class GenerationService:
         self.catalog_repo = catalog_repo
         self.audit = audit
 
-    def generate(self, *, actor_id: str, calendar_id: str) -> GenerationSummary:
+    def generate(
+        self,
+        *,
+        actor_id: str,
+        calendar_id: str,
+        generation_mode: str = "assisted_auto",
+    ) -> GenerationSummary:
+        if generation_mode not in CALENDAR_GENERATION_MODES:
+            raise CalendarServiceError(
+                "invalid_generation_mode",
+                f"Unsupported calendar generation mode: {generation_mode}.",
+            )
+
         calendar = self.calendar_repo.get_calendar_by_id(calendar_id)
         if calendar is None:
             raise CalendarServiceError("calendar_not_found", f"Calendar {calendar_id} not found.")
@@ -79,6 +88,17 @@ class GenerationService:
             raise CalendarServiceError(
                 "version_is_approved",
                 "Cannot generate into an approved version. Create a new version first.",
+            )
+
+        approved_weeks = [
+            week
+            for week in self.calendar_repo.list_weeks_by_version(version.id)
+            if week.status == "approved"
+        ]
+        if approved_weeks:
+            raise CalendarServiceError(
+                "week_locked",
+                "No se puede generar con reglas porque hay semanas aprobadas. Desbloquea las semanas primero.",
             )
 
         # Build code↔uuid mapper so the domain engine works with logical codes
@@ -168,6 +188,8 @@ class GenerationService:
         self.calendar_repo.session.flush()
 
         now = datetime.now(UTC)
+        calendar.generation_mode = generation_mode
+        calendar.updated_at = now
 
         # Persist results — convert service_area_id from codes back to UUIDs
         for result in summary_raw.slot_results:
@@ -209,27 +231,8 @@ class GenerationService:
                     "year": calendar.year,
                     "assigned": summary_raw.assigned_count,
                     "gaps": summary_raw.gap_count,
+                    "generation_mode": generation_mode,
                 },
             )
-
-        # Auto-generate mission candidate ranking for the period
-        try:
-            from backend.app.application.missions.ranking_service import MissionRankingService
-
-            ranking_service = MissionRankingService(
-                mission_repo=self.mission_repo,
-                doctor_repo=self.doctor_repo,
-                calendar_repo=self.calendar_repo,
-                catalog_repo=self.catalog_repo,
-                audit=self.audit,
-            )
-            ranking_service.generate_ranking(
-                actor_id=actor_id,
-                year=calendar.year,
-                month=calendar.month,
-                calendar_version_id=version.id,
-            )
-        except Exception:
-            logger.warning("Failed to auto-generate mission ranking", exc_info=True)
 
         return summary_raw

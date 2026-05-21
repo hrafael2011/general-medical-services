@@ -1,7 +1,12 @@
 import { apiFetch, setToken } from "./client";
 
 export interface UserRead {
-  id: string; name: string; email: string; role: string; active: boolean; must_change_password: boolean;
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  must_change_password: boolean;
 }
 export interface LoginResponse { access_token: string; token_type: string; user: UserRead; }
 
@@ -20,3 +25,29 @@ export async function changePassword(currentPassword: string, newPassword: strin
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
 }
+
+export interface SetPasswordValidateResponse {
+  valid: boolean;
+  email?: string;
+  name?: string;
+  expires_at?: string;
+}
+
+export const authApi = {
+  me() {
+    return apiFetch<UserRead>("/auth/me");
+  },
+
+  validateSetPasswordToken(token: string) {
+    return apiFetch<SetPasswordValidateResponse>(
+      `/auth/set-password?token=${encodeURIComponent(token)}`,
+    );
+  },
+
+  setPassword(token: string, password: string) {
+    return apiFetch<{ message: string }>("/auth/set-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
+  },
+};

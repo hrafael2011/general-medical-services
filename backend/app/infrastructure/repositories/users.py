@@ -50,4 +50,3 @@ class UserRepository:
             created_at=datetime.now(UTC),
         )
         self.session.add(entry)
-

@@ -69,7 +69,6 @@ describe("NotificationLog", () => {
           recipient_phone: null,
           assignment_id: null,
           mission_id: null,
-          idempotency_key: "key1",
           scheduled_for: null,
           sent_at: null,
           status: "sent",

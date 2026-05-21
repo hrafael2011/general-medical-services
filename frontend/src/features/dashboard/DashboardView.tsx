@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { calendarsApi, CalendarRead } from "../../api/calendars";
 import { doctorsApi } from "../../api/doctors";
+import { missionsApi, MissionReplacementAlertSummary } from "../../api/missions";
 import { AlertCard } from "./AlertCard";
 import { KpiCard } from "./KpiCard";
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-function deriveAlerts(calendars: CalendarRead[]) {
+function deriveAlerts(calendars: CalendarRead[], replacementAlerts?: MissionReplacementAlertSummary) {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -31,6 +32,17 @@ function deriveAlerts(calendars: CalendarRead[]) {
     alerts.push({ severity: "warning", icon: "⚠️", title: `Calendario ${MONTHS[nextMonth - 1]} no creado`, detail: "Crealo antes de que inicie el mes.", actionLabel: "Crear", actionTo: "/calendars" });
   }
 
+  if (replacementAlerts && replacementAlerts.participant_count > 0) {
+    alerts.unshift({
+      severity: "warning",
+      icon: "⚠️",
+      title: `${replacementAlerts.mission_count} misión futura requiere reemplazo`,
+      detail: `${replacementAlerts.participant_count} participante(s) deben ser reemplazados antes de la misión.`,
+      actionLabel: "Revisar",
+      actionTo: "/missions",
+    });
+  }
+
   return alerts;
 }
 
@@ -45,11 +57,16 @@ export function DashboardView() {
     queryFn: () => doctorsApi.list(false),
   });
 
+  const { data: replacementAlerts } = useQuery({
+    queryKey: ["mission-replacement-alerts"],
+    queryFn: missionsApi.getReplacementAlertSummary,
+  });
+
   const activeCount = doctors?.items.filter(d => d.service_active).length ?? 0;
 
   const now = new Date();
   const currentCal = calendars.find(c => c.year === now.getFullYear() && c.month === now.getMonth() + 1);
-  const alerts = deriveAlerts(calendars);
+  const alerts = deriveAlerts(calendars, replacementAlerts);
 
   return (
     <div className="dashboard">

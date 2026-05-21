@@ -6,14 +6,17 @@ from pydantic import BaseModel, Field
 class AuditEventRead(BaseModel):
     id: str
     actor_id: str | None
+    actor_display: str | None = None
     action_type: str
     entity_type: str
     entity_id: str | None
+    entity_display: str | None = None
     occurred_at: datetime
     request_id: str | None
     before_snapshot: dict | None
     after_snapshot: dict | None
     metadata_: dict | None = Field(alias="metadata_", default=None)
+    detail_summary: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -16,11 +16,11 @@ import backend.app.infrastructure.db.models.availability  # noqa: F401
 import backend.app.infrastructure.db.models.calendars  # noqa: F401
 import backend.app.infrastructure.db.models.catalogs  # noqa: F401
 import backend.app.infrastructure.db.models.doctors  # noqa: F401
-import backend.app.infrastructure.db.models.import_staging  # noqa: F401
 import backend.app.infrastructure.db.models.missions  # noqa: F401
 import backend.app.infrastructure.db.models.notifications  # noqa: F401
 import backend.app.infrastructure.db.models.telegram  # noqa: F401
 import backend.app.infrastructure.db.models.user  # noqa: F401
+from backend.app.application.telegram.sanitize import _is_uuid_column
 from backend.app.infrastructure.db.base import Base as _Base
 
 _FORBIDDEN_KEYWORDS = [
@@ -31,7 +31,10 @@ _FORBIDDEN_KEYWORDS = [
 ]
 
 # Also block CTEs that start with WITH … DELETE/UPDATE/INSERT
-_CTE_DML = re.compile(r"\bWITH\s+\w+\s+AS\s*\([^)]*\)\s*(DELETE|UPDATE|INSERT)", re.DOTALL | re.IGNORECASE)
+_CTE_DML = re.compile(
+    r"\bWITH\s+\w+\s+AS\s*\([^)]*\)\s*(DELETE|UPDATE|INSERT)",
+    re.DOTALL | re.IGNORECASE,
+)
 
 _EXCLUDE_TABLES = {
     "alembic_version",
@@ -39,10 +42,10 @@ _EXCLUDE_TABLES = {
     "telegram_user_links",
     "telegram_link_tokens",
     "audit_logs",
-    "import_staging",
-    "import_staging_areas",
-    "import_reviews",
+    "users",  # NEVER expose credentials table to LLM
 }
+
+_INTERNAL_IDENTIFIER_RE = re.compile(r"(^id$|_id$)", re.IGNORECASE)
 
 _TABLE_DESCRIPTIONS = {
     "doctors": "Medicos del sistema. Datos personales y estado.",
@@ -148,6 +151,7 @@ class QueryExecutor:
         self,
         nl_query: str,
         user_text: str = "",
+        entity_hints: str = "",
     ) -> dict:
         """
         Convert a natural language query to SQL, validate, execute, return results.
@@ -156,7 +160,7 @@ class QueryExecutor:
             {"ok": True, "data": {"columns": [...], "rows": [...], "row_count": N, ...}}
             or {"ok": False, "error": "..."}
         """
-        sql = self._generate_sql(nl_query, user_text)
+        sql = self._generate_sql(nl_query, user_text, entity_hints=entity_hints)
         if not sql:
             return {"ok": False, "error": "No se pudo generar una consulta SQL."}
 
@@ -170,7 +174,13 @@ class QueryExecutor:
                 "error": "Solo se permiten consultas SELECT.",
             }
 
-        return self._run_sql(sql_clean)
+        result = self._run_sql(sql_clean)
+        if result.get("ok"):
+            row_count = result.get("data", {}).get("row_count", 0)
+            result["source"] = "nl_to_sql"
+            result["sql"] = sql_clean
+            result["row_count"] = row_count
+        return result
 
     def _extract_sql(self, text: str) -> str:
         """Extract SQL from markdown code blocks if present."""
@@ -183,9 +193,17 @@ class QueryExecutor:
         # No code block — assume the whole response is SQL
         return text
 
-    def _generate_sql(self, nl_query: str, user_text: str = "") -> str:
+    def _generate_sql(self, nl_query: str, user_text: str = "", entity_hints: str = "") -> str:
         """Send schema + query to LLM and extract SQL."""
         context = user_text or nl_query
+
+        entity_section = ""
+        if entity_hints:
+            entity_section = (
+                f"\n\nENTIDADES DETECTADAS (usa estos valores exactos en los predicados SQL):\n"
+                f"{entity_hints}\n"
+            )
+
         messages = [
             {
                 "role": "system",
@@ -198,7 +216,8 @@ class QueryExecutor:
                 "role": "user",
                 "content": (
                     f"Esquema de la base de datos:\n\n"
-                    f"{self._schema_summary}\n\n"
+                    f"{self._schema_summary}"
+                    f"{entity_section}\n\n"
                     f"Pregunta: {context}\n\n"
                     f"Genera una consulta SELECT de PostgreSQL para responder. "
                     f"Usa los nombres exactos de tablas y columnas. "
@@ -225,6 +244,9 @@ class QueryExecutor:
         for kw in _FORBIDDEN_KEYWORDS:
             if re.search(rf"\b{kw}\b", cleaned):
                 return False
+        for table_name in _EXCLUDE_TABLES:
+            if re.search(rf"\b{re.escape(table_name.upper())}\b", cleaned):
+                return False
         return True
 
     def _run_sql(self, sql: str) -> dict:
@@ -233,10 +255,15 @@ class QueryExecutor:
 
         logger = logging.getLogger(__name__)
         try:
+            # Set real PostgreSQL statement timeout (10 seconds)
+            # Silently ignored by SQLite — only takes effect on PostgreSQL
+            try:
+                self._session.execute(text("SET LOCAL statement_timeout = '10000'"))
+            except Exception:
+                pass
+
             start = time.time()
-            result = self._session.execute(
-                text(sql).execution_options(timeout=10)
-            )
+            result = self._session.execute(text(sql))
             elapsed = time.time() - start
 
             rows = result.fetchmany(101)
@@ -244,17 +271,28 @@ class QueryExecutor:
             if truncated:
                 rows = rows[:100]
 
-            columns = list(result.keys())
+            raw_columns = list(result.keys())
+            raw_rows = [dict(zip(raw_columns, row, strict=False)) for row in rows]
+            columns = [
+                column for column in raw_columns
+                if not _INTERNAL_IDENTIFIER_RE.search(column)
+                and not _is_uuid_column(raw_rows, column)
+            ]
+            cleaned_rows = [
+                {column: row.get(column) for column in columns}
+                for row in raw_rows
+            ]
             return {
                 "ok": True,
                 "data": {
                     "columns": columns,
-                    "rows": [dict(zip(columns, row)) for row in rows],
-                    "row_count": len(rows),
+                    "rows": cleaned_rows,
+                    "row_count": len(cleaned_rows),
                     "truncated": truncated,
                     "elapsed_seconds": round(elapsed, 2),
                 },
             }
         except Exception as exc:
             logger.warning("Query SQL failed: %s | %s", sql[:120], exc)
+            self._session.rollback()
             return {"ok": False, "error": f"Error en la consulta: {exc}"}

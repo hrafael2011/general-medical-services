@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- TITLE -->
+<div class="title-block">
+  <div class="title-text">
+    LISTA DEL PERSONAL MÉDICO GENERAL, QUE SE ENCUENTRA DE SERVICIO LOS DÍAS INDICADOS AL LADO DE SUS RESPECTIVOS NOMBRE: DEL MES DE {{ month_name }} DEL AÑO {{ year }}
+  </div>
+</div>
+
+<!-- TABLE — each <tbody> is one day block with alternating gold/white background -->
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:18%;">DÍAS</th>
+        <th style="width:52%;">RANGO / NOMBRE</th>
+        <th style="width:30%;">LUGAR SERV.</th>
+      </tr>
+    </thead>
+    {% for day in schedule_data %}
+    <tbody class="{% if loop.index is odd %}day-white{% else %}day-accent{% endif %}">
+      {% set day_name = day.get("day_name", "") %}
+      {% set day_number = day.get("day_number", "") %}
+      {% set date_label = day.get("date_label", day_number) %}
+      {% set day_label = (day_name ~ " " ~ date_label) if date_label else day_name %}
+      {% set outer_loop = loop %}
+      {% for assgn in day.get("assignments", []) %}
+      <tr class="{% if loop.last and not outer_loop.last %}day-divider{% endif %}">
+        {% if loop.first %}
+        <td class="day-cell" rowspan="{{ day.assignments|length }}">{{ day_label }}</td>
+        {% endif %}
+        <td>{{ assgn.get("rank_name", "") }}</td>
+        <td>{{ assgn.get("location", "") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% endfor %}
+  </table>
+</div>
+
+{% endblock %}

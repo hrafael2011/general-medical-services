@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- TITLE -->
+<div class="title-block">
+  <div class="title-text">{{ title }}</div>
+</div>
+
+<!-- RESUME -->
+<div class="section-title"><span class="gold-accent">■</span> RESUME</div>
+
+<table class="info-table">
+  <tr>
+    <td>Total Servicios</td>
+    <td>{{ data['total_services'] }}</td>
+  </tr>
+  <tr>
+    <td>Médicos Activos</td>
+    <td>{{ data['active_doctors'] }}</td>
+  </tr>
+  <tr>
+    <td>Promedio por Médico</td>
+    <td>{{ data['avg_per_doctor'] }}</td>
+  </tr>
+  <tr>
+    <td>Mayor Carga</td>
+    <td>{{ (data.get('most_load') or {}).get('name', '—') }} ({{ (data.get('most_load') or {}).get('total', 0) }})</td>
+  </tr>
+  <tr>
+    <td>Menor Carga</td>
+    <td>{{ (data.get('least_load') or {}).get('name', '—') }} ({{ (data.get('least_load') or {}).get('total', 0) }})</td>
+  </tr>
+</table>
+
+<!-- DETALLE POR MEDICO -->
+<div class="section-title"><span class="gold-accent">■</span> DETALLE POR MÉDICO</div>
+
+<div class="table-container bordered-table">
+  <table>
+    <thead>
+      <tr>
+        <th>Médico</th>
+        <th>Rango</th>
+        <th>Sexo</th>
+        <th>Depto</th>
+        <th>Emerg</th>
+        <th>Pista</th>
+        <th>Disp.</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in data.get("entries", []) %}
+      <tr>
+        <td>{{ entry["name"] }}</td>
+        <td>{{ entry.get("rank") or "—" }}</td>
+        <td>{{ sex_label(entry.get("sex")) or "—" }}</td>
+        <td>{{ entry.get("department") or "—" }}</td>
+        <td>{{ entry.get("emergencia", 0) }}</td>
+        <td>{{ entry.get("pista", 0) }}</td>
+        <td>{{ entry.get("disponible", 0) }}</td>
+        <td>{{ entry["total"] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

@@ -15,7 +15,6 @@ from backend.app.schemas.catalogs import (
     DepartmentRead,
     RankRead,
     ServiceAreaRead,
-    SystemSettingRead,
 )
 
 router = APIRouter(prefix="/catalogs", tags=["catalogs"])
@@ -98,18 +97,3 @@ def create_department(
     department = service.create_department(payload.name)
     session.commit()
     return DepartmentRead.model_validate(department)
-
-
-@router.get("/settings/calendar-generation-day", response_model=SystemSettingRead)
-def get_calendar_generation_day(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
-    session: Annotated[Session, Depends(get_db_session)],
-) -> SystemSettingRead:
-    repository = CatalogRepository(session)
-    setting = repository.get_setting("calendar_generation_day")
-    if setting is None:
-        CatalogService(repository).seed_initial_catalogs()
-        session.commit()
-        setting = repository.get_setting("calendar_generation_day")
-    return SystemSettingRead.model_validate(setting)
-

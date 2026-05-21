@@ -49,11 +49,8 @@ class ToolGateway:
 
         if query_executor is not None:
             self._handlers["query_database"] = self._tool_query_database
-        if report_service is not None:
-            self._handlers["generate_calendar_report"] = self._tool_generate_calendar_report
-            self._handlers["generate_doctor_history_report"] = self._tool_generate_doctor_history_report
-            self._handlers["generate_operational_summary"] = self._tool_generate_operational_summary
-            self._handlers["generate_mission_ranking_report"] = self._tool_generate_mission_ranking_report
+        # PDF report generation tools removed as part of reports redesign.
+        # Will be re-added in a later version with new report templates.
 
     def execute(self, intent: str, entities: dict) -> dict:
         """
@@ -90,72 +87,6 @@ class ToolGateway:
             "row_count": data["row_count"],
             "truncated": data["truncated"],
             "elapsed_seconds": data["elapsed_seconds"],
-        }
-
-    def _tool_generate_calendar_report(self, entities: dict) -> dict:
-        """Generate a PDF or Excel calendar report."""
-        import io
-
-        month: int = int(entities["month"])
-        year: int = int(entities.get("year", 0))
-        fmt: str = entities.get("format", "pdf")
-
-        calendar = self._calendar_repo.get_calendar_by_period(year, month)
-        if calendar is None:
-            return {"ok": False, "error": "No hay calendario para ese periodo."}
-
-        if fmt == "excel":
-            data = self._report_service.generate_calendar_excel(calendar.id)
-            return {
-                "ok": True, "data": {"message": "Reporte Excel generado."},
-                "document_bytes": data, "document_filename": f"calendario_{year}_{month:02d}.xlsx",
-            }
-
-        data = self._report_service.generate_calendar_pdf(calendar.id)
-        return {
-            "ok": True, "data": {"message": "Reporte PDF generado."},
-            "document_bytes": data, "document_filename": f"calendario_{year}_{month:02d}.pdf",
-        }
-
-    def _tool_generate_doctor_history_report(self, entities: dict) -> dict:
-        """Generate a PDF or Excel doctor history report."""
-        month: int = int(entities["month"])
-        year: int = int(entities.get("year", 0))
-        fmt: str = entities.get("format", "pdf")
-
-        if fmt == "excel":
-            data = self._report_service.generate_doctor_history_excel(year, month)
-            return {
-                "ok": True, "data": {"message": "Reporte Excel generado."},
-                "document_bytes": data, "document_filename": f"historial_{year}_{month:02d}.xlsx",
-            }
-
-        data = self._report_service.generate_doctor_history_pdf(year, month)
-        return {
-            "ok": True, "data": {"message": "Reporte PDF generado."},
-            "document_bytes": data, "document_filename": f"historial_{year}_{month:02d}.pdf",
-        }
-
-    def _tool_generate_operational_summary(self, entities: dict) -> dict:
-        """Generate a PDF operational summary report."""
-        month: int = int(entities["month"])
-        year: int = int(entities.get("year", 0))
-
-        data = self._report_service.generate_operational_summary_pdf(year, month)
-        return {
-            "ok": True, "data": {"message": "Reporte PDF generado."},
-            "document_bytes": data, "document_filename": f"resumen_operativo_{year}_{month:02d}.pdf",
-        }
-
-    def _tool_generate_mission_ranking_report(self, entities: dict) -> dict:
-        """Generate a PDF mission ranking report."""
-        month: int = int(entities["month"])
-        year: int = int(entities.get("year", 0))
-
-        data = self._report_service.generate_mission_ranking_pdf(year, month)
-        return {
-            "ok": True, "data": {"message": "Reporte PDF generado."},
-            "document_bytes": data, "document_filename": f"ranking_misiones_{year}_{month:02d}.pdf",
         }
 
     def _tool_count_medicos_activos(self, entities: dict) -> dict:

@@ -1,9 +1,10 @@
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { FormEvent, useState } from "react";
-import { KeyRound, LogIn, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LogIn, ShieldCheck } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { changePassword } from "./api/auth";
 import { Sidebar } from "./components/Sidebar";
+import { AlertBell } from "./components/AlertBell";
 import { AuthGuard } from "./components/AuthGuard";
 import { DashboardView } from "./features/dashboard/DashboardView";
 import { DoctorsPage } from "./features/doctors/DoctorsPage";
@@ -11,15 +12,19 @@ import { CalendarsPage } from "./features/calendars/CalendarsPage";
 import { CalendarGrid } from "./features/calendars/CalendarGrid";
 import { MissionView } from "./features/missions/MissionView";
 import { ReportsView } from "./features/reports/ReportsView";
-import { ImportView } from "./features/import/ImportView";
 import { NotificationLog } from "./features/notifications/NotificationLog";
 import { TelegramLinks } from "./features/telegram/TelegramLinks";
 import { AuditLog } from "./features/audit/AuditLog";
+import { UsersView } from "./features/users/UsersView";
+import { SetPasswordPage } from "./features/auth/SetPasswordPage";
+import { PublicConfirmationPage } from "./features/confirmations/PublicConfirmationPage";
 
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/set-password" element={<SetPasswordPage />} />
+      <Route path="/confirmacion-medica" element={<PublicConfirmationPage />} />
       <Route element={<AuthGuard />}>
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -28,11 +33,11 @@ export function App() {
           <Route path="/calendars/:calendarId" element={<CalendarGrid />} />
           <Route path="/doctors" element={<DoctorsPage />} />
           <Route path="/missions" element={<MissionView />} />
-          <Route path="/reports" element={<ReportsView />} />
-          <Route path="/import" element={<ImportView />} />
           <Route path="/notifications" element={<NotificationLog />} />
           <Route path="/telegram" element={<TelegramLinks />} />
+          <Route path="/reports" element={<ReportsView />} />
           <Route path="/audit" element={<AuditLog />} />
+          <Route path="/users" element={<UsersView />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
@@ -45,6 +50,9 @@ function AppShell() {
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
+        <div className="top-alert-bar">
+          <AlertBell />
+        </div>
         <Outlet />
       </main>
     </div>
@@ -58,6 +66,7 @@ function LoginPage() {
   const [email, setEmail] = useState("admin@turnos.com");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("Ingresa con tu usuario asignado.");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -116,14 +125,14 @@ function LoginPage() {
         {step === "login" && (
           <form className="auth-form" onSubmit={handleLogin}>
             <label>Correo<input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" /></label>
-            <label>Contraseña<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /></label>
+            <label>Contraseña<span className="password-wrapper"><input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /><button type="button" className="password-toggle" onClick={() => setShowPassword(p => !p)} tabIndex={-1} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
             <button type="submit" disabled={isLoading}><LogIn size={18} />{isLoading ? "Entrando…" : "Entrar"}</button>
           </form>
         )}
 
         {step === "change-password" && (
           <form className="auth-form" onSubmit={handlePasswordChange}>
-            <label>Nueva contraseña<input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" /></label>
+            <label>Nueva contraseña<span className="password-wrapper"><input type={showPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" /><button type="button" className="password-toggle" onClick={() => setShowPassword(p => !p)} tabIndex={-1} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
             <button type="submit" disabled={isLoading}><KeyRound size={18} />{isLoading ? "Cambiando…" : "Cambiar contraseña"}</button>
           </form>
         )}

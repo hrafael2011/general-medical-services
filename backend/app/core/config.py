@@ -7,12 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Medical Shift Scheduling System"
     app_env: str = "local"
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5433/medical_shifts"
+    database_url: str = "postgresql+psycopg://postgres:postgres@127.0.0.1:5433/medical_shifts"
     frontend_origin: str = "http://localhost:5173"
     secret_key: str = "change-this-local-secret"
     access_token_expire_minutes: int = 60 * 8
     failed_login_lock_threshold: int = 5
     failed_login_lock_minutes: int = 15
+    confirmation_overdue_hours: int = 12
     token_audience: str = "medical-shifts-app"
     token_issuer: str = "medical-shifts-system"
 
@@ -26,6 +27,13 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_whatsapp_from: str = "whatsapp:+14155238886"
+
+    resend_api_key: str | None = None
+    resend_from_email: str = "noreply@turnos-medicos.com"
+
+    # Feature flags for partial deployment
+    feature_notifications: bool = False
+    feature_telegram: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -57,11 +65,11 @@ def get_settings() -> Settings:
         print("FATAL: SECRET_KEY must be changed for production.", file=_sys.stderr)
         _sys.exit(1)
 
-    # Warn about missing optional-but-critical keys
+    # Warn about missing optional keys — only when the feature is enabled
     import sys as _sys
-    if not settings.telegram_bot_token:
+    if settings.feature_telegram and not settings.telegram_bot_token:
         print("WARNING: TELEGRAM_BOT_TOKEN not set — Telegram bot will use FakeBotClient.", file=_sys.stderr)
-    if not settings.deepseek_api_key:
+    if settings.feature_telegram and not settings.deepseek_api_key:
         print("WARNING: DEEPSEEK_API_KEY not set — LLM agent will use FakeLLMProvider.", file=_sys.stderr)
 
     return settings

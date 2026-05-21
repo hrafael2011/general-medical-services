@@ -7,6 +7,7 @@ import { apiFetch } from "./client";
 export interface MissionCandidateRankingEntry {
   id: string;
   doctor_id: string;
+  doctor_name: string | null;
   ranking_position: number;
   total_load_score: number;
   monthly_service_load: number;
@@ -31,15 +32,20 @@ export interface MissionParticipant {
   id: string;
   mission_assignment_id: string;
   doctor_id: string;
+  doctor_name: string | null;
   selection_source: string;
   ranking_position: number | null;
   score: number | null;
   created_at: string;
+  requires_replacement: boolean;
+  replacement_reason: string | null;
 }
 
 export interface MissionAssignment {
   id: string;
   mission_date: string;
+  mission_start_at: string | null;
+  mission_end_at: string | null;
   participant_count: number;
   location: string | null;
   description: string | null;
@@ -50,7 +56,15 @@ export interface MissionAssignment {
   confirmed_at: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
   participants: MissionParticipant[];
+  has_replacement_warnings: boolean;
+  replacement_warning_count: number;
+}
+
+export interface MissionReplacementAlertSummary {
+  mission_count: number;
+  participant_count: number;
 }
 
 export interface MissionCandidateResponse {
@@ -58,6 +72,21 @@ export interface MissionCandidateResponse {
   participant_count: number;
   primary: MissionCandidateRankingEntry[];
   alternates: MissionCandidateRankingEntry[];
+}
+
+export interface MissionCandidateDateRankingEntry extends Omit<MissionCandidateRankingEntry, "reasons" | "warnings"> {
+  adjusted_position: number;
+  recommendation_status: "recommended" | "alternate" | "unavailable";
+  selectable: boolean;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface MissionCandidateDateRankingResponse {
+  mission_date: string;
+  month: number;
+  year: number;
+  entries: MissionCandidateDateRankingEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +105,9 @@ export const missionsApi = {
 
   listMissions: () =>
     apiFetch<MissionAssignment[]>("/missions"),
+
+  getReplacementAlertSummary: () =>
+    apiFetch<MissionReplacementAlertSummary>("/missions/replacement-alerts/summary"),
 
   createMission: (
     date: string,
@@ -99,6 +131,27 @@ export const missionsApi = {
       body: JSON.stringify({ doctor_ids: doctorIds }),
     }),
 
+  updateMission: (
+    missionId: string,
+    payload: {
+      mission_date?: string;
+      participant_count?: number;
+      location?: string | null;
+      description?: string | null;
+      mission_start_at?: string | null;
+      mission_end_at?: string | null;
+    },
+  ) =>
+    apiFetch<MissionAssignment>(`/missions/${missionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteMission: (missionId: string) =>
+    apiFetch<void>(`/missions/${missionId}`, {
+      method: "DELETE",
+    }),
+
   getCandidates: (
     missionDate: string,
     participantCount: number,
@@ -110,6 +163,16 @@ export const missionsApi = {
         mission_date: missionDate,
         participant_count: participantCount,
         include_alternates: includeAlternates,
+      }),
+    }),
+
+  getRankedCandidatesForDate: (missionDate: string) =>
+    apiFetch<MissionCandidateDateRankingResponse>("/missions/candidates/ranked", {
+      method: "POST",
+      body: JSON.stringify({
+        mission_date: missionDate,
+        participant_count: 1,
+        include_alternates: true,
       }),
     }),
 };

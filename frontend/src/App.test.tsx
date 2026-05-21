@@ -16,6 +16,25 @@ vi.mock("./api/auth", () => ({
   }),
 }));
 
+vi.mock("./api/confirmations", () => ({
+  confirmationsApi: {
+    processOverdue: vi.fn(),
+    getPublicConfirmation: vi.fn().mockResolvedValue({
+      confirmation_type: "service",
+      status: "pending",
+      doctor_name: "Dra. Test",
+      due_at: null,
+      responded_at: null,
+    }),
+    respondPublicConfirmation: vi.fn().mockResolvedValue({
+      confirmation_type: "service",
+      status: "confirmed",
+      doctor_name: "Dra. Test",
+      responded_at: "2026-05-14T10:00:00Z",
+    }),
+  },
+}));
+
 function renderApp(initialPath = "/login") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -38,6 +57,14 @@ describe("App", () => {
   it("redirige a /login en rutas desconocidas sin sesión", () => {
     renderApp("/unknown");
     expect(screen.getByRole("heading", { name: /sistema de turnos/i })).toBeInTheDocument();
+  });
+
+  it("muestra la confirmación médica pública sin sesión", async () => {
+    renderApp("/confirmacion-medica?token=abc");
+    expect(await screen.findByText(/Dra. Test/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmar recibido/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmar servicio/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument();
   });
 
   it("pide cambio de contraseña después del login", async () => {

@@ -15,6 +15,11 @@ class SetMonthlyAvailabilityRequest(BaseModel):
     available_dates: list[int] = Field(min_length=1, description="Day-of-month numbers 1–31")
 
 
+class SetRecurringAvailabilityRequest(BaseModel):
+    weekday: int = Field(ge=0, le=6, description="0=Monday to 6=Sunday")
+    week_number: int = Field(description="0=first, 1=second, 2=third, 3=fourth, -1=last")
+
+
 class AddRestrictionRequest(BaseModel):
     restriction_type: str = Field(pattern="^(license|restriction)$")
     severity: str = Field(pattern="^(hard_block|warn|informational)$")

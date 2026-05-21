@@ -3,7 +3,7 @@ ReportService — generates Excel, JSON and PDF reports.
 Reads from existing repos; no writes to DB.
 """
 import io
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
@@ -29,7 +29,7 @@ class ReportService:
 
     def _load_signatures(self):
         """Load PDF signature config from system_settings, falling back to defaults."""
-        from backend.app.application.reports.pdf_templates import DEFAULT_SIGNATURES, SignatureConfig
+        from backend.app.application.reports.weasyprint_gen import DEFAULT_SIGNATURES, SignatureConfig
 
         if self.catalog_repo is None:
             return DEFAULT_SIGNATURES
@@ -70,7 +70,7 @@ class ReportService:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Calendario {calendar.month}/{calendar.year}"
+        ws.title = f"Calendario {calendar.month:02d}-{calendar.year}"
 
         # Header row
         ws.append(["Fecha", "Area", "Doctor ID", "Estado"])
@@ -136,7 +136,7 @@ class ReportService:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Historial {month}/{year}"
+        ws.title = f"Historial {month:02d}-{year}"
 
         ws.append(["Doctor ID", "Nombre", "Servicios Mes", "Areas"])
         for row in rows:
@@ -214,115 +214,330 @@ class ReportService:
             "generated_at": datetime.now(UTC).isoformat(),
         }
 
+
     # ------------------------------------------------------------------
-    # PDF: calendar report
+    # Coverage report
     # ------------------------------------------------------------------
 
-    def generate_calendar_pdf(self, calendar_id: str) -> bytes:
-        """Return a PDF report for a specific calendar."""
-        from backend.app.application.reports.pdf_templates import generate_calendar_pdf
+    def generate_coverage(
+        self,
+        *,
+        year_start: int,
+        month_start: int,
+        year_end: int,
+        month_end: int,
+        area: str | None = None,
+        rank_id: str | None = None,
+        sex: str | None = None,
+        department_id: str | None = None,
+    ) -> dict:
+        """Generate coverage report — gaps by area."""
+        from calendar import monthrange
 
-        calendar = self.calendar_repo.get_calendar_by_id(calendar_id)
-        if calendar is None:
-            raise ValueError("Calendario no encontrado")
+        period_label = f"{month_start}/{year_start} - {month_end}/{year_end}"
 
-        version = self.calendar_repo.get_latest_version(calendar.id)
-        if version is None:
-            raise ValueError("Calendario no encontrado")
+        # Get doctors filtered by criteria
+        filtered_doctor_ids: set[str] | None = None
+        if rank_id or sex or department_id:
+            doctors = self.doctor_repo.list_with_filters(
+                rank_id=rank_id, sex=sex, department_id=department_id, active_only=True
+            )
+            filtered_doctor_ids = {d.id for d in doctors}
 
-        assignments = self.calendar_repo.list_assignments(version.id)
-        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
-        areas = self.calendar_repo.list_service_areas() if hasattr(self.calendar_repo, "list_service_areas") else {}
-        area_map = {a.id: a.display_name for a in areas} if areas else {}
+        # Collect all service areas
+        service_areas = self.calendar_repo.list_service_areas()
+        if area:
+            service_areas = [sa for sa in service_areas if sa.display_name == area or sa.id == area]
 
-        rows = []
-        for a in assignments:
-            rows.append({
-                "service_date": str(a.service_date),
-                "service_area_id": area_map.get(a.service_area_id, a.service_area_id),
-                "doctor_id": a.doctor_id,
-                "doctor_name": doctors.get(a.doctor_id, a.doctor_id),
-                "assignment_source": a.assignment_source,
+        by_area_data: list[dict] = []
+        area_gaps: dict[str, list[dict]] = {}
+        day_of_week_gaps: dict[str, int] = {}
+        total_covered = 0
+        total_uncovered = 0
+
+        for sa in service_areas:
+            covered = 0
+            uncovered = 0
+            gaps: list[dict] = []
+
+            y, m = year_start, month_start
+            while (y < year_end) or (y == year_end and m <= month_end):
+                last_day = monthrange(y, m)[1]
+                calendar_obj = self.calendar_repo.get_calendar_by_period(y, m)
+                version = None
+                assignments = []
+                if calendar_obj:
+                    version = self.calendar_repo.get_latest_version(calendar_obj.id)
+                if version:
+                    assignments = self.calendar_repo.list_assignments(version.id)
+
+                assignments_for_area = [
+                    a for a in assignments
+                    if a.service_area_id == sa.id
+                    and (not filtered_doctor_ids or a.doctor_id in filtered_doctor_ids)
+                ]
+                assigned_dates = {a.service_date for a in assignments_for_area}
+
+                for day in range(1, last_day + 1):
+                    d = date(y, m, day)
+                    if d in assigned_dates:
+                        covered += 1
+                    else:
+                        uncovered += 1
+                        gap = {"date": d.isoformat(), "day_name": d.strftime("%A")}
+                        gaps.append(gap)
+                        day_name_es = d.strftime("%A")
+                        day_of_week_gaps[day_name_es] = day_of_week_gaps.get(day_name_es, 0) + 1
+
+                # next month
+                if m == 12:
+                    y += 1
+                    m = 1
+                else:
+                    m += 1
+
+            total = covered + uncovered
+            pct = round((covered / total) * 100, 1) if total > 0 else 0.0
+            by_area_data.append({
+                "area_id": sa.id,
+                "area_name": sa.display_name,
+                "days_covered": covered,
+                "days_uncovered": uncovered,
+                "coverage_pct": pct,
+                "gaps": gaps,
+            })
+            area_gaps[sa.id] = gaps
+            total_covered += covered
+            total_uncovered += uncovered
+
+        overall_total = total_covered + total_uncovered
+        overall_pct = round((total_covered / overall_total) * 100, 1) if overall_total > 0 else 0.0
+        total_gaps = total_uncovered
+        most_critical = max(by_area_data, key=lambda x: x["days_uncovered"])["area_name"] if by_area_data else None
+        weakest_day = max(day_of_week_gaps, key=day_of_week_gaps.get) if day_of_week_gaps else None
+
+        return {
+            "period_label": period_label,
+            "overall_coverage_pct": overall_pct,
+            "total_gaps": total_gaps,
+            "most_critical_area": most_critical,
+            "weakest_day": weakest_day,
+            "by_area": by_area_data,
+        }
+
+    # ------------------------------------------------------------------
+    # Workload report
+    # ------------------------------------------------------------------
+
+    def generate_workload(
+        self,
+        *,
+        year: int,
+        month: int,
+        area: str | None = None,
+        rank_id: str | None = None,
+        sex: str | None = None,
+        department_id: str | None = None,
+        group_by: str = "none",
+        order_by: str = "total_desc",
+    ) -> dict:
+        """Generate workload report — services per doctor."""
+        # Get doctors filtered
+        doctors = self.doctor_repo.list_with_filters(
+            rank_id=rank_id, sex=sex, department_id=department_id, active_only=True
+        )
+        doctor_map = {d.id: d for d in doctors}
+        filtered_ids = {d.id for d in doctors}
+
+        # Get calendar for period
+        calendar_obj = self.calendar_repo.get_calendar_by_period(year, month)
+        version = None
+        assignments = []
+        if calendar_obj:
+            version = self.calendar_repo.get_latest_version(calendar_obj.id)
+        if version:
+            assignments = self.calendar_repo.list_assignments(version.id)
+
+        # Filter by area
+        area_ids: set[str] | None = None
+        if area:
+            service_areas = self.calendar_repo.list_service_areas()
+            area_ids = {sa.id for sa in service_areas if sa.display_name == area or sa.id == area}
+
+        filtered_assignments = [
+            a for a in assignments
+            if a.doctor_id in filtered_ids
+            and (not area_ids or a.service_area_id in area_ids)
+        ]
+
+        # Build area name map
+        area_names = {}
+        for sa in self.calendar_repo.list_service_areas():
+            area_names[sa.id] = sa.display_name
+
+        # Per-doctor aggregation
+        entries: dict[str, dict] = {}
+        for a in filtered_assignments:
+            if a.doctor_id not in entries:
+                doc = doctor_map.get(a.doctor_id)
+                entries[a.doctor_id] = {
+                    "doctor_id": a.doctor_id,
+                    "name": doc.name if doc else a.doctor_id,
+                    "rank": doc.rank.name if doc and doc.rank else None,
+                    "sex": doc.sex if doc else None,
+                    "department": doc.department.name if doc and doc.department else None,
+                    "emergencia": 0,
+                    "pista": 0,
+                    "disponible": 0,
+                    "total": 0,
+                    "details": [],
+                }
+            e = entries[a.doctor_id]
+            area_display = area_names.get(a.service_area_id, a.service_area_id)
+            area_key = area_display.lower().replace(" ", "_")
+            if area_key in ("emergencia", "pista", "disponible"):
+                e[area_key] += 1
+            e["total"] += 1
+            e["details"].append({
+                "date": a.service_date.isoformat(),
+                "area": area_display,
             })
 
-        return generate_calendar_pdf(rows, calendar.month, calendar.year, self._load_signatures())
+        entry_list = list(entries.values())
+
+        # Sort
+        if order_by == "alpha":
+            entry_list.sort(key=lambda e: e["name"])
+        elif order_by == "rank":
+            entry_list.sort(key=lambda e: e["rank"] or "")
+        else:  # total_desc
+            entry_list.sort(key=lambda e: -e["total"])
+
+        totals = [e["total"] for e in entry_list]
+        total_services = sum(totals)
+        active_doctors = len(entry_list)
+        avg_per_doctor = round(total_services / active_doctors, 1) if active_doctors else 0.0
+        most = max(entry_list, key=lambda e: e["total"]) if entry_list else None
+        least = min(entry_list, key=lambda e: e["total"]) if entry_list else None
+
+        period_label = f"{month}/{year}"
+        return {
+            "period_label": period_label,
+            "total_services": total_services,
+            "active_doctors": active_doctors,
+            "avg_per_doctor": avg_per_doctor,
+            "most_load": {"name": most["name"], "total": most["total"]} if most else None,
+            "least_load": {"name": least["name"], "total": least["total"]} if least else None,
+            "entries": entry_list,
+        }
 
     # ------------------------------------------------------------------
-    # PDF: doctor history
+    # Doctor dossier report
     # ------------------------------------------------------------------
 
-    def generate_doctor_history_pdf(self, year: int, month: int) -> bytes:
-        """Return a PDF report with per-doctor assignment counts for a period."""
-        from backend.app.application.reports.pdf_templates import generate_doctor_history_pdf
+    def generate_doctor_dossier(
+        self,
+        doctor_id: str,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict:
+        """Generate doctor dossier — full profile for a period."""
+        doctor = self.doctor_repo.get_by_id(doctor_id)
+        if doctor is None:
+            raise ValueError("Médico no encontrado")
 
-        assignments: list = []
-        calendar = self.calendar_repo.get_calendar_by_period(year, month)
-        if calendar is not None:
-            version = self.calendar_repo.get_latest_version(calendar.id)
-            if version is not None:
+        min_date = date_from
+        max_date = date_to
+
+        # Collect assignments for this doctor in the period
+        services = []
+        services_by_area: dict[str, int] = {}
+
+        # Walk through calendars in the period
+        yr_start = min_date.year if min_date else 2026
+        yr_end = (max_date if max_date else date(2026, 12, 31)).year
+        for y in range(yr_start, yr_end + 1):
+            for m in range(1, 13):
+                cal = self.calendar_repo.get_calendar_by_period(y, m)
+                if not cal:
+                    continue
+                version = self.calendar_repo.get_latest_version(cal.id)
+                if not version:
+                    continue
                 assignments = self.calendar_repo.list_assignments(version.id)
+                for a in assignments:
+                    if a.doctor_id != doctor_id:
+                        continue
+                    if min_date and a.service_date < min_date:
+                        continue
+                    if max_date and a.service_date > max_date:
+                        continue
 
-        agg: dict[str, dict] = {}
-        for a in assignments:
-            entry = agg.setdefault(a.doctor_id, {"count": 0, "areas": set()})
-            entry["count"] += 1
-            entry["areas"].add(str(a.service_area_id))
+                    area_name = str(a.service_area_id)
+                    services.append({
+                        "date": a.service_date.isoformat(),
+                        "day_name": a.service_date.strftime("%A"),
+                        "area": area_name,
+                        "source": a.assignment_source,
+                    })
+                    services_by_area[area_name] = services_by_area.get(area_name, 0) + 1
 
-        doctors = self.doctor_repo.list_all()
-        rows = []
-        for doctor in doctors:
-            entry = agg.get(doctor.id, {"count": 0, "areas": set()})
-            rows.append({
-                "doctor_id": doctor.id,
-                "name": doctor.name,
-                "count": entry["count"],
-                "areas": ", ".join(sorted(entry["areas"])),
-                "load": "",
-            })
-        rows.sort(key=lambda r: (-r["count"], r["name"]))
+        total_services = len(services)
 
-        return generate_doctor_history_pdf(rows, month, year, self._load_signatures())
+        # Missions via participations
+        missions_data = []
+        if self.mission_repo and min_date and max_date:
+            participations = self.mission_repo.list_participations_for_doctor_in_range(
+                doctor_id, min_date, max_date
+            )
+            for p in participations:
+                missions_data.append({
+                    "mission": p.mission_assignment_id,
+                    "role": p.selection_source,
+                    "status": "confirmed",
+                })
 
-    # ------------------------------------------------------------------
-    # PDF: operational summary
-    # ------------------------------------------------------------------
+        # Allowed areas
+        areas = self.doctor_repo.get_allowed_areas(doctor_id)
 
-    def generate_operational_summary_pdf(self, year: int, month: int) -> bytes:
-        """Return a PDF report with the operational summary for a period."""
-        from backend.app.application.reports.pdf_templates import generate_operational_summary_pdf
+        # Restrictions (graceful if method doesn't exist)
+        restrictions_data = []
+        if hasattr(self.doctor_repo, "list_restrictions"):
+            rest = self.doctor_repo.list_restrictions(doctor_id)
+            for r in rest:
+                restrictions_data.append({
+                    "type": r.restriction_type,
+                    "date": r.date.isoformat() if hasattr(r, "date") and r.date else None,
+                    "reason": r.reason,
+                })
 
-        summary = self.generate_operational_summary(year, month)
-        return generate_operational_summary_pdf(summary, self._load_signatures())
+        # Availability (graceful if method doesn't exist)
+        availability_days = []
+        if hasattr(self.doctor_repo, "get_availability"):
+            av = self.doctor_repo.get_availability(doctor_id)
+            if av:
+                for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+                    if getattr(av, day, False):
+                        availability_days.append(day.capitalize())
 
-    # ------------------------------------------------------------------
-    # PDF: mission ranking
-    # ------------------------------------------------------------------
+        period_label = f"{min_date.isoformat() if min_date else 'inicio'} - {max_date.isoformat() if max_date else 'actualidad'}"
 
-    def generate_mission_ranking_pdf(self, year: int, month: int) -> bytes:
-        """Return a PDF report with the mission candidate ranking for a period."""
-        from backend.app.application.reports.pdf_templates import generate_mission_ranking_pdf
-
-        if self.mission_repo is None:
-            raise ValueError("MissionRepository no disponible")
-
-        ranking = self.mission_repo.get_ranking_by_period(year, month)
-        if ranking is None:
-            raise ValueError("No hay ranking generado para ese periodo")
-
-        entries = self.mission_repo.list_ranking_entries(ranking.id)
-        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
-
-        rows = []
-        for e in entries:
-            rows.append({
-                "position": e.ranking_position,
-                "doctor_id": e.doctor_id,
-                "doctor_name": doctors.get(e.doctor_id, e.doctor_id),
-                "total_load_score": e.total_load_score,
-                "eligible": e.eligible,
-            })
-
-        return generate_mission_ranking_pdf(rows, month, year, self._load_signatures())
+        return {
+            "doctor_id": doctor.id,
+            "name": doctor.name,
+            "rank": doctor.rank.name if doctor.rank else None,
+            "sex": doctor.sex,
+            "department": doctor.department.name if doctor.department else None,
+            "areas": areas,
+            "period_label": period_label,
+            "total_services": total_services,
+            "services_by_area": services_by_area,
+            "avg_weekly": round(total_services / 4.33, 1) if total_services > 0 else 0.0,
+            "services": sorted(services, key=lambda s: s["date"]),
+            "missions": missions_data,
+            "restrictions": restrictions_data,
+            "availability": availability_days,
+        }
 
     # ------------------------------------------------------------------
     # PDF: weekly schedule (formato SERVICIOS)
@@ -337,7 +552,7 @@ class ReportService:
         date_str: str | None = None,
     ) -> bytes:
         """Return a PDF weekly schedule in the institutional SERVICIOS format."""
-        from backend.app.application.reports.pdf_templates import generate_weekly_schedule_pdf
+        from backend.app.application.reports.weasyprint_gen import generate_weekly_schedule_pdf
 
         return generate_weekly_schedule_pdf(schedule_data, week_label, month, year, date_str, self._load_signatures())
 
@@ -347,6 +562,7 @@ class ReportService:
         year: int,
         month: int,
         calendar_version_id: str | None = None,
+        week_id: str | None = None,
     ) -> bytes:
         """Build a weekly schedule PDF from calendar data for the given period.
 
@@ -368,6 +584,20 @@ class ReportService:
             raise ValueError("Versión del calendario no encontrada")
 
         assignments = self.calendar_repo.list_assignments(version.id)
+
+        # If week_id is specified, filter to only that week's date range
+        if week_id:
+            week = self.calendar_repo.get_week_by_id(week_id)
+            if week is None:
+                raise ValueError(f"Week {week_id} not found")
+            week_label = week.label
+            week_start = week.start_date
+            week_end = week.end_date
+            assignments = [
+                a for a in assignments
+                if week_start <= a.service_date <= week_end
+            ]
+
         if not assignments:
             raise ValueError("No hay asignaciones para el período")
 
@@ -380,49 +610,185 @@ class ReportService:
             area_list = self.calendar_repo.list_service_areas()
             areas = {a.id: a.display_name for a in area_list}
 
-        # Group assignments by day number
+        # Group assignments by exact date to avoid collisions in cross-month weeks.
         DAY_NAMES = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
-        day_assignments: dict[int, list[dict]] = {}
+        MONTH_NAMES_LOWER = [
+            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+        ]
+        day_assignments: dict[date, list[dict]] = {}
 
         for a in assignments:
-            day = a.service_date.day
-            day_assignments.setdefault(day, []).append({
+            day_assignments.setdefault(a.service_date, []).append({
                 "rank_name": doctors.get(a.doctor_id, a.doctor_id),
                 "location": areas.get(a.service_area_id, a.service_area_id),
             })
 
-        # Build schedule_data in day order
+        # Build schedule_data — if week_id is given, walk the full Mon-Sun date range
+        # to include cross-boundary days from adjacent months
         schedule_data: list[dict] = []
-        last_day = monthrange(year, month)[1]
-        for day in range(1, last_day + 1):
-            if day in day_assignments:
+        if week_id and week:
+            current = week.start_date
+            while current <= week.end_date:
+                if current in day_assignments:
+                    day_name = DAY_NAMES[current.weekday()]
+                    schedule_data.append({
+                        "day_name": day_name,
+                        "day_number": current.day,
+                        "date_label": f"{MONTH_NAMES_LOWER[current.month - 1]} {current.day}",
+                        "assignments": day_assignments[current],
+                    })
+                current += timedelta(days=1)
+        else:
+            last_day = monthrange(year, month)[1]
+            for day in range(1, last_day + 1):
                 date_obj = date(year, month, day)
-                day_name = DAY_NAMES[date_obj.weekday()]
-                schedule_data.append({
-                    "day_name": day_name,
-                    "day_number": day,
-                    "assignments": day_assignments[day],
-                })
+                if date_obj in day_assignments:
+                    day_name = DAY_NAMES[date_obj.weekday()]
+                    schedule_data.append({
+                        "day_name": day_name,
+                        "day_number": day,
+                        "date_label": f"{MONTH_NAMES_LOWER[date_obj.month - 1]} {day}",
+                        "assignments": day_assignments[date_obj],
+                    })
 
         if not schedule_data:
             raise ValueError("No hay asignaciones para el período")
 
-        week_label = f"{month}/{year}"
+        if not week_id:
+            week_label = f"{month}/{year}"
         return self.generate_weekly_schedule_pdf(schedule_data, week_label, month, year)
 
     # ------------------------------------------------------------------
-    # PDF: generic doctor listing
+    # Full calendar grid data
     # ------------------------------------------------------------------
 
-    def generate_doctor_list_pdf(
-        self,
-        doctors: list[dict],
-        title: str,
-        subtitle: str = "",
-        columns: list[str] | None = None,
-        col_widths: list[float] | None = None,
-    ) -> bytes:
-        """Return a PDF listing of doctors in institutional format."""
-        from backend.app.application.reports.pdf_templates import generate_doctor_list_pdf
+    def build_full_calendar(self, *, year: int, month: int) -> dict:
+        """Build full calendar grid data for single-page PDF export."""
+        from calendar import monthrange
 
-        return generate_doctor_list_pdf(doctors, title, subtitle, columns, col_widths, self._load_signatures())
+        calendar = self.calendar_repo.get_calendar_by_period(year, month)
+        if calendar is None:
+            raise ValueError(f"No calendar found for {year}-{month}")
+
+        version = self.calendar_repo.get_latest_version(calendar.id)
+        if version is None:
+            raise ValueError(f"No version found for calendar {calendar.id}")
+
+        assignments = self.calendar_repo.list_assignments(version.id)
+
+        # Load doctor info (name + rank)
+        rank_map: dict[str, str] = {}
+        if self.catalog_repo:
+            for r in self.catalog_repo.list_ranks():
+                rank_map[r.id] = r.abbreviation or r.name
+
+        doctor_info: dict[str, dict[str, str]] = {}
+        for d in self.doctor_repo.list_all():
+            doctor_info[d.id] = {
+                "name": d.name,
+                "rank": rank_map.get(d.rank_id, "") if d.rank_id else "",
+            }
+
+        area_list = self.calendar_repo.list_service_areas()
+        areas = sorted(area_list, key=lambda a: a.code)
+
+        # Build cell grid: {day: {area_code: {name: str, rank: str}}}
+        cell_map: dict[int, dict[str, dict]] = {}
+        for a in assignments:
+            d = a.service_date.day
+            if d not in cell_map:
+                cell_map[d] = {}
+            area_name = ""
+            for area in areas:
+                if area.id == a.service_area_id:
+                    area_name = area.code
+                    break
+            if not area_name:
+                area_name = a.service_area_id
+            info = doctor_info.get(a.doctor_id, {"name": a.doctor_id, "rank": ""})
+            cell_map[d][area_name] = info
+
+        # Load assignments from adjacent months for cross-boundary days
+        adjacent_cells: dict[str, dict[str, dict]] = {}  # "YYYY-MM-DD" -> area_code -> doctor_info
+
+        def _load_month_assignments(y: int, m: int) -> None:
+            adj_cal = self.calendar_repo.get_calendar_by_period(y, m)
+            if adj_cal is None:
+                return
+            adj_version = self.calendar_repo.get_latest_version(adj_cal.id)
+            if adj_version is None:
+                return
+            for a in self.calendar_repo.list_assignments(adj_version.id):
+                date_str = a.service_date.isoformat()
+                if date_str not in adjacent_cells:
+                    adjacent_cells[date_str] = {}
+                area_code = ""
+                for area in areas:
+                    if area.id == a.service_area_id:
+                        area_code = area.code
+                        break
+                if not area_code:
+                    area_code = a.service_area_id
+                info = doctor_info.get(a.doctor_id, {"name": a.doctor_id, "rank": ""})
+                adjacent_cells[date_str][area_code] = info
+
+        # Previous month
+        prev_m = month - 1
+        prev_y = year
+        if prev_m == 0:
+            prev_m = 12
+            prev_y -= 1
+        _load_month_assignments(prev_y, prev_m)
+
+        # Next month
+        next_m = month + 1
+        next_y = year
+        if next_m == 13:
+            next_m = 1
+            next_y += 1
+        _load_month_assignments(next_y, next_m)
+
+        DAY_NAMES = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
+        last_day = monthrange(year, month)[1]
+        rows = []
+        area_codes = [a.code for a in areas]
+
+        for d in range(1, last_day + 1):
+            dt = date(year, month, d)
+            cells = {}
+            for area in areas:
+                cells[area.display_name] = cell_map.get(d, {}).get(area.code, {"name": "—", "rank": ""})
+            rows.append({
+                "day": d,
+                "day_name": DAY_NAMES[dt.weekday()],
+                "cells": cells,
+            })
+
+        total_services = len(assignments)
+        unique_doctors = len(set(a.doctor_id for a in assignments))
+        total_possible = last_day * len(areas)
+        gaps = max(0, total_possible - total_services)
+        coverage = round((total_services / total_possible * 100)) if total_possible else 0
+
+        return {
+            "month": month,
+            "year": year,
+            "areas": [a.display_name for a in areas],
+            "area_codes": [a.code for a in areas],
+            "rows": rows,
+            "adjacent_cells": adjacent_cells,
+            "summary": {
+                "total_services": total_services,
+                "gaps": gaps,
+                "active_doctors": unique_doctors,
+                "coverage_pct": coverage,
+            },
+        }
+
+    def build_full_calendar_by_id(self, calendar_id: str) -> dict:
+        """Build full calendar grid data from a calendar ID."""
+        cal = self.calendar_repo.get_calendar_by_id(calendar_id)
+        if cal is None:
+            raise ValueError(f"Calendar {calendar_id} not found")
+        return self.build_full_calendar(year=cal.year, month=cal.month)

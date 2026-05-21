@@ -56,6 +56,27 @@ def test_agent_constructor() -> None:
     assert agent._router is not None
 
 
+def test_agent_routes_monthly_assigned_doctor_count_without_llm() -> None:
+    """Preguntas claras de asignaciones mensuales usan consulta segura registrada."""
+    llm = FakeLLMProvider(responses={
+        "cuantos medicos fueron asignados para servicios en junio 2026": (
+            '{"action": "query", "query_type": "list_active_doctors", "params": {}}'
+        )
+    })
+    router = RouterStub(result=AgentResult(response_text="Resultado: total: 76", agent_action="query"))
+    agent = ConversationalAgent(llm=llm, router=router)
+
+    result = agent.process(
+        text="cuantos medicos fueron asignados para servicios en junio 2026"
+    )
+
+    assert result.response_text == "Resultado: total: 76"
+    assert router.last_handle_args is not None
+    assert router.last_handle_args["query_type"] == "count_assigned_doctors_by_month"
+    assert router.last_handle_args["params"] == {"month": 6, "year": 2026}
+    assert llm.calls == []
+
+
 def test_direct_reply_when_llm_returns_text(db_session) -> None:
     """When LLM returns plain text (not JSON), it's passed through as response."""
     llm = FakeLLMProvider(responses={"hola": "¡Hola! ¿En qué puedo ayudarte?"})
@@ -151,7 +172,7 @@ def test_legacy_call_tool_format_falls_back_to_tools(db_session) -> None:
 def test_unknown_query_type_falls_back_to_reply(db_session) -> None:
     """When router returns not-found, agent returns fallback message."""
     llm = FakeLLMProvider(responses={
-        "rare": '{"action": "query", "query_type": "nonexistent_query", "params": {}}',
+        "rara": '{"action": "query", "query_type": "nonexistent_query", "params": {}}',
     })
     agent = _make_agent(llm=llm)
 
@@ -286,6 +307,60 @@ def test_unknown_action_from_llm_returns_fallback(db_session) -> None:
     assert len(result.response_text) > 0
 
 
+def test_agent_validates_llm_output_with_pydantic(db_session) -> None:
+    """LLM output with action='invalid_action' → validation error, graceful fallback."""
+    llm = FakeLLMProvider(responses={
+        "mal": '{"action": "invalid_action", "query_type": "", "params": {}}',
+    })
+    agent = _make_agent(llm=llm)
+
+    result = agent.process(text="mal")
+
+    assert result.agent_action == "validation_error"
+    assert result.response_text is not None
+
+
+def test_agent_low_confidence_returns_clarification(db_session) -> None:
+    """confidence < 0.6 → ambiguous response asking for clarification."""
+    llm = FakeLLMProvider(responses={
+        "duda": '{"action": "query", "query_type": "count_doctors_total", "confidence": 0.3}',
+    })
+    agent = _make_agent(llm=llm)
+
+    result = agent.process(text="duda")
+
+    assert result.agent_action == "ambiguous"
+    assert "específico" in result.response_text.lower()
+
+
+def test_agent_uses_conversation_planner_before_llm_for_unclear_data_request(db_session) -> None:
+    """Mensajes operativos demasiado ambiguos se aclaran antes de llamar al LLM."""
+    llm = FakeLLMProvider(responses={
+        "dame eso": '{"action": "query", "query_type": "count_doctors_total", "params": {}}',
+    })
+    agent = _make_agent(llm=llm)
+
+    result = agent.process(text="dame eso")
+
+    assert result.agent_action == "ambiguous"
+    assert "necesito" in result.response_text.lower()
+    assert llm.calls == []
+
+
+def test_agent_missing_fields_triggers_prompt(db_session) -> None:
+    """missing_fields not empty → agent asks for the missing info."""
+    llm = FakeLLMProvider(responses={
+        "faltante": '{"action": "query", "query_type": "doctors_by_sex", '
+                    '"missing_fields": ["sex"], "confidence": 0.75}',
+    })
+    agent = _make_agent(llm=llm)
+
+    result = agent.process(text="faltante")
+
+    assert result.agent_action == "ambiguous"
+    assert "sex" in result.response_text.lower()
+
+
 def test_router_not_found_triggers_fallback_to_no_results(db_session) -> None:
     """Router devuelve 'No pude encontrar...' → agente hace fallback (sin query_executor → mensaje genérico)."""
 
@@ -305,6 +380,23 @@ def test_router_not_found_triggers_fallback_to_no_results(db_session) -> None:
     assert "encontrar" in result.response_text.lower()
 
 
+def test_agent_uses_entity_hints_in_prompt(db_session) -> None:
+    """EntityResolver hints are included in the system prompt."""
+    from backend.app.application.telegram.entity_resolver import EntityResolver
+
+    llm = FakeLLMProvider(responses={
+        "Pérez": '{"action": "query", "query_type": "doctor_detail", "params": {"search": "Pérez"}}',
+    })
+    router = RouterStub()
+    resolver = EntityResolver(session=None)
+    agent = ConversationalAgent(llm=llm, router=router, entity_resolver=resolver)
+
+    agent.process(text="busca a Pérez")
+
+    assert llm.calls
+    call_text = " ".join(m.get("content", "") for m in llm.calls[-1].get("messages", []))
+
+
 def test_memory_failure_is_handled_gracefully(db_session) -> None:
     """Si memory.load_history() lanza excepción, el agente continúa sin history."""
 
@@ -319,3 +411,91 @@ def test_memory_failure_is_handled_gracefully(db_session) -> None:
 
     assert isinstance(result, AgentResult)
     assert result.response_text is not None
+
+
+# ---------------------------------------------------------------------------
+# M5: Export format tests
+# ---------------------------------------------------------------------------
+
+
+def test_export_excel_format_reaches_router(db_session) -> None:
+    """Cuando el LLM devuelve format=excel, el router recibe ese format."""
+    router = RouterStub()
+    llm = FakeLLMProvider(responses={
+        "excel": '{"action": "export", "query_type": "list_active_doctors", "params": {}, "format": "excel"}',
+    })
+    agent = _make_agent(llm=llm, router=router)
+    agent.process(text="dame un excel de los médicos activos")
+    assert router.last_handle_args is not None
+    assert router.last_handle_args.get("format") == "excel"
+
+
+def test_export_pdf_is_default_format(db_session) -> None:
+    """Cuando el LLM no especifica format, el router lo recibe como None (PDF default)."""
+    router = RouterStub()
+    llm = FakeLLMProvider(responses={
+        "exporta médicos activos": '{"action": "export", "query_type": "list_active_doctors", "params": {}}',
+    })
+    agent = _make_agent(llm=llm, router=router)
+    agent.process(text="exporta médicos activos")
+    assert router.last_handle_args is not None
+    assert router.last_handle_args.get("format") is None
+
+
+def test_export_falls_back_to_query_executor(db_session) -> None:
+    """Cuando el query_type no existe y action=export, debe hacer fallback a QueryExecutor."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, UTC
+
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+    doc = DoctorModel(
+        id=str(_uuid.uuid4()),
+        name="Dr. ExportFallback",
+        normalized_name="dr. exportfallback",
+        sex="male",
+        active=True,
+        service_active=True,
+        availability_mode="variable",
+        participa_misiones=True,
+        whatsapp_phone=None,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        rank_id=None,
+        department_id=None,
+        created_at=_dt.now(UTC),
+        updated_at=_dt.now(UTC),
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    class StubQueryExecutor:
+        def execute(self, nl_query: str, user_text: str = "", entity_hints: str = "") -> dict:
+            # Return >20 rows so _format_nl_response falls back to _format_rows
+            # (avoids the FakeLLMProvider not supporting NL formatting in tests)
+            rows = [{"name": f"Dr. ExportFallback {i}"} for i in range(25)]
+            return {
+                "ok": True,
+                "data": {
+                    "columns": ["name"],
+                    "rows": rows,
+                    "row_count": 25,
+                    "truncated": False,
+                },
+            }
+
+    router = RouterStub(
+        result=AgentResult(response_text="No pude encontrar información sobre eso en el sistema.")
+    )
+    llm = FakeLLMProvider(responses={
+        "exporta": (
+            '{"action": "export", "query_type": "nonexistent_export_query", "params": {}}'
+        ),
+    })
+    agent = ConversationalAgent(llm=llm, router=router, query_executor=StubQueryExecutor())
+
+    result = agent.process(text="exporta un reporte de algo no registrado")
+
+    assert "ExportFallback" in result.response_text
+    assert result.agent_action == "query_db"

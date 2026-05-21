@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class LLMProvider(Protocol):
     def complete(self, system: str, user: str, temperature: float = 0.1) -> str: ...
 
-    def chat_complete(self, messages: list[dict], temperature: float = 0.1) -> str: ...
+    def chat_complete(self, messages: list[dict], temperature: float = 0.1, json_mode: bool = False) -> str: ...
 
     @property
     def name(self) -> str: ...
@@ -31,13 +31,15 @@ class FakeLLMProvider:
                 return resp
         return '{"intent": "out_of_domain", "entities": {}, "confidence": 0.0}'
 
-    def chat_complete(self, messages: list[dict], temperature: float = 0.1) -> str:
-        full_text = " ".join(m.get("content", "") for m in messages)
-        self.calls.append({"messages": messages})
+    def chat_complete(self, messages: list[dict], temperature: float = 0.1, json_mode: bool = False) -> str:
+        # Only search user messages, not system prompts, so response keys
+        # don't accidentally match query-type descriptions in the system prompt.
+        user_text = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+        self.calls.append({"messages": messages, "temperature": temperature, "json_mode": json_mode})
         for key, resp in self.responses.items():
-            if key.lower() in full_text.lower():
+            if key.lower() in user_text.lower():
                 return resp
-        return '{"action": "direct"}'
+        return '{"action": "reply"}'
 
 
 class DeepSeekProvider:
@@ -52,19 +54,29 @@ class DeepSeekProvider:
         self.base_url = settings.deepseek_base_url
         self.model = settings.deepseek_model
 
-    def _call(self, messages: list[dict], temperature: float) -> str:
+        self._client: OpenAI | None = None
+
+    def _ensure_client(self) -> "OpenAI":
+        if self._client is None:
+            from openai import OpenAI  # type: ignore[import]
+
+            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        return self._client
+
+    def _call(self, messages: list[dict], temperature: float, json_mode: bool = False) -> str:
         import openai
 
-        from openai import OpenAI  # type: ignore[import]
-
-        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        client = self._ensure_client()
+        kwargs: dict = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "timeout": 30,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
         try:
-            resp = client.chat.completions.create(
-                model=self.model,
-                messages=messages,  # type: ignore[arg-type]
-                temperature=temperature,
-                timeout=30,
-            )
+            resp = client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
             return resp.choices[0].message.content or ""
         except openai.APIConnectionError:
             logger.warning("DeepSeek API connection error")
@@ -89,5 +101,5 @@ class DeepSeekProvider:
         ]
         return self._call(messages, temperature)
 
-    def chat_complete(self, messages: list[dict], temperature: float = 0.1) -> str:
-        return self._call(messages, temperature)
+    def chat_complete(self, messages: list[dict], temperature: float = 0.1, json_mode: bool = False) -> str:
+        return self._call(messages, temperature, json_mode=json_mode)
