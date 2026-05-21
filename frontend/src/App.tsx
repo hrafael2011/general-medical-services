@@ -18,12 +18,14 @@ import { AuditLog } from "./features/audit/AuditLog";
 import { UsersView } from "./features/users/UsersView";
 import { CatalogsPage } from "./features/catalogs/CatalogsPage";
 import { SetPasswordPage } from "./features/auth/SetPasswordPage";
+import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { PublicConfirmationPage } from "./features/confirmations/PublicConfirmationPage";
 
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/set-password" element={<SetPasswordPage />} />
       <Route path="/confirmacion-medica" element={<PublicConfirmationPage />} />
       <Route element={<AuthGuard />}>
@@ -129,6 +131,16 @@ function LoginPage() {
             <label>Correo<input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" /></label>
             <label>Contraseña<span className="password-wrapper"><input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /><button type="button" className="password-toggle" onClick={() => setShowPassword(p => !p)} tabIndex={-1} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
             <button type="submit" disabled={isLoading}><LogIn size={18} />{isLoading ? "Entrando…" : "Entrar"}</button>
+            <p style={{ textAlign: "center", marginTop: 16, fontSize: 13 }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ color: "#64748b", fontSize: 13, textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                onClick={() => navigate("/forgot-password")}
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </p>
           </form>
         )}
 

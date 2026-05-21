@@ -50,4 +50,11 @@ export const authApi = {
       body: JSON.stringify({ token, password }),
     });
   },
+
+  forgotPassword(email: string) {
+    return apiFetch<{ message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
 };
