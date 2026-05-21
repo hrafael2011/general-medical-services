@@ -137,6 +137,28 @@ def test_create_encargado_duplicate_email_returns_409(client):
     assert response.status_code == 409
 
 
+def test_create_encargado_deleted_email_returns_actionable_409(client, session):
+    deleted_user = _create_user(session, role="encargado")
+    deleted_user.email = "deleted@example.com"
+    deleted_user.deleted_at = datetime.now(UTC)
+    session.commit()
+
+    response = client.post(
+        "/api/admin/users/encargados",
+        json={
+            "name": "Nuevo Encargado",
+            "email": "deleted@example.com",
+            "temporary_password": "TempEnc123!",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "email_belongs_to_deleted_user",
+        "message": "Este correo pertenece a un usuario eliminado. Usa otro correo o restaura el usuario eliminado.",
+    }
+
+
 def test_reset_encargado_password_returns_200(client):
     # Create an encargado first
     create_resp = client.post(

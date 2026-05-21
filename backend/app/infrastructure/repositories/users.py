@@ -35,6 +35,11 @@ class UserRepository:
         )
         return self.session.scalar(statement)
 
+    def get_by_email_including_deleted(self, email: str) -> UserModel | None:
+        normalized_email = email.strip().lower()
+        statement = select(UserModel).where(UserModel.email == normalized_email)
+        return self.session.scalar(statement)
+
     def list_by_role(self, role: str) -> list[UserModel]:
         statement = (
             select(UserModel)
