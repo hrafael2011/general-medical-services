@@ -37,17 +37,17 @@ class AvailabilityService:
         """
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise AvailabilityError("doctor_not_found", f"Doctor {doctor_id} not found")
+            raise AvailabilityError("doctor_not_found", f"Médico {doctor_id} no encontrado.")
         if doctor.availability_mode != "fixed":
             raise AvailabilityError(
                 "mode_mismatch",
-                "Doctor availability mode is 'monthly'. "
-                "Change the doctor's availability_mode to 'fixed' before setting weekly availability.",
+                "El modo de disponibilidad del médico es 'mensual'. "
+                "Cambia el availability_mode a 'fixed' antes de configurar disponibilidad semanal.",
             )
         if not days_of_week or not all(0 <= d <= 6 for d in days_of_week):
             raise AvailabilityError(
                 "invalid_days_of_week",
-                "days_of_week must be a non-empty list of integers between 0 (Monday) and 6 (Sunday).",
+                "days_of_week debe ser una lista no vacía de enteros entre 0 (Lunes) y 6 (Domingo).",
             )
 
         now = datetime.now(UTC)
@@ -91,19 +91,19 @@ class AvailabilityService:
         """
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise AvailabilityError("doctor_not_found", f"Doctor {doctor_id} not found")
+            raise AvailabilityError("doctor_not_found", f"Médico {doctor_id} no encontrado.")
         if doctor.availability_mode != "monthly":
             raise AvailabilityError(
                 "mode_mismatch",
-                "Doctor availability mode is 'fixed'. "
-                "Change the doctor's availability_mode to 'monthly' before setting monthly availability.",
+                "El modo de disponibilidad del médico es 'fixed'. "
+                "Cambia el availability_mode a 'monthly' antes de configurar disponibilidad mensual.",
             )
         if not 1 <= month <= 12:
-            raise AvailabilityError("invalid_month", "month must be between 1 and 12.")
+            raise AvailabilityError("invalid_month", "El mes debe estar entre 1 y 12.")
         if not available_dates or not all(1 <= d <= 31 for d in available_dates):
             raise AvailabilityError(
                 "invalid_available_dates",
-                "available_dates must be a non-empty list of day-of-month integers (1–31).",
+                "available_dates debe ser una lista no vacía de días del mes (1-31).",
             )
 
         # Replace existing record for the same period
@@ -148,16 +148,16 @@ class AvailabilityService:
         """Set a recurring availability pattern (e.g., "last Friday of each month")."""
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise AvailabilityError("doctor_not_found", f"Doctor {doctor_id} not found")
+            raise AvailabilityError("doctor_not_found", f"Médico {doctor_id} no encontrado.")
         if doctor.availability_mode != "fixed":
             raise AvailabilityError(
                 "mode_mismatch",
-                "Recurring availability requires doctor availability_mode = 'fixed'.",
+                "La disponibilidad recurrente requiere availability_mode = 'fixed'.",
             )
         if not 0 <= weekday <= 6:
-            raise AvailabilityError("invalid_weekday", "weekday must be 0 (Monday) to 6 (Sunday).")
+            raise AvailabilityError("invalid_weekday", "El día de la semana debe ser 0 (Lunes) a 6 (Domingo).")
         if week_number not in (-1, 0, 1, 2, 3):
-            raise AvailabilityError("invalid_week_number", "week_number must be -1 (last) or 0-3.")
+            raise AvailabilityError("invalid_week_number", "El número de semana debe ser -1 (último) o 0-3.")
 
         now = datetime.now(UTC)
         record = DoctorAvailabilityModel(
@@ -199,7 +199,7 @@ class AvailabilityService:
         """Add a restriction or license for a doctor."""
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise AvailabilityError("doctor_not_found", f"Doctor {doctor_id} not found")
+            raise AvailabilityError("doctor_not_found", f"Médico {doctor_id} no encontrado.")
 
         now = datetime.now(UTC)
         record = DoctorRestrictionModel(
@@ -231,7 +231,7 @@ class AvailabilityService:
         """Mark a restriction as lifted (soft delete by setting lifted_at)."""
         restriction = self.availability.get_restriction_by_id(restriction_id)
         if restriction is None:
-            raise AvailabilityError("restriction_not_found", f"Restriction {restriction_id} not found")
+            raise AvailabilityError("restriction_not_found", f"Restricción {restriction_id} no encontrada.")
 
         now = datetime.now(UTC)
         restriction.lifted_at = now

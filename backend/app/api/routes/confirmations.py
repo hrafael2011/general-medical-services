@@ -33,7 +33,7 @@ def get_public_confirmation(
 ) -> PublicConfirmationRead:
     request = ConfirmationRequestRepository(session).get_by_response_token(response_token.strip())
     if request is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Confirmation not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Confirmación no encontrada.")
     doctor = DoctorRepository(session).get_by_id(request.doctor_id)
     return PublicConfirmationRead(
         confirmation_type=request.confirmation_type,
@@ -72,17 +72,17 @@ def respond_public_confirmation(
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Confirmation action not found",
+                detail="Acción de confirmación no encontrada.",
             )
     except ConfirmationRequestError as exc:
         if exc.code == "confirmation_not_found":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Confirmation not found",
+                detail="Confirmación no encontrada.",
             ) from exc
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Confirmation response not authorized",
+            detail="No tienes autorización para responder esta confirmación.",
         ) from exc
 
     session.commit()

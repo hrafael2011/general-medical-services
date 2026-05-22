@@ -43,12 +43,21 @@ export class ApiError extends Error {
   public detail: unknown;
 
   constructor(public status: number, detail: unknown) {
-    const message =
-      typeof detail === "string"
-        ? detail
-        : detail && typeof detail === "object" && "message" in detail
-          ? String((detail as { message?: unknown }).message)
-          : "Error del servidor";
+    let message: string;
+    if (typeof detail === "string") {
+      message = detail;
+    } else if (Array.isArray(detail)) {
+      message = detail
+        .map((e: { loc?: string[]; msg?: string }) => {
+          const field = e.loc ? e.loc[e.loc.length - 1] : "";
+          return field ? `${field}: ${e.msg || ""}` : (e.msg || "");
+        })
+        .join(". ");
+    } else if (detail && typeof detail === "object" && "message" in detail) {
+      message = String((detail as { message: unknown }).message);
+    } else {
+      message = "Error del servidor";
+    }
     super(message);
     this.detail = detail;
   }

@@ -106,11 +106,11 @@ def reset_encargado_password(
             temporary_password=payload.temporary_password,
         )
     except UserNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.") from exc
     except PermissionDeniedError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only encargado users can be reset",
+            detail="Solo usuarios encargado pueden ser restablecidos.",
         ) from exc
     session.commit()
     return TemporaryPasswordResponse(
@@ -129,11 +129,11 @@ def invite_user(
     repo = UserRepository(session)
     user = repo.get_by_id(user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
     if user.role not in ("encargado",):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only encargado users can be invited",
+            detail="Solo usuarios encargado pueden ser invitados.",
         )
 
     token_repo = SetPasswordTokenRepository(session)
@@ -153,11 +153,11 @@ def send_reset_email(
     repo = UserRepository(session)
     user = repo.get_by_id(user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
     if user.role not in ("encargado",):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only encargado users can be reset",
+            detail="Solo usuarios encargado pueden recibir restablecimiento.",
         )
 
     token_repo = SetPasswordTokenRepository(session)
@@ -179,12 +179,12 @@ def delete_user(
     except UserNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "user_not_found", "message": "User not found"},
+            detail={"code": "user_not_found", "message": "Usuario no encontrado."},
         ) from exc
     except PermissionDeniedError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "permission_denied", "message": "Cannot delete this user"},
+            detail={"code": "permission_denied", "message": "No se puede eliminar este usuario."},
         ) from exc
     session.commit()
 
@@ -208,12 +208,12 @@ def update_user(
     except UserNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "user_not_found", "message": "User not found"},
+            detail={"code": "user_not_found", "message": "Usuario no encontrado."},
         ) from exc
     except PermissionDeniedError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "permission_denied", "message": "Cannot update this user"},
+            detail={"code": "permission_denied", "message": "No se puede actualizar este usuario."},
         ) from exc
     session.commit()
     return UserRead.model_validate(updated)

@@ -118,7 +118,7 @@ class TestListDeleted:
         assert len(result) == 1
 
     def test_list_deleted_invalid_type(self, trash_service):
-        with pytest.raises(TrashServiceError, match="Invalid entity type"):
+        with pytest.raises(TrashServiceError, match="Tipo de entidad"):
             trash_service.list_deleted("calendars")
 
 
@@ -138,7 +138,7 @@ class TestRestore:
         assert refreshed.deleted_at is None
 
     def test_restore_not_found(self, trash_service):
-        with pytest.raises(TrashServiceError, match="not found"):
+        with pytest.raises(TrashServiceError, match="no encontrado"):
             trash_service.restore("doctors", "nonexistent-id")
 
     def test_restore_active_entity_raises(self, db_session, trash_service):
@@ -155,7 +155,7 @@ class TestRestore:
         )
         db_session.add(doctor)
         db_session.flush()
-        with pytest.raises(TrashServiceError, match="not deleted"):
+        with pytest.raises(TrashServiceError, match="no está eliminada"):
             trash_service.restore("doctors", doctor.id)
 
 
@@ -173,7 +173,7 @@ class TestHardDelete:
         assert db_session.get(RankModel, rank.id) is None
 
     def test_hard_delete_not_found(self, trash_service):
-        with pytest.raises(TrashServiceError, match="not found"):
+        with pytest.raises(TrashServiceError, match="no encontrado"):
             trash_service.hard_delete("doctors", "nonexistent-id")
 
     def test_hard_delete_active_entity_raises(self, db_session, trash_service):
@@ -190,7 +190,7 @@ class TestHardDelete:
         )
         db_session.add(doctor)
         db_session.flush()
-        with pytest.raises(TrashServiceError, match="not deleted"):
+        with pytest.raises(TrashServiceError, match="no está eliminada"):
             trash_service.hard_delete("doctors", doctor.id)
 
     def test_hard_delete_doctor_anonymizes_audit(self, db_session):

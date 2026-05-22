@@ -78,7 +78,7 @@ def get_doctor(
     repo = DoctorRepository(session)
     doctor = repo.get_by_id(doctor_id)
     if doctor is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Médico no encontrado.")
     return _to_read(doctor, repo)
 
 

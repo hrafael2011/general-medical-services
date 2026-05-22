@@ -59,7 +59,7 @@ class DoctorService:
             if monthly_service_target > monthly_service_max:
                 raise DoctorServiceError(
                     "invalid_service_limits",
-                    "monthly_service_target cannot exceed monthly_service_max.",
+                    "El objetivo mensual de servicios no puede superar el máximo mensual.",
                 )
 
         raw_name = name.strip()
@@ -126,13 +126,13 @@ class DoctorService:
     ) -> DoctorModel:
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise DoctorServiceError("doctor_not_found", f"Doctor with id {doctor_id} not found")
+            raise DoctorServiceError("doctor_not_found", f"Médico con id {doctor_id} no encontrado.")
 
         if monthly_service_target is not None and monthly_service_max is not None:
             if monthly_service_target > monthly_service_max:
                 raise DoctorServiceError(
                     "invalid_service_limits",
-                    "monthly_service_target cannot exceed monthly_service_max.",
+                    "El objetivo mensual de servicios no puede superar el máximo mensual.",
                 )
 
         # Also check against the existing value when only one side is provided
@@ -141,14 +141,14 @@ class DoctorService:
             if effective_max is not None and monthly_service_target > effective_max:
                 raise DoctorServiceError(
                     "invalid_service_limits",
-                    "monthly_service_target cannot exceed monthly_service_max.",
+                    "El objetivo mensual de servicios no puede superar el máximo mensual.",
                 )
         if monthly_service_max is not None and monthly_service_target is None:
             effective_target = doctor.monthly_service_target
             if effective_target is not None and effective_target > monthly_service_max:
                 raise DoctorServiceError(
                     "invalid_service_limits",
-                    "monthly_service_target cannot exceed monthly_service_max.",
+                    "El objetivo mensual de servicios no puede superar el máximo mensual.",
                 )
 
         changed_fields: dict = {}
@@ -281,7 +281,7 @@ class DoctorService:
     ) -> DoctorModel:
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise DoctorServiceError("doctor_not_found", f"Doctor with id {doctor_id} not found")
+            raise DoctorServiceError("doctor_not_found", f"Médico con id {doctor_id} no encontrado.")
 
         if self.catalog_repo is not None:
             reason = self.catalog_repo.get_deactivation_reason_by_id(reason_id)
@@ -289,7 +289,7 @@ class DoctorService:
                 if doctor.sex != reason.applies_to_sex:
                     raise DoctorServiceError(
                         "reason_sex_mismatch",
-                        "This deactivation reason does not apply to this doctor's sex.",
+                        "Este motivo de desactivación no aplica al sexo del médico.",
                     )
 
         doctor.service_active = False
@@ -309,7 +309,7 @@ class DoctorService:
     def reactivate_service(self, doctor_id: str, *, actor_id: str) -> DoctorModel:
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise DoctorServiceError("doctor_not_found", f"Doctor with id {doctor_id} not found")
+            raise DoctorServiceError("doctor_not_found", f"Médico con id {doctor_id} no encontrado.")
 
         doctor.service_active = True
         doctor.service_inactive_reason_id = None
@@ -326,7 +326,7 @@ class DoctorService:
     def soft_delete_doctor(self, doctor_id: str, *, actor_id: str) -> None:
         doctor = self.doctors.get_by_id(doctor_id)
         if doctor is None:
-            raise DoctorServiceError("doctor_not_found", f"Doctor with id {doctor_id} not found")
+            raise DoctorServiceError("doctor_not_found", f"Médico con id {doctor_id} no encontrado.")
         self.doctors.soft_delete(doctor_id)
         if self.audit is not None:
             self.audit.log_doctor_deleted(actor_id=actor_id, doctor=doctor)

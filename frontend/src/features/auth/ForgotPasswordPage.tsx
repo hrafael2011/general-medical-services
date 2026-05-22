@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ShieldCheck, Mail, ArrowLeft } from "lucide-react";
 import { authApi } from "../../api/auth";
+import { ApiError } from "../../api/client";
 
 type PageState = "idle" | "submitting" | "done" | "rate-limited";
 
@@ -19,7 +20,7 @@ export function ForgotPasswordPage() {
       await authApi.forgotPassword(email.trim());
       setState("done");
     } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("429")) {
+      if (err instanceof ApiError && err.status === 429) {
         setState("rate-limited");
       } else {
         setState("done");

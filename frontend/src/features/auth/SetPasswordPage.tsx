@@ -53,8 +53,9 @@ export function SetPasswordPage() {
       setState("done");
       addToast("success", "Contraseña creada exitosamente. Ahora puedes iniciar sesión.");
       setTimeout(() => navigate("/login", { replace: true }), 2000);
-    } catch {
-      setErrorMessage("Error al crear la contraseña. El enlace podría haber expirado.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error al crear la contraseña. El enlace podría haber expirado.";
+      setErrorMessage(message);
       setState("valid");
     }
   };

@@ -34,7 +34,7 @@ class TrashService:
 
     def list_deleted(self, entity_type: str) -> list:
         if entity_type not in self.VALID_TYPES:
-            raise TrashServiceError("invalid_type", f"Invalid entity type: {entity_type}")
+            raise TrashServiceError("invalid_type", f"Tipo de entidad no válido: {entity_type}")
         if entity_type == "doctors":
             return self.doctors.list_deleted()
         if entity_type == "users":
@@ -45,22 +45,22 @@ class TrashService:
 
     def restore(self, entity_type: str, entity_id: str) -> None:
         if entity_type not in self.VALID_TYPES:
-            raise TrashServiceError("invalid_type", f"Invalid entity type: {entity_type}")
+            raise TrashServiceError("invalid_type", f"Tipo de entidad no válido: {entity_type}")
         entity = self._get_entity_including_deleted(entity_type, entity_id)
         if entity is None:
-            raise TrashServiceError("not_found", f"{entity_type} with id {entity_id} not found")
+            raise TrashServiceError("not_found", f"{entity_type} con id {entity_id} no encontrado.")
         if entity.deleted_at is None:
-            raise TrashServiceError("not_deleted", "Entity is not deleted")
+            raise TrashServiceError("not_deleted", "La entidad no está eliminada.")
         self._restore_entity(entity_type, entity_id)
 
     def hard_delete(self, entity_type: str, entity_id: str) -> None:
         if entity_type not in self.VALID_TYPES:
-            raise TrashServiceError("invalid_type", f"Invalid entity type: {entity_type}")
+            raise TrashServiceError("invalid_type", f"Tipo de entidad no válido: {entity_type}")
         entity = self._get_entity_including_deleted(entity_type, entity_id)
         if entity is None:
-            raise TrashServiceError("not_found", f"{entity_type} with id {entity_id} not found")
+            raise TrashServiceError("not_found", f"{entity_type} con id {entity_id} no encontrado.")
         if entity.deleted_at is None:
-            raise TrashServiceError("not_deleted", "Entity is not deleted")
+            raise TrashServiceError("not_deleted", "La entidad no está eliminada.")
         if entity_type in self._ANONYMIZABLE_TYPES and self.audit is not None:
             self.audit.anonymize_entity(entity_id)
         try:
@@ -68,7 +68,7 @@ class TrashService:
         except IntegrityError:
             raise TrashServiceError(
                 "integrity_violation",
-                "Cannot permanently delete: the entity has associated records. Remove those records first.",
+                "No se puede eliminar permanentemente: la entidad tiene registros asociados. Elimina esos registros primero.",
             )
 
     def _get_entity_including_deleted(self, entity_type: str, entity_id: str):

@@ -76,11 +76,11 @@ def _build_rate_limited_tool_response() -> dict:
 def _get_linkable_user(session: Session, user_id: str) -> UserModel:
     user = UserRepository(session).get_by_id(user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
     if user.role not in _TELEGRAM_LINKABLE_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only admin and encargado users can be linked to Telegram",
+            detail="Solo usuarios admin y encargado pueden vincularse a Telegram.",
         )
     return user
 

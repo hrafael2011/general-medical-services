@@ -150,7 +150,7 @@ def test_get_doctor_found(client, seed_doctor):
 def test_get_doctor_not_found(client):
     resp = client.get("/api/doctors/nonexistent-id")
     assert resp.status_code == 404
-    assert resp.json()["detail"] == "Doctor not found"
+    assert resp.json()["detail"] == "Médico no encontrado."
 
 
 # ---------------------------------------------------------------------------

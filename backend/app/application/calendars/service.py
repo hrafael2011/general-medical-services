@@ -43,14 +43,14 @@ class CalendarService:
         if generation_mode not in CALENDAR_GENERATION_MODES:
             raise CalendarServiceError(
                 "invalid_generation_mode",
-                f"Unsupported calendar generation mode: {generation_mode}.",
+                f"Modo de generación de calendario no soportado: {generation_mode}.",
             )
 
         existing = self.repo.get_calendar_by_period(year, month)
         if existing is not None:
             raise CalendarServiceError(
                 "calendar_already_exists",
-                f"A calendar for {year}-{month:02d} already exists.",
+                f"Ya existe un calendario para {year}-{month:02d}.",
             )
 
         now = datetime.now(UTC)
@@ -102,7 +102,7 @@ class CalendarService:
         if calendar is None:
             raise CalendarServiceError(
                 "calendar_not_found",
-                f"Calendar with id {calendar_id} not found.",
+                f"Calendario con id {calendar_id} no encontrado.",
             )
         return calendar
 
@@ -115,7 +115,7 @@ class CalendarService:
         if calendar is None:
             raise CalendarServiceError(
                 "calendar_not_found",
-                f"Calendar with id {calendar_id} not found.",
+                f"Calendario con id {calendar_id} no encontrado.",
             )
         self.repo.soft_delete_calendar(calendar_id)
 
@@ -138,7 +138,7 @@ class CalendarService:
         if calendar is None:
             raise CalendarServiceError(
                 "calendar_not_found",
-                f"Calendar with id {calendar_id} not found.",
+                f"Calendario con id {calendar_id} no encontrado.",
             )
 
         versions = self.repo.list_versions(calendar_id)
@@ -148,13 +148,13 @@ class CalendarService:
         if version is None:
             raise CalendarServiceError(
                 "version_not_found",
-                f"Version {version_number} not found for calendar {calendar_id}.",
+                f"Versión {version_number} no encontrada para el calendario {calendar_id}.",
             )
 
         if version.status == "approved":
             raise CalendarServiceError(
                 "calendar_already_approved",
-                f"Version {version_number} is already approved.",
+                f"La versión {version_number} ya está aprobada.",
             )
 
         now = datetime.now(UTC)
@@ -212,20 +212,20 @@ class CalendarService:
         if calendar is None:
             raise CalendarServiceError(
                 "calendar_not_found",
-                f"Calendar with id {calendar_id} not found.",
+                f"Calendario con id {calendar_id} no encontrado.",
             )
 
         if calendar.status != "approved":
             raise CalendarServiceError(
                 "invalid_status_transition",
-                "unlock_calendar can only be called on an approved calendar.",
+                "Solo se puede desbloquear un calendario aprobado.",
             )
 
         versions = self.repo.list_versions(calendar_id)
         if not versions:
             raise CalendarServiceError(
                 "version_not_found",
-                f"No versions found for calendar {calendar_id}.",
+                f"No se encontraron versiones para el calendario {calendar_id}.",
             )
 
         now = datetime.now(UTC)
@@ -281,20 +281,20 @@ class CalendarService:
         if calendar is None:
             raise CalendarServiceError(
                 "calendar_not_found",
-                f"Calendar with id {calendar_id} not found.",
+                f"Calendario con id {calendar_id} no encontrado.",
             )
 
         if calendar.status != "approved":
             raise CalendarServiceError(
                 "invalid_status_transition",
-                "new_version_after_approval can only be called on an approved calendar.",
+                "Solo se puede crear una nueva versión desde un calendario aprobado.",
             )
 
         versions = self.repo.list_versions(calendar_id)
         if not versions:
             raise CalendarServiceError(
                 "version_not_found",
-                f"No versions found for calendar {calendar_id}.",
+                f"No se encontraron versiones para el calendario {calendar_id}.",
             )
 
         next_version_number = max(v.version_number for v in versions) + 1
@@ -336,13 +336,13 @@ class CalendarService:
         if week is None:
             raise CalendarServiceError(
                 "week_not_found",
-                f"Week {week_id} not found.",
+                f"Semana {week_id} no encontrada.",
             )
 
         if week.status == "approved":
             raise CalendarServiceError(
                 "week_already_approved",
-                f"Week {week_id} is already approved.",
+                f"La semana {week_id} ya está aprobada.",
             )
 
         now = datetime.now(UTC)
@@ -396,13 +396,13 @@ class CalendarService:
         if week is None:
             raise CalendarServiceError(
                 "week_not_found",
-                f"Week {week_id} not found.",
+                f"Semana {week_id} no encontrada.",
             )
 
         if week.status != "approved":
             raise CalendarServiceError(
                 "week_not_approved",
-                f"Week {week_id} is not approved, cannot unlock.",
+                f"La semana {week_id} no está aprobada, no se puede desbloquear.",
             )
 
         # Compute hash of current assignments before reverting

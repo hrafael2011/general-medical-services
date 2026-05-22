@@ -125,8 +125,8 @@ export function TelegramLinks() {
       addToast("success", "Vínculo eliminado.");
       void queryClient.invalidateQueries({ queryKey: ["telegram-links"] });
     },
-    onError: () => {
-      addToast("error", "Error al eliminar el vínculo.");
+    onError: (err: Error) => {
+      addToast("error", err.message || "Error al eliminar el vínculo.");
     },
   });
 

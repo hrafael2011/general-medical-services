@@ -45,7 +45,7 @@ export function UsersView() {
   const resetMutation = useMutation({
     mutationFn: (userId: string) => adminApi.sendReset(userId),
     onSuccess: () => addToast("success", "Correo de restablecimiento enviado."),
-    onError: () => addToast("error", "Error al enviar correo de restablecimiento."),
+    onError: (err: Error) => addToast("error", err.message || "Error al enviar correo de restablecimiento."),
   });
 
   const updateMutation = useMutation({
@@ -56,7 +56,7 @@ export function UsersView() {
       setEditingId(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: () => addToast("error", "Error al actualizar usuario."),
+    onError: (err: Error) => addToast("error", err.message || "Error al actualizar usuario."),
   });
 
   const deleteMutation = useMutation({
@@ -66,7 +66,7 @@ export function UsersView() {
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: () => addToast("error", "Error al eliminar usuario."),
+    onError: (err: Error) => addToast("error", err.message || "Error al eliminar usuario."),
   });
 
   function startEditing(user: UserRead) {

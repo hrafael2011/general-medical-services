@@ -3,6 +3,7 @@ import { FormEvent, useState } from "react";
 import { Eye, EyeOff, KeyRound, LogIn, ShieldCheck } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { changePassword } from "./api/auth";
+import { ApiError } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { AlertBell } from "./components/AlertBell";
 import { AuthGuard } from "./components/AuthGuard";
@@ -92,7 +93,17 @@ function LoginPage() {
         navigate("/dashboard", { replace: true });
       }
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Error al iniciar sesión.");
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setMessage("Error de conexión. Verifica tu conexión a internet.");
+      } else if (err instanceof ApiError && err.status === 401) {
+        setMessage("Credenciales incorrectas. Verifica tu email y contraseña.");
+      } else if (err instanceof ApiError && err.status === 423) {
+        setMessage(err.message || "Cuenta bloqueada temporalmente.");
+      } else if (err instanceof ApiError && err.status === 403) {
+        setMessage(err.message || "Tu cuenta está desactivada.");
+      } else {
+        setMessage(err instanceof Error ? err.message : "Error al iniciar sesión.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +121,11 @@ function LoginPage() {
       setCurrentUser(user);
       navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Error al cambiar contraseña.");
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setMessage("Error de conexión. Verifica tu conexión a internet.");
+      } else {
+        setMessage(err instanceof Error ? err.message : "Error al cambiar contraseña.");
+      }
     } finally {
       setIsLoading(false);
     }

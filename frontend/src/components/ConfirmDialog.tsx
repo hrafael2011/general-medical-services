@@ -9,6 +9,8 @@ interface Props {
   cancelLabel?: string;
   variant?: "danger" | "warning";
   icon?: string;
+  warning?: string;
+  loadingLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
   isLoading?: boolean;
@@ -23,6 +25,8 @@ export function ConfirmDialog({
   cancelLabel = "Cancelar",
   variant = "danger",
   icon = "🗑️",
+  warning = "Esta acción no se puede deshacer",
+  loadingLabel = "Eliminando…",
   onConfirm,
   onCancel,
   isLoading = false,
@@ -64,9 +68,11 @@ export function ConfirmDialog({
         </h2>
         <p className="confirm-dialog-message">{message}</p>
         {detail && <p className="confirm-dialog-detail">{detail}</p>}
-        <div className="confirm-dialog-warning">
-          ⛔ Esta acción no se puede deshacer
-        </div>
+        {warning && (
+          <div className="confirm-dialog-warning">
+            ⛔ {warning}
+          </div>
+        )}
         <div className="confirm-dialog-actions">
           <button className="btn-secondary" onClick={onCancel} disabled={isLoading}>
             {cancelLabel}
@@ -78,7 +84,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={isLoading}
           >
-            {isLoading ? "Eliminando…" : confirmLabel}
+            {isLoading ? loadingLabel : confirmLabel}
           </button>
         </div>
       </div>

@@ -126,7 +126,7 @@ class CatalogService:
     ) -> RankModel:
         rank = self.catalogs.get_rank_by_id(rank_id)
         if rank is None:
-            raise CatalogError("rank_not_found", "Rank not found")
+            raise CatalogError("rank_not_found", "Rango no encontrado.")
         changed: dict[str, object] = {}
         if name is not None:
             rank.name = name.strip()
@@ -146,7 +146,7 @@ class CatalogService:
     def soft_delete_rank(self, rank_id: str) -> int:
         rank = self.catalogs.get_rank_by_id(rank_id)
         if rank is None:
-            raise CatalogError("rank_not_found", "Rank not found")
+            raise CatalogError("rank_not_found", "Rango no encontrado.")
         affected = self.catalogs.count_doctors_by_rank(rank_id)
         self.catalogs.soft_delete_rank(rank_id)
         return affected
@@ -160,7 +160,7 @@ class CatalogService:
     ) -> DepartmentModel:
         department = self.catalogs.get_department_by_id(department_id)
         if department is None:
-            raise CatalogError("department_not_found", "Department not found")
+            raise CatalogError("department_not_found", "Departamento no encontrado.")
         changed: dict[str, object] = {}
         if name is not None:
             department.name = name.strip()
@@ -177,7 +177,7 @@ class CatalogService:
     def soft_delete_department(self, department_id: str) -> int:
         department = self.catalogs.get_department_by_id(department_id)
         if department is None:
-            raise CatalogError("department_not_found", "Department not found")
+            raise CatalogError("department_not_found", "Departamento no encontrado.")
         affected = self.catalogs.count_doctors_by_department(department_id)
         self.catalogs.soft_delete_department(department_id)
         return affected
