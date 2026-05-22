@@ -1,5 +1,4 @@
 import logging
-import smtplib
 import base64
 from email.message import EmailMessage
 
@@ -11,13 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 def send_email(*, to: str, subject: str, html: str) -> None:
-    """Send email via Resend, SMTP, or fall back to console logging.
+    """Send email via Resend, Gmail API, or fall back to console logging.
 
     Priority:
     1. Resend — when RESEND_API_KEY is configured
     2. Gmail API — when Gmail OAuth credentials are configured
-    3. SMTP — when SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD are configured
-    4. Log — when no provider is configured
+    3. Log — when no provider is configured
     """
     if settings.resend_api_key:
         _send_via_resend(to, subject, html)
@@ -29,10 +27,6 @@ def send_email(*, to: str, subject: str, html: str) -> None:
         and settings.gmail_refresh_token
     ):
         _send_via_gmail_api(to, subject, html)
-        return
-
-    if settings.smtp_host and settings.smtp_username and settings.smtp_password:
-        _send_via_smtp(to, subject, html)
         return
 
     logger.info("--- EMAIL (no provider configured) ---")
@@ -60,7 +54,7 @@ def _send_via_resend(to: str, subject: str, html: str) -> None:
 
 
 def _send_via_gmail_api(to: str, subject: str, html: str) -> None:
-    from_email = settings.gmail_from_email or settings.smtp_from_email or settings.smtp_username
+    from_email = settings.gmail_from_email
     if not from_email:
         logger.error("Gmail API email requested but no sender is configured")
         return
@@ -91,20 +85,6 @@ def _send_via_gmail_api(to: str, subject: str, html: str) -> None:
         logger.info("Email sent to %s via Gmail API", to)
     except Exception:
         logger.exception("Failed to send email via Gmail API")
-
-
-def _send_via_smtp(to: str, subject: str, html: str) -> None:
-    from_email = settings.smtp_from_email or settings.smtp_username
-    msg = _build_email_message(from_email=from_email, to=to, subject=subject, html=html)
-
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
-            server.starttls()
-            server.login(settings.smtp_username, settings.smtp_password)  # type: ignore[arg-type]
-            server.send_message(msg)
-        logger.info("Email sent to %s via SMTP (%s)", to, settings.smtp_host)
-    except Exception:
-        logger.exception("Failed to send email via SMTP")
 
 
 def _build_email_message(*, from_email: str, to: str, subject: str, html: str) -> EmailMessage:

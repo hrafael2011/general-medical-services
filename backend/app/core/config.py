@@ -32,13 +32,6 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     resend_from_email: str = "noreply@turnos-medicos.com"
 
-    # SMTP fallback email provider (Gmail App Password compatible)
-    smtp_host: str | None = None
-    smtp_port: int = 587
-    smtp_username: str | None = None
-    smtp_password: str | None = None
-    smtp_from_email: str | None = None
-
     # Gmail API email provider (HTTPS; works when outbound SMTP is unavailable)
     gmail_client_id: str | None = None
     gmail_client_secret: str | None = None
