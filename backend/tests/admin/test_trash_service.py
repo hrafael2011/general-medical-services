@@ -1,0 +1,193 @@
+from datetime import UTC, datetime
+from uuid import uuid4
+
+import pytest
+from sqlalchemy.orm import Session
+
+from backend.app.application.admin.trash_service import TrashService, TrashServiceError
+from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
+from backend.app.infrastructure.db.models.doctors import DoctorModel
+from backend.app.infrastructure.db.models.user import UserModel
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.users import UserRepository
+
+
+@pytest.fixture
+def trash_service(db_session: Session) -> TrashService:
+    return TrashService(
+        DoctorRepository(db_session),
+        UserRepository(db_session),
+        CatalogRepository(db_session),
+    )
+
+
+def _make_deleted_doctor(db_session: Session) -> DoctorModel:
+    now = datetime.now(UTC)
+    doctor = DoctorModel(
+        id=str(uuid4()),
+        name="Dr. Deleted",
+        normalized_name="dr. deleted",
+        sex="male",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(doctor)
+    db_session.flush()
+    return doctor
+
+
+def _make_deleted_user(db_session: Session) -> UserModel:
+    now = datetime.now(UTC)
+    user = UserModel(
+        id=str(uuid4()),
+        name="Deleted User",
+        email="deleted@test.com",
+        password_hash="hash",
+        role="encargado",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(user)
+    db_session.flush()
+    return user
+
+
+def _make_deleted_rank(db_session: Session) -> RankModel:
+    now = datetime.now(UTC)
+    rank = RankModel(
+        id=str(uuid4()),
+        name="Deleted Rank",
+        normalized_name="deleted rank",
+        abbreviation="DR",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(rank)
+    db_session.flush()
+    return rank
+
+
+def _make_deleted_department(db_session: Session) -> DepartmentModel:
+    now = datetime.now(UTC)
+    dept = DepartmentModel(
+        id=str(uuid4()),
+        name="Deleted Dept",
+        normalized_name="deleted dept",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(dept)
+    db_session.flush()
+    return dept
+
+
+class TestListDeleted:
+    def test_list_deleted_doctors(self, db_session, trash_service):
+        _make_deleted_doctor(db_session)
+        result = trash_service.list_deleted("doctors")
+        assert len(result) == 1
+        assert result[0].name == "Dr. Deleted"
+
+    def test_list_deleted_users(self, db_session, trash_service):
+        _make_deleted_user(db_session)
+        result = trash_service.list_deleted("users")
+        assert len(result) == 1
+        assert result[0].email == "deleted@test.com"
+
+    def test_list_deleted_excludes_active(self, db_session, trash_service):
+        _make_deleted_doctor(db_session)
+        now = datetime.now(UTC)
+        active = DoctorModel(
+            id=str(uuid4()),
+            name="Active Doc",
+            normalized_name="active doc",
+            sex="male",
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        )
+        db_session.add(active)
+        db_session.flush()
+        result = trash_service.list_deleted("doctors")
+        assert len(result) == 1
+
+    def test_list_deleted_invalid_type(self, trash_service):
+        with pytest.raises(TrashServiceError, match="Invalid entity type"):
+            trash_service.list_deleted("calendars")
+
+
+class TestRestore:
+    def test_restore_doctor_clears_deleted_at(self, db_session, trash_service):
+        doctor = _make_deleted_doctor(db_session)
+        trash_service.restore("doctors", doctor.id)
+        db_session.expire_all()
+        refreshed = db_session.get(DoctorModel, doctor.id)
+        assert refreshed.deleted_at is None
+
+    def test_restore_user_clears_deleted_at(self, db_session, trash_service):
+        user = _make_deleted_user(db_session)
+        trash_service.restore("users", user.id)
+        db_session.expire_all()
+        refreshed = db_session.get(UserModel, user.id)
+        assert refreshed.deleted_at is None
+
+    def test_restore_not_found(self, trash_service):
+        with pytest.raises(TrashServiceError, match="not found"):
+            trash_service.restore("doctors", "nonexistent-id")
+
+    def test_restore_active_entity_raises(self, db_session, trash_service):
+        """Restoring an active (non-deleted) entity should raise."""
+        now = datetime.now(UTC)
+        doctor = DoctorModel(
+            id=str(uuid4()),
+            name="Active Doc",
+            normalized_name="active doc",
+            sex="male",
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        )
+        db_session.add(doctor)
+        db_session.flush()
+        with pytest.raises(TrashServiceError, match="not deleted"):
+            trash_service.restore("doctors", doctor.id)
+
+
+class TestHardDelete:
+    def test_hard_delete_removes_row(self, db_session, trash_service):
+        doctor = _make_deleted_doctor(db_session)
+        trash_service.hard_delete("doctors", doctor.id)
+        db_session.expire_all()
+        assert db_session.get(DoctorModel, doctor.id) is None
+
+    def test_hard_delete_rank_removes_row(self, db_session, trash_service):
+        rank = _make_deleted_rank(db_session)
+        trash_service.hard_delete("ranks", rank.id)
+        db_session.expire_all()
+        assert db_session.get(RankModel, rank.id) is None
+
+    def test_hard_delete_not_found(self, trash_service):
+        with pytest.raises(TrashServiceError, match="not found"):
+            trash_service.hard_delete("doctors", "nonexistent-id")
+
+    def test_hard_delete_active_entity_raises(self, db_session, trash_service):
+        """Hard-deleting an active (non-deleted) entity should raise."""
+        now = datetime.now(UTC)
+        doctor = DoctorModel(
+            id=str(uuid4()),
+            name="Active Doc",
+            normalized_name="active doc",
+            sex="male",
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        )
+        db_session.add(doctor)
+        db_session.flush()
+        with pytest.raises(TrashServiceError, match="not deleted"):
+            trash_service.hard_delete("doctors", doctor.id)
