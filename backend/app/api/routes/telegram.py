@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
@@ -33,6 +33,8 @@ from backend.app.schemas.telegram import (
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
 logger = logging.getLogger(__name__)
+
+_warned_no_webhook_secret = False
 
 _TELEGRAM_LINKABLE_ROLES = {"admin", "encargado"}
 
@@ -140,8 +142,22 @@ def webhook(
     update: TelegramWebhookUpdate,
     session: Annotated[Session, Depends(get_db_session)],
     orchestrator: Annotated[object, Depends(get_orchestrator)],
+    x_telegram_bot_api_secret_token: Annotated[str | None, Header()] = None,
 ) -> dict:
     """Telegram Bot API webhook. Always returns 200 to avoid Telegram retries."""
+    # Validate X-Telegram-Bot-Api-Secret-Token if configured
+    secret = settings.telegram_webhook_secret
+    if secret is not None:
+        if x_telegram_bot_api_secret_token is None or not secrets.compare_digest(
+            x_telegram_bot_api_secret_token, secret
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    else:
+        global _warned_no_webhook_secret
+        if not _warned_no_webhook_secret:
+            logger.warning("TELEGRAM_WEBHOOK_SECRET is not configured — webhook is unauthenticated")
+            _warned_no_webhook_secret = True
+
     chat_id: int | None = None
     telegram_user_id: str | None = None
     try:

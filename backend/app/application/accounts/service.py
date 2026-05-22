@@ -167,10 +167,10 @@ class AccountService:
 
         # Check against password history (last 5)
         recent_hashes = self.users.list_recent_password_hashes(user.id)
-        new_hash = hash_password(new_password)
         for old_hash in recent_hashes:
-            if old_hash == new_hash:
+            if verify_password(new_password, old_hash):
                 raise InvalidPasswordChangeError
+        new_hash = hash_password(new_password)
 
         now = datetime.now(UTC)
         user.password_hash = new_hash

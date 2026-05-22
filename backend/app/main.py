@@ -72,16 +72,32 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title=settings.app_name)
+    is_production = settings.app_env == "production"
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[settings.frontend_origin, "http://localhost:5174", "http://localhost:8999"],
-        allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+):(5173|8999)$",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+    app = FastAPI(
+        title=settings.app_name,
+        docs_url=None if is_production else "/docs",
+        redoc_url=None if is_production else "/redoc",
+        openapi_url=None if is_production else "/openapi.json",
     )
+
+    if is_production:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["https://general-medical-services.vercel.app"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[settings.frontend_origin, "http://localhost:5174", "http://localhost:8999"],
+            allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+):(5173|8999)$",
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     app.add_middleware(RequestIDMiddleware)
 
     app.add_exception_handler(RequestValidationError, validation_exception_handler)

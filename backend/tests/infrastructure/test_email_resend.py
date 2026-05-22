@@ -1,4 +1,4 @@
-"""Tests for email sending — Resend, Gmail API, SMTP fallback, and logging fallback."""
+"""Tests for email sending — Resend, Gmail API, and logging fallback."""
 
 import base64
 import json
@@ -13,9 +13,6 @@ def test_send_via_resend_when_api_key_set(mock_settings):
     """Sends via Resend when RESEND_API_KEY is configured."""
     mock_settings.resend_api_key = "re_abc123"
     mock_settings.resend_from_email = "noreply@test.com"
-    mock_settings.smtp_host = None
-    mock_settings.smtp_username = None
-    mock_settings.smtp_password = None
     mock_settings.gmail_client_id = None
     mock_settings.gmail_client_secret = None
     mock_settings.gmail_refresh_token = None
@@ -28,32 +25,9 @@ def test_send_via_resend_when_api_key_set(mock_settings):
 
 
 @patch("backend.app.infrastructure.email.resend.settings")
-def test_send_via_smtp_when_resend_missing_and_smtp_configured(mock_settings):
-    """Sends via SMTP when Resend is not configured but SMTP is."""
-    mock_settings.resend_api_key = None
-    mock_settings.smtp_host = "smtp.gmail.com"
-    mock_settings.smtp_port = 587
-    mock_settings.smtp_username = "user@gmail.com"
-    mock_settings.smtp_password = "app-pwd"
-    mock_settings.smtp_from_email = None
-    mock_settings.gmail_client_id = None
-    mock_settings.gmail_client_secret = None
-    mock_settings.gmail_refresh_token = None
-
-    with patch(
-        "backend.app.infrastructure.email.resend._send_via_smtp"
-    ) as mock_smtp:
-        send_email(to="a@b.com", subject="Test", html="<p>hi</p>")
-        mock_smtp.assert_called_once_with("a@b.com", "Test", "<p>hi</p>")
-
-
-@patch("backend.app.infrastructure.email.resend.settings")
 def test_fallback_to_log_when_no_provider(mock_settings):
     """Logs to console when no provider is configured."""
     mock_settings.resend_api_key = None
-    mock_settings.smtp_host = None
-    mock_settings.smtp_username = None
-    mock_settings.smtp_password = None
     mock_settings.gmail_client_id = None
     mock_settings.gmail_client_secret = None
     mock_settings.gmail_refresh_token = None
@@ -64,14 +38,29 @@ def test_fallback_to_log_when_no_provider(mock_settings):
 
 
 @patch("backend.app.infrastructure.email.resend.settings")
-def test_resend_takes_priority_over_smtp(mock_settings):
-    """Uses Resend when both Resend and SMTP are configured."""
+def test_gmail_chosen_over_log_when_configured(mock_settings):
+    """Uses Gmail API before falling back to log when Resend is not configured."""
+    mock_settings.resend_api_key = None
+    mock_settings.gmail_client_id = "gmail-client"
+    mock_settings.gmail_client_secret = "gmail-secret"
+    mock_settings.gmail_refresh_token = "gmail-refresh"
+    mock_settings.gmail_from_email = "Sistema <user@gmail.com>"
+
+    with patch(
+        "backend.app.infrastructure.email.resend._send_via_gmail_api"
+    ) as mock_gmail, patch(
+        "backend.app.infrastructure.email.resend.logger"
+    ) as mock_logger:
+        send_email(to="a@b.com", subject="Test", html="<p>hi</p>")
+        mock_gmail.assert_called_once()
+        mock_logger.info.assert_not_called()
+
+
+@patch("backend.app.infrastructure.email.resend.settings")
+def test_resend_takes_priority_over_gmail(mock_settings):
+    """Uses Resend when both Resend and Gmail API are configured."""
     mock_settings.resend_api_key = "re_abc123"
     mock_settings.resend_from_email = "noreply@test.com"
-    mock_settings.smtp_host = "smtp.gmail.com"
-    mock_settings.smtp_username = "user@gmail.com"
-    mock_settings.smtp_password = "app-pwd"
-    mock_settings.smtp_from_email = None
     mock_settings.gmail_client_id = "gmail-client"
     mock_settings.gmail_client_secret = "gmail-secret"
     mock_settings.gmail_refresh_token = "gmail-refresh"
@@ -81,35 +70,26 @@ def test_resend_takes_priority_over_smtp(mock_settings):
         "backend.app.infrastructure.email.resend._send_via_resend"
     ) as mock_resend, patch(
         "backend.app.infrastructure.email.resend._send_via_gmail_api"
-    ) as mock_gmail, patch(
-        "backend.app.infrastructure.email.resend._send_via_smtp"
-    ) as mock_smtp:
+    ) as mock_gmail:
         send_email(to="a@b.com", subject="Test", html="<p>hi</p>")
         mock_resend.assert_called_once()
         mock_gmail.assert_not_called()
-        mock_smtp.assert_not_called()
 
 
 @patch("backend.app.infrastructure.email.resend.settings")
 def test_send_via_gmail_api_when_resend_missing_and_gmail_configured(mock_settings):
-    """Uses Gmail API before SMTP when Gmail OAuth credentials are configured."""
+    """Uses Gmail API when Resend is not configured but Gmail OAuth credentials are."""
     mock_settings.resend_api_key = None
     mock_settings.gmail_client_id = "gmail-client"
     mock_settings.gmail_client_secret = "gmail-secret"
     mock_settings.gmail_refresh_token = "gmail-refresh"
     mock_settings.gmail_from_email = "Sistema <user@gmail.com>"
-    mock_settings.smtp_host = "smtp.gmail.com"
-    mock_settings.smtp_username = "user@gmail.com"
-    mock_settings.smtp_password = "app-pwd"
 
     with patch(
         "backend.app.infrastructure.email.resend._send_via_gmail_api"
-    ) as mock_gmail, patch(
-        "backend.app.infrastructure.email.resend._send_via_smtp"
-    ) as mock_smtp:
+    ) as mock_gmail:
         send_email(to="a@b.com", subject="Test", html="<p>hi</p>")
         mock_gmail.assert_called_once_with("a@b.com", "Test", "<p>hi</p>")
-        mock_smtp.assert_not_called()
 
 
 @patch("backend.app.infrastructure.email.resend.settings")
@@ -157,32 +137,6 @@ def test_gmail_api_sender_refreshes_token_and_posts_raw_message(mock_settings):
     assert "To: a@b.com" in decoded
     assert "Subject: Subject" in decoded
     assert "<p>body</p>" in decoded
-
-
-@patch("backend.app.infrastructure.email.resend.settings")
-def test_smtp_sender_calls_smtplib(mock_settings):
-    """_send_via_smtp connects to SMTP server and sends message."""
-    mock_settings.smtp_host = "smtp.gmail.com"
-    mock_settings.smtp_port = 587
-    mock_settings.smtp_username = "user@gmail.com"
-    mock_settings.smtp_password = "app-pwd"
-    mock_settings.smtp_from_email = None
-
-    mock_context = MagicMock()
-    mock_context.__enter__.return_value = mock_context
-    mock_smtp_constructor = MagicMock(return_value=mock_context)
-    with patch("smtplib.SMTP", mock_smtp_constructor):
-        from backend.app.infrastructure.email.resend import _send_via_smtp
-
-        _send_via_smtp("a@b.com", "Subject", "<p>body</p>")
-
-        mock_smtp_constructor.assert_called_once_with("smtp.gmail.com", 587, timeout=30)
-        mock_context.starttls.assert_called_once()
-        mock_context.login.assert_called_once_with("user@gmail.com", "app-pwd")
-        mock_context.send_message.assert_called_once()
-        msg = mock_context.send_message.call_args[0][0]
-        assert msg["To"] == "a@b.com"
-        assert msg["Subject"] == "Subject"
 
 
 @patch("backend.app.infrastructure.email.resend.settings")

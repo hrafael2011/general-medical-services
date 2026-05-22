@@ -43,6 +43,7 @@ class LoginAttemptModel(Base):
         DateTime(timezone=True), nullable=False, index=True
     )
     success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attempt_type: Mapped[str] = mapped_column(String(20), nullable=False, default="login")
 
 
 class PasswordRecoveryAttemptModel(Base):

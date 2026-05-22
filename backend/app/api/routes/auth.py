@@ -41,6 +41,9 @@ _RECOVERY_EMAIL_LIMIT = 3
 _RECOVERY_IP_LIMIT = 5
 _RECOVERY_WINDOW_SECONDS = 3600  # 1 hour
 
+_SET_PASSWORD_IP_LIMIT = 5
+_SET_PASSWORD_WINDOW_SECONDS = 900  # 15 minutes
+
 
 class SetPasswordRequest(BaseModel):
     token: str
@@ -59,19 +62,21 @@ def _check_login_rate_limit(session: Session, client_ip: str) -> None:
     cutoff = now.timestamp() - _LOGIN_WINDOW_SECONDS
     cutoff_dt = datetime.fromtimestamp(cutoff, tz=UTC)
 
-    # Prune old attempts for this IP
+    # Prune old login attempts for this IP
     delete_stmt = select(LoginAttemptModel).where(
         LoginAttemptModel.ip_address == client_ip,
         LoginAttemptModel.attempted_at < cutoff_dt,
+        LoginAttemptModel.attempt_type == "login",
     )
     old_attempts = list(session.scalars(delete_stmt))
     for a in old_attempts:
         session.delete(a)
 
-    # Count recent attempts
+    # Count recent login attempts
     count_stmt = select(LoginAttemptModel).where(
         LoginAttemptModel.ip_address == client_ip,
         LoginAttemptModel.attempted_at >= cutoff_dt,
+        LoginAttemptModel.attempt_type == "login",
     )
     recent = list(session.scalars(count_stmt))
     if len(recent) >= _LOGIN_RATE_LIMIT:
@@ -86,8 +91,10 @@ def _check_login_rate_limit(session: Session, client_ip: str) -> None:
         ip_address=client_ip,
         attempted_at=now,
         success=False,
+        attempt_type="login",
     )
     session.add(attempt)
+    session.flush()
 
 
 def _check_recovery_rate_limit(session: Session, email: str, client_ip: str) -> None:
@@ -134,6 +141,48 @@ def _check_recovery_rate_limit(session: Session, email: str, client_ip: str) -> 
             attempted_at=now,
         )
     )
+
+
+def _check_set_password_rate_limit(session: Session, client_ip: str) -> None:
+    now = datetime.now(UTC)
+    cutoff = now.timestamp() - _SET_PASSWORD_WINDOW_SECONDS
+    cutoff_dt = datetime.fromtimestamp(cutoff, tz=UTC)
+
+    # Prune old set-password attempts for this IP
+    old = session.query(LoginAttemptModel).filter(
+        LoginAttemptModel.ip_address == client_ip,
+        LoginAttemptModel.attempted_at < cutoff_dt,
+        LoginAttemptModel.attempt_type == "set_password",
+    )
+    for a in old:
+        session.delete(a)
+
+    # Count recent set-password attempts for this IP
+    ip_count = (
+        session.query(LoginAttemptModel)
+        .filter(
+            LoginAttemptModel.ip_address == client_ip,
+            LoginAttemptModel.attempted_at >= cutoff_dt,
+            LoginAttemptModel.attempt_type == "set_password",
+        )
+        .count()
+    )
+    if ip_count >= _SET_PASSWORD_IP_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos. Intenta de nuevo en 15 minutos.",
+        )
+
+    session.add(
+        LoginAttemptModel(
+            id=str(uuid4()),
+            ip_address=client_ip,
+            attempted_at=now,
+            success=False,
+            attempt_type="set_password",
+        )
+    )
+    session.flush()
 
 
 def get_account_service(session: Annotated[Session, Depends(get_db_session)]) -> AccountService:
@@ -218,6 +267,20 @@ def change_password(
     return UserRead.model_validate(user)
 
 
+def _mask_email(email: str) -> str:
+    """Mask email for safe display: h***@gmail.com"""
+    if not email or "@" not in email:
+        return "***"
+    local, _, domain = email.partition("@")
+    if not local:
+        return "***@" + domain
+    if len(local) <= 1:
+        masked_local = local[0] + "***"
+    else:
+        masked_local = local[0] + "***" + local[-1]
+    return f"{masked_local}@{domain}"
+
+
 @router.get("/set-password")
 def validate_set_password_token(
     token: str,
@@ -244,7 +307,7 @@ def validate_set_password_token(
 
     return SetPasswordValidateResponse(
         valid=True,
-        email=token_record.email,
+        email=_mask_email(token_record.email),
         name=user.name,
         expires_at=token_record.expires_at,
     )
@@ -252,6 +315,7 @@ def validate_set_password_token(
 
 @router.post("/set-password", status_code=status.HTTP_200_OK)
 def set_password(
+    request: Request,
     payload: SetPasswordRequest,
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict[str, str]:
@@ -259,11 +323,15 @@ def set_password(
     import re
 
     from backend.app.application.accounts.invitation_service import InvitationService
-    from backend.app.core.security import hash_password
+    from backend.app.core.security import hash_password, verify_password
     from backend.app.infrastructure.repositories.set_password_tokens import (
         SetPasswordTokenRepository,
     )
     from backend.app.infrastructure.repositories.users import UserRepository
+
+    client_ip = request.client.host if request.client else "unknown"
+    _check_set_password_rate_limit(session, client_ip)
+    session.commit()
 
     token_repo = SetPasswordTokenRepository(session)
     service = InvitationService(token_repo)
@@ -305,6 +373,15 @@ def set_password(
             detail="La contraseña debe contener al menos un carácter especial",
         )
 
+    # Check against password history (last 5)
+    recent_hashes = user_repo.list_recent_password_hashes(user.id)
+    for old_hash in recent_hashes:
+        if verify_password(payload.password, old_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No puedes reutilizar una contraseña reciente. Elige una nueva.",
+            )
+
     # Set the password
     new_hash = hash_password(payload.password)
     user.password_hash = new_hash
@@ -313,6 +390,7 @@ def set_password(
     user.updated_at = datetime.now(UTC)
 
     service.mark_used(token_record)
+    user_repo.add_password_history(user.id, new_hash)
 
     # Log audit for self-service recovery (created_by == user's own ID)
     if token_record.created_by == user.id:

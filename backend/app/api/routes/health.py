@@ -19,7 +19,7 @@ def health_readiness() -> dict:
     try:
         session.execute(text("SELECT 1"))
         return {"status": "ok", "database": "connected"}
-    except Exception as exc:
-        return {"status": "error", "database": str(exc)}
+    except Exception:
+        return {"status": "error", "database": "unavailable"}
     finally:
         session.close()
