@@ -93,3 +93,43 @@ class TestCORSLockedInProduction:
             client = TestClient(create_app())
             response = client.get("/api/health", headers={"Origin": origin})
         assert response.headers.get("access-control-allow-origin") == origin
+
+
+EXPECTED_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; font-src 'self'; connect-src 'self'"
+)
+
+
+class TestSecurityHeaders:
+    """All responses must carry 4 security headers with correct values."""
+
+    def test_health_endpoint_returns_security_headers(self):
+        client = TestClient(create_app())
+        response = client.get("/api/health")
+        assert response.headers.get("Content-Security-Policy") == EXPECTED_CSP
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        assert response.headers.get("Permissions-Policy") == "camera=(), microphone=(), geolocation=()"
+
+    def test_api_endpoint_returns_security_headers(self):
+        client = TestClient(create_app())
+        response = client.get("/api/health/ready")
+        assert response.headers.get("Content-Security-Policy") == EXPECTED_CSP
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        assert response.headers.get("Permissions-Policy") == "camera=(), microphone=(), geolocation=()"
+
+    def test_cors_preflight_returns_security_headers(self):
+        client = TestClient(create_app())
+        response = client.options(
+            "/api/health",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert response.headers.get("Content-Security-Policy") == EXPECTED_CSP
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        assert response.headers.get("Permissions-Policy") == "camera=(), microphone=(), geolocation=()"
