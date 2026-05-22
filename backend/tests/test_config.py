@@ -82,6 +82,20 @@ class TestCORSLockedInProduction:
         allow_origin = response.headers.get("access-control-allow-origin")
         assert allow_origin is None or allow_origin != self.EXTERNAL_ORIGIN
 
+    def test_production_error_responses_include_cors_for_vercel_origin(self):
+        with _with_env("production"):
+            app = create_app()
+
+            @app.get("/boom")
+            def boom():
+                raise RuntimeError("boom")
+
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.get("/boom", headers={"Origin": self.PRODUCTION_ORIGIN})
+
+        assert response.status_code == 500
+        assert response.headers.get("access-control-allow-origin") == self.PRODUCTION_ORIGIN
+
     @pytest.mark.parametrize("origin", [
         "http://localhost:5173",
         "http://localhost:5174",

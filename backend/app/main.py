@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import FastAPI, Request, status
@@ -11,6 +12,8 @@ from backend.app.api.router import api_router
 from backend.app.application.audit.service import set_current_request_id
 from backend.app.core.config import settings
 
+
+logger = logging.getLogger(__name__)
 
 _VALIDATION_TRANSLATIONS: dict[str, str] = {
     "missing": "Este campo es obligatorio.",
@@ -60,6 +63,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled request error", exc_info=exc)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Error interno del servidor."},
+    )
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Injects security headers into every HTTP response."""
 
@@ -73,6 +84,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response
+
+
+class UnhandledExceptionMiddleware(BaseHTTPMiddleware):
+    """Converts unexpected errors to JSON before outer response middleware runs."""
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            return await unhandled_exception_handler(request, exc)
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -96,6 +117,7 @@ def create_app() -> FastAPI:
         openapi_url=None if is_production else "/openapi.json",
     )
 
+    app.add_middleware(UnhandledExceptionMiddleware)
     if is_production:
         app.add_middleware(
             CORSMiddleware,
