@@ -61,3 +61,13 @@ class UpdateRankRequest(BaseModel):
 class UpdateDepartmentRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     active: bool | None = None
+
+
+class DeleteRankResponse(BaseModel):
+    message: str
+    affected_doctors: int = 0
+
+
+class DeleteDepartmentResponse(BaseModel):
+    message: str
+    affected_doctors: int = 0
