@@ -63,16 +63,19 @@ def restore_entity(
     try:
         service.restore(entity_type, entity_id)
     except TrashServiceError as exc:
-        status_code_map = {
-            "not_found": status.HTTP_404_NOT_FOUND,
-            "not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "invalid_type": status.HTTP_400_BAD_REQUEST,
-        }
         raise HTTPException(
-            status_code=status_code_map.get(exc.code, status.HTTP_400_BAD_REQUEST),
+            status_code=_TRASH_ERROR_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST),
             detail=exc.message,
         ) from exc
     session.commit()
+
+
+_TRASH_ERROR_STATUS = {
+    "not_found": status.HTTP_404_NOT_FOUND,
+    "not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "invalid_type": status.HTTP_400_BAD_REQUEST,
+    "integrity_violation": status.HTTP_409_CONFLICT,
+}
 
 
 @router.delete("/{entity_type}/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -86,13 +89,8 @@ def hard_delete_entity(
     try:
         service.hard_delete(entity_type, entity_id)
     except TrashServiceError as exc:
-        status_code_map = {
-            "not_found": status.HTTP_404_NOT_FOUND,
-            "not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "invalid_type": status.HTTP_400_BAD_REQUEST,
-        }
         raise HTTPException(
-            status_code=status_code_map.get(exc.code, status.HTTP_400_BAD_REQUEST),
+            status_code=_TRASH_ERROR_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST),
             detail=exc.message,
         ) from exc
     session.commit()

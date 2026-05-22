@@ -1,3 +1,5 @@
+from sqlalchemy.exc import IntegrityError
+
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -51,7 +53,13 @@ class TrashService:
             raise TrashServiceError("not_found", f"{entity_type} with id {entity_id} not found")
         if entity.deleted_at is None:
             raise TrashServiceError("not_deleted", "Entity is not deleted")
-        self._hard_delete_entity(entity_type, entity_id)
+        try:
+            self._hard_delete_entity(entity_type, entity_id)
+        except IntegrityError:
+            raise TrashServiceError(
+                "integrity_violation",
+                "Cannot permanently delete: the entity has associated records. Remove those records first.",
+            )
 
     def _get_entity_including_deleted(self, entity_type: str, entity_id: str):
         if entity_type == "doctors":
