@@ -244,7 +244,7 @@ def test_validate_set_password_token_valid():
     resp = client.get(f"/api/auth/set-password?token={raw_token}")
     assert resp.status_code == 200
     assert resp.json()["valid"] is True
-    assert resp.json()["email"] == "user@test.com"
+    assert resp.json()["email"] == "u***r@test.com"
 
 
 def test_validate_set_password_token_invalid(client):
