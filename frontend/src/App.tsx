@@ -17,6 +17,7 @@ import { TelegramLinks } from "./features/telegram/TelegramLinks";
 import { AuditLog } from "./features/audit/AuditLog";
 import { UsersView } from "./features/users/UsersView";
 import { CatalogsPage } from "./features/catalogs/CatalogsPage";
+import { TrashPage } from "./features/trash/TrashPage";
 import { SetPasswordPage } from "./features/auth/SetPasswordPage";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { PublicConfirmationPage } from "./features/confirmations/PublicConfirmationPage";
@@ -42,6 +43,7 @@ export function App() {
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/users" element={<UsersView />} />
           <Route path="/catalogs" element={<CatalogsPage />} />
+          <Route path="/trash" element={<TrashPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
