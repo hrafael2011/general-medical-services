@@ -62,19 +62,21 @@ def _check_login_rate_limit(session: Session, client_ip: str) -> None:
     cutoff = now.timestamp() - _LOGIN_WINDOW_SECONDS
     cutoff_dt = datetime.fromtimestamp(cutoff, tz=UTC)
 
-    # Prune old attempts for this IP
+    # Prune old login attempts for this IP
     delete_stmt = select(LoginAttemptModel).where(
         LoginAttemptModel.ip_address == client_ip,
         LoginAttemptModel.attempted_at < cutoff_dt,
+        LoginAttemptModel.attempt_type == "login",
     )
     old_attempts = list(session.scalars(delete_stmt))
     for a in old_attempts:
         session.delete(a)
 
-    # Count recent attempts
+    # Count recent login attempts
     count_stmt = select(LoginAttemptModel).where(
         LoginAttemptModel.ip_address == client_ip,
         LoginAttemptModel.attempted_at >= cutoff_dt,
+        LoginAttemptModel.attempt_type == "login",
     )
     recent = list(session.scalars(count_stmt))
     if len(recent) >= _LOGIN_RATE_LIMIT:
@@ -89,8 +91,10 @@ def _check_login_rate_limit(session: Session, client_ip: str) -> None:
         ip_address=client_ip,
         attempted_at=now,
         success=False,
+        attempt_type="login",
     )
     session.add(attempt)
+    session.flush()
 
 
 def _check_recovery_rate_limit(session: Session, email: str, client_ip: str) -> None:
@@ -144,20 +148,22 @@ def _check_set_password_rate_limit(session: Session, client_ip: str) -> None:
     cutoff = now.timestamp() - _SET_PASSWORD_WINDOW_SECONDS
     cutoff_dt = datetime.fromtimestamp(cutoff, tz=UTC)
 
-    # Prune old attempts for this IP
+    # Prune old set-password attempts for this IP
     old = session.query(LoginAttemptModel).filter(
         LoginAttemptModel.ip_address == client_ip,
         LoginAttemptModel.attempted_at < cutoff_dt,
+        LoginAttemptModel.attempt_type == "set_password",
     )
     for a in old:
         session.delete(a)
 
-    # Count recent attempts for this IP
+    # Count recent set-password attempts for this IP
     ip_count = (
         session.query(LoginAttemptModel)
         .filter(
             LoginAttemptModel.ip_address == client_ip,
             LoginAttemptModel.attempted_at >= cutoff_dt,
+            LoginAttemptModel.attempt_type == "set_password",
         )
         .count()
     )
@@ -173,9 +179,10 @@ def _check_set_password_rate_limit(session: Session, client_ip: str) -> None:
             ip_address=client_ip,
             attempted_at=now,
             success=False,
+            attempt_type="set_password",
         )
     )
-    session.commit()
+    session.flush()
 
 
 def get_account_service(session: Annotated[Session, Depends(get_db_session)]) -> AccountService:
@@ -262,7 +269,11 @@ def change_password(
 
 def _mask_email(email: str) -> str:
     """Mask email for safe display: h***@gmail.com"""
+    if not email or "@" not in email:
+        return "***"
     local, _, domain = email.partition("@")
+    if not local:
+        return "***@" + domain
     if len(local) <= 1:
         masked_local = local[0] + "***"
     else:
@@ -320,6 +331,7 @@ def set_password(
 
     client_ip = request.client.host if request.client else "unknown"
     _check_set_password_rate_limit(session, client_ip)
+    session.commit()
 
     token_repo = SetPasswordTokenRepository(session)
     service = InvitationService(token_repo)

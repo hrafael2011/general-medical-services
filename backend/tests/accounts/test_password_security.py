@@ -306,7 +306,7 @@ def test_set_password_rate_limit_respects_window():
     """Old attempts outside the 15-min window should not count."""
     _, SessionLocal = _make_shared_db()
 
-    # Seed 5 attempts that are 16 minutes old (outside the 15-min window)
+    # Seed 5 set-password attempts that are 16 minutes old (outside the 15-min window)
     sess = SessionLocal()
     old_time = datetime.now(UTC) - timedelta(minutes=16)
     for i in range(5):
@@ -315,6 +315,7 @@ def test_set_password_rate_limit_respects_window():
             ip_address="testclient",
             attempted_at=old_time,
             success=False,
+            attempt_type="set_password",
         ))
     sess.commit()
     sess.close()
@@ -359,3 +360,16 @@ def test_set_password_full_success():
     ).all()
     assert len(history) >= 1
     sess.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _mask_email — empty / malformed guard
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_mask_email_handles_empty():
+    from backend.app.api.routes.auth import _mask_email
+
+    assert _mask_email("") == "***"
+    assert _mask_email("no-at-sign") == "***"
+    assert _mask_email("a@b.com") == "a***@b.com"
