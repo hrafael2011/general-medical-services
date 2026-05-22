@@ -1,0 +1,98 @@
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.app.api.dependencies import require_admin
+from backend.app.application.admin.trash_service import TrashService, TrashServiceError
+from backend.app.infrastructure.db.models.user import UserModel
+from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+from backend.app.infrastructure.repositories.doctors import DoctorRepository
+from backend.app.infrastructure.repositories.users import UserRepository
+
+router = APIRouter(prefix="/admin/trash", tags=["admin-trash"])
+
+
+def get_trash_service(session: Annotated[Session, Depends(get_db_session)]) -> TrashService:
+    return TrashService(
+        DoctorRepository(session),
+        UserRepository(session),
+        CatalogRepository(session),
+    )
+
+
+@router.get("")
+def list_trash(
+    _admin: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[TrashService, Depends(get_trash_service)],
+    type: str,
+):
+    try:
+        items = service.list_deleted(type)
+    except TrashServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
+    result = []
+    for item in items:
+        data = {
+            "id": item.id,
+            "name": item.name,
+            "deleted_at": item.deleted_at.isoformat() if item.deleted_at else None,
+        }
+        if type == "doctors":
+            data["rank_name"] = getattr(item, "rank_id", None)
+        elif type == "users":
+            data["email"] = getattr(item, "email", "")
+            data["role"] = getattr(item, "role", "")
+        elif type == "ranks":
+            data["abbreviation"] = getattr(item, "abbreviation", "")
+        elif type == "departments":
+            data["normalized_name"] = getattr(item, "normalized_name", "")
+        result.append(data)
+    return result
+
+
+@router.post("/{entity_type}/{entity_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_entity(
+    entity_type: str,
+    entity_id: str,
+    _admin: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[TrashService, Depends(get_trash_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.restore(entity_type, entity_id)
+    except TrashServiceError as exc:
+        status_code_map = {
+            "not_found": status.HTTP_404_NOT_FOUND,
+            "not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "invalid_type": status.HTTP_400_BAD_REQUEST,
+        }
+        raise HTTPException(
+            status_code=status_code_map.get(exc.code, status.HTTP_400_BAD_REQUEST),
+            detail=exc.message,
+        ) from exc
+    session.commit()
+
+
+@router.delete("/{entity_type}/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
+def hard_delete_entity(
+    entity_type: str,
+    entity_id: str,
+    _admin: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[TrashService, Depends(get_trash_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.hard_delete(entity_type, entity_id)
+    except TrashServiceError as exc:
+        status_code_map = {
+            "not_found": status.HTTP_404_NOT_FOUND,
+            "not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "invalid_type": status.HTTP_400_BAD_REQUEST,
+        }
+        raise HTTPException(
+            status_code=status_code_map.get(exc.code, status.HTTP_400_BAD_REQUEST),
+            detail=exc.message,
+        ) from exc
+    session.commit()
