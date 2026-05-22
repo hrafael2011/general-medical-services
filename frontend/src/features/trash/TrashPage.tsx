@@ -30,11 +30,17 @@ export function TrashPage() {
     queryFn: () => trashApi.list(activeTab),
   });
 
+  const { data: counts } = useQuery({
+    queryKey: ["trash", "counts"],
+    queryFn: trashApi.counts,
+  });
+
   const restoreMutation = useMutation({
     mutationFn: ({ type, id }: { type: string; id: string }) =>
       trashApi.restore(type, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trash", activeTab] });
+      queryClient.invalidateQueries({ queryKey: ["trash", "counts"] });
       addToast("success", "Elemento restaurado correctamente");
     },
     onError: () => addToast("error", "Error al restaurar el elemento"),
@@ -45,6 +51,7 @@ export function TrashPage() {
       trashApi.hardDelete(type, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trash", activeTab] });
+      queryClient.invalidateQueries({ queryKey: ["trash", "counts"] });
       addToast("success", "Elemento eliminado permanentemente");
       setConfirmDelete(null);
     },
@@ -77,7 +84,7 @@ export function TrashPage() {
             }}
             onClick={() => setActiveTab(key)}
           >
-            {label} ({items.length})
+            {label} ({counts ? counts[key] : 0})
           </button>
         ))}
       </div>
