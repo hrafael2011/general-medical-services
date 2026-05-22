@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, CalendarDays, Stethoscope, Target,
   BarChart2, Bell, MessageCircle,
-  BookOpen, ClipboardList, ShieldCheck, LogOut, UserPlus,
+  BookOpen, ClipboardList, ShieldCheck, LogOut, UserPlus, Trash2,
 } from "lucide-react";
 import { actionAlertsApi } from "../api/actionAlerts";
 import { fetchFeatureFlags } from "../api/featureFlags";
@@ -112,6 +112,15 @@ export function Sidebar() {
             >
               <UserPlus size={16} />
               Usuarios
+            </NavLink>
+            <NavLink
+              to="/trash"
+              className={({ isActive }) =>
+                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+              }
+            >
+              <Trash2 size={16} />
+              Papelera
             </NavLink>
           </div>
         )}

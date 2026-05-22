@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from backend.app.api.routes.action_alerts import router as action_alerts_router
+from backend.app.api.routes.admin_trash import router as admin_trash_router
 from backend.app.api.routes.admin_users import router as admin_users_router
 from backend.app.api.routes.audit import router as audit_router
 from backend.app.api.routes.auth import router as auth_router
@@ -19,6 +20,7 @@ from backend.app.core.config import settings
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
+api_router.include_router(admin_trash_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(action_alerts_router)
 api_router.include_router(catalogs_router)

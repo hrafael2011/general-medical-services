@@ -98,6 +98,32 @@ class CatalogRepository:
         )
         self.session.flush()
 
+    def list_deleted_ranks(self) -> list[RankModel]:
+        stmt = (
+            select(RankModel)
+            .where(RankModel.deleted_at.isnot(None))
+            .order_by(RankModel.deleted_at.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_rank_by_id_including_deleted(self, rank_id: str) -> RankModel | None:
+        return self.session.get(RankModel, rank_id)
+
+    def restore_rank(self, rank_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(RankModel)
+            .where(RankModel.id == rank_id)
+            .values(deleted_at=None, updated_at=now)
+        )
+        self.session.flush()
+
+    def hard_delete_rank(self, rank_id: str) -> None:
+        rank = self.get_rank_by_id_including_deleted(rank_id)
+        if rank is not None:
+            self.session.delete(rank)
+            self.session.flush()
+
     def update_rank(self, rank_id: str, **fields: object) -> None:
         now = datetime.now(UTC)
         values = {**fields, "updated_at": now}
@@ -127,6 +153,32 @@ class CatalogRepository:
             .values(deleted_at=now, updated_at=now)
         )
         self.session.flush()
+
+    def list_deleted_departments(self) -> list[DepartmentModel]:
+        stmt = (
+            select(DepartmentModel)
+            .where(DepartmentModel.deleted_at.isnot(None))
+            .order_by(DepartmentModel.deleted_at.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_department_by_id_including_deleted(self, department_id: str) -> DepartmentModel | None:
+        return self.session.get(DepartmentModel, department_id)
+
+    def restore_department(self, department_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(DepartmentModel)
+            .where(DepartmentModel.id == department_id)
+            .values(deleted_at=None, updated_at=now)
+        )
+        self.session.flush()
+
+    def hard_delete_department(self, department_id: str) -> None:
+        dept = self.get_department_by_id_including_deleted(department_id)
+        if dept is not None:
+            self.session.delete(dept)
+            self.session.flush()
 
     def update_department(self, department_id: str, **fields: object) -> None:
         now = datetime.now(UTC)

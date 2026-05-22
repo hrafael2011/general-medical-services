@@ -95,7 +95,28 @@ export const doctorsApi = {
     apiFetch<DeactivationReasonRead[]>(
       `/catalogs/deactivation-reasons${sex ? `?sex=${sex}` : ""}`
     ),
+  listByDay: () =>
+    apiFetch<DoctorByDayResponse>("/doctors/by-day"),
 };
+
+export interface DoctorByDayItem {
+  id: string;
+  name: string;
+  rank_name: string | null;
+  department_name: string | null;
+  phone: string | null;
+  recurring_tag: string | null;
+}
+
+export interface DayGroup {
+  label: string;
+  count: number;
+  doctors: DoctorByDayItem[];
+}
+
+export interface DoctorByDayResponse {
+  days: Record<string, DayGroup>;
+}
 
 export const availabilityApi = {
   setWeekly: (doctorId: string, body: { days_of_week: number[]; effective_from?: string; effective_to?: string }) =>

@@ -56,6 +56,14 @@ class UserRepository:
         )
         return list(self.session.scalars(statement))
 
+    def list_deleted(self) -> list[UserModel]:
+        stmt = (
+            select(UserModel)
+            .where(UserModel.deleted_at.isnot(None))
+            .order_by(UserModel.deleted_at.desc())
+        )
+        return list(self.session.scalars(stmt))
+
     def soft_delete(self, user_id: str) -> None:
         now = datetime.now(UTC)
         self.session.execute(
@@ -64,6 +72,25 @@ class UserRepository:
             .values(deleted_at=now, updated_at=now)
         )
         self.session.flush()
+
+    def restore(self, user_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id)
+            .values(deleted_at=None, updated_at=now)
+        )
+        self.session.flush()
+
+    def get_by_id_including_deleted(self, user_id: str) -> UserModel | None:
+        stmt = select(UserModel).where(UserModel.id == user_id)
+        return self.session.scalars(stmt).first()
+
+    def hard_delete(self, user_id: str) -> None:
+        user = self.get_by_id_including_deleted(user_id)
+        if user is not None:
+            self.session.delete(user)
+            self.session.flush()
 
     def update(self, user_id: str, **fields: object) -> None:
         now = datetime.now(UTC)

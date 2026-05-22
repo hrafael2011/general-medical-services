@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
 from backend.app.infrastructure.db.models.doctors import DoctorAllowedAreaModel, DoctorModel
 
 
@@ -84,6 +85,20 @@ class DoctorRepository:
             result.setdefault(row.doctor_id, []).append(row.service_area_id)
         return result
 
+    def load_availability_bulk(self, doctor_ids: list[str]) -> dict[str, list[DoctorAvailabilityModel]]:
+        """Load approved availability records for multiple doctors in one query."""
+        if not doctor_ids:
+            return {}
+        stmt = (
+            select(DoctorAvailabilityModel)
+            .where(DoctorAvailabilityModel.doctor_id.in_(doctor_ids))
+            .where(DoctorAvailabilityModel.review_status == "approved")
+        )
+        result: dict[str, list[DoctorAvailabilityModel]] = {}
+        for record in self.session.scalars(stmt):
+            result.setdefault(record.doctor_id, []).append(record)
+        return result
+
     def set_allowed_areas(self, doctor_id: str, area_ids: list[str]) -> None:
         self.session.query(DoctorAllowedAreaModel).filter(
             DoctorAllowedAreaModel.doctor_id == doctor_id
@@ -100,3 +115,30 @@ class DoctorRepository:
             .values(deleted_at=now, updated_at=now)
         )
         self.session.flush()
+
+    def list_deleted(self) -> list[DoctorModel]:
+        stmt = (
+            select(DoctorModel)
+            .where(DoctorModel.deleted_at.isnot(None))
+            .order_by(DoctorModel.deleted_at.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_by_id_including_deleted(self, doctor_id: str) -> DoctorModel | None:
+        stmt = select(DoctorModel).where(DoctorModel.id == doctor_id)
+        return self.session.scalars(stmt).first()
+
+    def restore(self, doctor_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(DoctorModel)
+            .where(DoctorModel.id == doctor_id)
+            .values(deleted_at=None, updated_at=now)
+        )
+        self.session.flush()
+
+    def hard_delete(self, doctor_id: str) -> None:
+        doctor = self.get_by_id_including_deleted(doctor_id)
+        if doctor is not None:
+            self.session.delete(doctor)
+            self.session.flush()
