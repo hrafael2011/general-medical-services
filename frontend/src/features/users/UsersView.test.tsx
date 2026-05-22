@@ -60,4 +60,42 @@ describe("UsersView", () => {
       );
     });
   });
+
+  it("lista encargados y administradores juntos", async () => {
+    const { adminApi } = await import("../../api/admin");
+    vi.mocked(adminApi.listUsers).mockImplementation(async (role?: string) => {
+      if (role === "admin") {
+        return [
+          {
+            id: "admin-1",
+            name: "Admin Principal",
+            email: "admin@example.com",
+            role: "admin",
+            active: true,
+            must_change_password: false,
+          },
+        ];
+      }
+      if (role === "encargado") {
+        return [
+          {
+            id: "enc-1",
+            name: "Encargado Uno",
+            email: "encargado@example.com",
+            role: "encargado",
+            active: true,
+            must_change_password: false,
+          },
+        ];
+      }
+      return [];
+    });
+
+    renderUsers();
+
+    expect(await screen.findByText("Admin Principal")).toBeInTheDocument();
+    expect(screen.getByText("Encargado Uno")).toBeInTheDocument();
+    expect(adminApi.listUsers).toHaveBeenCalledWith("admin");
+    expect(adminApi.listUsers).toHaveBeenCalledWith("encargado");
+  });
 });

@@ -7,6 +7,11 @@ import { adminApi, UserRead } from "../../api/admin";
 
 const ROLES = ["encargado", "admin"] as const;
 
+async function listAdminPanelUsers(): Promise<UserRead[]> {
+  const usersByRole = await Promise.all(ROLES.map((role) => adminApi.listUsers(role)));
+  return usersByRole.flat().sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function UsersView() {
   const { addToast } = useToast();
   const queryClient = useQueryClient();
@@ -21,7 +26,7 @@ export function UsersView() {
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["admin-users"],
-    queryFn: () => adminApi.listUsers("encargado"),
+    queryFn: listAdminPanelUsers,
   });
 
   const createMutation = useMutation({
