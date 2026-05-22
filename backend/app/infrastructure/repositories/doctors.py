@@ -100,3 +100,30 @@ class DoctorRepository:
             .values(deleted_at=now, updated_at=now)
         )
         self.session.flush()
+
+    def list_deleted(self) -> list[DoctorModel]:
+        stmt = (
+            select(DoctorModel)
+            .where(DoctorModel.deleted_at.isnot(None))
+            .order_by(DoctorModel.deleted_at.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_by_id_including_deleted(self, doctor_id: str) -> DoctorModel | None:
+        stmt = select(DoctorModel).where(DoctorModel.id == doctor_id)
+        return self.session.scalars(stmt).first()
+
+    def restore(self, doctor_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(DoctorModel)
+            .where(DoctorModel.id == doctor_id)
+            .values(deleted_at=None, updated_at=now)
+        )
+        self.session.flush()
+
+    def hard_delete(self, doctor_id: str) -> None:
+        doctor = self.get_by_id_including_deleted(doctor_id)
+        if doctor is not None:
+            self.session.delete(doctor)
+            self.session.flush()
