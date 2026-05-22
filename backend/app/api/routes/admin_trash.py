@@ -7,6 +7,7 @@ from backend.app.api.dependencies import require_admin
 from backend.app.application.admin.trash_service import TrashService, TrashServiceError
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.repositories.audit import AuditRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -19,6 +20,7 @@ def get_trash_service(session: Annotated[Session, Depends(get_db_session)]) -> T
         DoctorRepository(session),
         UserRepository(session),
         CatalogRepository(session),
+        audit=AuditRepository(session),
     )
 
 
@@ -50,6 +52,19 @@ def list_trash(
             data["normalized_name"] = getattr(item, "normalized_name", "")
         result.append(data)
     return result
+
+
+@router.get("/counts")
+def get_trash_counts(
+    _admin: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[TrashService, Depends(get_trash_service)],
+):
+    return {
+        "doctors": len(service.list_deleted("doctors")),
+        "users": len(service.list_deleted("users")),
+        "ranks": len(service.list_deleted("ranks")),
+        "departments": len(service.list_deleted("departments")),
+    }
 
 
 @router.post("/{entity_type}/{entity_id}/restore", status_code=status.HTTP_204_NO_CONTENT)

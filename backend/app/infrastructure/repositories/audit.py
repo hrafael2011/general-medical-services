@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.audit import AuditEventModel
@@ -68,3 +68,16 @@ class AuditRepository:
         if to_dt is not None:
             stmt = stmt.where(AuditEventModel.occurred_at <= to_dt)
         return self.session.scalar(stmt) or 0
+
+    def anonymize_entity(self, entity_id: str) -> None:
+        self.session.execute(
+            update(AuditEventModel)
+            .where(AuditEventModel.entity_id == entity_id)
+            .values(entity_id=None)
+        )
+        self.session.execute(
+            update(AuditEventModel)
+            .where(AuditEventModel.actor_id == entity_id)
+            .values(actor_id=None)
+        )
+        self.session.flush()

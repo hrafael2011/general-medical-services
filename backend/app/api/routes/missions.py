@@ -483,7 +483,7 @@ def get_mission(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "mission_not_found",
-                "message": f"Mission with id {mission_id} not found.",
+                "message": f"Misión con id {mission_id} no encontrada.",
             },
         )
     return _to_mission_read(mission, repo)

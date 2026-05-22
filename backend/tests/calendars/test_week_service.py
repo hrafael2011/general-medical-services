@@ -121,7 +121,7 @@ def test_approve_week_already_approved_raises():
     repo.add_week(week)
 
     service = CalendarService(repo=repo, triggers=MagicMock(), audit=None)
-    with pytest.raises(CalendarServiceError, match="already approved"):
+    with pytest.raises(CalendarServiceError, match="ya está aprobada"):
         service.approve_week(actor_id="user1", week_id=week.id, notes=None)
 
 

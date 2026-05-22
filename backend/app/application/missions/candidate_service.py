@@ -49,7 +49,7 @@ class MissionCandidateService:
         if approved_version is None:
             raise MissionServiceError(
                 "approved_calendar_required",
-                "No approved calendar exists for this period.",
+                "No existe un calendario aprobado para este período.",
             )
         ranking = self.mission_repo.get_ranking_by_period(
             year,
@@ -59,7 +59,7 @@ class MissionCandidateService:
         if ranking is None:
             raise MissionServiceError(
                 "ranking_not_found",
-                "No ranking exists for the approved calendar.",
+                "No existe un ranking para el calendario aprobado.",
             )
         return ranking
 
@@ -297,7 +297,7 @@ class MissionCandidateService:
         if mission is None:
             raise MissionServiceError(
                 "mission_not_found",
-                f"Mission with id {mission_id} not found.",
+                f"Misión con id {mission_id} no encontrada.",
             )
 
         before = {
@@ -373,7 +373,7 @@ class MissionCandidateService:
         if mission is None:
             raise MissionServiceError(
                 "mission_not_found",
-                f"Mission with id {mission_id} not found.",
+                f"Misión con id {mission_id} no encontrada.",
             )
 
         now = datetime.now(UTC)
@@ -406,7 +406,7 @@ class MissionCandidateService:
         if mission is None:
             raise MissionServiceError(
                 "mission_not_found",
-                f"Mission with id {mission_id} not found.",
+                f"Misión con id {mission_id} no encontrada.",
             )
 
         was_confirmed = mission.status == "confirmed"
@@ -428,7 +428,7 @@ class MissionCandidateService:
         if unavailable_doctor_ids:
             raise MissionServiceError(
                 "candidate_not_available",
-                "One or more selected doctors are not available for this mission date.",
+                "Uno o más médicos seleccionados no están disponibles para esta fecha de misión.",
             )
 
         # 4. Delete existing participants

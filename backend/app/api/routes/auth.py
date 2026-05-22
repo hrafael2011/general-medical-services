@@ -159,17 +159,17 @@ def login(
         session.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
+            detail="Credenciales incorrectas. Verifica tu email y contraseña.",
         ) from exc
     except AccountLockedError as exc:
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
-            detail="Account temporarily locked",
+            detail="Cuenta bloqueada temporalmente. Intenta de nuevo en 15 minutos.",
         ) from exc
     except InactiveUserError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive account",
+            detail="Tu cuenta está desactivada. Contacta al administrador.",
         ) from exc
     session.commit()
     return LoginResponse(
@@ -199,7 +199,7 @@ def change_password(
     except InvalidPasswordChangeError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid password change",
+            detail="No se pudo cambiar la contraseña. Verifica que la contraseña actual sea correcta.",
         ) from exc
     session.commit()
 
@@ -280,7 +280,7 @@ def set_password(
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            detail="Usuario no encontrado.",
         )
 
     # Validate password complexity

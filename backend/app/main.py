@@ -1,14 +1,63 @@
 import uuid
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from starlette.responses import Response
 
 from backend.app.api.router import api_router
 from backend.app.application.audit.service import set_current_request_id
 from backend.app.core.config import settings
+
+
+_VALIDATION_TRANSLATIONS: dict[str, str] = {
+    "missing": "Este campo es obligatorio.",
+    "string_type": "Debe ser un texto.",
+    "integer_type": "Debe ser un número entero.",
+    "number_type": "Debe ser un número.",
+    "bool_type": "Debe ser verdadero o falso.",
+    "list_type": "Debe ser una lista.",
+    "string_too_short": "Debe tener al menos {min_length} caracteres.",
+    "string_too_long": "Debe tener como máximo {max_length} caracteres.",
+    "value_error.email": "El formato del email no es válido.",
+    "value_error.number.not_gt": "Debe ser mayor que {limit_value}.",
+    "value_error.number.not_ge": "Debe ser mayor o igual a {limit_value}.",
+    "value_error.number.not_lt": "Debe ser menor que {limit_value}.",
+    "value_error.number.not_le": "Debe ser menor o igual a {limit_value}.",
+    "greater_than": "Debe ser mayor que {gt}.",
+    "less_than": "Debe ser menor que {lt}.",
+    "ensure_ascii": "No debe contener caracteres especiales.",
+}
+
+
+def _translate_validation_error(error: dict) -> str:
+    error_type: str = error.get("type", "")
+    loc: list = error.get("loc", [])
+    field = str(loc[-1]) if loc else ""
+
+    template = _VALIDATION_TRANSLATIONS.get(error_type)
+    if template is None:
+        return error.get("msg", "Error de validación.")
+
+    ctx: dict = error.get("ctx", {})
+    try:
+        message = template.format(**ctx)
+    except KeyError:
+        message = template
+
+    if field:
+        return f"{field}: {message}"
+    return message
+
+
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    errors = [_translate_validation_error(e) for e in exc.errors()]
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": errors},
+    )
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -34,6 +83,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(RequestIDMiddleware)
+
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     app.include_router(api_router, prefix="/api")
 

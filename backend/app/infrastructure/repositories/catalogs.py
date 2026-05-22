@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.catalogs import (
@@ -10,6 +10,7 @@ from backend.app.infrastructure.db.models.catalogs import (
     ServiceAreaModel,
     SystemSettingModel,
 )
+from backend.app.infrastructure.db.models.doctors import DoctorModel
 
 
 def _not_deleted_rank() -> tuple:
@@ -144,6 +145,22 @@ class CatalogRepository:
             .order_by(DepartmentModel.name)
         )
         return list(self.session.scalars(statement))
+
+    def count_doctors_by_rank(self, rank_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(DoctorModel)
+            .where(DoctorModel.rank_id == rank_id, DoctorModel.deleted_at.is_(None))
+        )
+        return self.session.scalars(stmt).one()
+
+    def count_doctors_by_department(self, department_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(DoctorModel)
+            .where(DoctorModel.department_id == department_id, DoctorModel.deleted_at.is_(None))
+        )
+        return self.session.scalars(stmt).one()
 
     def soft_delete_department(self, department_id: str) -> None:
         now = datetime.now(UTC)

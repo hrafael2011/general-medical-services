@@ -160,7 +160,7 @@ def test_login_invalid_credentials(client, mock_account_service):
 
     resp = client.post("/api/auth/login", json={"email": "bad@b.com", "password": "wrong"})
     assert resp.status_code == 401
-    assert resp.json()["detail"] == "Invalid credentials"
+    assert resp.json()["detail"] == "Credenciales incorrectas. Verifica tu email y contraseña."
 
 
 def test_login_locked_account(client, mock_account_service):

@@ -12,6 +12,8 @@ from backend.app.schemas.catalogs import (
     CreateDepartmentRequest,
     CreateRankRequest,
     DeactivationReasonRead,
+    DeleteDepartmentResponse,
+    DeleteRankResponse,
     DepartmentRead,
     RankRead,
     ServiceAreaRead,
@@ -104,21 +106,22 @@ def update_rank(
     return RankRead.model_validate(rank)
 
 
-@router.delete("/ranks/{rank_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/ranks/{rank_id}", response_model=DeleteRankResponse)
 def delete_rank(
     rank_id: str,
     _user: Annotated[UserModel, Depends(require_admin)],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
-) -> None:
+) -> DeleteRankResponse:
     try:
-        service.soft_delete_rank(rank_id)
+        affected = service.soft_delete_rank(rank_id)
     except CatalogError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": exc.message},
         ) from exc
     session.commit()
+    return DeleteRankResponse(message="Rank deleted", affected_doctors=affected)
 
 
 @router.get("/departments", response_model=list[DepartmentRead])
@@ -165,18 +168,19 @@ def update_department(
     return DepartmentRead.model_validate(department)
 
 
-@router.delete("/departments/{department_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/departments/{department_id}", response_model=DeleteDepartmentResponse)
 def delete_department(
     department_id: str,
     _user: Annotated[UserModel, Depends(require_admin)],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
-) -> None:
+) -> DeleteDepartmentResponse:
     try:
-        service.soft_delete_department(department_id)
+        affected = service.soft_delete_department(department_id)
     except CatalogError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": exc.message},
         ) from exc
     session.commit()
+    return DeleteDepartmentResponse(message="Department deleted", affected_doctors=affected)

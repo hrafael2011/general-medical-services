@@ -191,11 +191,11 @@ def export_weekly_list_pdf(
     """Export a weekly list as PDF with institutional branding."""
     week = service.calendar_repo.get_week_by_id(week_id)
     if week is None:
-        raise HTTPException(status_code=404, detail=f"Week {week_id} not found")
+        raise HTTPException(status_code=404, detail=f"Semana {week_id} no encontrada.")
     # Get the calendar's actual month (week.start_date may be in adjacent month)
     cal = service.calendar_repo.get_calendar_by_id(calendar_id)
     if cal is None:
-        raise HTTPException(status_code=404, detail=f"Calendar {calendar_id} not found")
+        raise HTTPException(status_code=404, detail=f"Calendario {calendar_id} no encontrado.")
     try:
         pdf_bytes = service.build_weekly_schedule(
             year=cal.year,

@@ -264,8 +264,12 @@ def test_update_rank_not_found(client, mock_service):
 
 
 def test_delete_rank_success(client, mock_service):
+    mock_service.soft_delete_rank.return_value = 3
     resp = client.delete("/api/catalogs/ranks/r-1")
-    assert resp.status_code == 204
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["message"] == "Rank deleted"
+    assert data["affected_doctors"] == 3
     mock_service.soft_delete_rank.assert_called_once_with("r-1")
 
 
@@ -315,8 +319,12 @@ def test_update_department_not_found(client, mock_service):
 
 
 def test_delete_department_success(client, mock_service):
+    mock_service.soft_delete_department.return_value = 0
     resp = client.delete("/api/catalogs/departments/d-1")
-    assert resp.status_code == 204
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["message"] == "Department deleted"
+    assert data["affected_doctors"] == 0
     mock_service.soft_delete_department.assert_called_once_with("d-1")
 
 
