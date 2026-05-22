@@ -52,6 +52,19 @@ def list_trash(
     return result
 
 
+@router.get("/counts")
+def get_trash_counts(
+    _admin: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[TrashService, Depends(get_trash_service)],
+):
+    return {
+        "doctors": len(service.list_deleted("doctors")),
+        "users": len(service.list_deleted("users")),
+        "ranks": len(service.list_deleted("ranks")),
+        "departments": len(service.list_deleted("departments")),
+    }
+
+
 @router.post("/{entity_type}/{entity_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
 def restore_entity(
     entity_type: str,
