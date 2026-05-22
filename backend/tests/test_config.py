@@ -133,3 +133,31 @@ class TestSecurityHeaders:
         assert response.headers.get("X-Content-Type-Options") == "nosniff"
         assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
         assert response.headers.get("Permissions-Policy") == "camera=(), microphone=(), geolocation=()"
+from backend.app.core.config import get_settings
+
+
+def test_environment_variables_override_dotenv_file(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "APP_ENV=local",
+                "DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5433/medical_shifts",
+                "SECRET_KEY=local-secret",
+            ]
+        )
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://postgres:secret@postgres.railway.internal:5432/railway")
+    monkeypatch.setenv("SECRET_KEY", "production-secret")
+
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    assert settings.app_env == "production"
+    assert settings.database_url == "postgresql+psycopg://postgres:secret@postgres.railway.internal:5432/railway"
+    assert settings.secret_key == "production-secret"
+
+    get_settings.cache_clear()

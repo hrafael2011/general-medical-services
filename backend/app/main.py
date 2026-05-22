@@ -60,6 +60,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Injects security headers into every HTTP response."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self'; connect-src 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Ensures every request has an X-Request-ID for audit correlation."""
 
@@ -98,6 +113,7 @@ def create_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestIDMiddleware)
 
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
