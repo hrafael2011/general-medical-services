@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     telegram_bot_username: str = "MedicalSchedule_bot"
     telegram_bot_token: str | None = None
+    telegram_webhook_secret: str | None = None
 
     deepseek_api_key: str | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
