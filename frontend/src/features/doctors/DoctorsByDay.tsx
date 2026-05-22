@@ -142,8 +142,8 @@ export function DoctorsByDay() {
                             </span>
                           )}
                         </td>
-                        <td style={{ color: "#6b7280" }}>{doc.rank_name || "-"}</td>
-                        <td style={{ color: "#6b7280" }}>{doc.department_name || "-"}</td>
+                        <td style={{ color: "#6b7280" }}>{doc.rank_name || "Sin rango"}</td>
+                        <td style={{ color: "#6b7280" }}>{doc.department_name || "Sin departamento"}</td>
                         <td style={{ color: "#6b7280" }}>{doc.phone || "-"}</td>
                       </tr>
                     ))}
