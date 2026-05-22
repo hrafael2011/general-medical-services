@@ -413,3 +413,116 @@ def test_soft_delete_doctor_updates_updated_at(db_session) -> None:
 
     deleted = repo.session.get(DoctorModel, doctor.id)
     assert deleted.updated_at > original_updated_at
+
+
+# ---------------------------------------------------------------------------
+# list_by_day
+# ---------------------------------------------------------------------------
+
+
+def test_list_by_day_groups_weekly_fixed_doctors(db_session):
+    from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
+
+    service = _make_service(db_session)
+    now = datetime.now(UTC)
+
+    doctor = DoctorModel(
+        id=str(uuid4()),
+        name="Lunes Doc",
+        normalized_name="lunes doc",
+        sex="male",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(doctor)
+    db_session.flush()
+
+    avail = DoctorAvailabilityModel(
+        id=str(uuid4()),
+        doctor_id=doctor.id,
+        availability_type="weekly_fixed",
+        days_of_week=[0],
+        review_status="approved",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(avail)
+    db_session.commit()
+
+    result = service.list_by_day()
+    assert result["0"]["label"] == "Lunes"
+    assert result["0"]["count"] == 1
+    assert result["0"]["doctors"][0]["name"] == "Lunes Doc"
+    assert result["1"]["count"] == 0
+
+
+def test_list_by_day_includes_recurring_tag(db_session):
+    from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
+
+    service = _make_service(db_session)
+    now = datetime.now(UTC)
+
+    doctor = DoctorModel(
+        id=str(uuid4()),
+        name="Recurring Doc",
+        normalized_name="recurring doc",
+        sex="female",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(doctor)
+    db_session.flush()
+
+    avail = DoctorAvailabilityModel(
+        id=str(uuid4()),
+        doctor_id=doctor.id,
+        availability_type="recurring",
+        days_of_week=None,
+        weekday=4,
+        week_number=-1,
+        review_status="approved",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(avail)
+    db_session.commit()
+
+    result = service.list_by_day()
+    assert result["4"]["count"] == 1
+    assert result["4"]["doctors"][0]["recurring_tag"] == "último Viernes"
+
+
+def test_list_by_day_excludes_monthly_variable(db_session):
+    from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
+
+    service = _make_service(db_session)
+    now = datetime.now(UTC)
+
+    doctor = DoctorModel(
+        id=str(uuid4()),
+        name="Monthly Doc",
+        normalized_name="monthly doc",
+        sex="male",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(doctor)
+    db_session.flush()
+
+    avail = DoctorAvailabilityModel(
+        id=str(uuid4()),
+        doctor_id=doctor.id,
+        availability_type="monthly_variable",
+        available_dates=[5, 12, 20],
+        year=2026,
+        month=5,
+        review_status="approved",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(avail)
+    db_session.commit()
+
+    result = service.list_by_day()
+    total = sum(day["count"] for day in result.values())
+    assert total == 0

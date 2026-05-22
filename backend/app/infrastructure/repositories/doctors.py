@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
 from backend.app.infrastructure.db.models.doctors import DoctorAllowedAreaModel, DoctorModel
 
 
@@ -82,6 +83,20 @@ class DoctorRepository:
         result: dict[str, list[str]] = {}
         for row in self.session.scalars(stmt):
             result.setdefault(row.doctor_id, []).append(row.service_area_id)
+        return result
+
+    def load_availability_bulk(self, doctor_ids: list[str]) -> dict[str, list[DoctorAvailabilityModel]]:
+        """Load approved availability records for multiple doctors in one query."""
+        if not doctor_ids:
+            return {}
+        stmt = (
+            select(DoctorAvailabilityModel)
+            .where(DoctorAvailabilityModel.doctor_id.in_(doctor_ids))
+            .where(DoctorAvailabilityModel.review_status == "approved")
+        )
+        result: dict[str, list[DoctorAvailabilityModel]] = {}
+        for record in self.session.scalars(stmt):
+            result.setdefault(record.doctor_id, []).append(record)
         return result
 
     def set_allowed_areas(self, doctor_id: str, area_ids: list[str]) -> None:

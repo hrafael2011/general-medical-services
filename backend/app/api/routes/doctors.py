@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_ready_user
+from backend.app.api.dependencies import require_encargado_or_admin, require_ready_user
 from backend.app.application.doctors.errors import DoctorServiceError
 from backend.app.application.doctors.service import DoctorService
 from backend.app.infrastructure.db.models.user import UserModel
@@ -13,6 +13,7 @@ from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.schemas.doctors import (
     CreateDoctorRequest,
     DeactivateDoctorServiceRequest,
+    DoctorByDayResponse,
     DoctorListResponse,
     DoctorRead,
     UpdateDoctorRequest,
@@ -58,6 +59,14 @@ def list_doctors(
         data.allowed_area_ids = areas_by_doctor.get(d.id, [])
         items.append(data)
     return DoctorListResponse(items=items, total=len(items))
+
+
+@router.get("/by-day", response_model=DoctorByDayResponse)
+def list_doctors_by_day(
+    _user: Annotated[UserModel, Depends(require_encargado_or_admin)],
+    service: Annotated[DoctorService, Depends(get_doctor_service)],
+) -> dict:
+    return service.list_by_day()
 
 
 @router.get("/{doctor_id}", response_model=DoctorRead)

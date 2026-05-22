@@ -213,6 +213,64 @@ class DoctorService:
 
         return doctor
 
+    WEEKDAY_LABELS = {
+        0: "Lunes", 1: "Martes", 2: "Miércoles",
+        3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo",
+    }
+    WEEK_NUMBER_LABELS = {
+        0: "primer", 1: "segundo", 2: "tercer", 3: "cuarto", -1: "último",
+    }
+
+    def _make_recurring_tag(self, weekday: int, week_number: int) -> str:
+        week_label = self.WEEK_NUMBER_LABELS.get(week_number, "")
+        day_label = self.WEEKDAY_LABELS.get(weekday, "")
+        return f"{week_label} {day_label}"
+
+    def list_by_day(self) -> dict:
+        active_doctors = self.doctors.list_all(active_only=True)
+        doctor_ids = [d.id for d in active_doctors]
+        avail_by_doctor = self.doctors.load_availability_bulk(doctor_ids)
+
+        # Load rank/department names via catalog repo (DoctorModel has no relationships)
+        ranks = {r.id: r.name for r in self.catalog_repo.list_ranks()} if self.catalog_repo else {}
+        depts = {d.id: d.name for d in self.catalog_repo.list_departments()} if self.catalog_repo else {}
+
+        days: dict[int, dict] = {
+            i: {"label": self.WEEKDAY_LABELS[i], "count": 0, "doctors": []}
+            for i in range(7)
+        }
+
+        for doctor in active_doctors:
+            for record in avail_by_doctor.get(doctor.id, []):
+                if record.availability_type == "weekly_fixed" and record.days_of_week:
+                    for dow in record.days_of_week:
+                        if 0 <= dow <= 6:
+                            days[dow]["doctors"].append({
+                                "id": doctor.id,
+                                "name": doctor.name,
+                                "rank_name": ranks.get(doctor.rank_id),
+                                "department_name": depts.get(doctor.department_id),
+                                "phone": doctor.phone,
+                                "recurring_tag": None,
+                            })
+                            days[dow]["count"] = len(days[dow]["doctors"])
+
+                elif record.availability_type == "recurring" and record.weekday is not None:
+                    dow = record.weekday
+                    tag = self._make_recurring_tag(record.weekday, record.week_number)
+                    if 0 <= dow <= 6:
+                        days[dow]["doctors"].append({
+                            "id": doctor.id,
+                            "name": doctor.name,
+                            "rank_name": ranks.get(doctor.rank_id),
+                            "department_name": depts.get(doctor.department_id),
+                            "phone": doctor.phone,
+                            "recurring_tag": tag,
+                        })
+                        days[dow]["count"] = len(days[dow]["doctors"])
+
+        return {str(i): days[i] for i in range(7)}
+
     def deactivate_service(
         self,
         doctor_id: str,

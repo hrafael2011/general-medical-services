@@ -64,3 +64,24 @@ class DeactivateDoctorServiceRequest(BaseModel):
 class DoctorListResponse(BaseModel):
     items: list[DoctorRead]
     total: int
+
+
+class DoctorByDayItem(BaseModel):
+    id: str
+    name: str
+    rank_name: str | None = None
+    department_name: str | None = None
+    phone: str | None = None
+    recurring_tag: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class DayGroup(BaseModel):
+    label: str
+    count: int
+    doctors: list[DoctorByDayItem]
+
+
+class DoctorByDayResponse(BaseModel):
+    days: dict[str, DayGroup]
