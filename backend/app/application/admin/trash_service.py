@@ -1,8 +1,13 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy.exc import IntegrityError
 
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
+
+if TYPE_CHECKING:
+    from backend.app.infrastructure.repositories.audit import AuditRepository
 
 
 class TrashServiceError(Exception):
@@ -13,16 +18,19 @@ class TrashServiceError(Exception):
 
 class TrashService:
     VALID_TYPES = {"doctors", "users", "ranks", "departments"}
+    _ANONYMIZABLE_TYPES = {"doctors", "users"}
 
     def __init__(
         self,
         doctors: DoctorRepository,
         users: UserRepository,
         catalogs: CatalogRepository,
+        audit: "AuditRepository | None" = None,
     ) -> None:
         self.doctors = doctors
         self.users = users
         self.catalogs = catalogs
+        self.audit = audit
 
     def list_deleted(self, entity_type: str) -> list:
         if entity_type not in self.VALID_TYPES:
@@ -53,6 +61,8 @@ class TrashService:
             raise TrashServiceError("not_found", f"{entity_type} with id {entity_id} not found")
         if entity.deleted_at is None:
             raise TrashServiceError("not_deleted", "Entity is not deleted")
+        if entity_type in self._ANONYMIZABLE_TYPES and self.audit is not None:
+            self.audit.anonymize_entity(entity_id)
         try:
             self._hard_delete_entity(entity_type, entity_id)
         except IntegrityError:

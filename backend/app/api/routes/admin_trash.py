@@ -7,6 +7,7 @@ from backend.app.api.dependencies import require_admin
 from backend.app.application.admin.trash_service import TrashService, TrashServiceError
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.repositories.audit import AuditRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -19,6 +20,7 @@ def get_trash_service(session: Annotated[Session, Depends(get_db_session)]) -> T
         DoctorRepository(session),
         UserRepository(session),
         CatalogRepository(session),
+        audit=AuditRepository(session),
     )
 
 

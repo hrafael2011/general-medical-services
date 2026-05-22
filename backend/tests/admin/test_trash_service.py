@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from backend.app.application.admin.trash_service import TrashService, TrashServiceError
+from backend.app.infrastructure.db.models.audit import AuditEventModel
 from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.user import UserModel
@@ -191,3 +192,98 @@ class TestHardDelete:
         db_session.flush()
         with pytest.raises(TrashServiceError, match="not deleted"):
             trash_service.hard_delete("doctors", doctor.id)
+
+    def test_hard_delete_doctor_anonymizes_audit(self, db_session):
+        from backend.app.infrastructure.db.models.audit import AuditEventModel
+        from backend.app.infrastructure.repositories.audit import AuditRepository
+
+        audit_repo = AuditRepository(db_session)
+        service = TrashService(
+            DoctorRepository(db_session),
+            UserRepository(db_session),
+            CatalogRepository(db_session),
+            audit=audit_repo,
+        )
+
+        doctor = _make_deleted_doctor(db_session)
+        event = AuditEventModel(
+            id=str(uuid4()),
+            actor_id=doctor.id,
+            action_type="doctor_deleted",
+            entity_type="doctor",
+            entity_id=doctor.id,
+            occurred_at=datetime.now(UTC),
+            before_snapshot={"name": doctor.name},
+        )
+        db_session.add(event)
+        db_session.flush()
+
+        service.hard_delete("doctors", doctor.id)
+        db_session.expire_all()
+
+        updated = db_session.get(AuditEventModel, event.id)
+        assert updated.entity_id is None
+        assert updated.actor_id is None
+        assert updated.before_snapshot == {"name": doctor.name}
+
+    def test_hard_delete_user_anonymizes_audit(self, db_session):
+        from backend.app.infrastructure.db.models.audit import AuditEventModel
+        from backend.app.infrastructure.repositories.audit import AuditRepository
+
+        audit_repo = AuditRepository(db_session)
+        service = TrashService(
+            DoctorRepository(db_session),
+            UserRepository(db_session),
+            CatalogRepository(db_session),
+            audit=audit_repo,
+        )
+
+        user = _make_deleted_user(db_session)
+        event = AuditEventModel(
+            id=str(uuid4()),
+            actor_id=user.id,
+            action_type="user_deleted",
+            entity_type="user",
+            entity_id=user.id,
+            occurred_at=datetime.now(UTC),
+            before_snapshot={"name": user.name},
+        )
+        db_session.add(event)
+        db_session.flush()
+
+        service.hard_delete("users", user.id)
+        db_session.expire_all()
+
+        updated = db_session.get(AuditEventModel, event.id)
+        assert updated.entity_id is None
+        assert updated.actor_id is None
+
+    def test_hard_delete_rank_does_not_anonymize_audit(self, db_session):
+        from backend.app.infrastructure.db.models.audit import AuditEventModel
+        from backend.app.infrastructure.repositories.audit import AuditRepository
+
+        audit_repo = AuditRepository(db_session)
+        service = TrashService(
+            DoctorRepository(db_session),
+            UserRepository(db_session),
+            CatalogRepository(db_session),
+            audit=audit_repo,
+        )
+
+        rank = _make_deleted_rank(db_session)
+        event = AuditEventModel(
+            id=str(uuid4()),
+            actor_id=rank.id,
+            action_type="rank_deleted",
+            entity_type="rank",
+            entity_id=rank.id,
+            occurred_at=datetime.now(UTC),
+        )
+        db_session.add(event)
+        db_session.flush()
+
+        service.hard_delete("ranks", rank.id)
+        db_session.expire_all()
+
+        updated = db_session.get(AuditEventModel, event.id)
+        assert updated.entity_id == rank.id
