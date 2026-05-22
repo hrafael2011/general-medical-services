@@ -66,7 +66,7 @@ def list_doctors_by_day(
     _user: Annotated[UserModel, Depends(require_encargado_or_admin)],
     service: Annotated[DoctorService, Depends(get_doctor_service)],
 ) -> dict:
-    return service.list_by_day()
+    return {"days": service.list_by_day()}
 
 
 @router.get("/{doctor_id}", response_model=DoctorRead)
