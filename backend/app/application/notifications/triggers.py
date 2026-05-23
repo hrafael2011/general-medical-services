@@ -14,21 +14,13 @@ from backend.app.application.notifications.templates import (
     render_service_assignment_removed,
     render_service_assignment_updated,
 )
-from backend.app.core.config import settings
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 
 logger = logging.getLogger(__name__)
 
 
-def _with_confirmation_instructions(message: str, token: str, confirmation_type: str) -> str:
-    label = "servicio" if confirmation_type == "service" else "misión"
-    confirmation_url = f"{settings.frontend_origin.rstrip('/')}/confirmacion-medica?token={token}"
-    return (
-        f"{message}\n\n"
-        f"Para responder sobre este {label}, abra este enlace:\n"
-        f"{confirmation_url}\n"
-        "Desde ahí puede confirmar recibido o confirmar la asignación."
-    )
+def _with_whatsapp_confirmation(message: str) -> str:
+    return f"{message}\n\nResponda 1 para confirmar su turno."
 
 
 class NotificationTriggers:
@@ -84,11 +76,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_confirmation_instructions(
-                            message,
-                            confirmation.response_token,
-                            "service",
-                        ),
+                        "message": _with_whatsapp_confirmation(message),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -113,15 +101,20 @@ class NotificationTriggers:
         Follows the same pattern as on_calendar_approved but scoped
         to one week's assignments.
         """
+        from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+
         count = 0
         for assignment in assignments:
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
                 phone = doctor.whatsapp_phone if doctor else None
+                area = self.doctor_repo.session.get(ServiceAreaModel, assignment.service_area_id)
+                area_name = area.display_name if area else assignment.service_area_id
+                service_start = str(assignment.service_start_at) if assignment.service_start_at else None
                 message = render_initial_assignment(
                     service_date=str(assignment.service_date),
-                    service_area=assignment.service_area_id,
-                    service_start=None,
+                    service_area=area_name,
+                    service_start=service_start,
                 )
                 notification = self.notification_service.queue(
                     notification_type="initial_assignment",
@@ -144,11 +137,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_confirmation_instructions(
-                            message,
-                            confirmation.response_token,
-                            "service",
-                        ),
+                        "message": _with_whatsapp_confirmation(message),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -258,11 +247,7 @@ class NotificationTriggers:
                 )
                 notification.payload = {
                     **(notification.payload or {}),
-                    "message": _with_confirmation_instructions(
-                        message,
-                        confirmation.response_token,
-                        "service",
-                    ),
+                    "message": _with_whatsapp_confirmation(message),
                     "confirmation_request_id": confirmation.id,
                 }
             return 1
@@ -317,11 +302,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_confirmation_instructions(
-                            message,
-                            confirmation.response_token,
-                            "mission",
-                        ),
+                        "message": _with_whatsapp_confirmation(message),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -428,11 +409,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_confirmation_instructions(
-                            message,
-                            confirmation.response_token,
-                            "mission",
-                        ),
+                        "message": _with_whatsapp_confirmation(message),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
