@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Inbox } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Inbox, MessageCircle } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useState } from "react";
@@ -76,6 +76,13 @@ export function PublicConfirmationPage() {
         {confirmation.isLoading && <p className="summary">Cargando confirmación...</p>}
 
         {data && (
+          <>
+          {data.status !== "confirmed" && (
+            <div className="info-banner" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px", background: "#eff6ff", borderRadius: "8px", marginBottom: "16px", color: "#1e40af", fontSize: "0.9rem" }}>
+              <MessageCircle size={16} />
+              <span>También puede confirmar respondiendo &quot;1&quot; al mensaje de WhatsApp que recibió.</span>
+            </div>
+          )}
           <div className="auth-form">
             <label>
               Nota opcional
@@ -109,6 +116,7 @@ export function PublicConfirmationPage() {
               <p className="summary">No se pudo registrar la respuesta. Intente nuevamente.</p>
             )}
           </div>
+          </>
         )}
       </section>
     </main>
