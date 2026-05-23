@@ -48,15 +48,26 @@ def render_service_assignment_updated(
     )
 
 
+def _with_whatsapp_confirmation(message: str) -> str:
+    return f"{message}\n\nResponda 1 para confirmar su turno."
+
+
 def render_twelve_hour_reminder(
     service_date: str, service_area: str, service_start: str | None
 ) -> str:
     time_part = f" a las {service_start}" if service_start else ""
     return (
-        f"Recordatorio: en aproximadamente 12 horas tiene turno de servicio "
-        f"en {service_area} el día {service_date}{time_part}. "
-        f"Por favor confirme su disponibilidad."
+        f"Recordatorio: mañana tiene turno de servicio "
+        f"en {service_area} el día {service_date}{time_part}.\n\n"
+        "Responda 1 para confirmar su asistencia."
     )
+
+
+def render_escalamiento_encargado(doctor_name: str, service_info: str = "") -> str:
+    base = f"El Dr. {doctor_name} no ha confirmado sus turnos asignados."
+    if service_info:
+        base += f" Servicio: {service_info}."
+    return base + " Por favor, contacte al médico para verificar su disponibilidad."
 
 
 def render_mission_participant(

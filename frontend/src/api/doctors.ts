@@ -30,7 +30,7 @@ export interface CreateDoctorPayload {
 }
 
 export interface ServiceAreaRead { id: string; code: string; display_name: string; active: boolean; }
-export interface RankRead { id: string; name: string; abbreviation: string; }
+export interface RankRead { id: string; name: string; abbreviation: string; active: boolean; }
 export interface DepartmentRead { id: string; name: string; normalized_name: string; active: boolean; }
 export interface DeactivationReasonRead {
   id: string;
@@ -40,6 +40,12 @@ export interface DeactivationReasonRead {
   requires_detail: boolean;
   applies_to_sex: string | null;
   severity: string;
+}
+
+export interface DeactivationReasonPayload {
+  display_name: string;
+  applies_to_sex: string | null;
+  active?: boolean;
 }
 
 export interface AvailabilityRead {
@@ -96,6 +102,19 @@ export const doctorsApi = {
   listDeactivationReasons: (sex?: string) =>
     apiFetch<DeactivationReasonRead[]>(
       `/catalogs/deactivation-reasons${sex ? `?sex=${sex}` : ""}`
+    ),
+  createDeactivationReason: (payload: DeactivationReasonPayload) =>
+    apiFetch<DeactivationReasonRead>("/catalogs/deactivation-reasons", {
+      method: "POST", body: JSON.stringify(payload),
+    }),
+  updateDeactivationReason: (id: string, payload: Partial<DeactivationReasonPayload>) =>
+    apiFetch<DeactivationReasonRead>(`/catalogs/deactivation-reasons/${id}`, {
+      method: "PATCH", body: JSON.stringify(payload),
+    }),
+  deleteDeactivationReason: (id: string) =>
+    apiFetch<{ message: string; affected_doctors: number }>(
+      `/catalogs/deactivation-reasons/${id}`,
+      { method: "DELETE" },
     ),
   listByDay: () =>
     apiFetch<DoctorByDayResponse>("/doctors/by-day"),

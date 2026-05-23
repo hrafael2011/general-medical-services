@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, PlusCircle, Pencil, Trash2, Check, X } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { doctorsApi, RankRead, DepartmentRead } from "../../api/doctors";
+import { doctorsApi, RankRead, DepartmentRead, DeactivationReasonRead } from "../../api/doctors";
 
-type Tab = "ranks" | "departments";
+type Tab = "ranks" | "departments" | "deactivation-reasons";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "ranks", label: "Rangos" },
   { key: "departments", label: "Departamentos" },
+  { key: "deactivation-reasons", label: "Razones de desactivación" },
 ];
 
 export function CatalogsPage() {
@@ -36,7 +37,9 @@ export function CatalogsPage() {
         ))}
       </div>
 
-      {active === "ranks" ? <RanksTab /> : <DepartmentsTab />}
+      {active === "ranks" && <RanksTab />}
+      {active === "departments" && <DepartmentsTab />}
+      {active === "deactivation-reasons" && <DeactivationReasonsTab />}
     </div>
   );
 }
@@ -95,7 +98,7 @@ function RanksTab() {
     setEditingId(rank.id);
     setEditName(rank.name);
     setEditAbbr(rank.abbreviation);
-    setEditActive(true); // RankRead doesn't include active, default to true
+    setEditActive(rank.active);
   }
 
   return (
@@ -126,7 +129,7 @@ function RanksTab() {
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
-              <tr><th>Nombre</th><th>Abreviatura</th><th></th></tr>
+              <tr><th>Nombre</th><th>Abreviatura</th><th>Activo</th><th></th></tr>
             </thead>
             <tbody>
               {ranks.map(r => (
@@ -149,13 +152,23 @@ function RanksTab() {
                       />
                     </td>
                     <td>
+                      <label className="toggle-label" style={{ margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={editActive}
+                          onChange={e => setEditActive(e.target.checked)}
+                        />
+                        {editActive ? "Activo" : "Inactivo"}
+                      </label>
+                    </td>
+                    <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
                           className="btn-primary"
                           style={{ padding: "4px 10px", fontSize: "0.8rem" }}
                           onClick={() => updateMutation.mutate({
                             id: r.id,
-                            payload: { name: editName, abbreviation: editAbbr },
+                            payload: { name: editName, abbreviation: editAbbr, active: editActive },
                           })}
                           disabled={updateMutation.isPending}
                         >
@@ -175,6 +188,7 @@ function RanksTab() {
                   <tr key={r.id}>
                     <td>{r.name}</td>
                     <td>{r.abbreviation}</td>
+                    <td>{r.active ? "Activo" : "Inactivo"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
@@ -392,4 +406,210 @@ function DepartmentsTab() {
       />
     </div>
   );
+}
+
+function DeactivationReasonsTab() {
+  const { addToast } = useToast();
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newAppliesToSex, setNewAppliesToSex] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAppliesToSex, setEditAppliesToSex] = useState("");
+  const [editActive, setEditActive] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<DeactivationReasonRead | null>(null);
+
+  const { data: reasons, isLoading } = useQuery({
+    queryKey: ["deactivation-reasons"],
+    queryFn: () => doctorsApi.listDeactivationReasons(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => doctorsApi.createDeactivationReason({
+      display_name: newName,
+      applies_to_sex: newAppliesToSex || null,
+    }),
+    onSuccess: () => {
+      addToast("success", "Razón creada.");
+      setShowCreate(false);
+      setNewName("");
+      setNewAppliesToSex("");
+      qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
+    },
+    onError: () => addToast("error", "Error al crear razón."),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<{
+      display_name: string;
+      applies_to_sex: string | null;
+      active: boolean;
+    }> }) => doctorsApi.updateDeactivationReason(id, payload),
+    onSuccess: () => {
+      addToast("success", "Razón actualizada.");
+      setEditingId(null);
+      qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
+    },
+    onError: () => addToast("error", "Error al actualizar razón."),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => doctorsApi.deleteDeactivationReason(id),
+    onSuccess: () => {
+      addToast("success", "Razón eliminada.");
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
+    },
+    onError: () => addToast("error", "Error al eliminar razón."),
+  });
+
+  function startEditing(reason: DeactivationReasonRead) {
+    setEditingId(reason.id);
+    setEditName(reason.display_name);
+    setEditAppliesToSex(reason.applies_to_sex ?? "");
+    setEditActive(reason.active);
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: "16px" }}>
+        <button className="btn-primary" onClick={() => setShowCreate(!showCreate)}>
+          <PlusCircle size={15} />
+          {showCreate ? "Cancelar" : "Nueva Razón"}
+        </button>
+      </div>
+
+      {showCreate && (
+        <div style={{ background: "#f9fafb", padding: "16px", borderRadius: "8px", marginBottom: "20px" }}>
+          <h4 style={{ margin: "0 0 12px", fontSize: "0.9rem" }}>Crear razón de desactivación</h4>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            <label>Nombre <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
+            <label>
+              Aplica a
+              <select value={newAppliesToSex} onChange={e => setNewAppliesToSex(e.target.value)}>
+                <option value="">Todos</option>
+                <option value="male">Masculino</option>
+                <option value="female">Femenino</option>
+              </select>
+            </label>
+            <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creando…" : "Crear"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLoading && <p className="loading-text">Cargando razones…</p>}
+
+      {reasons && (
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr><th>Nombre</th><th>Aplica a</th><th>Activo</th><th></th></tr>
+            </thead>
+            <tbody>
+              {reasons.map(reason => (
+                editingId === reason.id ? (
+                  <tr key={reason.id} className="edit-row">
+                    <td>
+                      <input type="text" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
+                    </td>
+                    <td>
+                      <select value={editAppliesToSex} onChange={e => setEditAppliesToSex(e.target.value)}>
+                        <option value="">Todos</option>
+                        <option value="male">Masculino</option>
+                        <option value="female">Femenino</option>
+                      </select>
+                    </td>
+                    <td>
+                      <label className="toggle-label" style={{ margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={editActive}
+                          onChange={e => setEditActive(e.target.checked)}
+                        />
+                        {editActive ? "Activo" : "Inactivo"}
+                      </label>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          className="btn-primary"
+                          style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                          onClick={() => updateMutation.mutate({
+                            id: reason.id,
+                            payload: {
+                              display_name: editName,
+                              applies_to_sex: editAppliesToSex || null,
+                              active: editActive,
+                            },
+                          })}
+                          disabled={updateMutation.isPending}
+                        >
+                          <Check size={14} /> Guardar
+                        </button>
+                        <button
+                          className="btn-secondary"
+                          style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                          onClick={() => setEditingId(null)}
+                        >
+                          <X size={14} /> Cancelar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={reason.id}>
+                    <td>{reason.display_name}</td>
+                    <td>{sexLabel(reason.applies_to_sex)}</td>
+                    <td>{reason.active ? "Activo" : "Inactivo"}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          className="btn-ghost"
+                          style={{ padding: "3px 8px" }}
+                          onClick={() => startEditing(reason)}
+                          title="Editar razón"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          className="btn-ghost btn-danger"
+                          style={{ padding: "3px 8px" }}
+                          onClick={() => setDeleteTarget(reason)}
+                          title="Eliminar razón"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Eliminar razón"
+        message={`¿Estás seguro de eliminar la razón "${deleteTarget?.display_name}"?`}
+        confirmLabel="Sí, eliminar"
+        variant="danger"
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+        isLoading={deleteMutation.isPending}
+      />
+    </div>
+  );
+}
+
+function sexLabel(value: string | null): string {
+  if (value === "male") return "Masculino";
+  if (value === "female") return "Femenino";
+  return "Todos";
 }

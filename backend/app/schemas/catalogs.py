@@ -52,6 +52,11 @@ class CreateDepartmentRequest(BaseModel):
     name: str = Field(min_length=1, max_length=160)
 
 
+class CreateDeactivationReasonRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=160)
+    applies_to_sex: str | None = Field(default=None, pattern="^(male|female)$")
+
+
 class UpdateRankRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     abbreviation: str | None = Field(default=None, min_length=1, max_length=40)
@@ -63,11 +68,22 @@ class UpdateDepartmentRequest(BaseModel):
     active: bool | None = None
 
 
+class UpdateDeactivationReasonRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=160)
+    applies_to_sex: str | None = Field(default=None, pattern="^(male|female)$")
+    active: bool | None = None
+
+
 class DeleteRankResponse(BaseModel):
     message: str
     affected_doctors: int = 0
 
 
 class DeleteDepartmentResponse(BaseModel):
+    message: str
+    affected_doctors: int = 0
+
+
+class DeleteDeactivationReasonResponse(BaseModel):
     message: str
     affected_doctors: int = 0

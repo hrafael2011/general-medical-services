@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+import re
+import unicodedata
 from uuid import uuid4
 
 from backend.app.domain.catalogs import (
@@ -18,6 +20,20 @@ from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 
 def normalize_name(value: str) -> str:
     return " ".join(value.strip().lower().split())
+
+
+def normalize_reason_code(value: str) -> str:
+    ascii_value = (
+        unicodedata.normalize("NFKD", value.strip())
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+    )
+    code = re.sub(r"[^a-z0-9]+", "_", ascii_value).strip("_")
+    return code or "reason"
+
+
+_MISSING = object()
 
 
 class CatalogService:
@@ -116,6 +132,27 @@ class CatalogService:
         )
         return self.catalogs.add_department(department)
 
+    def create_deactivation_reason(
+        self,
+        *,
+        display_name: str,
+        applies_to_sex: str | None,
+    ) -> DeactivationReasonModel:
+        now = datetime.now(UTC)
+        display_name = display_name.strip()
+        reason = DeactivationReasonModel(
+            id=str(uuid4()),
+            code=normalize_reason_code(display_name),
+            display_name=display_name,
+            active=True,
+            requires_detail=False,
+            applies_to_sex=applies_to_sex,
+            severity="hard_block",
+            created_at=now,
+            updated_at=now,
+        )
+        return self.catalogs.add_deactivation_reason(reason)
+
     def update_rank(
         self,
         rank_id: str,
@@ -149,6 +186,41 @@ class CatalogService:
             raise CatalogError("rank_not_found", "Rango no encontrado.")
         affected = self.catalogs.count_doctors_by_rank(rank_id)
         self.catalogs.soft_delete_rank(rank_id)
+        return affected
+
+    def update_deactivation_reason(
+        self,
+        reason_id: str,
+        *,
+        display_name: str | None = None,
+        applies_to_sex: str | None | object = _MISSING,
+        active: bool | None = None,
+    ) -> DeactivationReasonModel:
+        reason = self.catalogs.get_deactivation_reason_by_id(reason_id)
+        if reason is None:
+            raise CatalogError("deactivation_reason_not_found", "Razón de desactivación no encontrada.")
+        changed: dict[str, object] = {}
+        if display_name is not None:
+            reason.display_name = display_name.strip()
+            reason.code = normalize_reason_code(reason.display_name)
+            changed["display_name"] = reason.display_name
+            changed["code"] = reason.code
+        if applies_to_sex is not _MISSING:
+            reason.applies_to_sex = applies_to_sex
+            changed["applies_to_sex"] = applies_to_sex
+        if active is not None:
+            reason.active = active
+            changed["active"] = active
+        if changed:
+            self.catalogs.update_deactivation_reason(reason_id, **changed)
+        return reason
+
+    def soft_delete_deactivation_reason(self, reason_id: str) -> int:
+        reason = self.catalogs.get_deactivation_reason_by_id(reason_id)
+        if reason is None:
+            raise CatalogError("deactivation_reason_not_found", "Razón de desactivación no encontrada.")
+        affected = self.catalogs.count_doctors_by_deactivation_reason(reason_id)
+        self.catalogs.update_deactivation_reason(reason_id, active=False)
         return affected
 
     def update_department(
