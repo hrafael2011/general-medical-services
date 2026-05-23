@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     email_redirect_to: str | None = None
     email_subject_prefix: str = ""
 
+    # ── Meta Cloud API / PyWa ──────────────────────────────────────────
+    meta_whatsapp_token: str | None = None
+    meta_whatsapp_phone_number_id: str | None = None
+    meta_whatsapp_api_version: str = "v22.0"
+    meta_whatsapp_business_account_id: str | None = None
+    meta_webhook_verify_token: str | None = None
+
+    # ── Service scheduling ─────────────────────────────────────────────
+    service_start_hour: int = 7  # DEPRECATED: se usa ServiceAreaModel.start_hour
+
     # Feature flags for partial deployment
     feature_notifications: bool = False
     feature_telegram: bool = False
