@@ -1,10 +1,14 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
+from backend.app.infrastructure.db.models.availability import (
+    DoctorAvailabilityModel,
+    DoctorRestrictionModel,
+)
 from backend.app.infrastructure.db.models.doctors import DoctorAllowedAreaModel, DoctorModel
+from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 
 
 def _not_deleted() -> tuple:
@@ -140,5 +144,25 @@ class DoctorRepository:
     def hard_delete(self, doctor_id: str) -> None:
         doctor = self.get_by_id_including_deleted(doctor_id)
         if doctor is not None:
+            self.session.execute(
+                delete(DoctorAllowedAreaModel).where(
+                    DoctorAllowedAreaModel.doctor_id == doctor_id
+                )
+            )
+            self.session.execute(
+                delete(DoctorAvailabilityModel).where(
+                    DoctorAvailabilityModel.doctor_id == doctor_id
+                )
+            )
+            self.session.execute(
+                delete(DoctorRestrictionModel).where(
+                    DoctorRestrictionModel.doctor_id == doctor_id
+                )
+            )
+            self.session.execute(
+                update(NotificationEventModel)
+                .where(NotificationEventModel.recipient_doctor_id == doctor_id)
+                .values(recipient_doctor_id=None)
+            )
             self.session.delete(doctor)
             self.session.flush()
