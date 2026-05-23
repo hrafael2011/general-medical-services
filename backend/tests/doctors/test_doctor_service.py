@@ -95,6 +95,45 @@ def test_create_doctor_stores_basic_fields(db_session) -> None:
     assert doctor.created_by == "actor-001"
 
 
+def test_create_doctor_from_first_and_last_name(db_session) -> None:
+    service = _make_service(db_session)
+
+    doctor = service.create_doctor(
+        actor_id="actor-001",
+        first_name="  Juan Carlos  ",
+        last_name="  Pérez Gómez  ",
+        sex="male",
+        rank_id=None,
+        department_id=None,
+        phone=None,
+        notes=None,
+        participa_misiones=True,
+        whatsapp_phone=None,
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        availability_mode="monthly",
+        allowed_area_ids=[],
+    )
+
+    assert doctor.first_name == "Juan Carlos"
+    assert doctor.last_name == "Pérez Gómez"
+    assert doctor.name == "Juan Carlos Pérez Gómez"
+    assert doctor.normalized_name == "juan carlos pérez gómez"
+
+
+def test_create_doctor_rejects_combined_name_over_column_limit(db_session) -> None:
+    service = _make_service(db_session)
+
+    with pytest.raises(DoctorServiceError, match="160 caracteres"):
+        service.create_doctor(
+            actor_id="actor-001",
+            first_name="A" * 100,
+            last_name="B" * 100,
+            sex="male",
+        )
+
+
 def test_create_doctor_trims_name(db_session) -> None:
     service = _make_service(db_session)
 
@@ -173,6 +212,30 @@ def test_update_doctor_changes_fields(db_session) -> None:
 
     assert updated.name == "Updated Name"
     assert updated.phone == "555-1234"
+
+
+def test_update_doctor_from_first_and_last_name(db_session) -> None:
+    service = _make_service(db_session)
+
+    doctor = service.create_doctor(
+        actor_id="a", name="Original Name", sex="male", rank_id=None, department_id=None,
+        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        monthly_service_target=3, monthly_service_max=3,
+        monthly_service_limit_mode="warn_only", availability_mode="monthly",
+        allowed_area_ids=[],
+    )
+
+    updated = service.update_doctor(
+        doctor.id,
+        actor_id="a",
+        first_name=" Ana ",
+        last_name=" García ",
+    )
+
+    assert updated.first_name == "Ana"
+    assert updated.last_name == "García"
+    assert updated.name == "Ana García"
+    assert updated.normalized_name == "ana garcía"
 
 
 def test_update_doctor_can_clear_nullable_fields(db_session) -> None:

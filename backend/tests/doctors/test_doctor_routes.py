@@ -103,7 +103,8 @@ def client(session_local, user, seed_doctor, mock_service):
 
 def _make_doctor(**overrides) -> DoctorModel:
     fields = dict(
-        id=str(uuid4()), name="Dr. Default", normalized_name="dr. default", sex="male",
+        id=str(uuid4()), first_name=None, last_name=None,
+        name="Dr. Default", normalized_name="dr. default", sex="male",
         rank_id=None, department_id=None, phone=None, notes=None,
         active=True, service_active=True, service_inactive_reason_id=None,
         service_inactive_detail=None, participa_misiones=True, whatsapp_phone=None,
@@ -159,12 +160,23 @@ def test_get_doctor_not_found(client):
 
 
 def test_create_doctor_success(client, mock_service):
-    mock_service.create_doctor.return_value = _make_doctor(name="Dr. New")
+    mock_service.create_doctor.return_value = _make_doctor(
+        first_name="Juan",
+        last_name="Pérez",
+        name="Juan Pérez",
+    )
 
-    resp = client.post("/api/doctors", json={"name": "Dr. New", "sex": "male"})
+    resp = client.post(
+        "/api/doctors",
+        json={"first_name": "Juan", "last_name": "Pérez", "sex": "male"},
+    )
     assert resp.status_code == 201
-    assert resp.json()["name"] == "Dr. New"
+    assert resp.json()["first_name"] == "Juan"
+    assert resp.json()["last_name"] == "Pérez"
+    assert resp.json()["name"] == "Juan Pérez"
     mock_service.create_doctor.assert_called_once()
+    assert mock_service.create_doctor.call_args.kwargs["first_name"] == "Juan"
+    assert mock_service.create_doctor.call_args.kwargs["last_name"] == "Pérez"
 
 
 def test_create_doctor_invalid_sex(client):
@@ -183,11 +195,20 @@ def test_create_doctor_empty_name(client):
 
 
 def test_update_doctor_success(client, mock_service):
-    mock_service.update_doctor.return_value = _make_doctor(name="Dr. Updated")
+    mock_service.update_doctor.return_value = _make_doctor(
+        first_name="Ana",
+        last_name="García",
+        name="Ana García",
+    )
 
-    resp = client.patch("/api/doctors/some-id", json={"name": "Dr. Updated"})
+    resp = client.patch(
+        "/api/doctors/some-id",
+        json={"first_name": "Ana", "last_name": "García"},
+    )
     assert resp.status_code == 200
-    assert resp.json()["name"] == "Dr. Updated"
+    assert resp.json()["first_name"] == "Ana"
+    assert resp.json()["last_name"] == "García"
+    assert resp.json()["name"] == "Ana García"
     mock_service.update_doctor.assert_called_once()
 
 

@@ -1,7 +1,8 @@
 import { apiFetch } from "./client";
 
 export interface DoctorRead {
-  id: string; name: string; sex: string;
+  id: string; first_name?: string | null; last_name?: string | null;
+  name: string; sex: string;
   rank_id: string | null; department_id: string | null;
   phone: string | null; notes: string | null;
   active: boolean; service_active: boolean;
@@ -17,7 +18,8 @@ export interface DoctorRead {
 export interface DoctorListResponse { items: DoctorRead[]; total: number; }
 
 export interface CreateDoctorPayload {
-  name: string; sex: string;
+  first_name?: string | null; last_name?: string | null;
+  name?: string; sex: string;
   rank_id?: string | null; department_id?: string | null;
   phone?: string | null; notes?: string | null;
   participa_misiones: boolean;

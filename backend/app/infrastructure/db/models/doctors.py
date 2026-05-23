@@ -10,6 +10,8 @@ class DoctorModel(Base):
     __tablename__ = "doctors"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    first_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     normalized_name: Mapped[str] = mapped_column(
         String(160), nullable=False, unique=True, index=True
