@@ -70,8 +70,8 @@ describe("App", () => {
   it("pide cambio de contraseña después del login", async () => {
     const user = userEvent.setup();
     renderApp("/login");
-    await user.type(screen.getByLabelText(/contraseña/i), "Temp123!");
+    await user.type(screen.getByLabelText(/^Contraseña$/i), "Temp123!");
     await user.click(screen.getByRole("button", { name: /entrar/i }));
-    expect(await screen.findByLabelText(/nueva contraseña/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^Nueva contraseña$/i)).toBeInTheDocument();
   });
 });
