@@ -2,6 +2,7 @@
 .venv
 venv
 backend/.venv
+frontend
 frontend/node_modules
 frontend/dist
 node_modules
