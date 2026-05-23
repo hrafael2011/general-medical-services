@@ -71,6 +71,7 @@ class UpdateDepartmentRequest(BaseModel):
 class UpdateDeactivationReasonRequest(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=160)
     applies_to_sex: str | None = Field(default=None, pattern="^(male|female)$")
+    active: bool | None = None
 
 
 class DeleteRankResponse(BaseModel):

@@ -30,7 +30,7 @@ export interface CreateDoctorPayload {
 }
 
 export interface ServiceAreaRead { id: string; code: string; display_name: string; active: boolean; }
-export interface RankRead { id: string; name: string; abbreviation: string; }
+export interface RankRead { id: string; name: string; abbreviation: string; active: boolean; }
 export interface DepartmentRead { id: string; name: string; normalized_name: string; active: boolean; }
 export interface DeactivationReasonRead {
   id: string;
@@ -45,6 +45,7 @@ export interface DeactivationReasonRead {
 export interface DeactivationReasonPayload {
   display_name: string;
   applies_to_sex: string | null;
+  active?: boolean;
 }
 
 export interface AvailabilityRead {

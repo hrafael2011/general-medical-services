@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ToastProvider } from "../../components/Toast";
@@ -13,12 +13,16 @@ const mockCreateDeactivationReason = vi.fn().mockResolvedValue({
   applies_to_sex: null,
   severity: "hard_block",
 });
+const mockUpdateRank = vi.fn().mockResolvedValue({});
+const mockUpdateDeactivationReason = vi.fn().mockResolvedValue({});
 
 vi.mock("../../api/doctors", () => ({
   doctorsApi: {
-    listRanks: vi.fn().mockResolvedValue([]),
+    listRanks: vi.fn().mockResolvedValue([
+      { id: "rank-1", name: "Capitán", abbreviation: "Cap.", active: false },
+    ]),
     createRank: vi.fn(),
-    updateRank: vi.fn(),
+    updateRank: (...args: unknown[]) => mockUpdateRank(...args),
     deleteRank: vi.fn(),
     listDepartments: vi.fn().mockResolvedValue([]),
     createDepartment: vi.fn(),
@@ -34,9 +38,18 @@ vi.mock("../../api/doctors", () => ({
         applies_to_sex: null,
         severity: "hard_block",
       },
+      {
+        id: "reason-2",
+        code: "vacaciones",
+        display_name: "Vacaciones",
+        active: false,
+        requires_detail: false,
+        applies_to_sex: null,
+        severity: "hard_block",
+      },
     ]),
     createDeactivationReason: (...args: unknown[]) => mockCreateDeactivationReason(...args),
-    updateDeactivationReason: vi.fn(),
+    updateDeactivationReason: (...args: unknown[]) => mockUpdateDeactivationReason(...args),
     deleteDeactivationReason: vi.fn(),
   },
 }));
@@ -57,6 +70,27 @@ describe("CatalogsPage", () => {
     vi.clearAllMocks();
   });
 
+  it("updates rank active status from the catalog tab", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Capitán")).toBeInTheDocument();
+    expect(screen.getByText("Inactivo")).toBeInTheDocument();
+
+    const row = screen.getByText("Capitán").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLTableRowElement).getByTitle("Editar rango"));
+    fireEvent.click(screen.getByLabelText("Inactivo"));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateRank).toHaveBeenCalledWith("rank-1", {
+        name: "Capitán",
+        abbreviation: "Cap.",
+        active: true,
+      });
+    });
+  });
+
   it("creates deactivation reasons from the catalog tab", async () => {
     renderPage();
 
@@ -73,6 +107,28 @@ describe("CatalogsPage", () => {
       expect(mockCreateDeactivationReason).toHaveBeenCalledWith({
         display_name: "Capacitación",
         applies_to_sex: null,
+      });
+    });
+  });
+
+  it("updates deactivation reason active status from the catalog tab", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /Razones de desactivación/i }));
+    expect(await screen.findByText("Vacaciones")).toBeInTheDocument();
+    expect(screen.getByText("Inactivo")).toBeInTheDocument();
+
+    const row = screen.getByText("Vacaciones").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLTableRowElement).getByTitle("Editar razón"));
+    fireEvent.click(screen.getByLabelText("Inactivo"));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateDeactivationReason).toHaveBeenCalledWith("reason-2", {
+        display_name: "Vacaciones",
+        applies_to_sex: null,
+        active: true,
       });
     });
   });

@@ -98,7 +98,7 @@ function RanksTab() {
     setEditingId(rank.id);
     setEditName(rank.name);
     setEditAbbr(rank.abbreviation);
-    setEditActive(true); // RankRead doesn't include active, default to true
+    setEditActive(rank.active);
   }
 
   return (
@@ -129,7 +129,7 @@ function RanksTab() {
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
-              <tr><th>Nombre</th><th>Abreviatura</th><th></th></tr>
+              <tr><th>Nombre</th><th>Abreviatura</th><th>Activo</th><th></th></tr>
             </thead>
             <tbody>
               {ranks.map(r => (
@@ -152,13 +152,23 @@ function RanksTab() {
                       />
                     </td>
                     <td>
+                      <label className="toggle-label" style={{ margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={editActive}
+                          onChange={e => setEditActive(e.target.checked)}
+                        />
+                        {editActive ? "Activo" : "Inactivo"}
+                      </label>
+                    </td>
+                    <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
                           className="btn-primary"
                           style={{ padding: "4px 10px", fontSize: "0.8rem" }}
                           onClick={() => updateMutation.mutate({
                             id: r.id,
-                            payload: { name: editName, abbreviation: editAbbr },
+                            payload: { name: editName, abbreviation: editAbbr, active: editActive },
                           })}
                           disabled={updateMutation.isPending}
                         >
@@ -178,6 +188,7 @@ function RanksTab() {
                   <tr key={r.id}>
                     <td>{r.name}</td>
                     <td>{r.abbreviation}</td>
+                    <td>{r.active ? "Activo" : "Inactivo"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
@@ -406,6 +417,7 @@ function DeactivationReasonsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editAppliesToSex, setEditAppliesToSex] = useState("");
+  const [editActive, setEditActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<DeactivationReasonRead | null>(null);
 
   const { data: reasons, isLoading } = useQuery({
@@ -432,6 +444,7 @@ function DeactivationReasonsTab() {
     mutationFn: ({ id, payload }: { id: string; payload: Partial<{
       display_name: string;
       applies_to_sex: string | null;
+      active: boolean;
     }> }) => doctorsApi.updateDeactivationReason(id, payload),
     onSuccess: () => {
       addToast("success", "Razón actualizada.");
@@ -455,9 +468,8 @@ function DeactivationReasonsTab() {
     setEditingId(reason.id);
     setEditName(reason.display_name);
     setEditAppliesToSex(reason.applies_to_sex ?? "");
+    setEditActive(reason.active);
   }
-
-  const activeReasons = (reasons ?? []).filter(reason => reason.active);
 
   return (
     <div>
@@ -494,10 +506,10 @@ function DeactivationReasonsTab() {
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
-              <tr><th>Nombre</th><th>Aplica a</th><th></th></tr>
+              <tr><th>Nombre</th><th>Aplica a</th><th>Activo</th><th></th></tr>
             </thead>
             <tbody>
-              {activeReasons.map(reason => (
+              {reasons.map(reason => (
                 editingId === reason.id ? (
                   <tr key={reason.id} className="edit-row">
                     <td>
@@ -511,6 +523,16 @@ function DeactivationReasonsTab() {
                       </select>
                     </td>
                     <td>
+                      <label className="toggle-label" style={{ margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={editActive}
+                          onChange={e => setEditActive(e.target.checked)}
+                        />
+                        {editActive ? "Activo" : "Inactivo"}
+                      </label>
+                    </td>
+                    <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
                           className="btn-primary"
@@ -520,6 +542,7 @@ function DeactivationReasonsTab() {
                             payload: {
                               display_name: editName,
                               applies_to_sex: editAppliesToSex || null,
+                              active: editActive,
                             },
                           })}
                           disabled={updateMutation.isPending}
@@ -540,6 +563,7 @@ function DeactivationReasonsTab() {
                   <tr key={reason.id}>
                     <td>{reason.display_name}</td>
                     <td>{sexLabel(reason.applies_to_sex)}</td>
+                    <td>{reason.active ? "Activo" : "Inactivo"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button

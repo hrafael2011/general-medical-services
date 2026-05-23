@@ -185,6 +185,7 @@ def test_update_deactivation_reason_success(client, mock_service):
         json={
             "display_name": "Capacitación externa",
             "applies_to_sex": "female",
+            "active": False,
         },
     )
 
@@ -194,6 +195,7 @@ def test_update_deactivation_reason_success(client, mock_service):
         "reason-1",
         display_name="Capacitación externa",
         applies_to_sex="female",
+        active=False,
     )
 
 

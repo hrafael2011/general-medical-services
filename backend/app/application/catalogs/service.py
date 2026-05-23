@@ -194,6 +194,7 @@ class CatalogService:
         *,
         display_name: str | None = None,
         applies_to_sex: str | None | object = _MISSING,
+        active: bool | None = None,
     ) -> DeactivationReasonModel:
         reason = self.catalogs.get_deactivation_reason_by_id(reason_id)
         if reason is None:
@@ -207,6 +208,9 @@ class CatalogService:
         if applies_to_sex is not _MISSING:
             reason.applies_to_sex = applies_to_sex
             changed["applies_to_sex"] = applies_to_sex
+        if active is not None:
+            reason.active = active
+            changed["active"] = active
         if changed:
             self.catalogs.update_deactivation_reason(reason_id, **changed)
         return reason

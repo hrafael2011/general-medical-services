@@ -82,6 +82,7 @@ def test_create_update_and_soft_delete_deactivation_reason(db_session) -> None:
         reason.id,
         display_name="Capacitación externa",
         applies_to_sex="female",
+        active=False,
     )
 
     assert updated.code == "capacitacion_externa"
@@ -89,7 +90,7 @@ def test_create_update_and_soft_delete_deactivation_reason(db_session) -> None:
     assert updated.requires_detail is False
     assert updated.applies_to_sex == "female"
     assert updated.severity == "hard_block"
-    assert updated.active is True
+    assert updated.active is False
 
     affected = service.soft_delete_deactivation_reason(reason.id)
 
