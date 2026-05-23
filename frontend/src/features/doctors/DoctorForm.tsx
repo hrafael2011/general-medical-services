@@ -12,7 +12,9 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const qc = useQueryClient();
   const isEdit = !!doctor;
 
-  const [name, setName] = useState(doctor?.name ?? "");
+  const initialNameParts = splitDoctorName(doctor);
+  const [firstName, setFirstName] = useState(initialNameParts.firstName);
+  const [lastName, setLastName] = useState(initialNameParts.lastName);
   const [sex, setSex] = useState(doctor?.sex ?? "male");
   const [phone, setPhone] = useState(doctor?.phone ?? "");
   const [participaMisiones, setParticipaMisiones] = useState(doctor?.participa_misiones ?? true);
@@ -136,8 +138,16 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
     const availabilityMode = avMode === "monthly" ? "monthly" : "fixed";
 
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+    const fullName = [cleanFirstName, cleanLastName].filter(Boolean).join(" ");
+    if (!cleanFirstName || !cleanLastName) { setError("Nombre y apellido son obligatorios."); return; }
+
     save.mutate({
-      name, sex, phone: phone || null, participa_misiones: participaMisiones,
+      first_name: cleanFirstName,
+      last_name: cleanLastName,
+      name: fullName,
+      sex, phone: phone || null, participa_misiones: participaMisiones,
       rank_id: rankId || null,
       department_id: departmentId || null,
       availability_mode: availabilityMode,
@@ -164,9 +174,16 @@ export function DoctorForm({ doctor, onClose }: Props) {
         <form className="doctor-form" onSubmit={handleSubmit}>
           <div className="form-row">
             <label>
-              Nombre completo
-              <input required value={name} onChange={e => setName(e.target.value)} />
+              Nombre
+              <input required value={firstName} onChange={e => setFirstName(e.target.value)} />
             </label>
+            <label>
+              Apellido
+              <input required value={lastName} onChange={e => setLastName(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="form-row">
             <label>
               Sexo
               <select value={sex} onChange={e => setSex(e.target.value)}>
@@ -341,4 +358,14 @@ export function DoctorForm({ doctor, onClose }: Props) {
       </div>
     </div>
   );
+}
+
+function splitDoctorName(doctor?: DoctorRead): { firstName: string; lastName: string } {
+  if (!doctor) return { firstName: "", lastName: "" };
+  if (doctor.first_name || doctor.last_name) {
+    return { firstName: doctor.first_name ?? "", lastName: doctor.last_name ?? "" };
+  }
+  const parts = doctor.name.trim().split(/\s+/);
+  if (parts.length <= 1) return { firstName: doctor.name, lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }

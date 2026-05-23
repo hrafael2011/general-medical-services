@@ -20,6 +20,24 @@ def _strip_html(value: str | None) -> str | None:
 
 
 _MISSING = object()
+MAX_DOCTOR_NAME_LENGTH = 160
+
+
+def _clean_name_part(value: str | None) -> str | None:
+    cleaned = _strip_html(value)
+    return cleaned or None
+
+
+def _join_name_parts(first_name: str | None, last_name: str | None) -> str:
+    return " ".join(part for part in (first_name, last_name) if part).strip()
+
+
+def _validate_doctor_name_length(doctor_name: str) -> None:
+    if len(doctor_name) > MAX_DOCTOR_NAME_LENGTH:
+        raise DoctorServiceError(
+            "doctor_name_too_long",
+            "El nombre completo del médico no puede superar 160 caracteres.",
+        )
 
 
 class DoctorService:
@@ -41,8 +59,10 @@ class DoctorService:
         self,
         *,
         actor_id: str,
-        name: str,
         sex: str,
+        name: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
         rank_id: str | None = None,
         department_id: str | None = None,
         phone: str | None = None,
@@ -62,8 +82,14 @@ class DoctorService:
                     "El objetivo mensual de servicios no puede superar el máximo mensual.",
                 )
 
-        raw_name = name.strip()
-        doctor_name = _strip_html(raw_name)
+        cleaned_first_name = _clean_name_part(first_name)
+        cleaned_last_name = _clean_name_part(last_name)
+        doctor_name = _join_name_parts(cleaned_first_name, cleaned_last_name)
+        if not doctor_name and name is not None:
+            doctor_name = _clean_name_part(name) or ""
+        if not doctor_name:
+            raise DoctorServiceError("missing_doctor_name", "Debe indicar nombre y apellido.")
+        _validate_doctor_name_length(doctor_name)
         computed_normalized = normalize_name(doctor_name)
 
         # Check for duplicate normalized_name
@@ -77,6 +103,8 @@ class DoctorService:
         now = datetime.now(UTC)
         doctor = DoctorModel(
             id=str(uuid4()),
+            first_name=cleaned_first_name,
+            last_name=cleaned_last_name,
             name=doctor_name,
             normalized_name=computed_normalized,
             sex=sex,
@@ -111,6 +139,8 @@ class DoctorService:
         *,
         actor_id: str,
         name: str | None = None,
+        first_name: str | None | object = _MISSING,
+        last_name: str | None | object = _MISSING,
         sex: str | None = None,
         rank_id: str | None | object = _MISSING,
         department_id: str | None | object = _MISSING,
@@ -152,9 +182,43 @@ class DoctorService:
                 )
 
         changed_fields: dict = {}
-        if name is not None:
-            raw_name = name.strip()
-            doctor_name = _strip_html(raw_name)
+        if first_name is not _MISSING or last_name is not _MISSING:
+            cleaned_first_name = (
+                _clean_name_part(first_name)
+                if first_name is not _MISSING
+                else doctor.first_name
+            )
+            cleaned_last_name = (
+                _clean_name_part(last_name)
+                if last_name is not _MISSING
+                else doctor.last_name
+            )
+            doctor_name = _join_name_parts(cleaned_first_name, cleaned_last_name)
+            if not doctor_name:
+                raise DoctorServiceError("missing_doctor_name", "Debe indicar nombre y apellido.")
+            _validate_doctor_name_length(doctor_name)
+            computed_normalized = normalize_name(doctor_name)
+
+            # Check for duplicate normalized_name (exclude current doctor)
+            existing = self.doctors.get_by_normalized_name(computed_normalized)
+            if existing is not None and existing.id != doctor_id:
+                raise DoctorServiceError(
+                    "duplicate_doctor_name",
+                    f"Ya existe un médico con el nombre «{existing.name}».",
+                )
+
+            doctor.first_name = cleaned_first_name
+            doctor.last_name = cleaned_last_name
+            doctor.name = doctor_name
+            doctor.normalized_name = computed_normalized
+            changed_fields["first_name"] = cleaned_first_name
+            changed_fields["last_name"] = cleaned_last_name
+            changed_fields["name"] = doctor_name
+        elif name is not None:
+            doctor_name = _clean_name_part(name) or ""
+            if not doctor_name:
+                raise DoctorServiceError("missing_doctor_name", "Debe indicar nombre y apellido.")
+            _validate_doctor_name_length(doctor_name)
             computed_normalized = normalize_name(doctor_name)
 
             # Check for duplicate normalized_name (exclude current doctor)

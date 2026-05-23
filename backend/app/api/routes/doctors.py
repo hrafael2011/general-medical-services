@@ -91,6 +91,8 @@ def create_doctor(
 ) -> DoctorRead:
     doctor = service.create_doctor(
         actor_id=current_user.id,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
         name=payload.name,
         sex=payload.sex,
         rank_id=payload.rank_id,

@@ -1,8 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DoctorRead(BaseModel):
     id: str
+    first_name: str | None = None
+    last_name: str | None = None
     name: str
     sex: str
     rank_id: str | None
@@ -25,7 +27,9 @@ class DoctorRead(BaseModel):
 
 
 class CreateDoctorRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=160)
+    first_name: str | None = Field(default=None, min_length=1, max_length=160)
+    last_name: str | None = Field(default=None, min_length=1, max_length=160)
+    name: str | None = Field(default=None, min_length=1, max_length=160)
     sex: str = Field(pattern="^(male|female)$")
     rank_id: str | None = None
     department_id: str | None = None
@@ -39,8 +43,18 @@ class CreateDoctorRequest(BaseModel):
     availability_mode: str = Field(default="monthly", pattern="^(fixed|monthly)$")
     allowed_area_ids: list[str] = []
 
+    @model_validator(mode="after")
+    def require_name_or_parts(self) -> "CreateDoctorRequest":
+        if self.name is not None:
+            return self
+        if self.first_name is not None and self.last_name is not None:
+            return self
+        raise ValueError("Debe indicar nombre y apellido.")
+
 
 class UpdateDoctorRequest(BaseModel):
+    first_name: str | None = Field(default=None, min_length=1, max_length=160)
+    last_name: str | None = Field(default=None, min_length=1, max_length=160)
     name: str | None = Field(default=None, min_length=1, max_length=160)
     sex: str | None = Field(default=None, pattern="^(male|female)$")
     rank_id: str | None = None

@@ -74,8 +74,11 @@ describe("DoctorForm availability", () => {
   it("sends selected department when creating a doctor", async () => {
     renderForm();
 
-    fireEvent.change(screen.getByLabelText("Nombre completo"), {
-      target: { value: "Dra. Prueba" },
+    fireEvent.change(screen.getByLabelText("Nombre"), {
+      target: { value: "Ana" },
+    });
+    fireEvent.change(screen.getByLabelText("Apellido"), {
+      target: { value: "García" },
     });
     await screen.findByText("Recursos Humanos");
     fireEvent.change(screen.getByLabelText("Departamento"), {
@@ -86,7 +89,12 @@ describe("DoctorForm availability", () => {
 
     await waitFor(() => {
       expect(mockCreateDoctor).toHaveBeenCalledWith(
-        expect.objectContaining({ department_id: "dept-1" })
+        expect.objectContaining({
+          first_name: "Ana",
+          last_name: "García",
+          name: "Ana García",
+          department_id: "dept-1",
+        })
       );
     });
   });
