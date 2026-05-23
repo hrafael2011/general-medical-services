@@ -256,14 +256,20 @@ Implementado:
 https://general-medical-services-staging-staging.up.railway.app
 ```
 
-- Vercel Preview para rama `staging` desplegado:
+- Vercel Preview para rama `staging` desplegado. Alias estable recomendado:
+
+```text
+https://general-medical-services-git-staging-hrafael2011s-projects.vercel.app
+```
+
+Deploy puntual validado:
 
 ```text
 https://general-medical-services-oy79i2g68-hrafael2011s-projects.vercel.app
 ```
 
 - `VITE_API_URL` de Vercel Preview `staging` apunta al backend staging.
-- `FRONTEND_ORIGIN` de Railway staging apunta al preview real de Vercel.
+- `FRONTEND_ORIGIN` de Railway staging apunta al alias estable de la rama `staging`.
 - Correos staging configurados en modo redirect a:
 
 ```text
@@ -273,7 +279,7 @@ hendrickrafaelbackup@gmail.com
 Validado:
 
 - Backend staging `/api/health` responde `200`.
-- CORS staging permite el preview real de Vercel.
+- CORS staging permite el alias estable de Vercel para la rama `staging`.
 - CORS staging rechaza `localhost`.
 - Login staging responde correctamente.
 - Creacion de usuario staging funciona.
