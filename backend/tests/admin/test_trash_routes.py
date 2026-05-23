@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from backend.app.api.dependencies import get_db_session
 from backend.app.core.security import create_access_token
 from backend.app.infrastructure.db.models.catalogs import RankModel
+from backend.app.infrastructure.db.models.doctors import DoctorAllowedAreaModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
-from backend.app.infrastructure.db.models.user import UserModel
+from backend.app.infrastructure.db.models.user import PasswordHistoryModel, UserModel
 from backend.app.main import create_app
 
 
@@ -190,6 +191,86 @@ def test_hard_delete_rank(client: TestClient, db_session: Session) -> None:
         f"/api/admin/trash/ranks/{rank.id}", headers=headers
     )
     assert resp.status_code == 204
+
+
+def test_hard_delete_user_removes_password_history(
+    client: TestClient, db_session: Session
+) -> None:
+    now = datetime.now(UTC)
+    user = UserModel(
+        id=str(uuid4()),
+        email="deleted-user@test.com",
+        password_hash="hash",
+        name="Deleted User",
+        role="encargado",
+        active=True,
+        must_change_password=False,
+        token_version=1,
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(user)
+    db_session.add(
+        PasswordHistoryModel(
+            id=str(uuid4()),
+            user_id=user.id,
+            password_hash="old-hash",
+            created_at=now,
+        )
+    )
+    db_session.commit()
+
+    admin = _create_user(db_session, role="admin")
+    headers = _auth_headers(admin)
+
+    resp = client.delete(f"/api/admin/trash/users/{user.id}", headers=headers)
+
+    assert resp.status_code == 204
+    assert db_session.get(UserModel, user.id) is None
+    assert (
+        db_session.query(PasswordHistoryModel)
+        .filter(PasswordHistoryModel.user_id == user.id)
+        .count()
+        == 0
+    )
+
+
+def test_hard_delete_doctor_removes_allowed_areas(
+    client: TestClient, db_session: Session
+) -> None:
+    now = datetime.now(UTC)
+    doctor = DoctorModel(
+        id=str(uuid4()),
+        name="Deleted Doctor",
+        normalized_name="deleted doctor",
+        sex="male",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(doctor)
+    db_session.add(
+        DoctorAllowedAreaModel(
+            doctor_id=doctor.id,
+            service_area_id=str(uuid4()),
+        )
+    )
+    db_session.commit()
+
+    admin = _create_user(db_session, role="admin")
+    headers = _auth_headers(admin)
+
+    resp = client.delete(f"/api/admin/trash/doctors/{doctor.id}", headers=headers)
+
+    assert resp.status_code == 204
+    assert db_session.get(DoctorModel, doctor.id) is None
+    assert (
+        db_session.query(DoctorAllowedAreaModel)
+        .filter(DoctorAllowedAreaModel.doctor_id == doctor.id)
+        .count()
+        == 0
+    )
 
 
 def test_hard_delete_not_found(client: TestClient, db_session: Session) -> None:

@@ -1,9 +1,17 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from backend.app.infrastructure.db.models.action_alerts import ActionAlertModel
+from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
+from backend.app.infrastructure.db.models.set_password_token import SetPasswordTokenModel
+from backend.app.infrastructure.db.models.telegram import (
+    TelegramInteractionModel,
+    TelegramLinkTokenModel,
+    TelegramUserLinkModel,
+)
 from backend.app.infrastructure.db.models.user import PasswordHistoryModel, UserModel
 
 PASSWORD_HISTORY_DEPTH = 5
@@ -89,6 +97,48 @@ class UserRepository:
     def hard_delete(self, user_id: str) -> None:
         user = self.get_by_id_including_deleted(user_id)
         if user is not None:
+            self.session.execute(
+                delete(PasswordHistoryModel).where(PasswordHistoryModel.user_id == user_id)
+            )
+            self.session.execute(
+                delete(SetPasswordTokenModel).where(SetPasswordTokenModel.user_id == user_id)
+            )
+            self.session.execute(
+                delete(TelegramLinkTokenModel).where(TelegramLinkTokenModel.user_id == user_id)
+            )
+            self.session.execute(
+                delete(TelegramUserLinkModel).where(TelegramUserLinkModel.user_id == user_id)
+            )
+            self.session.execute(
+                update(ActionAlertModel)
+                .where(ActionAlertModel.created_by == user_id)
+                .values(created_by=None)
+            )
+            self.session.execute(
+                update(ActionAlertModel)
+                .where(ActionAlertModel.resolved_by == user_id)
+                .values(resolved_by=None)
+            )
+            self.session.execute(
+                update(ActionAlertModel)
+                .where(ActionAlertModel.dismissed_by == user_id)
+                .values(dismissed_by=None)
+            )
+            self.session.execute(
+                update(ConfirmationRequestModel)
+                .where(ConfirmationRequestModel.created_by == user_id)
+                .values(created_by=None)
+            )
+            self.session.execute(
+                update(TelegramInteractionModel)
+                .where(TelegramInteractionModel.matched_user_id == user_id)
+                .values(matched_user_id=None)
+            )
+            self.session.execute(
+                update(TelegramLinkTokenModel)
+                .where(TelegramLinkTokenModel.created_by == user_id)
+                .values(created_by=None)
+            )
             self.session.delete(user)
             self.session.flush()
 
