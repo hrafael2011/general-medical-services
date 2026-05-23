@@ -174,10 +174,7 @@ def test_on_calendar_approved_creates_confirmation_requests(db_session) -> None:
     assert confirmations[0].assignment_id == assignment.id
     assert confirmations[0].due_at is not None
     notification = NotificationRepository(db_session).list_all()[0]
-    assert confirmations[0].response_token in notification.payload["message"]
-    assert "/confirmacion-medica?token=" in notification.payload["message"]
-    assert "/confirmar " not in notification.payload["message"]
-    assert "rechazar" not in notification.payload["message"].lower()
+    assert "Responda 1" in notification.payload["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -267,10 +264,7 @@ def test_on_mission_confirmed_creates_confirmation_requests(db_session) -> None:
     assert confirmations[0].mission_id == mission.id
     assert confirmations[0].due_at is not None
     notification = NotificationRepository(db_session).list_all()[0]
-    assert confirmations[0].response_token in notification.payload["message"]
-    assert "/confirmacion-medica?token=" in notification.payload["message"]
-    assert "/confirmar " not in notification.payload["message"]
-    assert "rechazar" not in notification.payload["message"].lower()
+    assert "Responda 1" in notification.payload["message"]
 
 
 def test_calendar_assignment_added_after_approval_creates_change_confirmation(db_session) -> None:

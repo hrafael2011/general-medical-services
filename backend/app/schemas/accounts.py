@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserRead(BaseModel):
@@ -9,6 +9,11 @@ class UserRead(BaseModel):
     active: bool
     must_change_password: bool
     permissions: list[str] = []
+
+    @field_validator("permissions", mode="before")
+    @classmethod
+    def empty_list_if_none(cls, v: object) -> object:
+        return [] if v is None else v
 
     model_config = {"from_attributes": True}
 
