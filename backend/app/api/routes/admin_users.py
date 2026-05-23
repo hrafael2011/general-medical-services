@@ -67,6 +67,7 @@ def create_encargado(
             name=payload.name,
             email=payload.email,
             temporary_password=payload.temporary_password,
+            permissions=payload.permissions,
         )
     except DuplicateEmailError as exc:
         raise HTTPException(

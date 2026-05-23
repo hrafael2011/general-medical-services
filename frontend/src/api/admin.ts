@@ -15,10 +15,10 @@ export const adminApi = {
     return apiFetch<UserRead[]>(`/admin/users${query}`);
   },
 
-  createEncargado(name: string, email: string, temporaryPassword?: string) {
+  createEncargado(name: string, email: string, temporaryPassword?: string, permissions?: string[]) {
     return apiFetch<{ user: UserRead; temporary_password: string }>("/admin/users/encargados", {
       method: "POST",
-      body: JSON.stringify({ name, email, temporary_password: temporaryPassword }),
+      body: JSON.stringify({ name, email, temporary_password: temporaryPassword, permissions }),
     });
   },
 

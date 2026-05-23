@@ -79,6 +79,7 @@ class AccountService:
         name: str,
         email: str,
         temporary_password: str | None = None,
+        permissions: list[str] | None = None,
     ) -> TemporaryPasswordResult:
         self._require_admin(actor)
         password = temporary_password or generate_temporary_password()
@@ -102,6 +103,7 @@ class AccountService:
             created_by=actor.id,
             created_at=now,
             updated_at=now,
+            permissions=permissions or [],
         )
         try:
             self.users.add(user)

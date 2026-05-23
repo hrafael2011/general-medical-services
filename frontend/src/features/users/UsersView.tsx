@@ -23,6 +23,14 @@ export function UsersView() {
   const [editRole, setEditRole] = useState("");
   const [editActive, setEditActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<UserRead | null>(null);
+  const [newPermissions, setNewPermissions] = useState<string[]>([]);
+
+  const AVAILABLE_PERMISSIONS = [
+    { key: "receive_escalation_alerts", label: "Recibir alertas de escalamiento" },
+    { key: "manage_doctors", label: "Gestionar médicos" },
+    { key: "manage_calendars", label: "Gestionar calendarios" },
+    { key: "view_reports", label: "Ver reportes" },
+  ];
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["admin-users"],
@@ -30,7 +38,7 @@ export function UsersView() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => adminApi.createEncargado(newName, newEmail),
+    mutationFn: () => adminApi.createEncargado(newName, newEmail, undefined, newPermissions),
     onSuccess: (res) => {
       adminApi.inviteUser(res.user.id).catch(() => {
         addToast("error", "Usuario creado, pero no se pudo enviar la invitación. Verifica la configuración de correo.");
@@ -39,6 +47,7 @@ export function UsersView() {
       setShowCreate(false);
       setNewName("");
       setNewEmail("");
+      setNewPermissions([]);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: (err) => {
@@ -111,6 +120,26 @@ export function UsersView() {
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
             <label>Nombre <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
             <label>Email <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} /></label>
+          </div>
+          <div style={{ marginTop: "12px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
+            {AVAILABLE_PERMISSIONS.map(p => (
+              <label key={p.key} className="permission-checkbox">
+                <input
+                  type="checkbox"
+                  checked={newPermissions.includes(p.key)}
+                  onChange={(e) => {
+                    setNewPermissions(
+                      e.target.checked
+                        ? [...newPermissions, p.key]
+                        : newPermissions.filter(x => x !== p.key)
+                    );
+                  }}
+                />
+                {p.label}
+              </label>
+            ))}
+          </div>
+          <div style={{ marginTop: "12px" }}>
             <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
               {createMutation.isPending ? "Creando…" : "Crear"}
             </button>
