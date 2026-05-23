@@ -1,3 +1,7 @@
+def _with_whatsapp_confirmation(message: str) -> str:
+    return f"{message}\n\nResponda 1 para confirmar su turno."
+
+
 def render_initial_assignment(
     service_date: str, service_area: str, service_start: str | None
 ) -> str:
@@ -170,3 +174,10 @@ def render_missing_availability_reminder(
         f"Los siguientes médicos aún no han registrado su disponibilidad: {names}. "
         f"Por favor, solicíteles que la registren antes de esa fecha."
     )
+
+
+def render_escalamiento_encargado(doctor_name: str, service_info: str = "") -> str:
+    base = f"El Dr. {doctor_name} no ha confirmado sus turnos asignados."
+    if service_info:
+        base += f" Servicio: {service_info}."
+    return base + " Por favor, contacte al médico para verificar su disponibilidad."
