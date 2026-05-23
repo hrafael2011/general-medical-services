@@ -141,34 +141,28 @@ def test_create_deactivation_reason_success(client, mock_service):
 
     reason = DeactivationReasonModel(
         id="reason-new",
-        code="training_leave",
+        code="capacitacion",
         display_name="Capacitación",
         active=True,
-        requires_detail=True,
+        requires_detail=False,
         applies_to_sex=None,
-        severity="warn",
+        severity="hard_block",
     )
     mock_service.create_deactivation_reason.return_value = reason
 
     resp = client.post(
         "/api/catalogs/deactivation-reasons",
         json={
-            "code": "training_leave",
             "display_name": "Capacitación",
-            "requires_detail": True,
             "applies_to_sex": None,
-            "severity": "warn",
         },
     )
 
     assert resp.status_code == 201
     assert resp.json()["display_name"] == "Capacitación"
     mock_service.create_deactivation_reason.assert_called_once_with(
-        code="training_leave",
         display_name="Capacitación",
-        requires_detail=True,
         applies_to_sex=None,
-        severity="warn",
     )
 
 
@@ -190,10 +184,7 @@ def test_update_deactivation_reason_success(client, mock_service):
         "/api/catalogs/deactivation-reasons/reason-1",
         json={
             "display_name": "Capacitación externa",
-            "requires_detail": False,
             "applies_to_sex": "female",
-            "severity": "hard_block",
-            "active": False,
         },
     )
 
@@ -202,10 +193,7 @@ def test_update_deactivation_reason_success(client, mock_service):
     mock_service.update_deactivation_reason.assert_called_once_with(
         "reason-1",
         display_name="Capacitación externa",
-        requires_detail=False,
         applies_to_sex="female",
-        severity="hard_block",
-        active=False,
     )
 
 

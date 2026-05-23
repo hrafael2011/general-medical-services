@@ -67,34 +67,29 @@ def test_create_update_and_soft_delete_deactivation_reason(db_session) -> None:
     service = CatalogService(repository)
 
     reason = service.create_deactivation_reason(
-        code="training_leave",
         display_name="Capacitación",
-        requires_detail=True,
         applies_to_sex=None,
-        severity="warn",
     )
 
-    assert reason.code == "training_leave"
+    assert reason.code == "capacitacion"
     assert reason.display_name == "Capacitación"
     assert reason.active is True
-    assert reason.requires_detail is True
+    assert reason.requires_detail is False
     assert reason.applies_to_sex is None
-    assert reason.severity == "warn"
+    assert reason.severity == "hard_block"
 
     updated = service.update_deactivation_reason(
         reason.id,
         display_name="Capacitación externa",
-        requires_detail=False,
         applies_to_sex="female",
-        severity="hard_block",
-        active=False,
     )
 
+    assert updated.code == "capacitacion_externa"
     assert updated.display_name == "Capacitación externa"
     assert updated.requires_detail is False
     assert updated.applies_to_sex == "female"
     assert updated.severity == "hard_block"
-    assert updated.active is False
+    assert updated.active is True
 
     affected = service.soft_delete_deactivation_reason(reason.id)
 

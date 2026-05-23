@@ -401,18 +401,11 @@ function DeactivationReasonsTab() {
   const { addToast } = useToast();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [newCode, setNewCode] = useState("");
   const [newName, setNewName] = useState("");
-  const [newRequiresDetail, setNewRequiresDetail] = useState(false);
   const [newAppliesToSex, setNewAppliesToSex] = useState("");
-  const [newSeverity, setNewSeverity] = useState("hard_block");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editCode, setEditCode] = useState("");
   const [editName, setEditName] = useState("");
-  const [editRequiresDetail, setEditRequiresDetail] = useState(false);
   const [editAppliesToSex, setEditAppliesToSex] = useState("");
-  const [editSeverity, setEditSeverity] = useState("hard_block");
-  const [editActive, setEditActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<DeactivationReasonRead | null>(null);
 
   const { data: reasons, isLoading } = useQuery({
@@ -422,20 +415,14 @@ function DeactivationReasonsTab() {
 
   const createMutation = useMutation({
     mutationFn: () => doctorsApi.createDeactivationReason({
-      code: newCode,
       display_name: newName,
-      requires_detail: newRequiresDetail,
       applies_to_sex: newAppliesToSex || null,
-      severity: newSeverity,
     }),
     onSuccess: () => {
       addToast("success", "Razón creada.");
       setShowCreate(false);
-      setNewCode("");
       setNewName("");
-      setNewRequiresDetail(false);
       setNewAppliesToSex("");
-      setNewSeverity("hard_block");
       qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
     },
     onError: () => addToast("error", "Error al crear razón."),
@@ -443,12 +430,8 @@ function DeactivationReasonsTab() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: Partial<{
-      code: string;
       display_name: string;
-      requires_detail: boolean;
       applies_to_sex: string | null;
-      severity: string;
-      active: boolean;
     }> }) => doctorsApi.updateDeactivationReason(id, payload),
     onSuccess: () => {
       addToast("success", "Razón actualizada.");
@@ -461,22 +444,20 @@ function DeactivationReasonsTab() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => doctorsApi.deleteDeactivationReason(id),
     onSuccess: () => {
-      addToast("success", "Razón desactivada.");
+      addToast("success", "Razón eliminada.");
       setDeleteTarget(null);
       qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
     },
-    onError: () => addToast("error", "Error al desactivar razón."),
+    onError: () => addToast("error", "Error al eliminar razón."),
   });
 
   function startEditing(reason: DeactivationReasonRead) {
     setEditingId(reason.id);
-    setEditCode(reason.code);
     setEditName(reason.display_name);
-    setEditRequiresDetail(reason.requires_detail);
     setEditAppliesToSex(reason.applies_to_sex ?? "");
-    setEditSeverity(reason.severity);
-    setEditActive(reason.active);
   }
+
+  const activeReasons = (reasons ?? []).filter(reason => reason.active);
 
   return (
     <div>
@@ -491,30 +472,14 @@ function DeactivationReasonsTab() {
         <div style={{ background: "#f9fafb", padding: "16px", borderRadius: "8px", marginBottom: "20px" }}>
           <h4 style={{ margin: "0 0 12px", fontSize: "0.9rem" }}>Crear razón de desactivación</h4>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label>Código <input type="text" value={newCode} onChange={e => setNewCode(e.target.value)} /></label>
-            <label>Nombre visible <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
+            <label>Nombre <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
             <label>
-              Aplica a sexo
+              Aplica a
               <select value={newAppliesToSex} onChange={e => setNewAppliesToSex(e.target.value)}>
                 <option value="">Todos</option>
                 <option value="male">Masculino</option>
                 <option value="female">Femenino</option>
               </select>
-            </label>
-            <label>
-              Severidad
-              <select value={newSeverity} onChange={e => setNewSeverity(e.target.value)}>
-                <option value="hard_block">Bloquea servicio</option>
-                <option value="warn">Advertencia</option>
-              </select>
-            </label>
-            <label className="toggle-label" style={{ margin: 0 }}>
-              <input
-                type="checkbox"
-                checked={newRequiresDetail}
-                onChange={e => setNewRequiresDetail(e.target.checked)}
-              />
-              Requiere detalle
             </label>
             <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
               {createMutation.isPending ? "Creando…" : "Crear"}
@@ -529,17 +494,14 @@ function DeactivationReasonsTab() {
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
-              <tr><th>Nombre</th><th>Código</th><th>Sexo</th><th>Severidad</th><th>Detalle</th><th>Activo</th><th></th></tr>
+              <tr><th>Nombre</th><th>Aplica a</th><th></th></tr>
             </thead>
             <tbody>
-              {reasons.map(reason => (
+              {activeReasons.map(reason => (
                 editingId === reason.id ? (
                   <tr key={reason.id} className="edit-row">
                     <td>
                       <input type="text" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
-                    </td>
-                    <td>
-                      <input type="text" value={editCode} onChange={e => setEditCode(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
                     </td>
                     <td>
                       <select value={editAppliesToSex} onChange={e => setEditAppliesToSex(e.target.value)}>
@@ -549,24 +511,6 @@ function DeactivationReasonsTab() {
                       </select>
                     </td>
                     <td>
-                      <select value={editSeverity} onChange={e => setEditSeverity(e.target.value)}>
-                        <option value="hard_block">Bloquea servicio</option>
-                        <option value="warn">Advertencia</option>
-                      </select>
-                    </td>
-                    <td>
-                      <label className="toggle-label" style={{ margin: 0 }}>
-                        <input type="checkbox" checked={editRequiresDetail} onChange={e => setEditRequiresDetail(e.target.checked)} />
-                        {editRequiresDetail ? "Sí" : "No"}
-                      </label>
-                    </td>
-                    <td>
-                      <label className="toggle-label" style={{ margin: 0 }}>
-                        <input type="checkbox" checked={editActive} onChange={e => setEditActive(e.target.checked)} />
-                        {editActive ? "Activo" : "Inactivo"}
-                      </label>
-                    </td>
-                    <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
                           className="btn-primary"
@@ -574,12 +518,8 @@ function DeactivationReasonsTab() {
                           onClick={() => updateMutation.mutate({
                             id: reason.id,
                             payload: {
-                              code: editCode,
                               display_name: editName,
-                              requires_detail: editRequiresDetail,
                               applies_to_sex: editAppliesToSex || null,
-                              severity: editSeverity,
-                              active: editActive,
                             },
                           })}
                           disabled={updateMutation.isPending}
@@ -599,11 +539,7 @@ function DeactivationReasonsTab() {
                 ) : (
                   <tr key={reason.id}>
                     <td>{reason.display_name}</td>
-                    <td>{reason.code}</td>
                     <td>{sexLabel(reason.applies_to_sex)}</td>
-                    <td>{severityLabel(reason.severity)}</td>
-                    <td>{reason.requires_detail ? "Sí" : "No"}</td>
-                    <td>{reason.active ? "Activo" : "Inactivo"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
@@ -618,7 +554,7 @@ function DeactivationReasonsTab() {
                           className="btn-ghost btn-danger"
                           style={{ padding: "3px 8px" }}
                           onClick={() => setDeleteTarget(reason)}
-                          title="Desactivar razón"
+                          title="Eliminar razón"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -634,9 +570,9 @@ function DeactivationReasonsTab() {
 
       <ConfirmDialog
         open={deleteTarget !== null}
-        title="Desactivar razón"
-        message={`¿Estás seguro de desactivar la razón "${deleteTarget?.display_name}"?`}
-        confirmLabel="Sí, desactivar"
+        title="Eliminar razón"
+        message={`¿Estás seguro de eliminar la razón "${deleteTarget?.display_name}"?`}
+        confirmLabel="Sí, eliminar"
         variant="danger"
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
@@ -652,8 +588,4 @@ function sexLabel(value: string | null): string {
   if (value === "male") return "Masculino";
   if (value === "female") return "Femenino";
   return "Todos";
-}
-
-function severityLabel(value: string): string {
-  return value === "hard_block" ? "Bloquea servicio" : "Advertencia";
 }

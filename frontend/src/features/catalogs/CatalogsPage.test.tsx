@@ -6,12 +6,12 @@ import { CatalogsPage } from "./CatalogsPage";
 
 const mockCreateDeactivationReason = vi.fn().mockResolvedValue({
   id: "reason-new",
-  code: "training_leave",
+  code: "capacitacion",
   display_name: "Capacitación",
   active: true,
-  requires_detail: true,
+  requires_detail: false,
   applies_to_sex: null,
-  severity: "warn",
+  severity: "hard_block",
 });
 
 vi.mock("../../api/doctors", () => ({
@@ -64,25 +64,15 @@ describe("CatalogsPage", () => {
     expect(await screen.findByText("Licencia médica")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Nueva Razón/i }));
-    fireEvent.change(screen.getByLabelText("Código"), {
-      target: { value: "training_leave" },
-    });
-    fireEvent.change(screen.getByLabelText("Nombre visible"), {
+    fireEvent.change(screen.getByLabelText("Nombre"), {
       target: { value: "Capacitación" },
-    });
-    fireEvent.click(screen.getByLabelText("Requiere detalle"));
-    fireEvent.change(screen.getByLabelText("Severidad"), {
-      target: { value: "warn" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^Crear$/i }));
 
     await waitFor(() => {
       expect(mockCreateDeactivationReason).toHaveBeenCalledWith({
-        code: "training_leave",
         display_name: "Capacitación",
-        requires_detail: true,
         applies_to_sex: null,
-        severity: "warn",
       });
     });
   });

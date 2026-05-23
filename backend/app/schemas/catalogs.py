@@ -53,11 +53,8 @@ class CreateDepartmentRequest(BaseModel):
 
 
 class CreateDeactivationReasonRequest(BaseModel):
-    code: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_]+$")
     display_name: str = Field(min_length=1, max_length=160)
-    requires_detail: bool = False
     applies_to_sex: str | None = Field(default=None, pattern="^(male|female)$")
-    severity: str = Field(pattern="^(hard_block|warn)$")
 
 
 class UpdateRankRequest(BaseModel):
@@ -72,12 +69,8 @@ class UpdateDepartmentRequest(BaseModel):
 
 
 class UpdateDeactivationReasonRequest(BaseModel):
-    code: str | None = Field(default=None, min_length=1, max_length=80, pattern=r"^[a-z0-9_]+$")
     display_name: str | None = Field(default=None, min_length=1, max_length=160)
-    requires_detail: bool | None = None
     applies_to_sex: str | None = Field(default=None, pattern="^(male|female)$")
-    severity: str | None = Field(default=None, pattern="^(hard_block|warn)$")
-    active: bool | None = None
 
 
 class DeleteRankResponse(BaseModel):

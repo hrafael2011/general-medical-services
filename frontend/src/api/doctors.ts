@@ -43,11 +43,8 @@ export interface DeactivationReasonRead {
 }
 
 export interface DeactivationReasonPayload {
-  code: string;
   display_name: string;
-  requires_detail: boolean;
   applies_to_sex: string | null;
-  severity: string;
 }
 
 export interface AvailabilityRead {
@@ -109,7 +106,7 @@ export const doctorsApi = {
     apiFetch<DeactivationReasonRead>("/catalogs/deactivation-reasons", {
       method: "POST", body: JSON.stringify(payload),
     }),
-  updateDeactivationReason: (id: string, payload: Partial<DeactivationReasonPayload> & { active?: boolean }) =>
+  updateDeactivationReason: (id: string, payload: Partial<DeactivationReasonPayload>) =>
     apiFetch<DeactivationReasonRead>(`/catalogs/deactivation-reasons/${id}`, {
       method: "PATCH", body: JSON.stringify(payload),
     }),

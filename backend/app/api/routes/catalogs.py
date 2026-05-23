@@ -76,11 +76,8 @@ def create_deactivation_reason(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DeactivationReasonRead:
     reason = service.create_deactivation_reason(
-        code=payload.code,
         display_name=payload.display_name,
-        requires_detail=payload.requires_detail,
         applies_to_sex=payload.applies_to_sex,
-        severity=payload.severity,
     )
     session.commit()
     return DeactivationReasonRead.model_validate(reason)
