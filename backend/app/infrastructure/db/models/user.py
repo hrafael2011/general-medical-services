@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.infrastructure.db.base import Base
@@ -32,6 +32,8 @@ class UserModel(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    whatsapp_phone: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
+    permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
 
 class LoginAttemptModel(Base):

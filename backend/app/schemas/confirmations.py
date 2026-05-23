@@ -13,6 +13,7 @@ class ConfirmationRequestRead(BaseModel):
     mission_id: str | None
     due_at: datetime | None
     responded_at: datetime | None
+    escalated_at: datetime | None = None
     response_channel: str | None
     created_by: str | None
     created_at: datetime

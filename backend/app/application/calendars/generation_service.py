@@ -11,6 +11,7 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     UnresolvedGapModel,
 )
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
@@ -206,6 +207,13 @@ class GenerationService:
                     created_by=actor_id,
                     created_at=now,
                 )
+                # Resolve service_start_at from ServiceAreaModel.start_hour
+                area = self.calendar_repo.session.get(ServiceAreaModel, area_uuid)
+                if area and area.start_hour is not None:
+                    assignment.service_start_at = datetime(
+                        result.slot.date.year, result.slot.date.month, result.slot.date.day,
+                        area.start_hour, 0, 0, tzinfo=UTC,
+                    )
                 self.calendar_repo.add_assignment(assignment)
             else:
                 gap = UnresolvedGapModel(
