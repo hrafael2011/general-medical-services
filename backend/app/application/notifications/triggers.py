@@ -108,9 +108,14 @@ class NotificationTriggers:
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
                 phone = doctor.whatsapp_phone if doctor else None
-                area = self.doctor_repo.session.get(ServiceAreaModel, assignment.service_area_id)
-                area_name = area.display_name if area else assignment.service_area_id
-                service_start = str(assignment.service_start_at) if assignment.service_start_at else None
+                # Resolver display_name del área — el repo puede tener .session (prod) o no (test)
+                db_session = getattr(self.doctor_repo, 'session', None)
+                if db_session:
+                    area = db_session.get(ServiceAreaModel, assignment.service_area_id)
+                    area_name = area.display_name if area else assignment.service_area_id
+                else:
+                    area_name = assignment.service_area_id
+                service_start = str(assignment.service_start_at) if getattr(assignment, 'service_start_at', None) else None
                 message = render_initial_assignment(
                     service_date=str(assignment.service_date),
                     service_area=area_name,
