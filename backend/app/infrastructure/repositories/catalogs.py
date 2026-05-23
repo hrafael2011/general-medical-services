@@ -57,6 +57,27 @@ class CatalogRepository:
         statement = select(DeactivationReasonModel).order_by(DeactivationReasonModel.code)
         return list(self.session.scalars(statement))
 
+    def update_deactivation_reason(self, reason_id: str, **fields: object) -> None:
+        now = datetime.now(UTC)
+        values = {**fields, "updated_at": now}
+        self.session.execute(
+            update(DeactivationReasonModel)
+            .where(DeactivationReasonModel.id == reason_id)
+            .values(**values)
+        )
+        self.session.flush()
+
+    def count_doctors_by_deactivation_reason(self, reason_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(DoctorModel)
+            .where(
+                DoctorModel.service_inactive_reason_id == reason_id,
+                DoctorModel.deleted_at.is_(None),
+            )
+        )
+        return self.session.scalars(stmt).one()
+
     def list_deactivation_reasons_for_sex(self, sex: str) -> list[DeactivationReasonModel]:
         statement = (
             select(DeactivationReasonModel)
@@ -221,4 +242,3 @@ class CatalogRepository:
 
     def get_setting(self, key: str) -> SystemSettingModel | None:
         return self.session.get(SystemSettingModel, key)
-

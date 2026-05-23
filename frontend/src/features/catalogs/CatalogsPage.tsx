@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, PlusCircle, Pencil, Trash2, Check, X } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { doctorsApi, RankRead, DepartmentRead } from "../../api/doctors";
+import { doctorsApi, RankRead, DepartmentRead, DeactivationReasonRead } from "../../api/doctors";
 
-type Tab = "ranks" | "departments";
+type Tab = "ranks" | "departments" | "deactivation-reasons";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "ranks", label: "Rangos" },
   { key: "departments", label: "Departamentos" },
+  { key: "deactivation-reasons", label: "Razones de desactivación" },
 ];
 
 export function CatalogsPage() {
@@ -36,7 +37,9 @@ export function CatalogsPage() {
         ))}
       </div>
 
-      {active === "ranks" ? <RanksTab /> : <DepartmentsTab />}
+      {active === "ranks" && <RanksTab />}
+      {active === "departments" && <DepartmentsTab />}
+      {active === "deactivation-reasons" && <DeactivationReasonsTab />}
     </div>
   );
 }
@@ -392,4 +395,265 @@ function DepartmentsTab() {
       />
     </div>
   );
+}
+
+function DeactivationReasonsTab() {
+  const { addToast } = useToast();
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newRequiresDetail, setNewRequiresDetail] = useState(false);
+  const [newAppliesToSex, setNewAppliesToSex] = useState("");
+  const [newSeverity, setNewSeverity] = useState("hard_block");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCode, setEditCode] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editRequiresDetail, setEditRequiresDetail] = useState(false);
+  const [editAppliesToSex, setEditAppliesToSex] = useState("");
+  const [editSeverity, setEditSeverity] = useState("hard_block");
+  const [editActive, setEditActive] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<DeactivationReasonRead | null>(null);
+
+  const { data: reasons, isLoading } = useQuery({
+    queryKey: ["deactivation-reasons"],
+    queryFn: () => doctorsApi.listDeactivationReasons(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => doctorsApi.createDeactivationReason({
+      code: newCode,
+      display_name: newName,
+      requires_detail: newRequiresDetail,
+      applies_to_sex: newAppliesToSex || null,
+      severity: newSeverity,
+    }),
+    onSuccess: () => {
+      addToast("success", "Razón creada.");
+      setShowCreate(false);
+      setNewCode("");
+      setNewName("");
+      setNewRequiresDetail(false);
+      setNewAppliesToSex("");
+      setNewSeverity("hard_block");
+      qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
+    },
+    onError: () => addToast("error", "Error al crear razón."),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<{
+      code: string;
+      display_name: string;
+      requires_detail: boolean;
+      applies_to_sex: string | null;
+      severity: string;
+      active: boolean;
+    }> }) => doctorsApi.updateDeactivationReason(id, payload),
+    onSuccess: () => {
+      addToast("success", "Razón actualizada.");
+      setEditingId(null);
+      qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
+    },
+    onError: () => addToast("error", "Error al actualizar razón."),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => doctorsApi.deleteDeactivationReason(id),
+    onSuccess: () => {
+      addToast("success", "Razón desactivada.");
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
+    },
+    onError: () => addToast("error", "Error al desactivar razón."),
+  });
+
+  function startEditing(reason: DeactivationReasonRead) {
+    setEditingId(reason.id);
+    setEditCode(reason.code);
+    setEditName(reason.display_name);
+    setEditRequiresDetail(reason.requires_detail);
+    setEditAppliesToSex(reason.applies_to_sex ?? "");
+    setEditSeverity(reason.severity);
+    setEditActive(reason.active);
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: "16px" }}>
+        <button className="btn-primary" onClick={() => setShowCreate(!showCreate)}>
+          <PlusCircle size={15} />
+          {showCreate ? "Cancelar" : "Nueva Razón"}
+        </button>
+      </div>
+
+      {showCreate && (
+        <div style={{ background: "#f9fafb", padding: "16px", borderRadius: "8px", marginBottom: "20px" }}>
+          <h4 style={{ margin: "0 0 12px", fontSize: "0.9rem" }}>Crear razón de desactivación</h4>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            <label>Código <input type="text" value={newCode} onChange={e => setNewCode(e.target.value)} /></label>
+            <label>Nombre visible <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
+            <label>
+              Aplica a sexo
+              <select value={newAppliesToSex} onChange={e => setNewAppliesToSex(e.target.value)}>
+                <option value="">Todos</option>
+                <option value="male">Masculino</option>
+                <option value="female">Femenino</option>
+              </select>
+            </label>
+            <label>
+              Severidad
+              <select value={newSeverity} onChange={e => setNewSeverity(e.target.value)}>
+                <option value="hard_block">Bloquea servicio</option>
+                <option value="warn">Advertencia</option>
+              </select>
+            </label>
+            <label className="toggle-label" style={{ margin: 0 }}>
+              <input
+                type="checkbox"
+                checked={newRequiresDetail}
+                onChange={e => setNewRequiresDetail(e.target.checked)}
+              />
+              Requiere detalle
+            </label>
+            <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creando…" : "Crear"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLoading && <p className="loading-text">Cargando razones…</p>}
+
+      {reasons && (
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr><th>Nombre</th><th>Código</th><th>Sexo</th><th>Severidad</th><th>Detalle</th><th>Activo</th><th></th></tr>
+            </thead>
+            <tbody>
+              {reasons.map(reason => (
+                editingId === reason.id ? (
+                  <tr key={reason.id} className="edit-row">
+                    <td>
+                      <input type="text" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
+                    </td>
+                    <td>
+                      <input type="text" value={editCode} onChange={e => setEditCode(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
+                    </td>
+                    <td>
+                      <select value={editAppliesToSex} onChange={e => setEditAppliesToSex(e.target.value)}>
+                        <option value="">Todos</option>
+                        <option value="male">Masculino</option>
+                        <option value="female">Femenino</option>
+                      </select>
+                    </td>
+                    <td>
+                      <select value={editSeverity} onChange={e => setEditSeverity(e.target.value)}>
+                        <option value="hard_block">Bloquea servicio</option>
+                        <option value="warn">Advertencia</option>
+                      </select>
+                    </td>
+                    <td>
+                      <label className="toggle-label" style={{ margin: 0 }}>
+                        <input type="checkbox" checked={editRequiresDetail} onChange={e => setEditRequiresDetail(e.target.checked)} />
+                        {editRequiresDetail ? "Sí" : "No"}
+                      </label>
+                    </td>
+                    <td>
+                      <label className="toggle-label" style={{ margin: 0 }}>
+                        <input type="checkbox" checked={editActive} onChange={e => setEditActive(e.target.checked)} />
+                        {editActive ? "Activo" : "Inactivo"}
+                      </label>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          className="btn-primary"
+                          style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                          onClick={() => updateMutation.mutate({
+                            id: reason.id,
+                            payload: {
+                              code: editCode,
+                              display_name: editName,
+                              requires_detail: editRequiresDetail,
+                              applies_to_sex: editAppliesToSex || null,
+                              severity: editSeverity,
+                              active: editActive,
+                            },
+                          })}
+                          disabled={updateMutation.isPending}
+                        >
+                          <Check size={14} /> Guardar
+                        </button>
+                        <button
+                          className="btn-secondary"
+                          style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                          onClick={() => setEditingId(null)}
+                        >
+                          <X size={14} /> Cancelar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={reason.id}>
+                    <td>{reason.display_name}</td>
+                    <td>{reason.code}</td>
+                    <td>{sexLabel(reason.applies_to_sex)}</td>
+                    <td>{severityLabel(reason.severity)}</td>
+                    <td>{reason.requires_detail ? "Sí" : "No"}</td>
+                    <td>{reason.active ? "Activo" : "Inactivo"}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          className="btn-ghost"
+                          style={{ padding: "3px 8px" }}
+                          onClick={() => startEditing(reason)}
+                          title="Editar razón"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          className="btn-ghost btn-danger"
+                          style={{ padding: "3px 8px" }}
+                          onClick={() => setDeleteTarget(reason)}
+                          title="Desactivar razón"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Desactivar razón"
+        message={`¿Estás seguro de desactivar la razón "${deleteTarget?.display_name}"?`}
+        confirmLabel="Sí, desactivar"
+        variant="danger"
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+        isLoading={deleteMutation.isPending}
+      />
+    </div>
+  );
+}
+
+function sexLabel(value: string | null): string {
+  if (value === "male") return "Masculino";
+  if (value === "female") return "Femenino";
+  return "Todos";
+}
+
+function severityLabel(value: string): string {
+  return value === "hard_block" ? "Bloquea servicio" : "Advertencia";
 }

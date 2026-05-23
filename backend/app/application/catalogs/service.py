@@ -20,6 +20,9 @@ def normalize_name(value: str) -> str:
     return " ".join(value.strip().lower().split())
 
 
+_MISSING = object()
+
+
 class CatalogService:
     def __init__(self, catalogs: CatalogRepository) -> None:
         self.catalogs = catalogs
@@ -116,6 +119,29 @@ class CatalogService:
         )
         return self.catalogs.add_department(department)
 
+    def create_deactivation_reason(
+        self,
+        *,
+        code: str,
+        display_name: str,
+        requires_detail: bool,
+        applies_to_sex: str | None,
+        severity: str,
+    ) -> DeactivationReasonModel:
+        now = datetime.now(UTC)
+        reason = DeactivationReasonModel(
+            id=str(uuid4()),
+            code=code.strip(),
+            display_name=display_name.strip(),
+            active=True,
+            requires_detail=requires_detail,
+            applies_to_sex=applies_to_sex,
+            severity=severity,
+            created_at=now,
+            updated_at=now,
+        )
+        return self.catalogs.add_deactivation_reason(reason)
+
     def update_rank(
         self,
         rank_id: str,
@@ -149,6 +175,51 @@ class CatalogService:
             raise CatalogError("rank_not_found", "Rango no encontrado.")
         affected = self.catalogs.count_doctors_by_rank(rank_id)
         self.catalogs.soft_delete_rank(rank_id)
+        return affected
+
+    def update_deactivation_reason(
+        self,
+        reason_id: str,
+        *,
+        code: str | None = None,
+        display_name: str | None = None,
+        requires_detail: bool | None = None,
+        applies_to_sex: str | None | object = _MISSING,
+        severity: str | None = None,
+        active: bool | None = None,
+    ) -> DeactivationReasonModel:
+        reason = self.catalogs.get_deactivation_reason_by_id(reason_id)
+        if reason is None:
+            raise CatalogError("deactivation_reason_not_found", "Razón de desactivación no encontrada.")
+        changed: dict[str, object] = {}
+        if code is not None:
+            reason.code = code.strip()
+            changed["code"] = reason.code
+        if display_name is not None:
+            reason.display_name = display_name.strip()
+            changed["display_name"] = reason.display_name
+        if requires_detail is not None:
+            reason.requires_detail = requires_detail
+            changed["requires_detail"] = requires_detail
+        if applies_to_sex is not _MISSING:
+            reason.applies_to_sex = applies_to_sex
+            changed["applies_to_sex"] = applies_to_sex
+        if severity is not None:
+            reason.severity = severity
+            changed["severity"] = severity
+        if active is not None:
+            reason.active = active
+            changed["active"] = active
+        if changed:
+            self.catalogs.update_deactivation_reason(reason_id, **changed)
+        return reason
+
+    def soft_delete_deactivation_reason(self, reason_id: str) -> int:
+        reason = self.catalogs.get_deactivation_reason_by_id(reason_id)
+        if reason is None:
+            raise CatalogError("deactivation_reason_not_found", "Razón de desactivación no encontrada.")
+        affected = self.catalogs.count_doctors_by_deactivation_reason(reason_id)
+        self.catalogs.update_deactivation_reason(reason_id, active=False)
         return affected
 
     def update_department(

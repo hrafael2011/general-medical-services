@@ -42,6 +42,14 @@ export interface DeactivationReasonRead {
   severity: string;
 }
 
+export interface DeactivationReasonPayload {
+  code: string;
+  display_name: string;
+  requires_detail: boolean;
+  applies_to_sex: string | null;
+  severity: string;
+}
+
 export interface AvailabilityRead {
   id: string;
   doctor_id: string;
@@ -96,6 +104,19 @@ export const doctorsApi = {
   listDeactivationReasons: (sex?: string) =>
     apiFetch<DeactivationReasonRead[]>(
       `/catalogs/deactivation-reasons${sex ? `?sex=${sex}` : ""}`
+    ),
+  createDeactivationReason: (payload: DeactivationReasonPayload) =>
+    apiFetch<DeactivationReasonRead>("/catalogs/deactivation-reasons", {
+      method: "POST", body: JSON.stringify(payload),
+    }),
+  updateDeactivationReason: (id: string, payload: Partial<DeactivationReasonPayload> & { active?: boolean }) =>
+    apiFetch<DeactivationReasonRead>(`/catalogs/deactivation-reasons/${id}`, {
+      method: "PATCH", body: JSON.stringify(payload),
+    }),
+  deleteDeactivationReason: (id: string) =>
+    apiFetch<{ message: string; affected_doctors: number }>(
+      `/catalogs/deactivation-reasons/${id}`,
+      { method: "DELETE" },
     ),
   listByDay: () =>
     apiFetch<DoctorByDayResponse>("/doctors/by-day"),

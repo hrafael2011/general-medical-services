@@ -136,6 +136,90 @@ def test_list_deactivation_reasons_invalid_sex(client):
     assert resp.status_code == 422
 
 
+def test_create_deactivation_reason_success(client, mock_service):
+    from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel
+
+    reason = DeactivationReasonModel(
+        id="reason-new",
+        code="training_leave",
+        display_name="Capacitación",
+        active=True,
+        requires_detail=True,
+        applies_to_sex=None,
+        severity="warn",
+    )
+    mock_service.create_deactivation_reason.return_value = reason
+
+    resp = client.post(
+        "/api/catalogs/deactivation-reasons",
+        json={
+            "code": "training_leave",
+            "display_name": "Capacitación",
+            "requires_detail": True,
+            "applies_to_sex": None,
+            "severity": "warn",
+        },
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["display_name"] == "Capacitación"
+    mock_service.create_deactivation_reason.assert_called_once_with(
+        code="training_leave",
+        display_name="Capacitación",
+        requires_detail=True,
+        applies_to_sex=None,
+        severity="warn",
+    )
+
+
+def test_update_deactivation_reason_success(client, mock_service):
+    from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel
+
+    reason = DeactivationReasonModel(
+        id="reason-1",
+        code="training_leave",
+        display_name="Capacitación externa",
+        active=False,
+        requires_detail=False,
+        applies_to_sex="female",
+        severity="hard_block",
+    )
+    mock_service.update_deactivation_reason.return_value = reason
+
+    resp = client.patch(
+        "/api/catalogs/deactivation-reasons/reason-1",
+        json={
+            "display_name": "Capacitación externa",
+            "requires_detail": False,
+            "applies_to_sex": "female",
+            "severity": "hard_block",
+            "active": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] == "Capacitación externa"
+    mock_service.update_deactivation_reason.assert_called_once_with(
+        "reason-1",
+        display_name="Capacitación externa",
+        requires_detail=False,
+        applies_to_sex="female",
+        severity="hard_block",
+        active=False,
+    )
+
+
+def test_delete_deactivation_reason_success(client, mock_service):
+    mock_service.soft_delete_deactivation_reason.return_value = 2
+
+    resp = client.delete("/api/catalogs/deactivation-reasons/reason-1")
+
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Deactivation reason deleted"
+    assert resp.json()["affected_doctors"] == 2
+    mock_service.soft_delete_deactivation_reason.assert_called_once_with("reason-1")
+
+
 # ---------------------------------------------------------------------------
 # GET /api/catalogs/ranks
 # ---------------------------------------------------------------------------

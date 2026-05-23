@@ -60,3 +60,43 @@ def test_create_rank_and_department(db_session) -> None:
 
     assert rank.normalized_name == "coronel"
     assert department.normalized_name == "emergencia"
+
+
+def test_create_update_and_soft_delete_deactivation_reason(db_session) -> None:
+    repository = CatalogRepository(db_session)
+    service = CatalogService(repository)
+
+    reason = service.create_deactivation_reason(
+        code="training_leave",
+        display_name="Capacitación",
+        requires_detail=True,
+        applies_to_sex=None,
+        severity="warn",
+    )
+
+    assert reason.code == "training_leave"
+    assert reason.display_name == "Capacitación"
+    assert reason.active is True
+    assert reason.requires_detail is True
+    assert reason.applies_to_sex is None
+    assert reason.severity == "warn"
+
+    updated = service.update_deactivation_reason(
+        reason.id,
+        display_name="Capacitación externa",
+        requires_detail=False,
+        applies_to_sex="female",
+        severity="hard_block",
+        active=False,
+    )
+
+    assert updated.display_name == "Capacitación externa"
+    assert updated.requires_detail is False
+    assert updated.applies_to_sex == "female"
+    assert updated.severity == "hard_block"
+    assert updated.active is False
+
+    affected = service.soft_delete_deactivation_reason(reason.id)
+
+    assert affected == 0
+    assert repository.get_deactivation_reason_by_id(reason.id).active is False

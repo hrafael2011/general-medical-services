@@ -9,14 +9,17 @@ from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.schemas.catalogs import (
+    CreateDeactivationReasonRequest,
     CreateDepartmentRequest,
     CreateRankRequest,
+    DeleteDeactivationReasonResponse,
     DeactivationReasonRead,
     DeleteDepartmentResponse,
     DeleteRankResponse,
     DepartmentRead,
     RankRead,
     ServiceAreaRead,
+    UpdateDeactivationReasonRequest,
     UpdateDepartmentRequest,
     UpdateRankRequest,
 )
@@ -59,6 +62,71 @@ def list_deactivation_reasons(
     else:
         reasons = repository.list_deactivation_reasons_for_sex(sex)
     return [DeactivationReasonRead.model_validate(reason) for reason in reasons]
+
+
+@router.post(
+    "/deactivation-reasons",
+    response_model=DeactivationReasonRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_deactivation_reason(
+    payload: CreateDeactivationReasonRequest,
+    _user: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> DeactivationReasonRead:
+    reason = service.create_deactivation_reason(
+        code=payload.code,
+        display_name=payload.display_name,
+        requires_detail=payload.requires_detail,
+        applies_to_sex=payload.applies_to_sex,
+        severity=payload.severity,
+    )
+    session.commit()
+    return DeactivationReasonRead.model_validate(reason)
+
+
+@router.patch("/deactivation-reasons/{reason_id}", response_model=DeactivationReasonRead)
+def update_deactivation_reason(
+    reason_id: str,
+    payload: UpdateDeactivationReasonRequest,
+    _user: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> DeactivationReasonRead:
+    try:
+        reason = service.update_deactivation_reason(
+            reason_id,
+            **payload.model_dump(exclude_unset=True),
+        )
+    except CatalogError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    session.commit()
+    return DeactivationReasonRead.model_validate(reason)
+
+
+@router.delete("/deactivation-reasons/{reason_id}", response_model=DeleteDeactivationReasonResponse)
+def delete_deactivation_reason(
+    reason_id: str,
+    _user: Annotated[UserModel, Depends(require_admin)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> DeleteDeactivationReasonResponse:
+    try:
+        affected = service.soft_delete_deactivation_reason(reason_id)
+    except CatalogError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    session.commit()
+    return DeleteDeactivationReasonResponse(
+        message="Deactivation reason deleted",
+        affected_doctors=affected,
+    )
 
 
 @router.get("/ranks", response_model=list[RankRead])
