@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, CalendarDays, Stethoscope, Target,
-  BarChart2, Bell, MessageCircle,
+  BarChart2, Bell, MessageCircle, CheckCircle,
   BookOpen, ClipboardList, ShieldCheck, LogOut, UserPlus, Trash2,
 } from "lucide-react";
 import { actionAlertsApi } from "../api/actionAlerts";
@@ -166,6 +166,17 @@ export function Sidebar() {
               >
                 <MessageCircle size={16} />
                 <span className="sidebar-link-label">Telegram</span>
+              </NavLink>
+            )}
+            {featureFlags?.confirmations && (
+              <NavLink
+                to="/confirmations"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <CheckCircle size={16} />
+                <span className="sidebar-link-label">Confirmaciones</span>
               </NavLink>
             )}
           </div>
