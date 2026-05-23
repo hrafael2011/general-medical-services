@@ -14,6 +14,7 @@ class ConfirmationRequestRead(BaseModel):
     escalated_at: datetime | None = None
     due_at: datetime | None
     responded_at: datetime | None
+    escalated_at: datetime | None = None
     response_channel: str | None
     created_by: str | None
     created_at: datetime

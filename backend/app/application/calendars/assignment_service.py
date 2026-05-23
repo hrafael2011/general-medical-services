@@ -17,6 +17,7 @@ from backend.app.domain.availability_rules import (
     belongs_to_operational_month,
     matches_recurring_monthly_rule,
 )
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 
 # Codes that indicate a hard block — cannot be overridden.
 _HARD_BLOCK_CODES = {"doctor_inactive", "area_not_allowed", "has_hard_block"}
@@ -730,6 +731,13 @@ class AssignmentService:
             created_by=actor_id,
             created_at=datetime.now(UTC),
         )
+        # Resolve service_start_at from ServiceAreaModel.start_hour
+        area = self.calendar_repo.session.get(ServiceAreaModel, service_area_id)
+        if area and area.start_hour is not None:
+            assignment.service_start_at = datetime(
+                date.year, date.month, date.day,
+                area.start_hour, 0, 0, tzinfo=UTC,
+            )
         assignment = self.calendar_repo.add_assignment(assignment)
 
         # 5b. Resolve any matching gap — a manual assignment fills the slot.

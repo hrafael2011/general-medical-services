@@ -18,18 +18,21 @@ INITIAL_SERVICE_AREAS = [
         "display_name": "Emergencia",
         "load_weight": 3,
         "required_for_daily_coverage": True,
+        "start_hour": 7,
     },
     {
         "code": "pista",
         "display_name": "Pista",
         "load_weight": 2,
         "required_for_daily_coverage": True,
+        "start_hour": 6,
     },
     {
         "code": "disponible",
         "display_name": "Disponible",
         "load_weight": 1,
         "required_for_daily_coverage": True,
+        "start_hour": 7,
     },
 ]
 

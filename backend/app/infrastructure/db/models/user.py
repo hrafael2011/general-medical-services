@@ -35,6 +35,7 @@ class UserModel(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    whatsapp_phone: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
 
 
 class LoginAttemptModel(Base):

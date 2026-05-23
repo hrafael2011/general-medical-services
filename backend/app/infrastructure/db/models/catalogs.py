@@ -15,6 +15,7 @@ class ServiceAreaModel(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     required_for_daily_coverage: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     load_weight: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
