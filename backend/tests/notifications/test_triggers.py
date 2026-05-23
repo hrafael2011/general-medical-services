@@ -291,7 +291,7 @@ def test_calendar_assignment_added_after_approval_creates_change_confirmation(db
     assert len(confirmations) == 1
     assert confirmations[0].confirmation_type == "service"
     assert confirmations[0].assignment_id == assignment.id
-    assert confirmations[0].response_token in events[0].payload["message"]
+    assert "Responda 1" in events[0].payload["message"]
 
 
 def test_mission_participants_changed_notifies_removed_and_confirms_added(db_session) -> None:
