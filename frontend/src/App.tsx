@@ -22,6 +22,7 @@ import { TrashPage } from "./features/trash/TrashPage";
 import { SetPasswordPage } from "./features/auth/SetPasswordPage";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { PublicConfirmationPage } from "./features/confirmations/PublicConfirmationPage";
+import { ConfirmationManagementPanel } from "./features/confirmations/ConfirmationManagementPanel";
 
 export function App() {
   return (
@@ -39,6 +40,7 @@ export function App() {
           <Route path="/doctors" element={<DoctorsPage />} />
           <Route path="/missions" element={<MissionView />} />
           <Route path="/notifications" element={<NotificationLog />} />
+          <Route path="/confirmations" element={<ConfirmationManagementPanel />} />
           <Route path="/telegram" element={<TelegramLinks />} />
           <Route path="/reports" element={<ReportsView />} />
           <Route path="/audit" element={<AuditLog />} />
