@@ -239,3 +239,47 @@ Comportamiento esperado:
 - Creacion de usuarios funciona en staging.
 - Correos staging llegan solo a `hendrickrafaelbackup@gmail.com`.
 - Produccion queda intacta.
+
+## Estado de implementacion
+
+Fecha: 2026-05-22
+
+Implementado:
+
+- Rama `staging` creada y subida a GitHub.
+- Railway environment `staging` creado en el proyecto `generous-rebirth`.
+- Servicio backend staging creado: `general-medical-services-staging`.
+- Base de datos Postgres staging separada creada: `Postgres-V7Ht`.
+- Dominio Railway staging:
+
+```text
+https://general-medical-services-staging-staging.up.railway.app
+```
+
+- Vercel Preview para rama `staging` desplegado:
+
+```text
+https://general-medical-services-oy79i2g68-hrafael2011s-projects.vercel.app
+```
+
+- `VITE_API_URL` de Vercel Preview `staging` apunta al backend staging.
+- `FRONTEND_ORIGIN` de Railway staging apunta al preview real de Vercel.
+- Correos staging configurados en modo redirect a:
+
+```text
+hendrickrafaelbackup@gmail.com
+```
+
+Validado:
+
+- Backend staging `/api/health` responde `200`.
+- CORS staging permite el preview real de Vercel.
+- CORS staging rechaza `localhost`.
+- Login staging responde correctamente.
+- Creacion de usuario staging funciona.
+- Invitacion staging responde `200` y usa el modo de correo redirect.
+- Produccion no fue modificada por los deploys de staging.
+
+Nota operativa:
+
+- El preview de Vercel puede estar protegido por Vercel Authentication. Para pruebas desde navegador, iniciar sesion en Vercel si aparece la pantalla de autenticacion.
