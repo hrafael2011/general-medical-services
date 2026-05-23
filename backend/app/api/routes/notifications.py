@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_permission
-from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
+from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider, TwilioProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.user import UserModel
@@ -13,7 +13,6 @@ from backend.app.infrastructure.repositories.notifications import NotificationRe
 from backend.app.schemas.notifications import (
     NotificationEventRead,
     NotificationListResponse,
-    ProcessNotificationsResponse,
 )
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -25,7 +24,12 @@ def get_notification_service(
     from backend.app.application.action_alerts.service import ActionAlertService
     from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 
-    provider = TwilioProvider() if settings.twilio_account_sid else FakeProvider()
+    if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+        provider = MetaCloudAPIProvider()
+    elif settings.twilio_account_sid:
+        provider = TwilioProvider()
+    else:
+        provider = FakeProvider()
     return NotificationService(
         repo=NotificationRepository(session),
         provider=provider,
@@ -58,3 +62,4 @@ def process_notifications(
     result = service.process_pending()
     session.commit()
     return ProcessNotificationsResponse(**result)
+

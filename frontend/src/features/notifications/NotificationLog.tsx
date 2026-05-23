@@ -1,12 +1,10 @@
-import { Bell, Search, Play } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   notificationsApi,
   NotificationEventRead,
-  ProcessNotificationsResponse,
 } from "../../api/notifications";
-import { useToast } from "../../components/Toast";
 
 // ---------------------------------------------------------------------------
 // Label maps
@@ -111,19 +109,15 @@ function recipient(item: NotificationEventRead): string {
 // ---------------------------------------------------------------------------
 
 export function NotificationLog() {
-  const queryClient = useQueryClient();
-  const { addToast } = useToast();
 
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [appliedStatus, setAppliedStatus] = useState("");
   const [appliedType, setAppliedType] = useState("");
-  const [processResult, setProcessResult] = useState<ProcessNotificationsResponse | null>(null);
 
   function applyFilters() {
     setAppliedStatus(statusFilter);
     setAppliedType(typeFilter);
-    setProcessResult(null);
   }
 
   const { data, isLoading, error } = useQuery({
@@ -135,16 +129,6 @@ export function NotificationLog() {
       ),
   });
 
-  const processMutation = useMutation({
-    mutationFn: () => notificationsApi.process(),
-    onSuccess: (result) => {
-      setProcessResult(result);
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      addToast("success", `Cola procesada: ${result.sent} enviados, ${result.failed} fallidos.`);
-    },
-    onError: () => addToast("error", "Error al procesar la cola de notificaciones."),
-  });
-
   return (
     <div className="feature-panel">
       <div className="feature-header">
@@ -152,21 +136,6 @@ export function NotificationLog() {
           <Bell size={20} />
           <h2>Notificaciones</h2>
           {data && <span className="count-badge">{data.total}</span>}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {processResult && (
-            <span style={{ fontSize: "0.85rem", color: "#374151" }}>
-              Enviados: {processResult.sent} / Fallidos: {processResult.failed} / Omitidos: {processResult.skipped}
-            </span>
-          )}
-          <button
-            className="btn-primary"
-            onClick={() => processMutation.mutate()}
-            disabled={processMutation.isPending}
-          >
-            <Play size={15} />
-            {processMutation.isPending ? "Procesando…" : "Procesar cola"}
-          </button>
         </div>
       </div>
 
