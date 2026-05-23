@@ -11,6 +11,9 @@ from backend.app.infrastructure.email.resend import send_email
 @patch("backend.app.infrastructure.email.resend.settings")
 def test_send_via_resend_when_api_key_set(mock_settings):
     """Sends via Resend when RESEND_API_KEY is configured."""
+    mock_settings.email_mode = "send"
+    mock_settings.email_redirect_to = None
+    mock_settings.email_subject_prefix = ""
     mock_settings.resend_api_key = "re_abc123"
     mock_settings.resend_from_email = "noreply@test.com"
     mock_settings.gmail_client_id = None
@@ -27,6 +30,9 @@ def test_send_via_resend_when_api_key_set(mock_settings):
 @patch("backend.app.infrastructure.email.resend.settings")
 def test_fallback_to_log_when_no_provider(mock_settings):
     """Logs to console when no provider is configured."""
+    mock_settings.email_mode = "send"
+    mock_settings.email_redirect_to = None
+    mock_settings.email_subject_prefix = ""
     mock_settings.resend_api_key = None
     mock_settings.gmail_client_id = None
     mock_settings.gmail_client_secret = None
@@ -40,6 +46,9 @@ def test_fallback_to_log_when_no_provider(mock_settings):
 @patch("backend.app.infrastructure.email.resend.settings")
 def test_gmail_chosen_over_log_when_configured(mock_settings):
     """Uses Gmail API before falling back to log when Resend is not configured."""
+    mock_settings.email_mode = "send"
+    mock_settings.email_redirect_to = None
+    mock_settings.email_subject_prefix = ""
     mock_settings.resend_api_key = None
     mock_settings.gmail_client_id = "gmail-client"
     mock_settings.gmail_client_secret = "gmail-secret"
@@ -59,6 +68,9 @@ def test_gmail_chosen_over_log_when_configured(mock_settings):
 @patch("backend.app.infrastructure.email.resend.settings")
 def test_resend_takes_priority_over_gmail(mock_settings):
     """Uses Resend when both Resend and Gmail API are configured."""
+    mock_settings.email_mode = "send"
+    mock_settings.email_redirect_to = None
+    mock_settings.email_subject_prefix = ""
     mock_settings.resend_api_key = "re_abc123"
     mock_settings.resend_from_email = "noreply@test.com"
     mock_settings.gmail_client_id = "gmail-client"
@@ -79,6 +91,9 @@ def test_resend_takes_priority_over_gmail(mock_settings):
 @patch("backend.app.infrastructure.email.resend.settings")
 def test_send_via_gmail_api_when_resend_missing_and_gmail_configured(mock_settings):
     """Uses Gmail API when Resend is not configured but Gmail OAuth credentials are."""
+    mock_settings.email_mode = "send"
+    mock_settings.email_redirect_to = None
+    mock_settings.email_subject_prefix = ""
     mock_settings.resend_api_key = None
     mock_settings.gmail_client_id = "gmail-client"
     mock_settings.gmail_client_secret = "gmail-secret"
@@ -90,6 +105,49 @@ def test_send_via_gmail_api_when_resend_missing_and_gmail_configured(mock_settin
     ) as mock_gmail:
         send_email(to="a@b.com", subject="Test", html="<p>hi</p>")
         mock_gmail.assert_called_once_with("a@b.com", "Test", "<p>hi</p>")
+
+
+@patch("backend.app.infrastructure.email.resend.settings")
+def test_redirect_mode_sends_to_safe_inbox_with_original_recipient(mock_settings):
+    mock_settings.email_mode = "redirect"
+    mock_settings.email_redirect_to = "hendrickrafaelbackup@gmail.com"
+    mock_settings.email_subject_prefix = "[STAGING]"
+    mock_settings.resend_api_key = "re_abc123"
+    mock_settings.resend_from_email = "noreply@test.com"
+    mock_settings.gmail_client_id = None
+    mock_settings.gmail_client_secret = None
+    mock_settings.gmail_refresh_token = None
+
+    with patch("backend.app.infrastructure.email.resend._send_via_resend") as mock_resend:
+        send_email(to="real-user@example.com", subject="Invitacion", html="<p>link</p>")
+
+    redirected_html = mock_resend.call_args.args[2]
+    mock_resend.assert_called_once()
+    assert mock_resend.call_args.args[0] == "hendrickrafaelbackup@gmail.com"
+    assert mock_resend.call_args.args[1] == "[STAGING] Invitacion"
+    assert "real-user@example.com" in redirected_html
+    assert "<p>link</p>" in redirected_html
+
+
+@patch("backend.app.infrastructure.email.resend.settings")
+def test_redirect_mode_without_redirect_address_logs_instead_of_sending(mock_settings):
+    mock_settings.email_mode = "redirect"
+    mock_settings.email_redirect_to = None
+    mock_settings.email_subject_prefix = "[STAGING]"
+    mock_settings.resend_api_key = "re_abc123"
+    mock_settings.gmail_client_id = None
+    mock_settings.gmail_client_secret = None
+    mock_settings.gmail_refresh_token = None
+
+    with patch("backend.app.infrastructure.email.resend._send_via_resend") as mock_resend, patch(
+        "backend.app.infrastructure.email.resend.logger"
+    ) as mock_logger:
+        send_email(to="real-user@example.com", subject="Invitacion", html="<p>link</p>")
+
+    mock_resend.assert_not_called()
+    mock_logger.error.assert_called_once_with(
+        "EMAIL_MODE=redirect configured but EMAIL_REDIRECT_TO is empty"
+    )
 
 
 @patch("backend.app.infrastructure.email.resend.settings")

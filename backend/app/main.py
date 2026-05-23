@@ -109,6 +109,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 def create_app() -> FastAPI:
     is_production = settings.app_env == "production"
+    is_staging = settings.app_env == "staging"
 
     app = FastAPI(
         title=settings.app_name,
@@ -122,6 +123,14 @@ def create_app() -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=["https://general-medical-services.vercel.app"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    elif is_staging:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[settings.frontend_origin],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
