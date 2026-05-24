@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.app.api.dependencies import require_ready_user
+from backend.app.api.dependencies import get_current_user
 from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
 from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
@@ -58,7 +58,7 @@ def user():
         email="actor@example.com",
         password_hash="hash",
         name="Actor Test",
-        role="encargado",
+        role="admin",
         active=True,
         must_change_password=False,
         token_version=1,
@@ -75,7 +75,7 @@ def client(session, user):
         yield session
 
     app.dependency_overrides[get_db_session] = override_get_db_session
-    app.dependency_overrides[require_ready_user] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
     return TestClient(app)
 
 
