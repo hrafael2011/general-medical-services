@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.app.api.dependencies import require_admin, require_ready_user
+from backend.app.api.dependencies import get_current_user, require_ready_user
 from backend.app.api.routes.catalogs import get_catalog_service
 from backend.app.application.catalogs.service import CatalogService
 from backend.app.infrastructure.db.base import Base
@@ -75,8 +75,7 @@ def client(session_local, user, seed_data, mock_service):
             s.close()
 
     app.dependency_overrides[get_db_session] = _get_session
-    app.dependency_overrides[require_ready_user] = lambda: user
-    app.dependency_overrides[require_admin] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_catalog_service] = lambda: mock_service
     return TestClient(app)
 

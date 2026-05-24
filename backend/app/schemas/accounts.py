@@ -16,6 +16,11 @@ class UserRead(BaseModel):
     def empty_list_if_none(cls, v: object) -> object:
         return [] if v is None else v
 
+    @field_validator("is_superadmin", mode="before")
+    @classmethod
+    def false_if_none(cls, v: object) -> object:
+        return False if v is None else v
+
     model_config = {"from_attributes": True}
 
 

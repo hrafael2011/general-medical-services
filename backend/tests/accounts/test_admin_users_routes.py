@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.app.api.dependencies import require_admin
+from backend.app.api.dependencies import get_current_user
 from backend.app.application.accounts.service import AccountService
 from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
@@ -74,7 +74,7 @@ def client(session, admin_user):
 
     # The route imports get_db_session from backend.app.infrastructure.db.session
     app.dependency_overrides[get_db_session] = override_get_db_session
-    app.dependency_overrides[require_admin] = lambda: admin_user
+    app.dependency_overrides[get_current_user] = lambda: admin_user
     return TestClient(app)
 
 
