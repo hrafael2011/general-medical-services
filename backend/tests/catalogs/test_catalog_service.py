@@ -95,4 +95,7 @@ def test_create_update_and_soft_delete_deactivation_reason(db_session) -> None:
     affected = service.soft_delete_deactivation_reason(reason.id)
 
     assert affected == 0
-    assert repository.get_deactivation_reason_by_id(reason.id).active is False
+    deleted = repository.get_deactivation_reason_by_id_including_deleted(reason.id)
+    assert deleted.active is False
+    assert deleted.deleted_at is not None
+    assert repository.list_deactivation_reasons() == []

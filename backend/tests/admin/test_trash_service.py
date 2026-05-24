@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from backend.app.application.admin.trash_service import TrashService, TrashServiceError
 from backend.app.infrastructure.db.models.audit import AuditEventModel
-from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
+from backend.app.infrastructure.db.models.catalogs import (
+    DeactivationReasonModel,
+    DepartmentModel,
+    RankModel,
+)
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
@@ -87,6 +91,25 @@ def _make_deleted_department(db_session: Session) -> DepartmentModel:
     return dept
 
 
+def _make_deleted_deactivation_reason(db_session: Session) -> DeactivationReasonModel:
+    now = datetime.now(UTC)
+    reason = DeactivationReasonModel(
+        id=str(uuid4()),
+        code="deleted_reason",
+        display_name="Deleted Reason",
+        active=False,
+        requires_detail=False,
+        applies_to_sex=None,
+        severity="hard_block",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(reason)
+    db_session.flush()
+    return reason
+
+
 class TestListDeleted:
     def test_list_deleted_doctors(self, db_session, trash_service):
         _make_deleted_doctor(db_session)
@@ -99,6 +122,12 @@ class TestListDeleted:
         result = trash_service.list_deleted("users")
         assert len(result) == 1
         assert result[0].email == "deleted@test.com"
+
+    def test_list_deleted_deactivation_reasons(self, db_session, trash_service):
+        _make_deleted_deactivation_reason(db_session)
+        result = trash_service.list_deleted("deactivation_reasons")
+        assert len(result) == 1
+        assert result[0].display_name == "Deleted Reason"
 
     def test_list_deleted_excludes_active(self, db_session, trash_service):
         _make_deleted_doctor(db_session)
@@ -137,6 +166,14 @@ class TestRestore:
         refreshed = db_session.get(UserModel, user.id)
         assert refreshed.deleted_at is None
 
+    def test_restore_deactivation_reason_clears_deleted_at(self, db_session, trash_service):
+        reason = _make_deleted_deactivation_reason(db_session)
+        trash_service.restore("deactivation_reasons", reason.id)
+        db_session.expire_all()
+        refreshed = db_session.get(DeactivationReasonModel, reason.id)
+        assert refreshed.deleted_at is None
+        assert refreshed.active is True
+
     def test_restore_not_found(self, trash_service):
         with pytest.raises(TrashServiceError, match="no encontrado"):
             trash_service.restore("doctors", "nonexistent-id")
@@ -171,6 +208,12 @@ class TestHardDelete:
         trash_service.hard_delete("ranks", rank.id)
         db_session.expire_all()
         assert db_session.get(RankModel, rank.id) is None
+
+    def test_hard_delete_deactivation_reason_removes_row(self, db_session, trash_service):
+        reason = _make_deleted_deactivation_reason(db_session)
+        trash_service.hard_delete("deactivation_reasons", reason.id)
+        db_session.expire_all()
+        assert db_session.get(DeactivationReasonModel, reason.id) is None
 
     def test_hard_delete_not_found(self, trash_service):
         with pytest.raises(TrashServiceError, match="no encontrado"):

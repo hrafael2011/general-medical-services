@@ -21,6 +21,10 @@ def _not_deleted_department() -> tuple:
     return (DepartmentModel.deleted_at.is_(None),)
 
 
+def _not_deleted_deactivation_reason() -> tuple:
+    return (DeactivationReasonModel.deleted_at.is_(None),)
+
+
 class CatalogRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -47,14 +51,25 @@ class CatalogRepository:
         return reason
 
     def get_deactivation_reason_by_id(self, reason_id: str) -> DeactivationReasonModel | None:
-        return self.session.get(DeactivationReasonModel, reason_id)
+        statement = select(DeactivationReasonModel).where(
+            DeactivationReasonModel.id == reason_id,
+            *_not_deleted_deactivation_reason(),
+        )
+        return self.session.scalar(statement)
 
     def get_deactivation_reason_by_code(self, code: str) -> DeactivationReasonModel | None:
-        statement = select(DeactivationReasonModel).where(DeactivationReasonModel.code == code)
+        statement = select(DeactivationReasonModel).where(
+            DeactivationReasonModel.code == code,
+            *_not_deleted_deactivation_reason(),
+        )
         return self.session.scalar(statement)
 
     def list_deactivation_reasons(self) -> list[DeactivationReasonModel]:
-        statement = select(DeactivationReasonModel).order_by(DeactivationReasonModel.code)
+        statement = (
+            select(DeactivationReasonModel)
+            .where(*_not_deleted_deactivation_reason())
+            .order_by(DeactivationReasonModel.code)
+        )
         return list(self.session.scalars(statement))
 
     def update_deactivation_reason(self, reason_id: str, **fields: object) -> None:
@@ -83,6 +98,7 @@ class CatalogRepository:
             select(DeactivationReasonModel)
             .where(
                 DeactivationReasonModel.active.is_(True),
+                *_not_deleted_deactivation_reason(),
                 (
                     (DeactivationReasonModel.applies_to_sex.is_(None))
                     | (DeactivationReasonModel.applies_to_sex == sex)
@@ -91,6 +107,44 @@ class CatalogRepository:
             .order_by(DeactivationReasonModel.code)
         )
         return list(self.session.scalars(statement))
+
+    def soft_delete_deactivation_reason(self, reason_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(DeactivationReasonModel)
+            .where(DeactivationReasonModel.id == reason_id)
+            .values(active=False, deleted_at=now, updated_at=now)
+        )
+        self.session.flush()
+
+    def list_deleted_deactivation_reasons(self) -> list[DeactivationReasonModel]:
+        stmt = (
+            select(DeactivationReasonModel)
+            .where(DeactivationReasonModel.deleted_at.isnot(None))
+            .order_by(DeactivationReasonModel.deleted_at.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_deactivation_reason_by_id_including_deleted(
+        self,
+        reason_id: str,
+    ) -> DeactivationReasonModel | None:
+        return self.session.get(DeactivationReasonModel, reason_id)
+
+    def restore_deactivation_reason(self, reason_id: str) -> None:
+        now = datetime.now(UTC)
+        self.session.execute(
+            update(DeactivationReasonModel)
+            .where(DeactivationReasonModel.id == reason_id)
+            .values(active=True, deleted_at=None, updated_at=now)
+        )
+        self.session.flush()
+
+    def hard_delete_deactivation_reason(self, reason_id: str) -> None:
+        reason = self.get_deactivation_reason_by_id_including_deleted(reason_id)
+        if reason is not None:
+            self.session.delete(reason)
+            self.session.flush()
 
     def add_rank(self, rank: RankModel) -> RankModel:
         self.session.add(rank)

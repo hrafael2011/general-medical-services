@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import get_db_session
 from backend.app.core.security import create_access_token
-from backend.app.infrastructure.db.models.catalogs import RankModel
+from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel, RankModel
 from backend.app.infrastructure.db.models.doctors import DoctorAllowedAreaModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.user import PasswordHistoryModel, UserModel
@@ -89,6 +89,34 @@ def test_list_trash_doctors(client: TestClient, db_session: Session) -> None:
     data = resp.json()
     assert len(data) == 1
     assert data[0]["name"] == "Deleted Doc"
+
+
+def test_list_trash_deactivation_reasons(client: TestClient, db_session: Session) -> None:
+    now = datetime.now(UTC)
+    reason = DeactivationReasonModel(
+        id=str(uuid4()),
+        code="training",
+        display_name="Capacitación",
+        active=False,
+        requires_detail=False,
+        applies_to_sex=None,
+        severity="hard_block",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(reason)
+    db_session.commit()
+
+    admin = _create_user(db_session, role="admin")
+    headers = _auth_headers(admin)
+
+    resp = client.get("/api/admin/trash?type=deactivation_reasons", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "Capacitación"
+    assert data[0]["code"] == "training"
 
 
 def test_list_trash_empty(client: TestClient, db_session: Session) -> None:
@@ -191,6 +219,33 @@ def test_hard_delete_rank(client: TestClient, db_session: Session) -> None:
         f"/api/admin/trash/ranks/{rank.id}", headers=headers
     )
     assert resp.status_code == 204
+
+
+def test_hard_delete_deactivation_reason(client: TestClient, db_session: Session) -> None:
+    now = datetime.now(UTC)
+    reason = DeactivationReasonModel(
+        id=str(uuid4()),
+        code="training",
+        display_name="Capacitación",
+        active=False,
+        requires_detail=False,
+        applies_to_sex=None,
+        severity="hard_block",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    db_session.add(reason)
+    db_session.commit()
+
+    admin = _create_user(db_session, role="admin")
+    headers = _auth_headers(admin)
+
+    resp = client.delete(
+        f"/api/admin/trash/deactivation_reasons/{reason.id}", headers=headers
+    )
+    assert resp.status_code == 204
+    assert db_session.get(DeactivationReasonModel, reason.id) is None
 
 
 def test_hard_delete_user_removes_password_history(

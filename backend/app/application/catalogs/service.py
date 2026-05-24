@@ -220,7 +220,7 @@ class CatalogService:
         if reason is None:
             raise CatalogError("deactivation_reason_not_found", "Razón de desactivación no encontrada.")
         affected = self.catalogs.count_doctors_by_deactivation_reason(reason_id)
-        self.catalogs.update_deactivation_reason(reason_id, active=False)
+        self.catalogs.soft_delete_deactivation_reason(reason_id)
         return affected
 
     def update_department(

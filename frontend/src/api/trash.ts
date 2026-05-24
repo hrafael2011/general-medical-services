@@ -9,6 +9,7 @@ export interface TrashItem {
   role?: string;
   abbreviation?: string;
   normalized_name?: string;
+  code?: string;
 }
 
 export interface TrashCounts {
@@ -16,6 +17,7 @@ export interface TrashCounts {
   users: number;
   ranks: number;
   departments: number;
+  deactivation_reasons: number;
 }
 
 export const trashApi = {

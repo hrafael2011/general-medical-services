@@ -46,12 +46,18 @@ def _auth_headers(user: UserModel) -> dict[str, str]:
 
 
 class TestTrashCounts:
-    def test_counts_returns_all_four_types(self, client, db_session):
+    def test_counts_returns_all_types(self, client, db_session):
         admin = _create_user(db_session, "admin")
         resp = client.get("/api/admin/trash/counts", headers=_auth_headers(admin))
         assert resp.status_code == 200
         data = resp.json()
-        assert set(data.keys()) == {"doctors", "users", "ranks", "departments"}
+        assert set(data.keys()) == {
+            "doctors",
+            "users",
+            "ranks",
+            "departments",
+            "deactivation_reasons",
+        }
         assert all(isinstance(v, int) for v in data.values())
 
     def test_counts_requires_admin(self, client, db_session):
