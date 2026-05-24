@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_admin
+from backend.app.api.dependencies import require_permission
 from backend.app.application.admin.trash_service import TrashService, TrashServiceError
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
@@ -26,7 +26,7 @@ def get_trash_service(session: Annotated[Session, Depends(get_db_session)]) -> T
 
 @router.get("")
 def list_trash(
-    _admin: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_trash"))],
     service: Annotated[TrashService, Depends(get_trash_service)],
     type: str,
 ):
@@ -58,7 +58,7 @@ def list_trash(
 
 @router.get("/counts")
 def get_trash_counts(
-    _admin: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_trash"))],
     service: Annotated[TrashService, Depends(get_trash_service)],
 ):
     return {
@@ -74,7 +74,7 @@ def get_trash_counts(
 def restore_entity(
     entity_type: str,
     entity_id: str,
-    _admin: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_trash"))],
     service: Annotated[TrashService, Depends(get_trash_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
@@ -100,7 +100,7 @@ _TRASH_ERROR_STATUS = {
 def hard_delete_entity(
     entity_type: str,
     entity_id: str,
-    _admin: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_trash"))],
     service: Annotated[TrashService, Depends(get_trash_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:

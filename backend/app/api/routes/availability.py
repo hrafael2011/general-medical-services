@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_ready_user
+from backend.app.api.dependencies import require_permission, require_ready_user
 from backend.app.application.availability.errors import AvailabilityError
 from backend.app.application.availability.service import AvailabilityService
 from backend.app.infrastructure.db.models.user import UserModel
@@ -69,7 +69,7 @@ def get_available_doctors(
 def set_weekly_availability(
     doctor_id: str,
     payload: SetWeeklyAvailabilityRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_availability"))],
     service: Annotated[AvailabilityService, Depends(get_availability_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AvailabilityRead:
@@ -91,7 +91,7 @@ def set_weekly_availability(
 def set_monthly_availability(
     doctor_id: str,
     payload: SetMonthlyAvailabilityRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_availability"))],
     service: Annotated[AvailabilityService, Depends(get_availability_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AvailabilityRead:
@@ -113,7 +113,7 @@ def set_monthly_availability(
 def set_recurring_availability(
     doctor_id: str,
     payload: SetRecurringAvailabilityRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_availability"))],
     service: Annotated[AvailabilityService, Depends(get_availability_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AvailabilityRead:
@@ -145,7 +145,7 @@ def list_restrictions(
 def add_restriction(
     doctor_id: str,
     payload: AddRestrictionRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_availability"))],
     service: Annotated[AvailabilityService, Depends(get_availability_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> RestrictionRead:
@@ -169,7 +169,7 @@ def add_restriction(
 @router.post("/restrictions/{restriction_id}/lift", response_model=RestrictionRead)
 def lift_restriction(
     restriction_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_availability"))],
     service: Annotated[AvailabilityService, Depends(get_availability_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> RestrictionRead:

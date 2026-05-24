@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_encargado_or_admin
+from backend.app.api.dependencies import require_permission
 from backend.app.application.notifications.providers import FakeProvider, TwilioProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.core.config import settings
@@ -35,7 +35,7 @@ def get_notification_service(
 
 @router.get("", response_model=NotificationListResponse)
 def list_notifications(
-    _user: Annotated[UserModel, Depends(require_encargado_or_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("view_notifications"))],
     session: Annotated[Session, Depends(get_db_session)],
     status: str | None = Query(default=None),
     notification_type: str | None = Query(default=None),
@@ -51,7 +51,7 @@ def list_notifications(
 
 @router.post("/process", response_model=ProcessNotificationsResponse)
 def process_notifications(
-    _user: Annotated[UserModel, Depends(require_encargado_or_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("view_notifications"))],
     service: Annotated[NotificationService, Depends(get_notification_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> ProcessNotificationsResponse:

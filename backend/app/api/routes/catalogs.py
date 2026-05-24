@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_admin, require_ready_user
+from backend.app.api.dependencies import require_permission, require_ready_user
 from backend.app.application.catalogs.service import CatalogError, CatalogService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
@@ -33,7 +33,7 @@ def get_catalog_service(session: Annotated[Session, Depends(get_db_session)]) ->
 
 @router.post("/seed", status_code=status.HTTP_204_NO_CONTENT)
 def seed_catalogs(
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
@@ -71,7 +71,7 @@ def list_deactivation_reasons(
 )
 def create_deactivation_reason(
     payload: CreateDeactivationReasonRequest,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DeactivationReasonRead:
@@ -87,7 +87,7 @@ def create_deactivation_reason(
 def update_deactivation_reason(
     reason_id: str,
     payload: UpdateDeactivationReasonRequest,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DeactivationReasonRead:
@@ -108,7 +108,7 @@ def update_deactivation_reason(
 @router.delete("/deactivation-reasons/{reason_id}", response_model=DeleteDeactivationReasonResponse)
 def delete_deactivation_reason(
     reason_id: str,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DeleteDeactivationReasonResponse:
@@ -138,7 +138,7 @@ def list_ranks(
 @router.post("/ranks", response_model=RankRead, status_code=status.HTTP_201_CREATED)
 def create_rank(
     payload: CreateRankRequest,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> RankRead:
@@ -151,7 +151,7 @@ def create_rank(
 def update_rank(
     rank_id: str,
     payload: UpdateRankRequest,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> RankRead:
@@ -174,7 +174,7 @@ def update_rank(
 @router.delete("/ranks/{rank_id}", response_model=DeleteRankResponse)
 def delete_rank(
     rank_id: str,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DeleteRankResponse:
@@ -201,7 +201,7 @@ def list_departments(
 @router.post("/departments", response_model=DepartmentRead, status_code=status.HTTP_201_CREATED)
 def create_department(
     payload: CreateDepartmentRequest,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DepartmentRead:
@@ -214,7 +214,7 @@ def create_department(
 def update_department(
     department_id: str,
     payload: UpdateDepartmentRequest,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DepartmentRead:
@@ -236,7 +236,7 @@ def update_department(
 @router.delete("/departments/{department_id}", response_model=DeleteDepartmentResponse)
 def delete_department(
     department_id: str,
-    _user: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DeleteDepartmentResponse:

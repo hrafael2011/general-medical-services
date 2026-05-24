@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_admin
+from backend.app.api.dependencies import require_permission, require_superadmin
 from backend.app.application.accounts.errors import (
     DeletedEmailConflictError,
     DuplicateEmailError,
@@ -37,7 +37,7 @@ def get_account_service(session: Annotated[Session, Depends(get_db_session)]) ->
 
 @router.get("", response_model=list[UserRead])
 def list_users(
-    admin: Annotated[UserModel, Depends(require_admin)],
+    admin: Annotated[UserModel, Depends(require_permission("manage_users"))],
     session: Annotated[Session, Depends(get_db_session)],
     role: str | None = Query(default=None),
 ) -> list[UserRead]:
@@ -57,7 +57,7 @@ def list_users(
 )
 def create_encargado(
     payload: CreateEncargadoRequest,
-    admin: Annotated[UserModel, Depends(require_admin)],
+    admin: Annotated[UserModel, Depends(require_permission("manage_users"))],
     service: Annotated[AccountService, Depends(get_account_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> TemporaryPasswordResponse:
@@ -67,6 +67,7 @@ def create_encargado(
             name=payload.name,
             email=payload.email,
             temporary_password=payload.temporary_password,
+            permissions=payload.permissions,
         )
     except DuplicateEmailError as exc:
         raise HTTPException(
@@ -95,7 +96,7 @@ def create_encargado(
 def reset_encargado_password(
     user_id: str,
     payload: ResetPasswordRequest,
-    admin: Annotated[UserModel, Depends(require_admin)],
+    admin: Annotated[UserModel, Depends(require_permission("manage_users"))],
     service: Annotated[AccountService, Depends(get_account_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> TemporaryPasswordResponse:
@@ -122,7 +123,7 @@ def reset_encargado_password(
 @router.post("/{user_id}/invite", status_code=status.HTTP_200_OK)
 def invite_user(
     user_id: str,
-    admin: Annotated[UserModel, Depends(require_admin)],
+    admin: Annotated[UserModel, Depends(require_permission("manage_users"))],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict[str, str]:
     """Send invitation email to an encargado user."""
@@ -146,7 +147,7 @@ def invite_user(
 @router.post("/{user_id}/send-reset", status_code=status.HTTP_200_OK)
 def send_reset_email(
     user_id: str,
-    admin: Annotated[UserModel, Depends(require_admin)],
+    admin: Annotated[UserModel, Depends(require_permission("manage_users"))],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict[str, str]:
     """Send password reset email to an encargado user."""
@@ -170,7 +171,7 @@ def send_reset_email(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: str,
-    admin: Annotated[UserModel, Depends(require_admin)],
+    admin: Annotated[UserModel, Depends(require_permission("manage_users"))],
     service: Annotated[AccountService, Depends(get_account_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
@@ -193,7 +194,7 @@ def delete_user(
 def update_user(
     user_id: str,
     payload: UpdateUserRequest,
-    admin: Annotated[UserModel, Depends(require_admin)],
+    admin: Annotated[UserModel, Depends(require_permission("manage_users"))],
     service: Annotated[AccountService, Depends(get_account_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> UserRead:
@@ -217,3 +218,35 @@ def update_user(
         ) from exc
     session.commit()
     return UserRead.model_validate(updated)
+
+
+@router.post("/admins", response_model=TemporaryPasswordResponse, status_code=201)
+def create_admin(
+    payload: CreateEncargadoRequest,
+    _superadmin: Annotated[UserModel, Depends(require_superadmin)],
+    service: Annotated[AccountService, Depends(get_account_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> TemporaryPasswordResponse:
+    result = service.create_admin(
+        actor=_superadmin,
+        name=payload.name,
+        email=payload.email,
+        temporary_password=payload.temporary_password,
+    )
+    session.commit()
+    return TemporaryPasswordResponse(
+        user=UserRead.model_validate(result.user),
+        temporary_password=result.temporary_password,
+    )
+
+
+@router.patch("/{user_id}/make-superadmin", response_model=UserRead)
+def make_superadmin(
+    user_id: str,
+    _superadmin: Annotated[UserModel, Depends(require_superadmin)],
+    service: Annotated[AccountService, Depends(get_account_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> UserRead:
+    result = service.make_superadmin(actor=_superadmin, user_id=user_id)
+    session.commit()
+    return UserRead.model_validate(result)
