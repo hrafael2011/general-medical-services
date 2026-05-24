@@ -248,6 +248,49 @@ def test_hard_delete_deactivation_reason(client: TestClient, db_session: Session
     assert db_session.get(DeactivationReasonModel, reason.id) is None
 
 
+def test_hard_delete_deactivation_reason_clears_doctor_references(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    now = datetime.now(UTC)
+    reason = DeactivationReasonModel(
+        id=str(uuid4()),
+        code="training",
+        display_name="Capacitación",
+        active=False,
+        requires_detail=False,
+        applies_to_sex=None,
+        severity="hard_block",
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    doctor = DoctorModel(
+        id=str(uuid4()),
+        name="Inactive Doctor",
+        normalized_name="inactive doctor",
+        sex="male",
+        service_active=False,
+        service_inactive_reason_id=reason.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(reason)
+    db_session.add(doctor)
+    db_session.commit()
+
+    admin = _create_user(db_session, role="admin")
+    headers = _auth_headers(admin)
+
+    resp = client.delete(
+        f"/api/admin/trash/deactivation_reasons/{reason.id}", headers=headers
+    )
+
+    assert resp.status_code == 204
+    assert db_session.get(DeactivationReasonModel, reason.id) is None
+    assert db_session.get(DoctorModel, doctor.id).service_inactive_reason_id is None
+
+
 def test_hard_delete_user_removes_password_history(
     client: TestClient, db_session: Session
 ) -> None:

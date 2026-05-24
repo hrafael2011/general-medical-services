@@ -215,6 +215,25 @@ class TestHardDelete:
         db_session.expire_all()
         assert db_session.get(DeactivationReasonModel, reason.id) is None
 
+    def test_hard_delete_deactivation_reason_clears_doctor_references(
+        self,
+        db_session,
+        trash_service,
+    ):
+        reason = _make_deleted_deactivation_reason(db_session)
+        doctor = _make_deleted_doctor(db_session)
+        doctor.deleted_at = None
+        doctor.service_active = False
+        doctor.service_inactive_reason_id = reason.id
+        db_session.flush()
+
+        trash_service.hard_delete("deactivation_reasons", reason.id)
+        db_session.expire_all()
+
+        refreshed_doctor = db_session.get(DoctorModel, doctor.id)
+        assert db_session.get(DeactivationReasonModel, reason.id) is None
+        assert refreshed_doctor.service_inactive_reason_id is None
+
     def test_hard_delete_not_found(self, trash_service):
         with pytest.raises(TrashServiceError, match="no encontrado"):
             trash_service.hard_delete("doctors", "nonexistent-id")

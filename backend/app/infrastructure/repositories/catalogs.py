@@ -143,6 +143,12 @@ class CatalogRepository:
     def hard_delete_deactivation_reason(self, reason_id: str) -> None:
         reason = self.get_deactivation_reason_by_id_including_deleted(reason_id)
         if reason is not None:
+            now = datetime.now(UTC)
+            self.session.execute(
+                update(DoctorModel)
+                .where(DoctorModel.service_inactive_reason_id == reason_id)
+                .values(service_inactive_reason_id=None, updated_at=now)
+            )
             self.session.delete(reason)
             self.session.flush()
 
