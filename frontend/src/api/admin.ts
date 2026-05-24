@@ -7,6 +7,8 @@ export interface UserRead {
   role: string;
   active: boolean;
   must_change_password: boolean;
+  is_superadmin: boolean;
+  permissions: string[];
 }
 
 export const adminApi = {
@@ -15,10 +17,10 @@ export const adminApi = {
     return apiFetch<UserRead[]>(`/admin/users${query}`);
   },
 
-  createEncargado(name: string, email: string, temporaryPassword?: string) {
+  createEncargado(name: string, email: string, temporaryPassword?: string, permissions?: string[]) {
     return apiFetch<{ user: UserRead; temporary_password: string }>("/admin/users/encargados", {
       method: "POST",
-      body: JSON.stringify({ name, email, temporary_password: temporaryPassword }),
+      body: JSON.stringify({ name, email, temporary_password: temporaryPassword, permissions }),
     });
   },
 
@@ -48,7 +50,7 @@ export const adminApi = {
     return apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" });
   },
 
-  updateUser(id: string, payload: { name?: string; role?: string; active?: boolean }) {
+  updateUser(id: string, payload: { name?: string; role?: string; active?: boolean; permissions?: string[] }) {
     return apiFetch<UserRead>(`/admin/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),

@@ -7,6 +7,8 @@ export interface UserRead {
   role: string;
   active: boolean;
   must_change_password: boolean;
+  is_superadmin: boolean;
+  permissions: string[];
 }
 export interface LoginResponse { access_token: string; token_type: string; user: UserRead; }
 
