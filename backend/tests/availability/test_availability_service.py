@@ -70,6 +70,29 @@ def test_set_weekly_availability_deduplicates_days(db_session) -> None:
     assert sorted(record.days_of_week) == [1, 3]
 
 
+def test_set_weekly_availability_replaces_existing_fixed_patterns(db_session) -> None:
+    doctor = create_doctor(db_session, availability_mode="fixed")
+    service = make_availability_service(db_session)
+    availability_repo = AvailabilityRepository(db_session)
+
+    service.set_recurring_availability(
+        doctor.id,
+        weekday=1,
+        week_number=1,
+        actor_id="actor-1",
+    )
+    service.set_weekly_availability(
+        doctor.id,
+        days_of_week=[0, 2],
+        actor_id="actor-1",
+    )
+
+    records = availability_repo.list_availability_for_doctor(doctor.id)
+    assert len(records) == 1
+    assert records[0].availability_type == "weekly_fixed"
+    assert sorted(records[0].days_of_week) == [0, 2]
+
+
 def test_set_weekly_availability_fails_for_monthly_mode_doctor(db_session) -> None:
     doctor = create_doctor(db_session, availability_mode="monthly")
     service = make_availability_service(db_session)
@@ -160,6 +183,33 @@ def test_set_monthly_availability_deduplicates_and_sorts_dates(db_session) -> No
     )
 
     assert record.available_dates == [5, 10, 15]
+
+
+# --- set_recurring_availability ---
+
+
+def test_set_recurring_availability_replaces_existing_fixed_patterns(db_session) -> None:
+    doctor = create_doctor(db_session, availability_mode="fixed")
+    service = make_availability_service(db_session)
+    availability_repo = AvailabilityRepository(db_session)
+
+    service.set_weekly_availability(
+        doctor.id,
+        days_of_week=[1],
+        actor_id="actor-1",
+    )
+    service.set_recurring_availability(
+        doctor.id,
+        weekday=1,
+        week_number=1,
+        actor_id="actor-1",
+    )
+
+    records = availability_repo.list_availability_for_doctor(doctor.id)
+    assert len(records) == 1
+    assert records[0].availability_type == "recurring"
+    assert records[0].weekday == 1
+    assert records[0].week_number == 1
 
 
 # --- has_submitted_monthly_availability ---

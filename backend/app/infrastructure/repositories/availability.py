@@ -47,6 +47,13 @@ class AvailabilityRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def list_fixed_patterns_for_doctor(self, doctor_id: str) -> list[DoctorAvailabilityModel]:
+        stmt = select(DoctorAvailabilityModel).where(
+            DoctorAvailabilityModel.doctor_id == doctor_id,
+            DoctorAvailabilityModel.availability_type.in_(("weekly_fixed", "recurring")),
+        )
+        return list(self.session.scalars(stmt))
+
     def delete_availability(self, record_id: str) -> None:
         record = self.session.get(DoctorAvailabilityModel, record_id)
         if record:

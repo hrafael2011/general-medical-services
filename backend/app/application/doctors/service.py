@@ -305,10 +305,12 @@ class DoctorService:
         }
 
         for doctor in active_doctors:
+            doctor_days_seen: set[int] = set()
             for record in avail_by_doctor.get(doctor.id, []):
                 if record.availability_type == "weekly_fixed" and record.days_of_week:
                     for dow in record.days_of_week:
-                        if 0 <= dow <= 6:
+                        if 0 <= dow <= 6 and dow not in doctor_days_seen:
+                            doctor_days_seen.add(dow)
                             days[dow]["doctors"].append({
                                 "id": doctor.id,
                                 "name": doctor.name,
@@ -323,6 +325,14 @@ class DoctorService:
                     dow = record.weekday
                     tag = self._make_recurring_tag(record.weekday, record.week_number)
                     if 0 <= dow <= 6:
+                        if dow in doctor_days_seen:
+                            for item in days[dow]["doctors"]:
+                                if item["id"] == doctor.id:
+                                    item["recurring_tag"] = tag
+                                    break
+                            days[dow]["count"] = len(days[dow]["doctors"])
+                            continue
+                        doctor_days_seen.add(dow)
                         days[dow]["doctors"].append({
                             "id": doctor.id,
                             "name": doctor.name,
