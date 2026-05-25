@@ -23,6 +23,16 @@ def _with_env(app_env: str):
         settings.app_env = original
 
 
+@contextmanager
+def _with_frontend_origin(frontend_origin: str):
+    original = settings.frontend_origin
+    settings.frontend_origin = frontend_origin
+    try:
+        yield
+    finally:
+        settings.frontend_origin = original
+
+
 class TestDocsDisabledInProduction:
     """/docs, /redoc, /openapi.json must be disabled when APP_ENV=production."""
 
@@ -81,6 +91,29 @@ class TestCORSLockedInProduction:
             response = client.get("/api/health", headers={"Origin": self.EXTERNAL_ORIGIN})
         allow_origin = response.headers.get("access-control-allow-origin")
         assert allow_origin is None or allow_origin != self.EXTERNAL_ORIGIN
+
+    def test_staging_allows_configured_frontend_origin(self):
+        staging_origin = "https://general-medical-services-staging.vercel.app"
+        with _with_env("staging"), _with_frontend_origin(staging_origin):
+            client = TestClient(create_app())
+            response = client.get("/api/health", headers={"Origin": staging_origin})
+        assert response.headers.get("access-control-allow-origin") == staging_origin
+
+    def test_staging_rejects_unconfigured_origin(self):
+        staging_origin = "https://general-medical-services-staging.vercel.app"
+        with _with_env("staging"), _with_frontend_origin(staging_origin):
+            client = TestClient(create_app())
+            response = client.get("/api/health", headers={"Origin": self.EXTERNAL_ORIGIN})
+        allow_origin = response.headers.get("access-control-allow-origin")
+        assert allow_origin is None or allow_origin != self.EXTERNAL_ORIGIN
+
+    def test_staging_rejects_localhost_origin(self):
+        staging_origin = "https://general-medical-services-staging.vercel.app"
+        with _with_env("staging"), _with_frontend_origin(staging_origin):
+            client = TestClient(create_app())
+            response = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
+        allow_origin = response.headers.get("access-control-allow-origin")
+        assert allow_origin is None or allow_origin != "http://localhost:5173"
 
     def test_production_error_responses_include_cors_for_vercel_origin(self):
         with _with_env("production"):

@@ -104,6 +104,49 @@ class AccountService:
             created_at=now,
             updated_at=now,
             permissions=permissions or [],
+            is_superadmin=False,
+        )
+        try:
+            self.users.add(user)
+        except IntegrityError as exc:
+            raise DuplicateEmailError from exc
+        self.users.add_password_history(user.id, user.password_hash)
+        if self.audit is not None:
+            self.audit.log_user_created(actor_id=actor.id, user=user)
+        return TemporaryPasswordResult(user=user, temporary_password=password)
+
+    def create_admin(
+        self,
+        *,
+        actor: UserModel,
+        name: str,
+        email: str,
+        temporary_password: str | None = None,
+    ) -> TemporaryPasswordResult:
+        self._require_superadmin(actor)
+        password = temporary_password or generate_temporary_password()
+        existing_user = self.users.get_by_email_including_deleted(email)
+        if existing_user is not None:
+            if existing_user.deleted_at is not None:
+                raise DeletedEmailConflictError
+            raise DuplicateEmailError
+
+        now = datetime.now(UTC)
+        user = UserModel(
+            id=str(uuid4()),
+            name=name.strip(),
+            email=email.strip().lower(),
+            role=UserRole.ADMIN.value,
+            active=True,
+            password_hash=hash_password(password),
+            must_change_password=True,
+            token_version=1,
+            failed_login_count=0,
+            created_by=actor.id,
+            created_at=now,
+            updated_at=now,
+            permissions=[],
+            is_superadmin=False,
         )
         try:
             self.users.add(user)
@@ -245,6 +288,7 @@ class AccountService:
         name: str | None = None,
         role: str | None = None,
         active: bool | None = None,
+        permissions: list[str] | None = None,
     ) -> UserModel:
         self._require_admin(actor)
         user = self.users.get_by_id(user_id)
@@ -263,6 +307,9 @@ class AccountService:
         if active is not None:
             user.active = active
             changed["active"] = active
+        if permissions is not None:
+            user.permissions = permissions
+            changed["permissions"] = permissions
 
         if not changed:
             return user
@@ -270,6 +317,28 @@ class AccountService:
         self.users.update(user_id, **changed)
         if self.audit is not None:
             self.audit.log_user_updated(actor_id=actor.id, user=user, changed_fields=changed)
+        return user
+
+    def make_superadmin(
+        self,
+        *,
+        actor: UserModel,
+        user_id: str,
+    ) -> UserModel:
+        self._require_superadmin(actor)
+        user = self.users.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError
+        if user.role != UserRole.ADMIN.value:
+            raise PermissionDeniedError("Solo administradores pueden ser promovidos a superadmin.")
+        user.is_superadmin = True
+        user.updated_at = datetime.now(UTC)
+        self.users.update(user_id, is_superadmin=True)
+        if self.audit is not None:
+            self.audit.log_user_updated(
+                actor_id=actor.id, user=user,
+                changed_fields={"is_superadmin": True},
+            )
         return user
 
     def initiate_password_recovery(self, *, email: str) -> UserModel | None:
@@ -286,3 +355,8 @@ class AccountService:
     def _require_admin(self, actor: UserModel) -> None:
         if actor.role != UserRole.ADMIN.value or not actor.active or actor.must_change_password:
             raise PermissionDeniedError
+
+    def _require_superadmin(self, actor: UserModel) -> None:
+        self._require_admin(actor)
+        if not actor.is_superadmin:
+            raise PermissionDeniedError("Se requiere rol de superadmin para esta acción.")

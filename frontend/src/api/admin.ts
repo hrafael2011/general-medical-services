@@ -7,6 +7,8 @@ export interface UserRead {
   role: string;
   active: boolean;
   must_change_password: boolean;
+  is_superadmin: boolean;
+  permissions: string[];
 }
 
 export const adminApi = {
@@ -48,7 +50,7 @@ export const adminApi = {
     return apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" });
   },
 
-  updateUser(id: string, payload: { name?: string; role?: string; active?: boolean }) {
+  updateUser(id: string, payload: { name?: string; role?: string; active?: boolean; permissions?: string[] }) {
     return apiFetch<UserRead>(`/admin/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),

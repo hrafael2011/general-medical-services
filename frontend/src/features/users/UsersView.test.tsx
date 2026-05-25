@@ -21,6 +21,12 @@ vi.mock("../../api/admin", () => ({
   },
 }));
 
+vi.mock("../../context/AuthContext", () => ({
+  useAuth: () => ({
+    currentUser: { id: "admin-1", name: "Admin", email: "admin@example.com", role: "admin", active: true, must_change_password: false, is_superadmin: true, permissions: [] },
+  }),
+}));
+
 function renderUsers() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -73,6 +79,8 @@ describe("UsersView", () => {
             role: "admin",
             active: true,
             must_change_password: false,
+            is_superadmin: false,
+            permissions: [],
           },
         ];
       }
@@ -85,6 +93,8 @@ describe("UsersView", () => {
             role: "encargado",
             active: true,
             must_change_password: false,
+            is_superadmin: false,
+            permissions: [],
           },
         ];
       }

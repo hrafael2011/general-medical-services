@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_ready_user
+from backend.app.api.dependencies import require_permission, require_ready_user
 from backend.app.application.missions.candidate_service import MissionCandidateService
 from backend.app.application.missions.errors import MissionServiceError
 from backend.app.application.missions.ranking_service import MissionRankingService
@@ -283,7 +283,7 @@ def _approved_version_or_409(
 )
 def generate_ranking(
     payload: GenerateRankingRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_missions"))],
     service: Annotated[MissionRankingService, Depends(get_ranking_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionCandidateRankingRead:
@@ -337,7 +337,7 @@ def get_ranking(
 )
 def recommend_candidates(
     payload: MissionCandidateRequest,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_missions"))],
     service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
 ) -> MissionCandidateResponse:
     try:
@@ -365,7 +365,7 @@ def recommend_candidates(
 )
 def rank_candidates_for_date(
     payload: MissionCandidateRequest,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_missions"))],
     service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
 ) -> MissionCandidateDateRankingResponse:
     try:
@@ -396,7 +396,7 @@ def rank_candidates_for_date(
 )
 def create_mission(
     payload: CreateMissionRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_missions"))],
     service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionAssignmentRead:
@@ -496,7 +496,7 @@ def get_mission(
 def update_mission(
     mission_id: str,
     payload: UpdateMissionRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_missions"))],
     service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionAssignmentRead:
@@ -519,7 +519,7 @@ def update_mission(
 )
 def delete_mission(
     mission_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_missions"))],
     service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
@@ -538,7 +538,7 @@ def delete_mission(
 def confirm_mission(
     mission_id: str,
     payload: ConfirmMissionRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_missions"))],
     service: Annotated[MissionCandidateService, Depends(get_candidate_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionAssignmentRead:

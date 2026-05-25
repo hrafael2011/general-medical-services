@@ -30,9 +30,14 @@ export function Sidebar() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const isEncargadoPlus = currentUser && (currentUser.role === "encargado" || currentUser.role === "admin");
-  const isAdmin = currentUser && currentUser.role === "admin";
   const alertCounts = alertSummary?.by_section ?? {};
+
+  const hasPermission = (perm: string) => {
+    if (currentUser?.role === "admin") return true;
+    return (currentUser?.permissions ?? []).includes(perm);
+  };
+
+  const hasAnySecurityPerm = hasPermission("manage_users") || hasPermission("manage_catalogs") || hasPermission("view_audit") || hasPermission("manage_trash");
 
   return (
     <aside className="sidebar">
@@ -68,7 +73,7 @@ export function Sidebar() {
           ))}
         </div>
 
-        {isEncargadoPlus && (
+        {hasPermission("export_reports") && (
           <div className="sidebar-group">
             <span className="sidebar-group-label">ADMINISTRACIÓN</span>
             <NavLink
@@ -83,52 +88,60 @@ export function Sidebar() {
           </div>
         )}
 
-        {isAdmin && (
+        {hasAnySecurityPerm && (
           <div className="sidebar-group">
             <span className="sidebar-group-label">SEGURIDAD</span>
-            <NavLink
-              to="/audit"
-              className={({ isActive }) =>
-                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
-              }
-            >
-              <ClipboardList size={16} />
-              Auditoría
-            </NavLink>
-            <NavLink
-              to="/catalogs"
-              className={({ isActive }) =>
-                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
-              }
-            >
-              <BookOpen size={16} />
-              Catálogos
-            </NavLink>
-            <NavLink
-              to="/users"
-              className={({ isActive }) =>
-                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
-              }
-            >
-              <UserPlus size={16} />
-              Usuarios
-            </NavLink>
-            <NavLink
-              to="/trash"
-              className={({ isActive }) =>
-                isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
-              }
-            >
-              <Trash2 size={16} />
-              Papelera
-            </NavLink>
+            {hasPermission("view_audit") && (
+              <NavLink
+                to="/audit"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <ClipboardList size={16} />
+                Auditoría
+              </NavLink>
+            )}
+            {hasPermission("manage_catalogs") && (
+              <NavLink
+                to="/catalogs"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <BookOpen size={16} />
+                Catálogos
+              </NavLink>
+            )}
+            {hasPermission("manage_users") && (
+              <NavLink
+                to="/users"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <UserPlus size={16} />
+                Usuarios
+              </NavLink>
+            )}
+            {hasPermission("manage_trash") && (
+              <NavLink
+                to="/trash"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <Trash2 size={16} />
+                Papelera
+              </NavLink>
+            )}
           </div>
         )}
 
         {(featureFlags?.notifications || featureFlags?.telegram) && (
           <div className="sidebar-group">
             <span className="sidebar-group-label">NOTIFICACIONES</span>
-            {featureFlags?.notifications && (
+            {featureFlags?.notifications && hasPermission("view_notifications") && (
               <NavLink
                 to="/notifications"
                 className={({ isActive }) =>

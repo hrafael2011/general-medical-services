@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_ready_user
+from backend.app.api.dependencies import require_permission, require_ready_user
 from backend.app.application.calendars.assignment_service import AssignmentService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
@@ -196,7 +196,7 @@ def list_calendars(
 @router.post("", response_model=CalendarRead, status_code=status.HTTP_201_CREATED)
 def create_calendar(
     payload: CreateCalendarRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[CalendarService, Depends(get_calendar_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarRead:
@@ -231,7 +231,7 @@ def get_calendar(
 @router.delete("/{calendar_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_calendar(
     calendar_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[CalendarService, Depends(get_calendar_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
@@ -293,7 +293,7 @@ def get_calendar_grid(
 def approve_calendar(
     calendar_id: str,
     payload: ApproveCalendarRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[CalendarService, Depends(get_calendar_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarVersionRead:
@@ -328,7 +328,7 @@ def approve_calendar(
 )
 def new_version(
     calendar_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[CalendarService, Depends(get_calendar_service)],
     session: Annotated[Session, Depends(get_db_session)],
     reason: str | None = None,
@@ -348,7 +348,7 @@ def new_version(
 @router.post("/{calendar_id}/unlock", response_model=CalendarVersionRead)
 def unlock_calendar(
     calendar_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[CalendarService, Depends(get_calendar_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarVersionRead:
@@ -413,7 +413,7 @@ def get_eligible_doctors(
 def evaluate_slot(
     calendar_id: str,
     payload: EvaluationRequest,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[AssignmentService, Depends(get_assignment_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> EvaluationResponse:
@@ -449,7 +449,7 @@ def evaluate_slot(
 )
 def generate_calendar(
     calendar_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[GenerationService, Depends(get_generation_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> GenerationResponse:
@@ -539,7 +539,7 @@ def list_weeks(
 def approve_week(
     calendar_id: str,
     week_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[CalendarService, Depends(get_calendar_service)],
     session: Annotated[Session, Depends(get_db_session)],
     payload: ApproveWeekRequest | None = None,
@@ -571,7 +571,7 @@ def approve_week(
 def unlock_week(
     calendar_id: str,
     week_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[CalendarService, Depends(get_calendar_service)],
     session: Annotated[Session, Depends(get_db_session)],
     payload: ApproveWeekRequest | None = None,
@@ -612,7 +612,7 @@ def assign_doctor(
     calendar_id: str,
     version_id: str,
     payload: AssignDoctorRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[AssignmentService, Depends(get_assignment_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarAssignmentRead:
@@ -640,7 +640,7 @@ def remove_assignment(
     calendar_id: str,
     version_id: str,
     assignment_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[AssignmentService, Depends(get_assignment_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
@@ -663,7 +663,7 @@ def replace_assignment(
     version_id: str,
     assignment_id: str,
     payload: ReplaceAssignmentRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
     service: Annotated[AssignmentService, Depends(get_assignment_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CalendarAssignmentRead:

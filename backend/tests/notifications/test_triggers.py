@@ -174,7 +174,8 @@ def test_on_calendar_approved_creates_confirmation_requests(db_session) -> None:
     assert confirmations[0].assignment_id == assignment.id
     assert confirmations[0].due_at is not None
     notification = NotificationRepository(db_session).list_all()[0]
-    assert "Responda 1" in notification.payload["message"]
+    assert "Responda 1 para confirmar su turno" in notification.payload["message"]
+    assert notification.payload["confirmation_request_id"] == confirmations[0].id
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +265,8 @@ def test_on_mission_confirmed_creates_confirmation_requests(db_session) -> None:
     assert confirmations[0].mission_id == mission.id
     assert confirmations[0].due_at is not None
     notification = NotificationRepository(db_session).list_all()[0]
-    assert "Responda 1" in notification.payload["message"]
+    assert "Responda 1 para confirmar su turno" in notification.payload["message"]
+    assert notification.payload["confirmation_request_id"] == confirmations[0].id
 
 
 def test_calendar_assignment_added_after_approval_creates_change_confirmation(db_session) -> None:
@@ -291,7 +293,8 @@ def test_calendar_assignment_added_after_approval_creates_change_confirmation(db
     assert len(confirmations) == 1
     assert confirmations[0].confirmation_type == "service"
     assert confirmations[0].assignment_id == assignment.id
-    assert "Responda 1" in events[0].payload["message"]
+    assert "Responda 1 para confirmar su turno" in events[0].payload["message"]
+    assert events[0].payload["confirmation_request_id"] == confirmations[0].id
 
 
 def test_mission_participants_changed_notifies_removed_and_confirms_added(db_session) -> None:

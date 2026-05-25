@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     gmail_refresh_token: str | None = None
     gmail_from_email: str | None = None
 
+    # Email safety controls for non-production environments
+    email_mode: str = "send"
+    email_redirect_to: str | None = None
+    email_subject_prefix: str = ""
+
     # ── Meta Cloud API / PyWa ──────────────────────────────────────────
     meta_whatsapp_token: str | None = None
     meta_whatsapp_phone_number_id: str | None = None

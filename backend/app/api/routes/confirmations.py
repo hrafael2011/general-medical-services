@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_encargado_or_admin
+from backend.app.api.dependencies import require_permission
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.confirmations.service import (
     ConfirmationRequestError,
@@ -97,7 +97,7 @@ def respond_public_confirmation(
 
 @router.get("", response_model=ConfirmationRequestListResponse)
 def list_confirmation_requests(
-    _user: Annotated[UserModel, Depends(require_encargado_or_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_confirmations"))],
     session: Annotated[Session, Depends(get_db_session)],
     status: str | None = Query(default=None),
     confirmation_type: str | None = Query(default=None),
@@ -119,7 +119,7 @@ def list_confirmation_requests(
 
 @router.post("/process-overdue", response_model=ProcessOverdueConfirmationsResponse)
 def process_overdue_confirmations(
-    current_user: Annotated[UserModel, Depends(require_encargado_or_admin)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_confirmations"))],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> ProcessOverdueConfirmationsResponse:
     service = ConfirmationRequestService(

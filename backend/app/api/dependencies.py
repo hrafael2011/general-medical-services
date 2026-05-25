@@ -63,3 +63,34 @@ def require_encargado_or_admin(
             detail="Se requiere rol de encargado o administrador.",
         )
     return current_user
+
+
+def require_permission(permission: str):
+    """
+    FastAPI dependency factory.
+    Admins (role == "admin") automatically pass any permission check.
+    Encargados must have the specific permission string in their permissions array.
+    """
+    def _check(
+        current_user: Annotated[UserModel, Depends(require_ready_user)],
+    ) -> UserModel:
+        if current_user.role == "admin":
+            return current_user
+        if permission not in (current_user.permissions or []):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para realizar esta acción.",
+            )
+        return current_user
+    return _check
+
+
+def require_superadmin(
+    current_user: Annotated[UserModel, Depends(require_admin)],
+) -> UserModel:
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere rol de superadmin para esta acción.",
+        )
+    return current_user

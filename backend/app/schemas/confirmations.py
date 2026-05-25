@@ -11,6 +11,7 @@ class ConfirmationRequestRead(BaseModel):
     notification_id: str | None
     assignment_id: str | None
     mission_id: str | None
+    escalated_at: datetime | None = None
     due_at: datetime | None
     responded_at: datetime | None
     escalated_at: datetime | None = None

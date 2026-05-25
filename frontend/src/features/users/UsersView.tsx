@@ -1,11 +1,29 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, UserPlus, KeyRound, Pencil, Trash2, Check, X } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useAuth } from "../../context/AuthContext";
 import { adminApi, UserRead } from "../../api/admin";
 
 const ROLES = ["encargado", "admin"] as const;
+
+const PERMISSION_DEFINITIONS = [
+  { key: "manage_doctors", label: "Gestionar Medicos" },
+  { key: "manage_calendars", label: "Gestionar Calendarios" },
+  { key: "manage_missions", label: "Gestionar Misiones" },
+  { key: "manage_availability", label: "Gestionar Disponibilidad" },
+  { key: "manage_catalogs", label: "Gestionar Catalogos" },
+  { key: "manage_users", label: "Gestionar Usuarios" },
+  { key: "manage_admins", label: "Gestionar Administradores" },
+  { key: "manage_trash", label: "Gestionar Papelera" },
+  { key: "view_audit", label: "Ver Auditoria" },
+  { key: "view_notifications", label: "Ver Notificaciones" },
+  { key: "manage_confirmations", label: "Gestionar Confirmaciones" },
+  { key: "manage_alerts", label: "Gestionar Alertas" },
+  { key: "export_reports", label: "Exportar Reportes" },
+  { key: "receive_escalation_alerts", label: "Recibir Alertas de Escalamiento" },
+];
 
 async function listAdminPanelUsers(): Promise<UserRead[]> {
   const usersByRole = await Promise.all(ROLES.map((role) => adminApi.listUsers(role)));
@@ -15,13 +33,16 @@ async function listAdminPanelUsers(): Promise<UserRead[]> {
 export function UsersView() {
   const { addToast } = useToast();
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newPermissions, setNewPermissions] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editActive, setEditActive] = useState(true);
+  const [editPermissions, setEditPermissions] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserRead | null>(null);
   const [newPermissions, setNewPermissions] = useState<string[]>([]);
 
@@ -63,7 +84,7 @@ export function UsersView() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: { name?: string; role?: string; active?: boolean } }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: { name?: string; role?: string; active?: boolean; permissions?: string[] } }) =>
       adminApi.updateUser(id, payload),
     onSuccess: () => {
       addToast("success", "Usuario actualizado.");
@@ -88,6 +109,7 @@ export function UsersView() {
     setEditName(user.name);
     setEditRole(user.role);
     setEditActive(user.active);
+    setEditPermissions(user.permissions ?? []);
   }
 
   function cancelEditing() {
@@ -97,7 +119,7 @@ export function UsersView() {
   function saveEditing(userId: string) {
     updateMutation.mutate({
       id: userId,
-      payload: { name: editName, role: editRole, active: editActive },
+      payload: { name: editName, role: editRole, active: editActive, permissions: editPermissions },
     });
   }
 
@@ -141,8 +163,29 @@ export function UsersView() {
           </div>
           <div style={{ marginTop: "12px" }}>
             <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creando…" : "Crear"}
+              {createMutation.isPending ? "Creando..." : "Crear"}
             </button>
+          </div>
+          <div style={{ marginTop: "12px" }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Permisos</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+              {PERMISSION_DEFINITIONS.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
+                <label key={p.key} style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={newPermissions.includes(p.key)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setNewPermissions([...newPermissions, p.key]);
+                      } else {
+                        setNewPermissions(newPermissions.filter(k => k !== p.key));
+                      }
+                    }}
+                  />
+                  {p.label}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -158,63 +201,103 @@ export function UsersView() {
             <tbody>
               {users.map(u => (
                 editingId === u.id ? (
-                  <tr key={u.id} className="edit-row">
-                    <td>
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={e => setEditName(e.target.value)}
-                        style={{ width: "100%", boxSizing: "border-box" }}
-                      />
-                    </td>
-                    <td>{u.email}</td>
-                    <td>
-                      <select value={editRole} onChange={e => setEditRole(e.target.value)}>
-                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <label className="toggle-label" style={{ margin: 0 }}>
+                  <Fragment key={u.id}>
+                    <tr className="edit-row">
+                      <td>
                         <input
-                          type="checkbox"
-                          checked={editActive}
-                          onChange={e => setEditActive(e.target.checked)}
+                          type="text"
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          style={{ width: "100%", boxSizing: "border-box" }}
                         />
-                        {editActive ? "Activo" : "Inactivo"}
-                      </label>
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <button
-                          className="btn-primary"
-                          style={{ padding: "4px 10px", fontSize: "0.8rem" }}
-                          onClick={() => saveEditing(u.id)}
-                          disabled={updateMutation.isPending}
-                        >
-                          <Check size={14} /> Guardar
-                        </button>
-                        <button
-                          className="btn-secondary"
-                          style={{ padding: "4px 10px", fontSize: "0.8rem" }}
-                          onClick={cancelEditing}
-                        >
-                          <X size={14} /> Cancelar
-                        </button>
-                        <button
-                          className="btn-ghost"
-                          style={{ padding: "4px 10px", fontSize: "0.8rem" }}
-                          onClick={() => resetMutation.mutate(u.id)}
-                        >
-                          <KeyRound size={14} /> Resetear
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td>{u.email}</td>
+                      <td>
+                        <select value={editRole} onChange={e => setEditRole(e.target.value)}>
+                          {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <label className="toggle-label" style={{ margin: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={editActive}
+                            onChange={e => setEditActive(e.target.checked)}
+                          />
+                          {editActive ? "Activo" : "Inactivo"}
+                        </label>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                            onClick={() => saveEditing(u.id)}
+                            disabled={updateMutation.isPending}
+                          >
+                            <Check size={14} /> Guardar
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                            onClick={cancelEditing}
+                          >
+                            <X size={14} /> Cancelar
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                            onClick={() => resetMutation.mutate(u.id)}
+                          >
+                            <KeyRound size={14} /> Resetear
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={5} style={{ padding: "8px 12px", background: "#f9fafb" }}>
+                        {editRole === "admin" ? (
+                          <span style={{ fontSize: "0.8rem", color: "#666" }}>
+                            Los administradores tienen acceso completo.
+                          </span>
+                        ) : (
+                          <div>
+                            <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "4px" }}>Permisos</label>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
+                              {PERMISSION_DEFINITIONS.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
+                                <label key={p.key} style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={editPermissions.includes(p.key)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setEditPermissions([...editPermissions, p.key]);
+                                      } else {
+                                        setEditPermissions(editPermissions.filter(k => k !== p.key));
+                                      }
+                                    }}
+                                  />
+                                  {p.label}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  </Fragment>
                 ) : (
                   <tr key={u.id}>
                     <td>{u.name}</td>
                     <td>{u.email}</td>
-                    <td>{u.role}</td>
+                    <td>
+                      {u.role}
+                      {u.is_superadmin && (
+                        <span style={{ marginLeft: "6px", padding: "1px 6px", fontSize: "0.7rem", borderRadius: "4px", background: "#e0e7ff", color: "#4338ca", fontWeight: 600, verticalAlign: "middle" }}>
+                          Superadmin
+                        </span>
+                      )}
+                    </td>
                     <td>
                       {!u.active ? "No" : u.must_change_password ? "Pendiente" : "Activo"}
                     </td>

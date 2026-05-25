@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_encargado_or_admin, require_ready_user
+from backend.app.api.dependencies import require_encargado_or_admin, require_permission, require_ready_user
 from backend.app.application.doctors.errors import DoctorServiceError
 from backend.app.application.doctors.service import DoctorService
 from backend.app.infrastructure.db.models.user import UserModel
@@ -85,7 +85,7 @@ def get_doctor(
 @router.post("", response_model=DoctorRead, status_code=201)
 def create_doctor(
     payload: CreateDoctorRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_doctors"))],
     service: Annotated[DoctorService, Depends(get_doctor_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DoctorRead:
@@ -115,7 +115,7 @@ def create_doctor(
 def update_doctor(
     doctor_id: str,
     payload: UpdateDoctorRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_doctors"))],
     service: Annotated[DoctorService, Depends(get_doctor_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DoctorRead:
@@ -141,7 +141,7 @@ def update_doctor(
 def deactivate_service(
     doctor_id: str,
     payload: DeactivateDoctorServiceRequest,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_doctors"))],
     service: Annotated[DoctorService, Depends(get_doctor_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DoctorRead:
@@ -163,7 +163,7 @@ def deactivate_service(
 @router.post("/{doctor_id}/reactivate-service", response_model=DoctorRead)
 def reactivate_service(
     doctor_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_doctors"))],
     service: Annotated[DoctorService, Depends(get_doctor_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> DoctorRead:
@@ -178,7 +178,7 @@ def reactivate_service(
 @router.delete("/{doctor_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_doctor(
     doctor_id: str,
-    current_user: Annotated[UserModel, Depends(require_ready_user)],
+    current_user: Annotated[UserModel, Depends(require_permission("manage_doctors"))],
     service: Annotated[DoctorService, Depends(get_doctor_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:

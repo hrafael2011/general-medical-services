@@ -555,6 +555,56 @@ def test_list_by_day_includes_recurring_tag(db_session):
     assert result["4"]["doctors"][0]["recurring_tag"] == "último Viernes"
 
 
+def test_list_by_day_deduplicates_doctor_with_weekly_and_recurring_same_day(db_session):
+    from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
+
+    service = _make_service(db_session)
+    now = datetime.now(UTC)
+
+    doctor = DoctorModel(
+        id=str(uuid4()),
+        name="Duplicate Tuesday Doc",
+        normalized_name="duplicate tuesday doc",
+        sex="male",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(doctor)
+    db_session.flush()
+
+    db_session.add(
+        DoctorAvailabilityModel(
+            id=str(uuid4()),
+            doctor_id=doctor.id,
+            availability_type="weekly_fixed",
+            days_of_week=[1],
+            review_status="approved",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        DoctorAvailabilityModel(
+            id=str(uuid4()),
+            doctor_id=doctor.id,
+            availability_type="recurring",
+            days_of_week=None,
+            weekday=1,
+            week_number=1,
+            review_status="approved",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    result = service.list_by_day()
+
+    assert result["1"]["count"] == 1
+    assert [doc["id"] for doc in result["1"]["doctors"]] == [doctor.id]
+    assert result["1"]["doctors"][0]["recurring_tag"] == "segundo Martes"
+
+
 def test_list_by_day_excludes_monthly_variable(db_session):
     from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
 

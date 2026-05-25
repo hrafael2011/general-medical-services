@@ -50,6 +50,9 @@ class AvailabilityService:
                 "days_of_week debe ser una lista no vacía de enteros entre 0 (Lunes) y 6 (Domingo).",
             )
 
+        for old in self.availability.list_fixed_patterns_for_doctor(doctor_id):
+            self.availability.delete_availability(old.id)
+
         now = datetime.now(UTC)
         record = DoctorAvailabilityModel(
             id=str(uuid.uuid4()),
@@ -158,6 +161,9 @@ class AvailabilityService:
             raise AvailabilityError("invalid_weekday", "El día de la semana debe ser 0 (Lunes) a 6 (Domingo).")
         if week_number not in (-1, 0, 1, 2, 3):
             raise AvailabilityError("invalid_week_number", "El número de semana debe ser -1 (último) o 0-3.")
+
+        for old in self.availability.list_fixed_patterns_for_doctor(doctor_id):
+            self.availability.delete_availability(old.id)
 
         now = datetime.now(UTC)
         record = DoctorAvailabilityModel(

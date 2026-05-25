@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.infrastructure.db.base import Base
@@ -13,6 +14,8 @@ class UserModel(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     role: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    is_superadmin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -33,7 +36,6 @@ class UserModel(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
     whatsapp_phone: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
-    permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
 
 class LoginAttemptModel(Base):

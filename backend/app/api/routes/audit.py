@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_admin
+from backend.app.api.dependencies import require_permission
 from backend.app.application.audit.presenter import AuditPresenter
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 
 @router.get("", response_model=AuditListResponse)
 def list_audit_events(
-    _admin: Annotated[UserModel, Depends(require_admin)],
+    _current_user: Annotated[UserModel, Depends(require_permission("view_audit"))],
     session: Annotated[Session, Depends(get_db_session)],
     actor_id: str | None = Query(default=None),
     action_type: str | None = Query(default=None),

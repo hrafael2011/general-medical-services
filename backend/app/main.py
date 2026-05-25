@@ -1,17 +1,15 @@
 import logging
 import uuid
+from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-
-from contextlib import asynccontextmanager
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 
 from backend.app.api.router import api_router
 from backend.app.application.audit.service import set_current_request_id
@@ -120,7 +118,6 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage APScheduler lifecycle within the FastAPI application."""
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         process_notification_queue,
@@ -156,6 +153,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     is_production = settings.app_env == "production"
+    is_staging = settings.app_env == "staging"
 
     app = FastAPI(
         title=settings.app_name,
@@ -170,6 +168,14 @@ def create_app() -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=["https://general-medical-services.vercel.app"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    elif is_staging:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[settings.frontend_origin],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

@@ -7,7 +7,7 @@ import { setToken } from "../api/client";
 vi.mock("../api/auth", () => ({
   login: vi.fn().mockResolvedValue({
     access_token: "tok",
-    user: { id: "1", name: "Admin", email: "a@b.com", role: "admin", active: true, must_change_password: false },
+    user: { id: "1", name: "Admin", email: "a@b.com", role: "admin", active: true, must_change_password: false, is_superadmin: false, permissions: [] },
   }),
   authApi: {
     me: vi.fn(),
@@ -46,6 +46,8 @@ describe("AuthContext", () => {
       role: "admin",
       active: true,
       must_change_password: false,
+      is_superadmin: false,
+      permissions: [],
     });
 
     render(<AuthProvider><Consumer /></AuthProvider>);

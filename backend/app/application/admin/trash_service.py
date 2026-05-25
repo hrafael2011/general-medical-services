@@ -17,7 +17,7 @@ class TrashServiceError(Exception):
 
 
 class TrashService:
-    VALID_TYPES = {"doctors", "users", "ranks", "departments"}
+    VALID_TYPES = {"doctors", "users", "ranks", "departments", "deactivation_reasons"}
     _ANONYMIZABLE_TYPES = {"doctors", "users"}
 
     def __init__(
@@ -41,7 +41,9 @@ class TrashService:
             return self.users.list_deleted()
         if entity_type == "ranks":
             return self.catalogs.list_deleted_ranks()
-        return self.catalogs.list_deleted_departments()
+        if entity_type == "departments":
+            return self.catalogs.list_deleted_departments()
+        return self.catalogs.list_deleted_deactivation_reasons()
 
     def restore(self, entity_type: str, entity_id: str) -> None:
         if entity_type not in self.VALID_TYPES:
@@ -78,7 +80,9 @@ class TrashService:
             return self.users.get_by_id_including_deleted(entity_id)
         if entity_type == "ranks":
             return self.catalogs.get_rank_by_id_including_deleted(entity_id)
-        return self.catalogs.get_department_by_id_including_deleted(entity_id)
+        if entity_type == "departments":
+            return self.catalogs.get_department_by_id_including_deleted(entity_id)
+        return self.catalogs.get_deactivation_reason_by_id_including_deleted(entity_id)
 
     def _restore_entity(self, entity_type: str, entity_id: str) -> None:
         if entity_type == "doctors":
@@ -87,8 +91,10 @@ class TrashService:
             self.users.restore(entity_id)
         elif entity_type == "ranks":
             self.catalogs.restore_rank(entity_id)
-        else:
+        elif entity_type == "departments":
             self.catalogs.restore_department(entity_id)
+        else:
+            self.catalogs.restore_deactivation_reason(entity_id)
 
     def _hard_delete_entity(self, entity_type: str, entity_id: str) -> None:
         if entity_type == "doctors":
@@ -97,5 +103,7 @@ class TrashService:
             self.users.hard_delete(entity_id)
         elif entity_type == "ranks":
             self.catalogs.hard_delete_rank(entity_id)
-        else:
+        elif entity_type == "departments":
             self.catalogs.hard_delete_department(entity_id)
+        else:
+            self.catalogs.hard_delete_deactivation_reason(entity_id)

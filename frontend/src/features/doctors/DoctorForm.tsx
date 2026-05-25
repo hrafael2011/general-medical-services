@@ -198,7 +198,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
               Rango
               <select value={rankId} onChange={e => setRankId(e.target.value)}>
                 <option value="">— Sin rango —</option>
-                {(ranks ?? []).map(r => (
+                {(ranks ?? []).filter(r => r.active).map(r => (
                   <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </select>

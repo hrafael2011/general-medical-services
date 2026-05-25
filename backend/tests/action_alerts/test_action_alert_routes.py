@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.app.api.dependencies import require_encargado_or_admin
+from backend.app.api.dependencies import get_current_user
 from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models.action_alerts import ActionAlertModel
 from backend.app.infrastructure.db.models.user import UserModel
@@ -37,7 +37,7 @@ def session_local(engine):
 def user():
     return UserModel(
         id="test-user", email="user@test.com", password_hash="hash", name="Test User",
-        role="encargado", active=True, must_change_password=False, token_version=1,
+        role="admin", active=True, must_change_password=False, token_version=1,
         created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
     )
 
@@ -97,7 +97,7 @@ def client(session_local, user, seed_data):
             s.close()
 
     app.dependency_overrides[get_db_session] = _get_session
-    app.dependency_overrides[require_encargado_or_admin] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
     return TestClient(app)
 
 

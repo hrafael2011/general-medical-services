@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from backend.app.api.dependencies import require_ready_user
+from backend.app.api.dependencies import require_permission
 from backend.app.application.reports.report_service import ReportService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
@@ -34,7 +34,7 @@ def get_report_service(
 @router.get("/calendar/{calendar_id}/excel")
 def get_calendar_excel(
     calendar_id: str,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> StreamingResponse:
     try:
@@ -53,7 +53,7 @@ def get_calendar_excel(
 
 @router.get("/doctor-history/excel")
 def get_doctor_history_excel(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
@@ -74,7 +74,7 @@ def get_doctor_history_excel(
 
 @router.get("/weekly-schedule")
 def get_weekly_schedule(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
@@ -96,7 +96,7 @@ def get_weekly_schedule(
 
 @router.get("/coverage", response_model=None)
 def get_coverage(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
     year_start: int = Query(..., ge=2000, le=2100),
     month_start: int = Query(..., ge=1, le=12),
@@ -126,7 +126,7 @@ def get_coverage(
 
 @router.get("/workload", response_model=None)
 def get_workload(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
@@ -156,7 +156,7 @@ def get_workload(
 
 @router.get("/doctor-dossier/{doctor_id}", response_model=None)
 def get_doctor_dossier(
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
     doctor_id: str,
     date_from: date | None = Query(default=None),
@@ -185,7 +185,7 @@ def get_doctor_dossier(
 def export_weekly_list_pdf(
     calendar_id: str,
     week_id: str,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> StreamingResponse:
     """Export a weekly list as PDF with institutional branding."""
@@ -217,7 +217,7 @@ def export_weekly_list_pdf(
 @router.get("/calendar/{calendar_id}/full-pdf")
 def export_full_calendar_pdf(
     calendar_id: str,
-    _user: Annotated[UserModel, Depends(require_ready_user)],
+    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> StreamingResponse:
     """Export the full calendar as a single-page PDF grid."""

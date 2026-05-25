@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.app.api.dependencies import require_admin, require_ready_user
+from backend.app.api.dependencies import get_current_user, require_ready_user
 from backend.app.api.routes.catalogs import get_catalog_service
 from backend.app.application.catalogs.service import CatalogService
 from backend.app.infrastructure.db.base import Base
@@ -75,8 +75,7 @@ def client(session_local, user, seed_data, mock_service):
             s.close()
 
     app.dependency_overrides[get_db_session] = _get_session
-    app.dependency_overrides[require_ready_user] = lambda: user
-    app.dependency_overrides[require_admin] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_catalog_service] = lambda: mock_service
     return TestClient(app)
 
@@ -134,6 +133,80 @@ def test_list_deactivation_reasons_filtered_by_sex(client):
 def test_list_deactivation_reasons_invalid_sex(client):
     resp = client.get("/api/catalogs/deactivation-reasons?sex=invalid")
     assert resp.status_code == 422
+
+
+def test_create_deactivation_reason_success(client, mock_service):
+    from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel
+
+    reason = DeactivationReasonModel(
+        id="reason-new",
+        code="capacitacion",
+        display_name="Capacitación",
+        active=True,
+        requires_detail=False,
+        applies_to_sex=None,
+        severity="hard_block",
+    )
+    mock_service.create_deactivation_reason.return_value = reason
+
+    resp = client.post(
+        "/api/catalogs/deactivation-reasons",
+        json={
+            "display_name": "Capacitación",
+            "applies_to_sex": None,
+        },
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["display_name"] == "Capacitación"
+    mock_service.create_deactivation_reason.assert_called_once_with(
+        display_name="Capacitación",
+        applies_to_sex=None,
+    )
+
+
+def test_update_deactivation_reason_success(client, mock_service):
+    from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel
+
+    reason = DeactivationReasonModel(
+        id="reason-1",
+        code="training_leave",
+        display_name="Capacitación externa",
+        active=False,
+        requires_detail=False,
+        applies_to_sex="female",
+        severity="hard_block",
+    )
+    mock_service.update_deactivation_reason.return_value = reason
+
+    resp = client.patch(
+        "/api/catalogs/deactivation-reasons/reason-1",
+        json={
+            "display_name": "Capacitación externa",
+            "applies_to_sex": "female",
+            "active": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] == "Capacitación externa"
+    mock_service.update_deactivation_reason.assert_called_once_with(
+        "reason-1",
+        display_name="Capacitación externa",
+        applies_to_sex="female",
+        active=False,
+    )
+
+
+def test_delete_deactivation_reason_success(client, mock_service):
+    mock_service.soft_delete_deactivation_reason.return_value = 2
+
+    resp = client.delete("/api/catalogs/deactivation-reasons/reason-1")
+
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Deactivation reason deleted"
+    assert resp.json()["affected_doctors"] == 2
+    mock_service.soft_delete_deactivation_reason.assert_called_once_with("reason-1")
 
 
 # ---------------------------------------------------------------------------

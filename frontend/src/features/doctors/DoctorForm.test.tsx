@@ -15,7 +15,10 @@ vi.mock("../../api/doctors", () => ({
     update: (...args: unknown[]) => mockUpdateDoctor(...args),
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     listServiceAreas: vi.fn().mockResolvedValue([]),
-    listRanks: vi.fn().mockResolvedValue([]),
+    listRanks: vi.fn().mockResolvedValue([
+      { id: "rank-active", name: "Capitán", abbreviation: "Cap.", active: true },
+      { id: "rank-inactive", name: "Mayor", abbreviation: "May.", active: false },
+    ]),
     listDepartments: vi.fn().mockResolvedValue([
       { id: "dept-1", name: "Recursos Humanos", normalized_name: "recursos humanos", active: true },
     ]),
@@ -97,5 +100,14 @@ describe("DoctorForm availability", () => {
         })
       );
     });
+  });
+
+  it("only shows active ranks in the rank dropdown", async () => {
+    renderForm();
+
+    await screen.findByText("Capitán");
+
+    expect(screen.getByRole("option", { name: "Capitán" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Mayor" })).not.toBeInTheDocument();
   });
 });

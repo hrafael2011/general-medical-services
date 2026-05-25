@@ -10,6 +10,7 @@ const TABS = [
   { key: "users", label: "Usuarios" },
   { key: "ranks", label: "Rangos" },
   { key: "departments", label: "Departamentos" },
+  { key: "deactivation_reasons", label: "Razones de desactivación" },
 ] as const;
 
 const TYPE_LABELS: Record<string, string> = {
@@ -17,6 +18,7 @@ const TYPE_LABELS: Record<string, string> = {
   users: "usuarios",
   ranks: "rangos",
   departments: "departamentos",
+  deactivation_reasons: "razones de desactivación",
 };
 
 export function TrashPage() {
@@ -121,6 +123,8 @@ export function TrashPage() {
                       ? item.abbreviation
                       : activeTab === "departments"
                         ? item.normalized_name
+                        : activeTab === "deactivation_reasons"
+                          ? item.code
                         : item.role || item.rank_name || ""}
                   </td>
                   <td style={{ textAlign: "right" }}>
