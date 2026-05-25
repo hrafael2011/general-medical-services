@@ -25,10 +25,6 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
 
-    twilio_account_sid: str | None = None
-    twilio_auth_token: str | None = None
-    twilio_whatsapp_from: str = "whatsapp:+14155238886"
-
     resend_api_key: str | None = None
     resend_from_email: str = "noreply@turnos-medicos.com"
 
