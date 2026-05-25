@@ -13,7 +13,12 @@ from starlette.responses import Response
 
 from backend.app.api.router import api_router
 from backend.app.application.audit.service import set_current_request_id
-from backend.app.application.scheduler.jobs import check_unconfirmed_escalamiento
+from backend.app.application.scheduler.jobs import (
+    check_unconfirmed_escalamiento,
+    process_notification_queue,
+    process_overdue_confirmations,
+    send_pre_service_reminders,
+)
 from backend.app.core.config import settings
 
 
@@ -115,10 +120,28 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
+        process_notification_queue,
+        IntervalTrigger(seconds=30),
+        id="process_notifications",
+        name="Process notification queue",
+    )
+    scheduler.add_job(
+        send_pre_service_reminders,
+        IntervalTrigger(minutes=5),
+        id="send_reminders",
+        name="Send pre-service reminders",
+    )
+    scheduler.add_job(
         check_unconfirmed_escalamiento,
         IntervalTrigger(minutes=15),
         id="check_escalamiento",
         name="Check unconfirmed escalamiento",
+    )
+    scheduler.add_job(
+        process_overdue_confirmations,
+        IntervalTrigger(minutes=10),
+        id="process_overdue",
+        name="Process overdue confirmations",
     )
     scheduler.start()
     yield

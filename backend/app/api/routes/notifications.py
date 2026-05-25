@@ -13,6 +13,7 @@ from backend.app.infrastructure.repositories.notifications import NotificationRe
 from backend.app.schemas.notifications import (
     NotificationEventRead,
     NotificationListResponse,
+    ProcessNotificationsResponse,
 )
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
