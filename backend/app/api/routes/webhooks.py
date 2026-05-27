@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
 from fastapi.responses import PlainTextResponse
@@ -8,6 +9,9 @@ from backend.app.infrastructure.db.session import get_db_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+# Temporary: track webhook calls for staging debugging
+_webhook_log: list[dict] = []
 
 
 @router.get("/whatsapp", response_class=PlainTextResponse)
@@ -30,6 +34,15 @@ async def receive_whatsapp_message(
     try:
         messages = body.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {}).get("messages", [])
         for msg in messages:
+            _webhook_log.append({
+                "from": msg.get("from"),
+                "type": msg.get("type"),
+                "body": msg.get("text", {}).get("body", "") if msg.get("type") == "text" else None,
+                "id": msg.get("id"),
+                "ts": str(datetime.now(UTC)),
+            })
+            if len(_webhook_log) > 20:
+                _webhook_log.pop(0)
             if msg.get("type") == "text" and msg["text"]["body"].strip() == "1":
                 _confirm_by_phone(session, msg["from"], msg["id"])
     except Exception:
@@ -149,6 +162,7 @@ def diagnostic(
             {"id": r[0], "name": r[1], "whatsapp_phone": r[2]}
             for r in doctor_rows
         ],
+        "webhook_log": _webhook_log,
     }
 
 
