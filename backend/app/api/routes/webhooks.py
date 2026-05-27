@@ -37,6 +37,25 @@ async def receive_whatsapp_message(
     return {"status": "ok"}
 
 
+@router.get("/diagnostic/doctors")
+def diagnostic_doctors(
+    secret: str = Query(...),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if secret != "staging-setup-2026":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    from sqlalchemy import text
+    rows = session.execute(text(
+        "SELECT id, name, whatsapp_phone, active, service_active FROM doctors WHERE whatsapp_phone IS NOT NULL AND deleted_at IS NULL"
+    )).fetchall()
+    return {
+        "doctors": [
+            {"id": r[0], "name": r[1], "whatsapp_phone": r[2], "active": r[3], "service_active": r[4]}
+            for r in rows
+        ]
+    }
+
+
 def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> None:
     from datetime import datetime, UTC
     from sqlalchemy import select
