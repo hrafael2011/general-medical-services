@@ -1439,6 +1439,46 @@ select {
   background: #1d4ed8;
 }
 
+/* Calendar (react-day-picker overrides) */
+.av-calendar {
+  margin-left: 22px;
+  margin-top: 8px;
+}
+
+.av-calendar .rdp {
+  --rdp-accent-color: #2563eb;
+  --rdp-background-color: #eff6ff;
+  --rdp-day-width: 36px;
+  --rdp-day-height: 36px;
+  font-size: 0.78rem;
+}
+
+.av-calendar .rdp-nav_button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: #475569;
+}
+
+.av-calendar .rdp-nav_button:hover {
+  color: #2563eb;
+}
+
+.av-calendar .rdp-day_selected {
+  background: #2563eb;
+  color: #fff;
+  border-radius: 50%;
+}
+
+.av-calendar .rdp-day_selected:hover {
+  background: #1d4ed8;
+}
+
+.av-calendar .rdp-day:hover:not(.rdp-day_selected) {
+  background: #eff6ff;
+  border-radius: 50%;
+}
+
 /* ===== Spin animation for loading icons ===== */
 @keyframes spin {
   from { transform: rotate(0deg); }

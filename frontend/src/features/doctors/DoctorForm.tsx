@@ -314,7 +314,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
                     mode="multiple"
                     selected={selectedDates}
                     onSelect={handleDayPickerSelect}
-                    disabled={{ before: new Date() }}
+                    startMonth={new Date()}
                     defaultMonth={new Date()}
                     showOutsideDays={false}
                   />
