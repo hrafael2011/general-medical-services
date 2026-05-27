@@ -78,9 +78,9 @@ def test_notify(
             updated_at=now,
         )
         session.add(notification)
-        session.flush()  # persist so FK reference works
+        session.commit()  # commit notification first so FK is satisfied
 
-        # Create confirmation request (so webhook can match it)
+        # Now create confirmation request in a new transaction
         confirm = ConfirmationRequestModel(
             id=cid,
             confirmation_type="test",
