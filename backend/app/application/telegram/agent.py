@@ -25,6 +25,7 @@ from backend.app.application.telegram.memory import MemoryManager, SessionState,
 from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.sanitize import format_rows as shared_format_rows
 from backend.app.application.telegram.schemas import IntentOutput
+from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
 from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
 
@@ -420,6 +421,7 @@ class ConversationalAgent:
         doctor_query_service = None,
         session = None,
         calendar_query_service = None,
+        semantic_layer_resolver: SemanticLayerResolver | None = None,
     ) -> None:
         self._llm = llm
         self._router = router
@@ -431,6 +433,7 @@ class ConversationalAgent:
         self._doctor_query_service = doctor_query_service
         self._session = session
         self._calendar_query_service = calendar_query_service
+        self._semantic_layer_resolver = semantic_layer_resolver
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -1242,6 +1245,47 @@ class ConversationalAgent:
                     }
                 },
             )
+
+        # ---- Semantic Layer (fast deterministic path) ----
+        if self._semantic_layer_resolver is not None:
+            try:
+                previous_metric = None
+                if session_state is not None:
+                    previous_metric = session_state.last_query_type
+
+                semantic_result = self._semantic_layer_resolver.resolve(
+                    user_text=text,
+                    domain=conversation_plan.domain,
+                    action=conversation_plan.action,
+                    entities=resolved_entities,
+                    is_followup=conversation_plan.is_followup,
+                    previous_metric=previous_metric,
+                )
+                if semantic_result is not None:
+                    agent_result = self._semantic_layer_resolver.to_agent_result(
+                        semantic_result,
+                        user_text=text,
+                        format=conversation_plan.format,
+                    )
+                    self._remember_result(
+                        telegram_user_id,
+                        agent_result,
+                        query_type=f"semantic:{semantic_result.metric_name}",
+                        params={},
+                    )
+                    logger.info(
+                        "Agent resolved via semantic layer",
+                        extra={
+                            "telegram_event": "agent_route_completed",
+                            "match_type": "semantic_layer",
+                            "metric": semantic_result.metric_name,
+                            "agent_action": agent_result.agent_action,
+                            "latency_ms": round((time.perf_counter() - start) * 1000),
+                        },
+                    )
+                    return agent_result
+            except Exception:
+                logger.warning("SemanticLayerResolver failed, falling through", exc_info=True)
 
         # 2a. If entity resolver found ambiguity, return it directly
         if ambiguous_entities:
