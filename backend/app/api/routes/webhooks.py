@@ -48,10 +48,11 @@ def test_notify(
     import uuid as _uuid
     nid = str(_uuid.uuid4())
     session.execute(text("""
-        INSERT INTO notification_events (id, notification_type, recipient_phone, payload, status, retry_count, created_at, updated_at)
-        VALUES (:id, 'test', '8092186876', :payload::jsonb, 'pending', 0, NOW(), NOW())
+        INSERT INTO notification_events (id, notification_type, recipient_phone, idempotency_key, payload, status, retry_count, created_at, updated_at)
+        VALUES (:id, 'test', '8092186876', :ikey, :payload::jsonb, 'pending', 0, NOW(), NOW())
     """), {
         "id": nid,
+        "ikey": f"test:{nid}",
         "payload": '{"message": "Hola Dr. Hendrick Rafael, esta es una prueba de notificacion del sistema de turnos medicos.\\n\\nResponda 1 para confirmar su turno."}',
     })
     session.commit()
