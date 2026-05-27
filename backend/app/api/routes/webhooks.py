@@ -57,6 +57,41 @@ def diagnostic_doctors(
     }
 
 
+@router.post("/diagnostic/run-migration")
+def diagnostic_run_migration(
+    secret: str = Query(...),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if secret != "staging-setup-2026":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    from sqlalchemy import text
+    results = {}
+    # 1. Migrate existing data
+    r1 = session.execute(text(
+        "UPDATE doctors SET whatsapp_phone = phone WHERE whatsapp_phone IS NULL AND phone IS NOT NULL"
+    ))
+    results["migrated_from_phone"] = r1.rowcount
+    # 2. Set placeholder for any remaining nulls
+    r2 = session.execute(text(
+        "UPDATE doctors SET whatsapp_phone = '0000000000' WHERE whatsapp_phone IS NULL"
+    ))
+    results["set_placeholder"] = r2.rowcount
+    # 3. Drop phone column
+    try:
+        session.execute(text("ALTER TABLE doctors DROP COLUMN IF EXISTS phone"))
+        results["dropped_phone"] = True
+    except Exception as e:
+        results["dropped_phone"] = str(e)
+    # 4. Set NOT NULL
+    try:
+        session.execute(text("ALTER TABLE doctors ALTER COLUMN whatsapp_phone SET NOT NULL"))
+        results["set_not_null"] = True
+    except Exception as e:
+        results["set_not_null"] = str(e)
+    session.commit()
+    return {"migration": "20260527_0041", "results": results}
+
+
 @router.post("/diagnostic/set-whatsapp")
 def diagnostic_set_whatsapp(
     secret: str = Query(...),
