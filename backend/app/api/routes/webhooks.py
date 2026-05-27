@@ -57,6 +57,24 @@ def diagnostic_doctors(
     }
 
 
+@router.post("/diagnostic/set-whatsapp")
+def diagnostic_set_whatsapp(
+    secret: str = Query(...),
+    doctor_id: str = Query(...),
+    whatsapp_phone: str = Query(...),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if secret != "staging-setup-2026":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    from sqlalchemy import text
+    result = session.execute(
+        text("UPDATE doctors SET whatsapp_phone = :phone, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL"),
+        {"phone": whatsapp_phone, "id": doctor_id},
+    )
+    session.commit()
+    return {"updated": result.rowcount, "doctor_id": doctor_id, "whatsapp_phone": whatsapp_phone}
+
+
 def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> None:
     from datetime import datetime, UTC
     from sqlalchemy import select
