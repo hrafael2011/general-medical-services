@@ -74,6 +74,7 @@ class TestTrashCounts:
             name="Deleted Doc",
             normalized_name="deleted doc",
             sex="male",
+            whatsapp_phone="0000000000",
             created_at=now,
             updated_at=now,
             deleted_at=now,

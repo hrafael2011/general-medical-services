@@ -458,7 +458,7 @@ def test_export_falls_back_to_query_executor(db_session) -> None:
         service_active=True,
         availability_mode="variable",
         participa_misiones=True,
-        whatsapp_phone=None,
+        whatsapp_phone="0000000000",
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",
