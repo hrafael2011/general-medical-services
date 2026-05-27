@@ -171,13 +171,27 @@ def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> N
     from sqlalchemy import select
     from backend.app.infrastructure.db.models.doctors import DoctorModel
     from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
-    from backend.app.application.notifications.phone_utils import phones_match
+    from backend.app.application.notifications.phone_utils import phones_match, normalize_phone
 
     # Find doctor by normalized phone
     doctors = session.scalars(
         select(DoctorModel).where(DoctorModel.whatsapp_phone.is_not(None))
     ).all()
+    doctor_phones = [(d.name, d.whatsapp_phone, normalize_phone(d.whatsapp_phone)) for d in doctors]
+    normalized_sender = normalize_phone(sender_phone)
     doctor = next((d for d in doctors if phones_match(d.whatsapp_phone, sender_phone)), None)
+
+    _webhook_log.append({
+        "step": "confirm_by_phone",
+        "sender_phone": sender_phone,
+        "normalized_sender": normalized_sender,
+        "doctor_phones": doctor_phones,
+        "doctor_found": doctor.name if doctor else None,
+        "ts": str(datetime.now(UTC)),
+    })
+    if len(_webhook_log) > 20:
+        _webhook_log.pop(0)
+
     if not doctor:
         logger.info("No doctor found for phone %s", sender_phone)
         return
@@ -193,6 +207,12 @@ def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> N
     ).first()
     if not request:
         logger.info("No pending confirmation for doctor %s", doctor.name)
+        _webhook_log.append({
+            "step": "confirm_by_phone",
+            "doctor": doctor.name,
+            "result": "no_pending_request",
+            "ts": str(datetime.now(UTC)),
+        })
         return
 
     request.status = "confirmed"
