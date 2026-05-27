@@ -1,6 +1,7 @@
 import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.session import get_db_session
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
-@router.get("/whatsapp")
+@router.get("/whatsapp", response_class=PlainTextResponse)
 def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
     hub_verify_token: str = Query(alias="hub.verify_token"),
