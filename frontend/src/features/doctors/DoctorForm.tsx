@@ -235,6 +235,22 @@ export function DoctorForm({ doctor, onClose }: Props) {
             </label>
           </div>
 
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={doesService}
+              onChange={e => {
+                setDoesService(e.target.checked);
+                if (!e.target.checked) {
+                  setAllowedAreaIds([]);
+                }
+              }}
+            />
+            ¿Hace servicio?
+          </label>
+
+          {doesService && (
+          <>
           <div className="form-row">
             <label>
               Meta mensual
@@ -253,21 +269,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
             </label>
           </div>
 
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={doesService}
-              onChange={e => {
-                setDoesService(e.target.checked);
-                if (!e.target.checked) {
-                  setAllowedAreaIds([]);
-                }
-              }}
-            />
-            ¿Hace servicio?
-          </label>
-
-          {doesService && (
           <div className="form-row">
             <fieldset className="field-group">
               <legend>Disponibilidad</legend>
@@ -349,9 +350,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
               )}
             </fieldset>
           </div>
-          )}
 
-          {doesService ? (
           <fieldset className="field-group">
             <legend>Áreas de servicio permitidas</legend>
             <div className="area-checks">
@@ -367,11 +366,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
               ))}
             </div>
           </fieldset>
-          ) : (
-          <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "8px 0" }}>
-            El médico no estará disponible para turnos de servicio.
-          </p>
-          )}
 
           <label className="check-label">
             <input
@@ -381,6 +375,14 @@ export function DoctorForm({ doctor, onClose }: Props) {
             />
             Participa en misiones
           </label>
+          </>
+          )}
+
+          {!doesService && (
+          <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "8px 0" }}>
+            El médico no estará disponible para turnos de servicio.
+          </p>
+          )}
 
           {error && <p className="form-error">{error}</p>}
 
