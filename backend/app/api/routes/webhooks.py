@@ -65,6 +65,38 @@ def test_notify(
     return {"status": "queued", "notification_id": nid, "message": "Notificacion en cola. El scheduler la enviara en max 30s."}
 
 
+@router.get("/diagnostic")
+def diagnostic(
+    secret: str = Query(...),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if secret != "staging-setup-2026":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    from sqlalchemy import text
+    rows = session.execute(
+        text("SELECT id, notification_type, recipient_phone, status, error_code, error_message, retry_count, provider, created_at, updated_at FROM notification_events ORDER BY created_at DESC LIMIT 5")
+    ).fetchall()
+    return {
+        "meta_configured": bool(settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id),
+        "api_version": settings.meta_whatsapp_api_version,
+        "notifications": [
+            {
+                "id": r[0],
+                "type": r[1],
+                "phone": r[2],
+                "status": r[3],
+                "error_code": r[4],
+                "error_message": r[5],
+                "retry_count": r[6],
+                "provider": r[7],
+                "created_at": str(r[8]),
+                "updated_at": str(r[9]),
+            }
+            for r in rows
+        ],
+    }
+
+
 def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> None:
     from datetime import datetime, UTC
     from sqlalchemy import select
