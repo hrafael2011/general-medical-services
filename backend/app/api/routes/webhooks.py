@@ -46,9 +46,10 @@ def diagnostic_doctors(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     from sqlalchemy import text
     rows = session.execute(text(
-        "SELECT id, name, whatsapp_phone, active, service_active FROM doctors WHERE whatsapp_phone IS NOT NULL AND deleted_at IS NULL"
+        "SELECT id, name, whatsapp_phone, active, service_active FROM doctors WHERE deleted_at IS NULL LIMIT 20"
     )).fetchall()
     return {
+        "count": len(rows),
         "doctors": [
             {"id": r[0], "name": r[1], "whatsapp_phone": r[2], "active": r[3], "service_active": r[4]}
             for r in rows
