@@ -44,7 +44,6 @@ export function UsersView() {
   const [editActive, setEditActive] = useState(true);
   const [editPermissions, setEditPermissions] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserRead | null>(null);
-  const [newPermissions, setNewPermissions] = useState<string[]>([]);
 
   const AVAILABLE_PERMISSIONS = [
     { key: "receive_escalation_alerts", label: "Recibir alertas de escalamiento" },
