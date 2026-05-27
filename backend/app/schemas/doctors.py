@@ -35,6 +35,7 @@ class CreateDoctorRequest(BaseModel):
     department_id: str | None = None
     phone: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=500)
+    service_active: bool = True
     participa_misiones: bool = True
     whatsapp_phone: str | None = Field(default=None, max_length=40)
     monthly_service_target: int = Field(default=3, ge=0)
@@ -61,6 +62,7 @@ class UpdateDoctorRequest(BaseModel):
     department_id: str | None = None
     phone: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=500)
+    service_active: bool | None = None
     participa_misiones: bool | None = None
     whatsapp_phone: str | None = Field(default=None, max_length=40)
     monthly_service_target: int | None = Field(default=None, ge=0)

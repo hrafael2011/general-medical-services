@@ -100,6 +100,7 @@ def create_doctor(
         phone=payload.phone,
         notes=payload.notes,
         participa_misiones=payload.participa_misiones,
+        service_active=payload.service_active,
         whatsapp_phone=payload.whatsapp_phone,
         monthly_service_target=payload.monthly_service_target,
         monthly_service_max=payload.monthly_service_max,

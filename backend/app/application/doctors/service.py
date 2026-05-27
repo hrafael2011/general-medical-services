@@ -68,6 +68,7 @@ class DoctorService:
         phone: str | None = None,
         notes: str | None = None,
         participa_misiones: bool = True,
+        service_active: bool = True,
         whatsapp_phone: str | None = None,
         monthly_service_target: int = 3,
         monthly_service_max: int = 3,
@@ -113,7 +114,7 @@ class DoctorService:
             phone=_strip_html(phone),
             notes=_strip_html(notes),
             active=True,
-            service_active=True,
+            service_active=service_active,
             service_inactive_reason_id=None,
             service_inactive_detail=None,
             participa_misiones=participa_misiones,
@@ -147,6 +148,7 @@ class DoctorService:
         phone: str | None | object = _MISSING,
         notes: str | None | object = _MISSING,
         participa_misiones: bool | None = None,
+        service_active: bool | None = None,
         whatsapp_phone: str | None | object = _MISSING,
         monthly_service_target: int | None = None,
         monthly_service_max: int | None = None,
@@ -265,6 +267,16 @@ class DoctorService:
         if availability_mode is not None:
             doctor.availability_mode = availability_mode
             changed_fields["availability_mode"] = availability_mode
+
+        if service_active is not None:
+            doctor.service_active = service_active
+            changed_fields["service_active"] = service_active
+            if not service_active:
+                from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+                AvailabilityRepository(self.doctors.session).delete_all_for_doctor(doctor_id)
+                if allowed_area_ids is None:
+                    self.doctors.set_allowed_areas(doctor_id, [])
+                    changed_fields["allowed_area_ids"] = []
 
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
