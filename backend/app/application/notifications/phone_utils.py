@@ -18,5 +18,17 @@ def normalize_phone(phone: str) -> str:
 
 
 def phones_match(phone_a: str, phone_b: str) -> bool:
-    """Compara dos números de teléfono independientemente del formato."""
-    return normalize_phone(phone_a) == normalize_phone(phone_b)
+    """Compara dos números de teléfono independientemente del formato.
+
+    Maneja diferencias de código de país (ej: 18092186876 vs 8092186876).
+    """
+    a = normalize_phone(phone_a)
+    b = normalize_phone(phone_b)
+    if a == b:
+        return True
+    # One number may include country code while the other doesn't
+    if len(a) > len(b) and a.endswith(b):
+        return True
+    if len(b) > len(a) and b.endswith(a):
+        return True
+    return False
