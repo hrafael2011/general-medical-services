@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Save, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/style.css";
 import { doctorsApi, availabilityApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
 
 interface Props {
@@ -36,7 +38,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
     doctor?.availability_mode === "monthly" ? "monthly" : "weekly"
   );
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [selectedDates, setSelectedDates] = useState<number[]>([]);
+  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [selectedWeekday, setSelectedWeekday] = useState<number>(4);
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<number>(-1);
 
@@ -48,10 +50,8 @@ export function DoctorForm({ doctor, onClose }: Props) {
     });
   }
 
-  function toggleDate(day: number) {
-    setSelectedDates(prev =>
-      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
-    );
+  function handleDayPickerSelect(dates: Date[] | undefined) {
+    setSelectedDates(dates ?? []);
   }
   const [error, setError] = useState("");
 
@@ -92,7 +92,11 @@ export function DoctorForm({ doctor, onClose }: Props) {
       setSelectedWeekNumber(recurring.week_number ?? -1);
     } else if (monthly) {
       setAvMode("monthly");
-      setSelectedDates(monthly.available_dates ?? []);
+      const year = monthly.year ?? new Date().getFullYear();
+      const month = monthly.month ?? new Date().getMonth() + 1;
+      setSelectedDates(
+        (monthly.available_dates ?? []).map(d => new Date(year, month - 1, d))
+      );
     }
   }, [availabilityData, doctor?.availability_mode]);
 
@@ -140,11 +144,14 @@ export function DoctorForm({ doctor, onClose }: Props) {
             if (avMode === "weekly" && selectedDays.length > 0) {
               await availabilityApi.setWeekly(doctorId, { days_of_week: selectedDays });
             } else if (avMode === "monthly" && selectedDates.length > 0) {
-              const now = new Date();
+              const dates = selectedDates;
+              const year = dates[0].getFullYear();
+              const month = dates[0].getMonth() + 1;
+              const dayNumbers = dates.map(d => d.getDate());
               await availabilityApi.setMonthly(doctorId, {
-                year: now.getFullYear(),
-                month: now.getMonth() + 1,
-                available_dates: selectedDates,
+                year,
+                month,
+                available_dates: dayNumbers,
               });
             } else if (avMode === "recurring") {
               await availabilityApi.setRecurring(doctorId, {
@@ -302,14 +309,15 @@ export function DoctorForm({ doctor, onClose }: Props) {
                 </div>
               )}
               {avMode === "monthly" && (
-                <div className="av-month-grid">
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                    <button key={day} type="button"
-                      className={`av-month-day${selectedDates.includes(day) ? " av-month-day--selected" : ""}`}
-                      onClick={() => toggleDate(day)}>
-                      {day}
-                    </button>
-                  ))}
+                <div className="av-calendar">
+                  <DayPicker
+                    mode="multiple"
+                    selected={selectedDates}
+                    onSelect={handleDayPickerSelect}
+                    disabled={{ before: new Date() }}
+                    defaultMonth={new Date()}
+                    showOutsideDays={false}
+                  />
                 </div>
               )}
               {avMode === "recurring" && (
