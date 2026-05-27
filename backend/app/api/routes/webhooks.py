@@ -73,26 +73,38 @@ def diagnostic(
     if secret != "staging-setup-2026":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     from sqlalchemy import text
-    rows = session.execute(
+    notif_rows = session.execute(
         text("SELECT id, notification_type, recipient_phone, status, error_code, error_message, retry_count, provider, created_at, updated_at FROM notification_events ORDER BY created_at DESC LIMIT 5")
+    ).fetchall()
+    conf_rows = session.execute(
+        text("SELECT id, confirmation_type, status, doctor_id, response_channel, responded_at, created_at FROM confirmation_requests ORDER BY created_at DESC LIMIT 5")
+    ).fetchall()
+    doctor_rows = session.execute(
+        text("SELECT id, name, whatsapp_phone FROM doctors WHERE whatsapp_phone IS NOT NULL LIMIT 5")
     ).fetchall()
     return {
         "meta_configured": bool(settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id),
         "api_version": settings.meta_whatsapp_api_version,
+        "webhook_verify_token_set": bool(settings.meta_webhook_verify_token),
         "notifications": [
             {
-                "id": r[0],
-                "type": r[1],
-                "phone": r[2],
-                "status": r[3],
-                "error_code": r[4],
-                "error_message": r[5],
-                "retry_count": r[6],
-                "provider": r[7],
-                "created_at": str(r[8]),
-                "updated_at": str(r[9]),
+                "id": r[0], "type": r[1], "phone": r[2], "status": r[3],
+                "error_code": r[4], "error_message": r[5], "retry_count": r[6],
+                "provider": r[7], "created_at": str(r[8]), "updated_at": str(r[9]),
             }
-            for r in rows
+            for r in notif_rows
+        ],
+        "confirmations": [
+            {
+                "id": r[0], "type": r[1], "status": r[2], "doctor_id": r[3],
+                "response_channel": r[4], "responded_at": str(r[5]) if r[5] else None,
+                "created_at": str(r[6]),
+            }
+            for r in conf_rows
+        ],
+        "doctors": [
+            {"id": r[0], "name": r[1], "whatsapp_phone": r[2]}
+            for r in doctor_rows
         ],
     }
 
