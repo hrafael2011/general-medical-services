@@ -269,3 +269,103 @@ class TestQueryExecutorBackwardCompat:
         assert result["ok"] is True
         assert result["sql"] == "SELECT name FROM doctors WHERE id = 'd-legacy-1'"
         assert "data" in result
+
+
+# ---------------------------------------------------------------------------
+# ExampleStore
+# ---------------------------------------------------------------------------
+
+
+class TestExampleStore:
+    def test_add_and_search(self) -> None:
+        from backend.app.application.telegram.sql_agent.example_store import (
+            ExampleStore,
+            SQLExample,
+        )
+
+        store = ExampleStore(db_path=":memory:")
+        store.clear()
+        store.add([
+            SQLExample("cuantos medicos hay", "SELECT COUNT(*) FROM doctors", "count"),
+            SQLExample("lista de doctores", "SELECT name FROM doctors", "list"),
+            SQLExample("servicios por mes", "SELECT month, COUNT(*) FROM calendars GROUP BY month", "analytics"),
+        ])
+        assert store.count() == 3
+        results = store.search("cuantos doctores", k=2)
+        assert len(results) == 2
+        assert any("COUNT(*)" in r.sql for r in results)
+        store.close()
+
+    def test_empty_store_returns_nothing(self) -> None:
+        from backend.app.application.telegram.sql_agent.example_store import ExampleStore
+
+        store = ExampleStore(db_path=":memory:")
+        store.clear()
+        assert store.search("cualquier cosa", k=3) == []
+        store.close()
+
+    def test_clear_removes_all(self) -> None:
+        from backend.app.application.telegram.sql_agent.example_store import (
+            ExampleStore,
+            SQLExample,
+        )
+
+        store = ExampleStore(db_path=":memory:")
+        store.add([SQLExample("test", "SELECT 1", "test")])
+        assert store.count() == 1
+        store.clear()
+        assert store.count() == 0
+        store.close()
+
+
+# ---------------------------------------------------------------------------
+# PromptBuilder
+# ---------------------------------------------------------------------------
+
+
+class TestPromptBuilder:
+    def test_builds_few_shot_block(self) -> None:
+        from backend.app.application.telegram.sql_agent.example_store import (
+            ExampleStore,
+            SQLExample,
+        )
+        from backend.app.application.telegram.sql_agent.prompt_builder import (
+            PromptBuilder,
+        )
+
+        store = ExampleStore(db_path=":memory:")
+        store.add([
+            SQLExample("cuantos medicos", "SELECT COUNT(*) FROM doctors", "count"),
+        ])
+        builder = PromptBuilder(store)
+        block = builder.build_few_shot("cuantos doctores hay", k=1)
+        assert "SELECT COUNT(*) FROM doctors" in block
+        assert "Ejemplo 1" in block
+        store.close()
+
+    def test_returns_empty_when_no_store(self) -> None:
+        from backend.app.application.telegram.sql_agent.prompt_builder import (
+            PromptBuilder,
+        )
+
+        builder = PromptBuilder(None)
+        assert builder.build_few_shot("test") == ""
+
+    def test_wrap_prompt_inserts_block(self) -> None:
+        from backend.app.application.telegram.sql_agent.prompt_builder import (
+            PromptBuilder,
+        )
+
+        builder = PromptBuilder(None)
+        wrapped = builder.wrap_prompt("Pregunta final", "Ejemplo previo")
+        assert "Ejemplo previo" in wrapped
+        assert "Pregunta final" in wrapped
+
+    def test_wrap_prompt_skips_when_empty(self) -> None:
+        from backend.app.application.telegram.sql_agent.prompt_builder import (
+            PromptBuilder,
+        )
+
+        builder = PromptBuilder(None)
+        wrapped = builder.wrap_prompt("Pregunta final", "")
+        assert wrapped == "Pregunta final"

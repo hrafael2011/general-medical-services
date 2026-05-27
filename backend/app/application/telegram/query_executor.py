@@ -14,6 +14,8 @@ import time
 from typing import Any
 
 from backend.app.application.telegram.sql_agent import SQLAgentOrchestrator
+from backend.app.application.telegram.sql_agent.example_store import ExampleStore
+from backend.app.application.telegram.sql_agent.prompt_builder import PromptBuilder
 from backend.app.application.telegram.sql_agent.security import (
     _EXCLUDE_TABLES,
     build_schema_summary,
@@ -28,13 +30,15 @@ _build_schema_summary = build_schema_summary
 class QueryExecutor:
     """Backward-compatible wrapper that delegates to SQLAgentOrchestrator."""
 
-    def __init__(self, session: Any, llm: Any) -> None:
+    def __init__(self, session: Any, llm: Any, example_store: ExampleStore | None = None) -> None:
         self._session = session
         self._llm = llm
         # Keep schema summary accessible for diagnostics / prompts
         self._schema_summary = build_schema_summary(session)
+        # Optional few-shot prompting
+        prompt_builder = PromptBuilder(example_store) if example_store else None
         # Internal orchestrator with multi-turn self-correction
-        self._agent = SQLAgentOrchestrator(session, llm)
+        self._agent = SQLAgentOrchestrator(session, llm, prompt_builder=prompt_builder)
 
     def get_schema_summary(self) -> str:
         return self._schema_summary

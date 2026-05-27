@@ -11,6 +11,7 @@ from typing import Any
 
 from backend.app.application.telegram.sql_agent.executor import SafeSQLExecutor
 from backend.app.application.telegram.sql_agent.generator import QueryGenerator
+from backend.app.application.telegram.sql_agent.prompt_builder import PromptBuilder
 from backend.app.application.telegram.sql_agent.refiner import QueryRefiner
 from backend.app.application.telegram.sql_agent.schema_linker import SchemaLinker
 from backend.app.application.telegram.sql_agent.security import build_schema_summary
@@ -24,7 +25,7 @@ MAX_ITERATIONS = 3
 class SQLAgentOrchestrator:
     """Drop-in replacement for QueryExecutor with iterative self-correction."""
 
-    def __init__(self, session: Any, llm: Any) -> None:
+    def __init__(self, session: Any, llm: Any, prompt_builder: PromptBuilder | None = None) -> None:
         self._session = session
         self._llm = llm
         self._schema_linker = SchemaLinker(build_schema_summary(session))
@@ -32,6 +33,7 @@ class SQLAgentOrchestrator:
         self._executor = SafeSQLExecutor(session)
         self._verifier = SQLVerifier(llm)
         self._refiner = QueryRefiner(llm)
+        self._prompt_builder = prompt_builder
 
     # ------------------------------------------------------------------
     # Public API (same signature as legacy QueryExecutor.execute)
@@ -54,10 +56,14 @@ class SQLAgentOrchestrator:
         reduced_schema = self._schema_linker.reduce(context)
 
         # --- Iteration 0: initial generation ---
+        few_shot = ""
+        if self._prompt_builder is not None:
+            few_shot = self._prompt_builder.build_few_shot(context, k=3)
         sql, reasoning = self._generator.generate(
             user_text=context,
             reduced_schema=reduced_schema,
             entity_hints=entity_hints,
+            few_shot_examples=few_shot,
         )
         if not sql:
             return {"ok": False, "error": "No se pudo generar una consulta SQL."}
