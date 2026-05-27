@@ -23,7 +23,6 @@ class DoctorModel(Base):
     department_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("departments.id"), nullable=True, index=True
     )
-    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     service_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -36,7 +35,7 @@ class DoctorModel(Base):
     participa_misiones: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
-    whatsapp_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    whatsapp_phone: Mapped[str] = mapped_column(String(40), nullable=False)
     monthly_service_target: Mapped[int] = mapped_column(
         Integer, nullable=False, default=3
     )

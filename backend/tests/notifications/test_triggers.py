@@ -73,7 +73,6 @@ def _create_doctor(
         sex="male",
         rank_id=None,
         department_id=None,
-        phone=None,
         notes=None,
         active=True,
         service_active=True,

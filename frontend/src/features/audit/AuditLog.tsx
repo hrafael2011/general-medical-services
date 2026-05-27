@@ -42,7 +42,6 @@ const FIELD_LABELS: Record<string, string> = {
   sex: "Sexo",
   rank_id: "Rango",
   department_id: "Departamento",
-  phone: "Teléfono",
   notes: "Notas",
   active: "Activo en sistema",
   service_active: "Activo para servicio",

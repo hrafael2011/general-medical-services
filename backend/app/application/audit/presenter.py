@@ -41,7 +41,6 @@ FIELD_LABELS = {
     "sex": "sexo",
     "rank_id": "rango",
     "department_id": "departamento",
-    "phone": "teléfono",
     "notes": "notas",
     "active": "activo en sistema",
     "service_active": "activo para servicio",

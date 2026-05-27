@@ -76,10 +76,9 @@ def test_create_doctor_stores_basic_fields(db_session) -> None:
         sex="male",
         rank_id=None,
         department_id=None,
-        phone=None,
         notes=None,
         participa_misiones=True,
-        whatsapp_phone=None,
+        whatsapp_phone="+18095551234",
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",
@@ -105,10 +104,9 @@ def test_create_doctor_from_first_and_last_name(db_session) -> None:
         sex="male",
         rank_id=None,
         department_id=None,
-        phone=None,
         notes=None,
         participa_misiones=True,
-        whatsapp_phone=None,
+        whatsapp_phone="+18095551234",
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",
@@ -131,6 +129,7 @@ def test_create_doctor_rejects_combined_name_over_column_limit(db_session) -> No
             first_name="A" * 100,
             last_name="B" * 100,
             sex="male",
+            whatsapp_phone="+18095551234",
         )
 
 
@@ -143,10 +142,9 @@ def test_create_doctor_trims_name(db_session) -> None:
         sex="female",
         rank_id=None,
         department_id=None,
-        phone=None,
         notes=None,
         participa_misiones=False,
-        whatsapp_phone=None,
+        whatsapp_phone="+18095551234",
         monthly_service_target=2,
         monthly_service_max=2,
         monthly_service_limit_mode="warn_only",
@@ -164,14 +162,14 @@ def test_list_all_returns_doctors(db_session) -> None:
 
     service.create_doctor(
         actor_id="a", name="Doctor A", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
     )
     service.create_doctor(
         actor_id="a", name="Doctor B", sex="female", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -186,7 +184,7 @@ def test_update_doctor_changes_fields(db_session) -> None:
 
     doctor = service.create_doctor(
         actor_id="a", name="Original Name", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -199,10 +197,9 @@ def test_update_doctor_changes_fields(db_session) -> None:
         sex=None,
         rank_id=None,
         department_id=None,
-        phone="555-1234",
+        whatsapp_phone="555-1234",
         notes=None,
         participa_misiones=None,
-        whatsapp_phone=None,
         monthly_service_target=None,
         monthly_service_max=None,
         monthly_service_limit_mode=None,
@@ -211,7 +208,7 @@ def test_update_doctor_changes_fields(db_session) -> None:
     )
 
     assert updated.name == "Updated Name"
-    assert updated.phone == "555-1234"
+    assert updated.whatsapp_phone == "555-1234"
 
 
 def test_update_doctor_from_first_and_last_name(db_session) -> None:
@@ -219,7 +216,7 @@ def test_update_doctor_from_first_and_last_name(db_session) -> None:
 
     doctor = service.create_doctor(
         actor_id="a", name="Original Name", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -245,7 +242,7 @@ def test_update_doctor_can_clear_nullable_fields(db_session) -> None:
 
     doctor = service.create_doctor(
         actor_id="a", name="Doctor Clear", sex="male", rank_id=None, department_id=department.id,
-        phone="555-0000", notes="Nota", participa_misiones=True, whatsapp_phone="555-1111",
+        notes="Nota", participa_misiones=True, whatsapp_phone="555-1111",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -255,15 +252,12 @@ def test_update_doctor_can_clear_nullable_fields(db_session) -> None:
         doctor.id,
         actor_id="a",
         department_id=None,
-        phone=None,
         notes=None,
-        whatsapp_phone=None,
     )
 
     assert updated.department_id is None
-    assert updated.phone is None
     assert updated.notes is None
-    assert updated.whatsapp_phone is None
+    assert updated.whatsapp_phone == "555-1111"
 
 
 def test_update_doctor_omitted_nullable_fields_are_not_changed(db_session) -> None:
@@ -273,7 +267,7 @@ def test_update_doctor_omitted_nullable_fields_are_not_changed(db_session) -> No
 
     doctor = service.create_doctor(
         actor_id="a", name="Doctor Keep", sex="female", rank_id=None, department_id=department.id,
-        phone="555-2222", notes="Conservar", participa_misiones=True, whatsapp_phone="555-3333",
+        notes="Conservar", participa_misiones=True, whatsapp_phone="555-3333",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -282,7 +276,6 @@ def test_update_doctor_omitted_nullable_fields_are_not_changed(db_session) -> No
     updated = service.update_doctor(doctor.id, actor_id="a", name="Doctor Keep Updated")
 
     assert updated.department_id == department.id
-    assert updated.phone == "555-2222"
     assert updated.notes == "Conservar"
     assert updated.whatsapp_phone == "555-3333"
 
@@ -292,7 +285,7 @@ def test_deactivate_and_reactivate_service(db_session) -> None:
 
     doctor = service.create_doctor(
         actor_id="a", name="Dr. Test", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -317,14 +310,14 @@ def test_service_active_filter(db_session) -> None:
 
     d1 = service.create_doctor(
         actor_id="a", name="Active Doc", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
     )
     service.create_doctor(
         actor_id="a", name="Inactive Doc", sex="female", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -343,14 +336,14 @@ def test_list_all_active_only_filters_service_active_doctors(db_session) -> None
 
     d1 = service.create_doctor(
         actor_id="a", name="Service Inactive Doc", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
     )
     service.create_doctor(
         actor_id="a", name="Service Active Doc", sex="female", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -372,7 +365,7 @@ def test_deactivate_service_creates_alert_for_future_confirmed_mission(db_sessio
 
     doctor = service.create_doctor(
         actor_id="a", name="Doctor Mission", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -396,7 +389,7 @@ def test_deactivate_service_does_not_duplicate_replacement_alert(db_session) -> 
 
     doctor = service.create_doctor(
         actor_id="a", name="Doctor Duplicate", sex="female", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -420,7 +413,7 @@ def test_soft_delete_doctor_marks_deleted_at(db_session) -> None:
 
     doctor = service.create_doctor(
         actor_id="a", name="Dr. To Delete", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -438,7 +431,7 @@ def test_soft_delete_doctor_hides_from_queries(db_session) -> None:
 
     doctor = service.create_doctor(
         actor_id="a", name="Dr. Hidden", sex="female", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -465,7 +458,7 @@ def test_soft_delete_doctor_updates_updated_at(db_session) -> None:
 
     doctor = service.create_doctor(
         actor_id="a", name="Dr. Timestamp", sex="male", rank_id=None, department_id=None,
-        phone=None, notes=None, participa_misiones=True, whatsapp_phone=None,
+        notes=None, participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -494,6 +487,7 @@ def test_list_by_day_groups_weekly_fixed_doctors(db_session):
         name="Lunes Doc",
         normalized_name="lunes doc",
         sex="male",
+        whatsapp_phone="+18095551234",
         created_at=now,
         updated_at=now,
     )
@@ -530,6 +524,7 @@ def test_list_by_day_includes_recurring_tag(db_session):
         name="Recurring Doc",
         normalized_name="recurring doc",
         sex="female",
+        whatsapp_phone="+18095551234",
         created_at=now,
         updated_at=now,
     )
@@ -566,6 +561,7 @@ def test_list_by_day_deduplicates_doctor_with_weekly_and_recurring_same_day(db_s
         name="Duplicate Tuesday Doc",
         normalized_name="duplicate tuesday doc",
         sex="male",
+        whatsapp_phone="+18095551234",
         created_at=now,
         updated_at=now,
     )
@@ -616,6 +612,7 @@ def test_list_by_day_excludes_monthly_variable(db_session):
         name="Monthly Doc",
         normalized_name="monthly doc",
         sex="male",
+        whatsapp_phone="+18095551234",
         created_at=now,
         updated_at=now,
     )

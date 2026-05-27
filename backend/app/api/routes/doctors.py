@@ -97,7 +97,6 @@ def create_doctor(
         sex=payload.sex,
         rank_id=payload.rank_id,
         department_id=payload.department_id,
-        phone=payload.phone,
         notes=payload.notes,
         participa_misiones=payload.participa_misiones,
         service_active=payload.service_active,
