@@ -41,7 +41,7 @@ class MetaCloudAPIProvider:
 
         self.token = settings.meta_whatsapp_token
         self.phone_number_id = phone_number_id or settings.meta_whatsapp_phone_number_id
-        self.api_version = settings.meta_whatsapp_api_version
+        self.api_version = settings.meta_whatsapp_api_version.lstrip("v")
         if not self.token or not self.phone_number_id:
             raise ValueError("Meta WhatsApp token y phone_number_id son requeridos")
 

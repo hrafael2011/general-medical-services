@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # ── Meta Cloud API / PyWa ──────────────────────────────────────────
     meta_whatsapp_token: str | None = None
     meta_whatsapp_phone_number_id: str | None = None
-    meta_whatsapp_api_version: str = "v22.0"
+    meta_whatsapp_api_version: str = "22.0"
     meta_whatsapp_business_account_id: str | None = None
     meta_webhook_verify_token: str | None = None
 
