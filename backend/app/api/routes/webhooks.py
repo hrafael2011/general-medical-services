@@ -51,53 +51,60 @@ def test_notify(
     from backend.app.infrastructure.db.models.doctors import DoctorModel
     from sqlalchemy import select
 
-    # Find the test doctor
-    doctor = session.scalars(
-        select(DoctorModel).where(DoctorModel.whatsapp_phone == "8092186876")
-    ).first()
-    if not doctor:
-        raise HTTPException(status_code=400, detail="No doctor with whatsapp_phone=8092186876")
+    try:
+        # Find the test doctor
+        doctor = session.scalars(
+            select(DoctorModel).where(DoctorModel.whatsapp_phone == "8092186876")
+        ).first()
+        if not doctor:
+            raise HTTPException(status_code=400, detail="No doctor with whatsapp_phone=8092186876")
 
-    nid = str(_uuid.uuid4())
-    cid = str(_uuid.uuid4())
-    now = datetime.now(UTC)
+        nid = str(_uuid.uuid4())
+        cid = str(_uuid.uuid4())
+        token = str(_uuid.uuid4())
+        now = datetime.now(UTC)
 
-    # Create confirmation request first (so webhook can match it)
-    confirm = ConfirmationRequestModel(
-        id=cid,
-        confirmation_type="test",
-        status="pending",
-        idempotency_key=f"test-confirm:{cid}",
-        response_token=f"test-token:{cid}",
-        doctor_id=doctor.id,
-        notification_id=nid,
-        created_at=now,
-        updated_at=now,
-    )
-    session.add(confirm)
+        # Create confirmation request first (so webhook can match it)
+        confirm = ConfirmationRequestModel(
+            id=cid,
+            confirmation_type="test",
+            status="pending",
+            idempotency_key=f"test-confirm:{cid}",
+            response_token=token,
+            doctor_id=doctor.id,
+            notification_id=nid,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(confirm)
 
-    # Create notification
-    notification = NotificationEventModel(
-        id=nid,
-        notification_type="test",
-        recipient_phone="8092186876",
-        recipient_doctor_id=doctor.id,
-        idempotency_key=f"test:{nid}",
-        payload={"message": "Hola Dr. Hendrick Rafael, esta es una prueba de notificacion del sistema de turnos medicos.\n\nResponda 1 para confirmar su turno."},
-        status="pending",
-        retry_count=0,
-        created_at=now,
-        updated_at=now,
-    )
-    session.add(notification)
-    session.commit()
-    return {
-        "status": "queued",
-        "notification_id": nid,
-        "confirmation_id": cid,
-        "doctor_id": doctor.id,
-        "message": "Notificacion en cola + confirmation request creado. Responde 1 al WhatsApp.",
-    }
+        # Create notification
+        notification = NotificationEventModel(
+            id=nid,
+            notification_type="test",
+            recipient_phone="8092186876",
+            recipient_doctor_id=doctor.id,
+            idempotency_key=f"test:{nid}",
+            payload={"message": "Hola Dr. Hendrick Rafael, esta es una prueba de notificacion del sistema de turnos medicos.\n\nResponda 1 para confirmar su turno."},
+            status="pending",
+            retry_count=0,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(notification)
+        session.commit()
+        return {
+            "status": "queued",
+            "notification_id": nid,
+            "confirmation_id": cid,
+            "doctor_id": doctor.id,
+            "message": "Notificacion en cola + confirmation request creado. Responde 1 al WhatsApp.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("test-notify error")
+        return {"error": str(exc), "type": type(exc).__name__}
 
 
 @router.get("/diagnostic")
