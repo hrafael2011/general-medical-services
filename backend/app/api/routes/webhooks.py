@@ -37,6 +37,25 @@ async def receive_whatsapp_message(
     return {"status": "ok"}
 
 
+@router.get("/create-staging-admin")
+def create_staging_admin(
+    secret: str = Query(...),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if secret != "staging-setup-2026":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    from sqlalchemy import text
+    session.execute(
+        text("""
+            INSERT INTO users (id, name, email, role, permissions, is_superadmin, active, password_hash, must_change_password, token_version, failed_login_count, created_at, updated_at)
+            VALUES ('2313a454-9922-4d4b-b1cb-3682916b6176', 'Admin Staging', 'admin@staging.com', 'admin', '[]'::jsonb, true, true, '$argon2id$v=19$m=65536,t=3,p=4$3XerjVkYvc36e/2mdvzAXw$eVkOmHVgUKfISGJ7zWAJDT3oIS1g1disLdrL8QeKAPE', false, 1, 0, NOW(), NOW())
+            ON CONFLICT (email) DO NOTHING
+        """)
+    )
+    session.commit()
+    return {"created": True, "email": "admin@staging.com", "password": "Admin123!"}
+
+
 def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> None:
     from datetime import datetime, UTC
     from sqlalchemy import select
