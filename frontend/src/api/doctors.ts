@@ -23,6 +23,7 @@ export interface CreateDoctorPayload {
   rank_id?: string | null; department_id?: string | null;
   phone?: string | null; notes?: string | null;
   participa_misiones: boolean;
+  service_active?: boolean;  // <-- ADD THIS
   whatsapp_phone?: string | null;
   monthly_service_target: number; monthly_service_max: number;
   monthly_service_limit_mode: string; availability_mode: string;
