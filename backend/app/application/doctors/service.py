@@ -8,6 +8,7 @@ from backend.app.application.catalogs.service import normalize_name
 from backend.app.application.doctors.errors import DoctorServiceError
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
@@ -272,11 +273,9 @@ class DoctorService:
             doctor.service_active = service_active
             changed_fields["service_active"] = service_active
             if not service_active:
-                from backend.app.infrastructure.repositories.availability import AvailabilityRepository
                 AvailabilityRepository(self.doctors.session).delete_all_for_doctor(doctor_id)
-                if allowed_area_ids is None:
-                    self.doctors.set_allowed_areas(doctor_id, [])
-                    changed_fields["allowed_area_ids"] = []
+                self.doctors.set_allowed_areas(doctor_id, [])
+                changed_fields["allowed_area_ids"] = []
 
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
