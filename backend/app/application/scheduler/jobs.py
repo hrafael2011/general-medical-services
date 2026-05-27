@@ -136,20 +136,21 @@ def send_pre_service_reminders() -> dict:
 
 
 def check_unconfirmed_escalamiento() -> dict:
-    """Escalate pending confirmations older than 24 h to supervisors."""
+    """Escalate pending confirmations older than 24 h to supervisors.
+
+    Consolidates all unconfirmed doctors into a single message per supervisor
+    instead of sending one message per doctor.
+    """
     from datetime import UTC, datetime, timedelta
 
     from backend.app.infrastructure.db.session import SessionLocal
-    from backend.app.infrastructure.repositories.confirmations import (
-        ConfirmationRequestRepository,
-    )
     from backend.app.infrastructure.repositories.notifications import (
         NotificationRepository,
     )
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.application.notifications.service import NotificationService
     from backend.app.application.notifications.templates import (
-        render_escalamiento_encargado,
+        render_escalamiento_consolidado,
     )
     from backend.app.application.notifications.providers import (
         MetaCloudAPIProvider,
@@ -175,6 +176,9 @@ def check_unconfirmed_escalamiento() -> dict:
         )
         unconfirmed = list(session.scalars(stmt))
 
+        if not unconfirmed:
+            return {"escalations": 0}
+
         encargados = session.scalars(
             select(UserModel).where(
                 UserModel.active.is_(True),
@@ -196,27 +200,33 @@ def check_unconfirmed_escalamiento() -> dict:
         )
         doc_repo = DoctorRepository(session)
 
-        escalated = 0
+        # Collect unconfirmed doctor names
+        doctor_names: list[str] = []
         for req in unconfirmed:
             doctor = doc_repo.get_by_id(req.doctor_id)
-            if not doctor:
-                continue
-            message = render_escalamiento_encargado(doctor.name)
-            for encargado in encargados:
-                svc.queue(
-                    notification_type="escalamiento",
-                    idempotency_key=f"escalamiento:{req.id}:{encargado.id}",
-                    recipient_doctor_id=req.doctor_id,
-                    recipient_phone=encargado.whatsapp_phone,
-                    payload={"message": message},
-                    assignment_id=req.assignment_id,
-                    created_by=encargado.id,
-                )
+            if doctor:
+                doctor_names.append(doctor.name)
             req.escalated_at = datetime.now(UTC)
-            escalated += 1
+
+        if not doctor_names:
+            return {"escalations": 0}
+
+        # Send ONE consolidated message per supervisor
+        now = datetime.now(UTC)
+        import uuid
+        message = render_escalamiento_consolidado(doctor_names)
+        for encargado in encargados:
+            svc.queue(
+                notification_type="escalamiento",
+                idempotency_key=f"escalamiento:consolidated:{now.strftime('%Y%m%d%H')}:{encargado.id}",
+                recipient_doctor_id=None,
+                recipient_phone=encargado.whatsapp_phone,
+                payload={"message": message},
+                created_by=encargado.id,
+            )
 
         session.commit()
-        return {"escalations": escalated}
+        return {"escalations": len(unconfirmed)}
     except Exception:
         session.rollback()
         logger.exception("Failed escalamiento check")
