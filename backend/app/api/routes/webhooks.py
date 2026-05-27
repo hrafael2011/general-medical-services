@@ -37,6 +37,27 @@ async def receive_whatsapp_message(
     return {"status": "ok"}
 
 
+@router.post("/test-notify")
+def test_notify(
+    secret: str = Query(...),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if secret != "staging-setup-2026":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    from sqlalchemy import text
+    import uuid as _uuid
+    nid = str(_uuid.uuid4())
+    session.execute(text("""
+        INSERT INTO notification_events (id, notification_type, recipient_phone, payload, status, retry_count, created_at, updated_at)
+        VALUES (:id, 'test', '8092186876', :payload::jsonb, 'pending', 0, NOW(), NOW())
+    """), {
+        "id": nid,
+        "payload": '{"message": "Hola Dr. Hendrick Rafael, esta es una prueba de notificacion del sistema de turnos medicos.\\n\\nResponda 1 para confirmar su turno."}',
+    })
+    session.commit()
+    return {"status": "queued", "notification_id": nid, "message": "Notificacion en cola. El scheduler la enviara en max 30s."}
+
+
 def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> None:
     from datetime import datetime, UTC
     from sqlalchemy import select
