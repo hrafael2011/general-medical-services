@@ -99,34 +99,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const save = useMutation({
     mutationFn: (payload: CreateDoctorPayload) =>
       isEdit ? doctorsApi.update(doctor!.id, payload) : doctorsApi.create(payload),
-    onSuccess: async (savedDoctor) => {
-      const doctorId = savedDoctor.id;
-      if (doesService) {
-        try {
-          if (avMode === "weekly" && selectedDays.length > 0) {
-            await availabilityApi.setWeekly(doctorId, { days_of_week: selectedDays });
-          } else if (avMode === "monthly" && selectedDates.length > 0) {
-            const now = new Date();
-            await availabilityApi.setMonthly(doctorId, {
-              year: now.getFullYear(),
-              month: now.getMonth() + 1,
-              available_dates: selectedDates,
-            });
-          } else if (avMode === "recurring") {
-            await availabilityApi.setRecurring(doctorId, {
-              weekday: selectedWeekday,
-              week_number: selectedWeekNumber,
-            });
-          }
-        } catch {
-          setError("Médico guardado, pero no se pudo configurar la disponibilidad.");
-          return;
-        }
-      }
-      qc.invalidateQueries({ queryKey: ["doctors"] });
-      onClose();
-    },
-    onError: (err: Error) => setError(err.message),
   });
 
   function handleSubmit(e: FormEvent) {
@@ -160,6 +132,35 @@ export function DoctorForm({ doctor, onClose }: Props) {
       monthly_service_limit_mode: limitMode,
       service_active: doesService,
       allowed_area_ids: doesService ? allowedAreaIds : [],
+    }, {
+      onSuccess: async (savedDoctor) => {
+        const doctorId = savedDoctor.id;
+        if (doesService) {
+          try {
+            if (avMode === "weekly" && selectedDays.length > 0) {
+              await availabilityApi.setWeekly(doctorId, { days_of_week: selectedDays });
+            } else if (avMode === "monthly" && selectedDates.length > 0) {
+              const now = new Date();
+              await availabilityApi.setMonthly(doctorId, {
+                year: now.getFullYear(),
+                month: now.getMonth() + 1,
+                available_dates: selectedDates,
+              });
+            } else if (avMode === "recurring") {
+              await availabilityApi.setRecurring(doctorId, {
+                weekday: selectedWeekday,
+                week_number: selectedWeekNumber,
+              });
+            }
+          } catch {
+            setError("Médico guardado, pero no se pudo configurar la disponibilidad.");
+            return;
+          }
+        }
+        qc.invalidateQueries({ queryKey: ["doctors"] });
+        onClose();
+      },
+      onError: (err: Error) => setError(err.message),
     });
   }
 
