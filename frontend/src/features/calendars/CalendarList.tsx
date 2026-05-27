@@ -66,6 +66,19 @@ export function CalendarList({ onSelect }: Props) {
       {showForm && (
         <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "1rem", marginBottom: "1rem" }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: 15, color: "#1e293b" }}>Nuevo calendario</h3>
+          <div style={{
+            background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 6,
+            padding: "0.65rem 0.85rem", marginBottom: "0.75rem",
+            display: "flex", alignItems: "flex-start", gap: 8,
+          }}>
+            <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+            <p style={{ margin: 0, fontSize: 13, color: "#92400e", lineHeight: 1.5 }}>
+              Antes de habilitar el calendario, asegúrate de que los médicos con modalidad{" "}
+              <strong>"Avisa sus días cada mes"</strong> ya hayan registrado sus días para{" "}
+              {MONTHS[formMonth - 1]} de {formYear}. Puedes verificarlo en la sección de{" "}
+              <strong>Médicos</strong>.
+            </p>
+          </div>
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
               Mes
