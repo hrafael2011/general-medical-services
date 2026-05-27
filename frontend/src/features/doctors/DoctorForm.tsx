@@ -114,7 +114,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
     if (doesService) {
       if (avMode === "weekly" && selectedDays.length === 0) { setError("Selecciona al menos un día de la semana."); return; }
-      if (avMode === "monthly" && selectedDates.length === 0) { setError("Selecciona al menos un día del mes."); return; }
+      if (allowedAreaIds.length === 0) { setError("Selecciona al menos un área de servicio."); return; }
     }
 
     const availabilityMode = avMode === "monthly" ? "monthly" : "fixed";
