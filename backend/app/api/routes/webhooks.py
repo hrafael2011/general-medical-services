@@ -64,21 +64,7 @@ def test_notify(
         token = str(_uuid.uuid4())
         now = datetime.now(UTC)
 
-        # Create confirmation request first (so webhook can match it)
-        confirm = ConfirmationRequestModel(
-            id=cid,
-            confirmation_type="test",
-            status="pending",
-            idempotency_key=f"test-confirm:{cid}",
-            response_token=token,
-            doctor_id=doctor.id,
-            notification_id=nid,
-            created_at=now,
-            updated_at=now,
-        )
-        session.add(confirm)
-
-        # Create notification
+        # Create notification first (confirmation_request has FK to it)
         notification = NotificationEventModel(
             id=nid,
             notification_type="test",
@@ -92,6 +78,21 @@ def test_notify(
             updated_at=now,
         )
         session.add(notification)
+        session.flush()  # persist so FK reference works
+
+        # Create confirmation request (so webhook can match it)
+        confirm = ConfirmationRequestModel(
+            id=cid,
+            confirmation_type="test",
+            status="pending",
+            idempotency_key=f"test-confirm:{cid}",
+            response_token=token,
+            doctor_id=doctor.id,
+            notification_id=nid,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(confirm)
         session.commit()
         return {
             "status": "queued",
