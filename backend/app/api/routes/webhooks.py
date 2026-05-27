@@ -64,32 +64,47 @@ def diagnostic_run_migration(
 ) -> dict:
     if secret != "staging-setup-2026":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    from sqlalchemy import text
+    from sqlalchemy import text, inspect
     results = {}
-    conn = session.connection()
-    # 1. Migrate existing data
-    r1 = conn.execute(text(
-        "UPDATE doctors SET whatsapp_phone = phone WHERE whatsapp_phone IS NULL AND phone IS NOT NULL"
-    ))
-    results["migrated_from_phone"] = r1.rowcount
-    # 2. Set placeholder for any remaining nulls
-    r2 = conn.execute(text(
-        "UPDATE doctors SET whatsapp_phone = '0000000000' WHERE whatsapp_phone IS NULL"
-    ))
-    results["set_placeholder"] = r2.rowcount
-    # 3. Drop phone column (DDL via raw connection with autocommit)
     try:
-        conn.execute(text("ALTER TABLE doctors DROP COLUMN IF EXISTS phone"))
-        results["dropped_phone"] = True
+        engine = session.get_bind()
+        with engine.connect() as conn:
+            # Check what columns exist
+            inspector = inspect(engine)
+            cols = {c["name"] for c in inspector.get_columns("doctors")}
+
+            if "phone" in cols:
+                # 1. Migrate existing data
+                r1 = conn.execute(text(
+                    "UPDATE doctors SET whatsapp_phone = phone WHERE whatsapp_phone IS NULL AND phone IS NOT NULL"
+                ))
+                results["migrated_from_phone"] = r1.rowcount
+                # 2. Drop phone column
+                conn.execute(text("ALTER TABLE doctors DROP COLUMN phone"))
+                results["dropped_phone"] = True
+            else:
+                results["migrated_from_phone"] = "phone column already removed"
+
+            # 3. Set placeholder for remaining nulls
+            r2 = conn.execute(text(
+                "UPDATE doctors SET whatsapp_phone = '0000000000' WHERE whatsapp_phone IS NULL"
+            ))
+            results["set_placeholder"] = r2.rowcount
+
+            # 4. Set NOT NULL
+            col_info = inspector.get_columns("doctors")
+            w_col = next((c for c in col_info if c["name"] == "whatsapp_phone"), None)
+            if w_col and w_col.get("nullable", True):
+                conn.execute(text("ALTER TABLE doctors ALTER COLUMN whatsapp_phone SET NOT NULL"))
+                results["set_not_null"] = True
+            else:
+                results["set_not_null"] = "already NOT NULL"
+
+            conn.commit()
+        results["status"] = "ok"
     except Exception as e:
-        results["dropped_phone"] = str(e)
-    # 4. Set NOT NULL
-    try:
-        conn.execute(text("ALTER TABLE doctors ALTER COLUMN whatsapp_phone SET NOT NULL"))
-        results["set_not_null"] = True
-    except Exception as e:
-        results["set_not_null"] = str(e)
-    session.commit()
+        results["status"] = "error"
+        results["error"] = str(e)
     return {"migration": "20260527_0041", "results": results}
 
 
