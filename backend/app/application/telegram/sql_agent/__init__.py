@@ -16,6 +16,7 @@ from .prompt_builder import PromptBuilder
 from .refiner import QueryRefiner
 from .schema_linker import SchemaLinker
 from .security import build_schema_summary, extract_sql_from_markdown, validate_sql
+from .validator import SQLValidator
 from .verifier import SQLVerifier
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "SchemaLinker",
     "SQLAgentOrchestrator",
     "SQLExample",
+    "SQLValidator",
     "SQLVerifier",
     "validate_sql",
 ]

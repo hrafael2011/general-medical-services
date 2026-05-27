@@ -15,6 +15,7 @@ from backend.app.application.telegram.sql_agent.prompt_builder import PromptBuil
 from backend.app.application.telegram.sql_agent.refiner import QueryRefiner
 from backend.app.application.telegram.sql_agent.schema_linker import SchemaLinker
 from backend.app.application.telegram.sql_agent.security import build_schema_summary
+from backend.app.application.telegram.sql_agent.validator import SQLValidator
 from backend.app.application.telegram.sql_agent.verifier import SQLVerifier
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class SQLAgentOrchestrator:
         self._verifier = SQLVerifier(llm)
         self._refiner = QueryRefiner(llm)
         self._prompt_builder = prompt_builder
+        self._validator = SQLValidator()
 
     # ------------------------------------------------------------------
     # Public API (same signature as legacy QueryExecutor.execute)
@@ -72,8 +74,16 @@ class SQLAgentOrchestrator:
             iteration += 1
             logger.info("SQL Agent iteration %d | SQL: %s...", iteration, sql[:80])
 
-            # Execute
-            exec_result = self._executor.run(sql)
+            # Programmatic validation (fail fast before touching the DB)
+            validation = self._validator.validate(sql)
+            if not validation.ok:
+                exec_result = {
+                    "ok": False,
+                    "error": f"[Validacion] {validation.rule}: {validation.detail}",
+                }
+            else:
+                # Execute
+                exec_result = self._executor.run(sql)
 
             # If execution failed, refine immediately
             if not exec_result.get("ok"):

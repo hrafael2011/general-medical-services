@@ -261,13 +261,13 @@ class TestQueryExecutorBackwardCompat:
         db_session.commit()
 
         llm = FakeLLMProvider(responses={
-            "legacy": "```sql\nSELECT name FROM doctors WHERE id = 'd-legacy-1'\n```",
+            "legacy": "```sql\nSELECT name FROM doctors WHERE id = 'd-legacy-1' LIMIT 1\n```",
             "verifica": '{"verdict": "correct", "reason": "OK"}',
         })
         executor = QueryExecutor(db_session, llm)
         result = executor.execute("legacy test query")
         assert result["ok"] is True
-        assert result["sql"] == "SELECT name FROM doctors WHERE id = 'd-legacy-1'"
+        assert result["sql"] == "SELECT name FROM doctors WHERE id = 'd-legacy-1' LIMIT 1"
         assert "data" in result
 
 
