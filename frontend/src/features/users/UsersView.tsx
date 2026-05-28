@@ -10,9 +10,9 @@ const ROLES = ["encargado", "admin"] as const;
 
 const PERMISSION_GROUPS = [
   {
-    category: "Gestion Medica",
+    category: "Gestión Médica",
     permissions: [
-      { key: "manage_doctors", label: "Gestionar Medicos" },
+      { key: "manage_doctors", label: "Gestionar Médicos" },
       { key: "manage_availability", label: "Gestionar Disponibilidad" },
       { key: "manage_missions", label: "Gestionar Misiones" },
     ],
@@ -25,18 +25,18 @@ const PERMISSION_GROUPS = [
     ],
   },
   {
-    category: "Administracion",
+    category: "Administración",
     permissions: [
       { key: "manage_users", label: "Gestionar Usuarios" },
       { key: "manage_trash", label: "Gestionar Papelera" },
-      { key: "manage_catalogs", label: "Gestionar Catalogos" },
+      { key: "manage_catalogs", label: "Gestionar Catálogos" },
       { key: "manage_admins", label: "Gestionar Administradores" },
     ],
   },
   {
     category: "Monitoreo",
     permissions: [
-      { key: "view_audit", label: "Ver Auditoria" },
+      { key: "view_audit", label: "Ver Auditoría" },
       { key: "view_notifications", label: "Ver Notificaciones" },
       { key: "manage_alerts", label: "Gestionar Alertas" },
       { key: "receive_escalation_alerts", label: "Recibir Alertas de Escalamiento" },
