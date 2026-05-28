@@ -205,6 +205,7 @@ def update_user(
             name=payload.name,
             role=payload.role,
             active=payload.active,
+            permissions=payload.permissions,
         )
     except UserNotFoundError as exc:
         raise HTTPException(
