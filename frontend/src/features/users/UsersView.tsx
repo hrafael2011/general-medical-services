@@ -63,6 +63,7 @@ export function UsersView() {
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPermissions, setNewPermissions] = useState<string[]>([]);
+  const [newRole, setNewRole] = useState<string>("encargado");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
@@ -86,11 +87,31 @@ export function UsersView() {
       setNewName("");
       setNewEmail("");
       setNewPermissions([]);
+      setNewRole("encargado");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Error al crear usuario.";
       addToast("error", message || "Error al crear usuario.");
+    },
+  });
+
+  const createAdminMutation = useMutation({
+    mutationFn: () => adminApi.createAdmin(newName, newEmail),
+    onSuccess: (res) => {
+      adminApi.inviteUser(res.user.id).catch(() => {
+        addToast("error", "Administrador creado, pero no se pudo enviar la invitación.");
+      });
+      addToast("success", `Administrador creado. Invitación enviada a ${newEmail}.`);
+      setShowCreate(false);
+      setNewName("");
+      setNewEmail("");
+      setNewPermissions([]);
+      setNewRole("encargado");
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (err) => {
+      addToast("error", err instanceof Error ? err.message : "Error al crear administrador.");
     },
   });
 
@@ -155,42 +176,105 @@ export function UsersView() {
 
       {showCreate && (
         <div style={{ background: "#f9fafb", padding: "16px", borderRadius: "8px", marginBottom: "20px" }}>
-          <h4 style={{ margin: "0 0 12px", fontSize: "0.9rem" }}>Crear Encargado</h4>
+          {/* Title */}
+          <h4 style={{ margin: "0 0 12px", fontSize: "1rem" }}>
+            Crear {newRole === "admin" ? "Administrador" : "Encargado"}
+          </h4>
+
+          {/* Name + Email */}
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
             <label>Nombre <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
             <label>Email <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} /></label>
           </div>
-          <div style={{ marginTop: "12px" }}>
-            <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Permisos</label>
-            <div className="perm-groups">
-              {PERMISSION_GROUPS.map(group => (
-                <div key={group.category} className="perm-group">
-                  <div className="perm-group-header">{group.category}</div>
-                  <div className="perm-group-body">
-                    {group.permissions.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
-                      <label key={p.key} className="perm-check">
-                        <input
-                          type="checkbox"
-                          checked={newPermissions.includes(p.key)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setNewPermissions([...newPermissions, p.key]);
-                            } else {
-                              setNewPermissions(newPermissions.filter(k => k !== p.key));
-                            }
-                          }}
-                        />
-                        {p.label}
-                      </label>
-                    ))}
-                  </div>
+
+          {/* Role selector */}
+          <div className="form-section">
+            <h4 className="form-section-title">Rol</h4>
+            <p className="form-section-desc">Define el nivel de acceso del usuario</p>
+            <div className="role-cards">
+              <div
+                className={`role-card${newRole === "encargado" ? " role-card--active" : ""}`}
+                onClick={() => setNewRole("encargado")}
+              >
+                <div className="role-card-radio">
+                  <div className="role-card-radio-dot" />
                 </div>
-              ))}
+                <div>
+                  <div className="role-card-title">Encargado</div>
+                  <div className="role-card-desc">Acceso con permisos específicos</div>
+                </div>
+              </div>
+              <div
+                className={`role-card${newRole === "admin" ? " role-card--active" : ""}${!currentUser?.is_superadmin ? " role-card--disabled" : ""}`}
+                onClick={() => { if (currentUser?.is_superadmin) setNewRole("admin"); }}
+              >
+                <div className="role-card-radio">
+                  <div className="role-card-radio-dot" />
+                </div>
+                <div>
+                  <div className="role-card-title">Administrador</div>
+                  <div className="role-card-desc">Acceso completo al sistema</div>
+                </div>
+              </div>
             </div>
           </div>
-          <div style={{ marginTop: "12px" }}>
-            <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creando..." : "Crear"}
+
+          {/* Permissions (encargado only) */}
+          {newRole === "encargado" && (
+            <div className="form-section">
+              <h4 className="form-section-title">Permisos</h4>
+              <p className="form-section-desc">Asigna los permisos específicos para el rol Encargado</p>
+              <div className="perm-groups">
+                {PERMISSION_GROUPS.map(group => (
+                  <div key={group.category} className="perm-group">
+                    <div className="perm-group-header">{group.category}</div>
+                    <div className="perm-group-body">
+                      {group.permissions.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
+                        <label key={p.key} className="perm-check">
+                          <input
+                            type="checkbox"
+                            checked={newPermissions.includes(p.key)}
+                            onChange={(e) => {
+                              setNewPermissions(
+                                e.target.checked
+                                  ? [...newPermissions, p.key]
+                                  : newPermissions.filter(k => k !== p.key)
+                              );
+                            }}
+                          />
+                          {p.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {newRole === "admin" && (
+            <p style={{ color: "#64748b", fontSize: "0.85rem", fontStyle: "italic", margin: "12px 0" }}>
+              Los administradores tienen acceso completo a todas las funciones del sistema.
+            </p>
+          )}
+
+          {/* Buttons */}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+            <button className="btn-secondary" onClick={() => { setShowCreate(false); setNewRole("encargado"); }}>
+              Cancelar
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                if (newRole === "admin") {
+                  createAdminMutation.mutate();
+                } else {
+                  createMutation.mutate();
+                }
+              }}
+              disabled={createMutation.isPending || createAdminMutation.isPending}
+            >
+              {createMutation.isPending || createAdminMutation.isPending ? "Creando..." : "Crear Usuario"}
             </button>
           </div>
         </div>
