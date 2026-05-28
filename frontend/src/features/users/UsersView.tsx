@@ -45,13 +45,6 @@ export function UsersView() {
   const [editPermissions, setEditPermissions] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserRead | null>(null);
 
-  const AVAILABLE_PERMISSIONS = [
-    { key: "receive_escalation_alerts", label: "Recibir alertas de escalamiento" },
-    { key: "manage_doctors", label: "Gestionar médicos" },
-    { key: "manage_calendars", label: "Gestionar calendarios" },
-    { key: "view_reports", label: "Ver reportes" },
-  ];
-
   const { data: users, isLoading } = useQuery({
     queryKey: ["admin-users"],
     queryFn: listAdminPanelUsers,
@@ -142,29 +135,6 @@ export function UsersView() {
             <label>Nombre <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
             <label>Email <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} /></label>
           </div>
-          <div style={{ marginTop: "12px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
-            {AVAILABLE_PERMISSIONS.map(p => (
-              <label key={p.key} className="permission-checkbox">
-                <input
-                  type="checkbox"
-                  checked={newPermissions.includes(p.key)}
-                  onChange={(e) => {
-                    setNewPermissions(
-                      e.target.checked
-                        ? [...newPermissions, p.key]
-                        : newPermissions.filter(x => x !== p.key)
-                    );
-                  }}
-                />
-                {p.label}
-              </label>
-            ))}
-          </div>
-          <div style={{ marginTop: "12px" }}>
-            <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creando..." : "Crear"}
-            </button>
-          </div>
           <div style={{ marginTop: "12px" }}>
             <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Permisos</label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
@@ -185,6 +155,11 @@ export function UsersView() {
                 </label>
               ))}
             </div>
+          </div>
+          <div style={{ marginTop: "12px" }}>
+            <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creando..." : "Crear"}
+            </button>
           </div>
         </div>
       )}
