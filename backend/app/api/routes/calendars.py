@@ -61,6 +61,7 @@ _ERROR_STATUS: dict[str, int] = {
     "week_already_approved": status.HTTP_409_CONFLICT,
     "week_not_approved": status.HTTP_409_CONFLICT,
     "week_locked": status.HTTP_409_CONFLICT,
+    "calendar_not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 
@@ -237,6 +238,23 @@ def delete_calendar(
 ) -> None:
     try:
         service.soft_delete_calendar(
+            actor_id=current_user.id,
+            calendar_id=calendar_id,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+
+
+@router.post("/{calendar_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_calendar(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
+    service: Annotated[CalendarService, Depends(get_calendar_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    try:
+        service.restore_calendar(
             actor_id=current_user.id,
             calendar_id=calendar_id,
         )
