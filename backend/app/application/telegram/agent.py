@@ -15,16 +15,15 @@ from calendar import monthrange
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import ValidationError
-
-from backend.app.application.telegram.conversation_contract import format_contract_for_prompt
-from backend.app.application.telegram.conversation_planner import build_conversation_plan
+from backend.app.application.telegram.intent_classifier import (
+    ClassifiedIntent,
+    IntentClassifier,
+)
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
 from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.sanitize import format_rows as shared_format_rows
-from backend.app.application.telegram.schemas import IntentOutput
 from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
 from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
@@ -207,9 +206,88 @@ def _calendar_assignment_query_intent(text: str) -> tuple[str, dict[str, int]] |
         return "unassigned_doctors_by_month", params
     if re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE):
         return "count_assigned_doctors_by_month", params
-    if re.search(r"\b(lista|listado|dame|muestra|mu[eé]strame)\b", normalized, re.IGNORECASE):
+    if re.search(r"\b(lista|listado|dame|muestra|mu[eé]strame|dime|di)\b", normalized, re.IGNORECASE):
         return "list_assigned_doctors_by_month", params
     return None
+
+
+_WEEKDAY_TO_NUMBER = {
+    "lunes": 0,
+    "martes": 1,
+    "miercoles": 2,
+    "miércoles": 2,
+    "jueves": 3,
+    "viernes": 4,
+    "sabado": 5,
+    "sábado": 5,
+    "domingo": 6,
+}
+
+_ORDINAL_TO_NUMBER = {
+    "primer": 1,
+    "primea": 1,
+    "primera": 1,
+    "segundo": 2,
+    "seguna": 2,
+    "segunda": 2,
+    "tercer": 3,
+    "tercera": 3,
+    "cuarto": 4,
+    "cuarta": 4,
+    "quinto": 5,
+    "quinta": 5,
+}
+
+
+def _specific_weekday_query_intent(text: str) -> tuple[str, dict[str, str]] | None:
+    """Map 'primer lunes de mayo' to a specific date query."""
+    normalized = text.lower()
+    period = _extract_month_year(normalized)
+    if period is None:
+        return None
+
+    month, year = period
+
+    # Match patterns like: "primer lunes de mayo", "segundo martes de junio"
+    match = re.search(
+        r"\b(primer|primea|primera|segundo|seguna|segunda|tercer|tercera|cuarto|cuarta|quinto|quinta)\s+"
+        r"(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+        normalized,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    ordinal_str = match.group(1).lower()
+    weekday_str = match.group(2).lower()
+
+    ordinal = _ORDINAL_TO_NUMBER.get(ordinal_str)
+    target_weekday = _WEEKDAY_TO_NUMBER.get(weekday_str)
+    if ordinal is None or target_weekday is None:
+        return None
+
+    mentions_assignment = re.search(
+        r"\b(asignad[oa]s?|servicios?|turnos?|calendario|trabajaron?|estuvieron?|hcieron|hicieron)\b",
+        normalized,
+        re.IGNORECASE,
+    )
+    mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
+    if not mentions_assignment and not mentions_doctors:
+        return None
+
+    # Calculate the date of the Nth occurrence of the weekday in the month
+    first_weekday, days_in_month = monthrange(year, month)
+    # first_weekday is the weekday of the 1st of the month (0=Monday)
+    # Days from the 1st until the first occurrence of target_weekday
+    days_until_first = (target_weekday - first_weekday) % 7
+    first_occurrence = 1 + days_until_first
+    target_day = first_occurrence + (ordinal - 1) * 7
+
+    if target_day > days_in_month:
+        return None
+
+    target_date = date(year, month, target_day)
+    return "doctors_working_date", {"date": target_date.isoformat()}
 
 
 def _calendar_service_query_intent(
@@ -422,6 +500,7 @@ class ConversationalAgent:
         session = None,
         calendar_query_service = None,
         semantic_layer_resolver: SemanticLayerResolver | None = None,
+        intent_classifier: IntentClassifier | None = None,
     ) -> None:
         self._llm = llm
         self._router = router
@@ -434,6 +513,7 @@ class ConversationalAgent:
         self._session = session
         self._calendar_query_service = calendar_query_service
         self._semantic_layer_resolver = semantic_layer_resolver
+        self._intent_classifier = intent_classifier
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -458,7 +538,6 @@ class ConversationalAgent:
             query_types="\n".join(query_types_lines),
             rank_values=rank_vals,
         )
-        prompt += f"\n\n{format_contract_for_prompt()}"
 
         if entity_hints:
             prompt += (
@@ -474,6 +553,40 @@ class ConversationalAgent:
             )
 
         return prompt
+
+    # ------------------------------------------------------------------
+    # Intent classification
+    # ------------------------------------------------------------------
+
+    def _classify_intent(
+        self,
+        text: str,
+        entity_hints: str = "",
+        resolved_entities: dict | None = None,
+    ) -> ClassifiedIntent:
+        """Classify user intent via LLM, with fallback for when LLM is unavailable."""
+        if self._intent_classifier is not None:
+            try:
+                return self._intent_classifier.classify(
+                    text,
+                    entity_hints=entity_hints,
+                    resolved_entities=resolved_entities,
+                )
+            except Exception:
+                logger.warning("IntentClassifier failed", exc_info=True)
+
+        # Fallback: basic keyword-based classification (for tests without LLM)
+        text_lower = text.lower()
+        if any(w in text_lower for w in ("cuantos", "cuántos", "total", "conteo")):
+            if any(w in text_lower for w in ("medico", "doctor", "personal")):
+                return ClassifiedIntent(domain="medicos", action="query", metric="total_doctors")
+        if any(w in text_lower for w in ("hola", "buenos dias", "buenas tardes", "gracias")):
+            return ClassifiedIntent(
+                domain="general",
+                action="reply",
+                response_text="¡Hola! Soy el asistente de turnos medicos. ¿En que puedo ayudarte?",
+            )
+        return ClassifiedIntent(domain="general", action="ambiguous", confidence=0.3)
 
     # ------------------------------------------------------------------
     # JSON parsing
@@ -1210,71 +1323,62 @@ class ConversationalAgent:
             )
             return mission_followup
 
-        conversation_plan = build_conversation_plan(
-            text,
+        # ---- LLM-First Intent Classification ----
+        classified = self._classify_intent(
+            text=text,
+            entity_hints=entity_hints,
             resolved_entities=resolved_entities,
-            session_state=session_state,
         )
         logger.info(
-            "Telegram conversation plan built",
+            "Intent classified",
             extra={
-                "telegram_event": "conversation_plan_built",
-                "domain": conversation_plan.domain,
-                "action": conversation_plan.action,
-                "route": conversation_plan.route,
-                "memory_policy": conversation_plan.memory_policy,
-                "is_followup": conversation_plan.is_followup,
-                "confidence": conversation_plan.confidence,
+                "telegram_event": "intent_classified",
+                "domain": classified.domain,
+                "action": classified.action,
+                "metric": classified.metric,
+                "query_type": classified.query_type,
+                "confidence": classified.confidence,
             },
         )
-        if conversation_plan.route == "clarification":
+
+        # ---- Route based on classified intent ----
+
+        # Direct reply / ambiguous
+        if classified.action in ("reply", "ambiguous"):
             return AgentResult(
-                response_text=(
-                    conversation_plan.clarification_question
-                    or "Necesito que me indiques que informacion del sistema quieres consultar."
-                ),
-                agent_action="ambiguous",
-                tool_entities={
-                    "conversation_plan": {
-                        "domain": conversation_plan.domain,
-                        "action": conversation_plan.action,
-                        "route": conversation_plan.route,
-                        "memory_policy": conversation_plan.memory_policy,
-                        "is_followup": conversation_plan.is_followup,
-                        "confidence": conversation_plan.confidence,
-                    }
-                },
+                response_text=classified.response_text
+                or "Necesito que me indiques que informacion del sistema quieres consultar.",
+                agent_action=classified.action,
+                tool_entities={"classified_intent": classified.__dict__},
             )
 
-        # ---- Semantic Layer (fast deterministic path) ----
-        if self._semantic_layer_resolver is not None:
+        # Semantic Layer metric route
+        if classified.metric and self._semantic_layer_resolver is not None:
             try:
-                previous_metric = None
-                if session_state is not None:
-                    previous_metric = session_state.last_query_type
-
+                entities_for_semantic = dict(resolved_entities)
+                entities_for_semantic.update(classified.params)
                 semantic_result = self._semantic_layer_resolver.resolve(
                     user_text=text,
-                    domain=conversation_plan.domain,
-                    action=conversation_plan.action,
-                    entities=resolved_entities,
-                    is_followup=conversation_plan.is_followup,
-                    previous_metric=previous_metric,
+                    domain=classified.domain,
+                    action=classified.action,
+                    entities=entities_for_semantic,
+                    is_followup=False,
+                    previous_metric=None,
                 )
                 if semantic_result is not None:
                     agent_result = self._semantic_layer_resolver.to_agent_result(
                         semantic_result,
                         user_text=text,
-                        format=conversation_plan.format,
+                        format=classified.format,
                     )
                     self._remember_result(
                         telegram_user_id,
                         agent_result,
                         query_type=f"semantic:{semantic_result.metric_name}",
-                        params={},
+                        params=classified.params,
                     )
                     logger.info(
-                        "Agent resolved via semantic layer",
+                        "Agent resolved via semantic layer (LLM-classified)",
                         extra={
                             "telegram_event": "agent_route_completed",
                             "match_type": "semantic_layer",
@@ -1287,354 +1391,101 @@ class ConversationalAgent:
             except Exception:
                 logger.warning("SemanticLayerResolver failed, falling through", exc_info=True)
 
-        # 2a. If entity resolver found ambiguity, return it directly
-        if ambiguous_entities:
-            return AgentResult(
-                response_text=ambiguous_entities[0]["question"],
-                agent_action="ambiguous",
-            )
-
-        contextual_export = self._contextual_export_result(text, telegram_user_id)
-        if contextual_export is not None:
-            self._remember_result(
-                telegram_user_id,
-                contextual_export,
-                query_type=(
-                    contextual_export.tool_entities or {}
-                ).get("query_type"),
-                params={},
-            )
-            logger.info(
-                "Agent resolved via contextual export",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "contextual_export",
-                    "agent_action": contextual_export.agent_action,
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
-            return contextual_export
-
-        mission_ranking_query = _mission_ranking_query_intent(text)
-        if mission_ranking_query is not None:
-            query_type, params = mission_ranking_query
-            router_result = self._route_via_router("query", query_type, params, text)
-            if router_result is not None:
-                self._remember_result(
-                    telegram_user_id,
-                    router_result,
-                    query_type=query_type,
-                    params=params,
-                )
-                logger.info(
-                    "Agent resolved via deterministic mission ranking query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "mission_ranking",
-                        "agent_action": router_result.agent_action,
-                        "query_type": query_type,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return router_result
-
-        active_missions_query = _active_missions_query_intent(text)
-        if active_missions_query is not None:
-            query_type, params = active_missions_query
-            router_result = self._route_via_router("query", query_type, params, text)
-            if router_result is not None:
-                self._remember_result(
-                    telegram_user_id,
-                    router_result,
-                    query_type=query_type,
-                    params=params,
-                )
-                logger.info(
-                    "Agent resolved via deterministic active missions query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "active_missions",
-                        "agent_action": router_result.agent_action,
-                        "query_type": query_type,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return router_result
-
-        if self._calendar_query_service is not None:
-            service_query = _calendar_service_query_intent(text, session_state)
-            if service_query is not None:
-                query_type, params = service_query
-                result = self._calendar_query_service.execute(query_type, params)
+        # Doctor query route
+        if classified.domain == "medicos" and self._doctor_query_service is not None:
+            try:
+                result = self._doctor_query_service.execute(text, resolved_entities)
                 if result is not None:
-                    self._remember_result(
-                        telegram_user_id,
-                        result,
-                        query_type=query_type,
-                        params=params,
-                    )
+                    self._remember_result(telegram_user_id, result)
                     logger.info(
-                        "Agent resolved via deterministic calendar query service",
+                        "Agent resolved via doctor query service (LLM-classified)",
                         extra={
                             "telegram_event": "agent_route_completed",
-                            "match_type": "calendar_query_service",
+                            "match_type": "doctor_query_service",
                             "agent_action": result.agent_action,
-                            "query_type": query_type,
                             "latency_ms": round((time.perf_counter() - start) * 1000),
                         },
                     )
                     return result
+            except Exception:
+                logger.warning("DoctorQueryService failed, falling through", exc_info=True)
 
-        calendar_query = self._calendar_followup_query_intent(text, telegram_user_id)
-        calendar_match_type = "calendar_followup" if calendar_query is not None else None
-        if calendar_query is None:
-            calendar_query = _calendar_assignment_query_intent(text)
-            calendar_match_type = "deterministic_calendar" if calendar_query is not None else None
-        if calendar_query is not None:
-            query_type, params = calendar_query
-            router_result = self._route_via_router("query", query_type, params, text)
+        # Calendar query route
+        if classified.domain == "calendario" and self._calendar_query_service is not None:
+            try:
+                result = self._calendar_query_service.execute(
+                    classified.query_type or "list_calendar_assignments",
+                    classified.params,
+                )
+                if result is not None:
+                    self._remember_result(
+                        telegram_user_id,
+                        result,
+                        query_type=classified.query_type or "list_calendar_assignments",
+                        params=classified.params,
+                    )
+                    logger.info(
+                        "Agent resolved via calendar query service (LLM-classified)",
+                        extra={
+                            "telegram_event": "agent_route_completed",
+                            "match_type": "calendar_query_service",
+                            "agent_action": result.agent_action,
+                            "latency_ms": round((time.perf_counter() - start) * 1000),
+                        },
+                    )
+                    return result
+            except Exception:
+                logger.warning("CalendarQueryService failed, falling through", exc_info=True)
+
+        # IntentRouter route (query_type from classifier)
+        if classified.query_type:
+            router_result = self._route_via_router(
+                classified.action if classified.action == "export" else "query",
+                classified.query_type,
+                classified.params,
+                text,
+                format=classified.format,
+            )
             if router_result is not None:
                 self._remember_result(
                     telegram_user_id,
                     router_result,
-                    query_type=query_type,
-                    params=params,
+                    query_type=classified.query_type,
+                    params=classified.params,
                 )
                 logger.info(
-                    "Agent resolved via deterministic calendar assignment query",
+                    "Agent resolved via IntentRouter (LLM-classified)",
                     extra={
                         "telegram_event": "agent_route_completed",
-                        "match_type": calendar_match_type,
+                        "match_type": "intent_router",
                         "agent_action": router_result.agent_action,
-                        "query_type": query_type,
+                        "query_type": classified.query_type,
                         "latency_ms": round((time.perf_counter() - start) * 1000),
                     },
                 )
                 return router_result
 
-        # 2b. Filtered doctor queries: deterministic path first, NL-to-SQL fallback second.
-        if _count_filter_dims(entity_hints) >= 1 and self._doctor_query_service is not None:
-            doctor_query_text = text
-            asks_followup_count = bool(
-                re.search(r"\b\d+\s+o\s+\d+\b", text, re.IGNORECASE)
-                or re.search(r"\bson\b", text, re.IGNORECASE)
-            )
-            if context_applied and (
-                followup_operation in {"count", "count_by_sex"} or asks_followup_count
-            ):
-                doctor_query_text = f"cuantos {text}"
-            result = self._doctor_query_service.execute(doctor_query_text, resolved_entities)
-            if result is not None:
-                self._remember_result(telegram_user_id, result)
-                logger.info(
-                    "Agent resolved via deterministic doctor query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "deterministic",
-                        "agent_action": result.agent_action,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return result
-
-        if _count_filter_dims(entity_hints) >= 2 and self._query_executor is not None:
-            logger.info(
-                "Compound query detected (hints=%s), routing to QueryExecutor", entity_hints
-            )
+        # Final fallback: QueryExecutor (NL-to-SQL) if entity hints >= 1
+        if _count_filter_dims(entity_hints) >= 1 and self._query_executor is not None:
+            logger.info("Falling back to QueryExecutor (LLM-classified)")
             result = self._fallback_to_query_db(text, entity_hints=entity_hints)
             self._remember_result(telegram_user_id, result)
             logger.info(
-                "Agent resolved via compound fallback",
+                "Agent resolved via QueryExecutor fallback",
                 extra={
                     "telegram_event": "agent_route_completed",
-                    "match_type": "fallback",
+                    "match_type": "query_executor_fallback",
                     "agent_action": result.agent_action,
                     "latency_ms": round((time.perf_counter() - start) * 1000),
                 },
             )
             return result
 
-        # 3. Build prompt (with entity hints)
-        system_prompt = self._build_system_prompt(user_info, entity_hints=entity_hints)
-
-        # 4. LLM call
-        messages: list[dict] = [
-            {"role": "system", "content": system_prompt},
-        ]
-        messages.extend(history)
-        messages.append({"role": "user", "content": text})
-
-        response = self._llm.chat_complete(messages, temperature=0.0, json_mode=True)
-        response = response.strip()
-
-        # 4. Parse JSON
-        parsed = self._extract_json(response)
-
-        # Not valid JSON → retry once without json_mode (DeepSeek sometimes returns
-        # empty content with json_mode + temperature=0.0)
-        if parsed is None:
-            logger.warning(
-                "LLM returned invalid JSON (len=%s), retrying without json_mode",
-                len(response),
-            )
-            response = self._llm.chat_complete(messages, temperature=0.0, json_mode=False)
-            response = response.strip()
-            parsed = self._extract_json(response)
-            if parsed is None:
-                logger.warning("LLM retry also failed: %.200s", response)
-                return AgentResult(
-                    response_text=(
-                        response
-                        or "Lo siento, no pude procesar tu consulta. Intenta de nuevo."
-                    )
-                )
-
-        # 5. Legacy format support
-        if parsed.get("action") == "call_tool":
-            return self._handle_old_tool_format(parsed, text, actor_id=actor_id)
-
-        # 6. Validate with IntentOutput schema
-        try:
-            intent = IntentOutput.model_validate(parsed)
-        except ValidationError as exc:
-            logger.warning("LLM returned invalid IntentOutput: %.200s — %s", response, exc)
-            return AgentResult(
-                response_text="Ocurrió un error al procesar tu consulta. Intentá de nuevo.",
-                agent_action="validation_error",
-            )
-
-        # 7. Handle low confidence
-        if intent.confidence < 0.6:
-            return AgentResult(
-                response_text=(
-                    intent.response_text
-                    or "No estoy seguro de haber entendido correctamente. "
-                    "¿Podrías ser más específico?"
-                ),
-                agent_action="ambiguous",
-            )
-
-        # 8. Handle missing fields
-        if intent.missing_fields:
-            fields_str = ", ".join(intent.missing_fields)
-            return AgentResult(
-                response_text=(
-                    intent.response_text
-                    or f"Me falta información: {fields_str}. ¿Podrías indicarme?"
-                ),
-                agent_action="ambiguous",
-            )
-
-        action = intent.action
-        query_type = (intent.query_type or "").strip()
-        params = intent.params
-        response_text = intent.response_text or ""
-        fmt = intent.format
-        logger.info(
-            "LLM intent parsed",
-            extra={
-                "telegram_event": "llm_intent_parsed",
-                "agent_action": action,
-                "query_type": query_type,
-                "params": params,
-                "format": fmt,
-                "confidence": intent.confidence,
-            },
+        # Last resort: ask for clarification
+        return AgentResult(
+            response_text=(
+                classified.response_text
+                or "No estoy seguro de haber entendido. ¿Podrias ser mas especifico?"
+            ),
+            agent_action="ambiguous",
         )
-
-        # 6a. Reply / ambiguous → direct text
-        if action == "reply":
-            if _looks_like_data_request(text):
-                logger.warning("LLM used reply for a data request, refusing ungrounded answer")
-                if self._query_executor is not None:
-                    fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
-                    self._remember_result(telegram_user_id, fallback)
-                    return fallback
-                return AgentResult(
-                    response_text=(
-                        "Para datos especificos del sistema necesito ejecutar una consulta. "
-                        "No voy a responder con informacion no verificada."
-                    ),
-                    agent_action="ambiguous",
-                )
-            if _reply_has_hallucination(response_text):
-                logger.warning("Reply contained potential hallucination, replaced with generic")
-                response_text = (
-                    "Puedo ayudarte con informacion del sistema de turnos medicos. "
-                    "Para datos especificos, preguntame algo concreto como "
-                    "'cuantos medicos activos hay' o 'dame la lista de sargentos'."
-                )
-            logger.info(
-                "Agent returned direct reply",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "reply",
-                    "agent_action": "reply",
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
-            return AgentResult(
-                response_text=response_text or "No tengo informacion sobre eso en el sistema.",
-                agent_action="reply",
-            )
-
-        if action == "ambiguous":
-            logger.info(
-                "Agent returned clarification",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "clarification",
-                    "agent_action": "ambiguous",
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
-            return AgentResult(
-                response_text=(
-                    response_text
-                    or "Necesito un poco mas de detalle para ayudarte. "
-                       "¿Podrias ser mas especifico?"
-                ),
-                agent_action="ambiguous",
-            )
-
-        # 6b. Query / export → try router, fallback to query_db
-        if action in ("query", "export"):
-            if query_type:
-                router_result = self._route_via_router(action, query_type, params, text, format=fmt)
-                if router_result is not None:
-                    self._remember_result(
-                        telegram_user_id,
-                        router_result,
-                        query_type=query_type,
-                        params=params,
-                    )
-                    logger.info(
-                        "Agent resolved via query registry",
-                        extra={
-                            "telegram_event": "agent_route_completed",
-                            "match_type": "registry",
-                            "agent_action": router_result.agent_action,
-                            "query_type": query_type,
-                            "latency_ms": round((time.perf_counter() - start) * 1000),
-                        },
-                    )
-                    return router_result
-
-            # Fallback for query/export action
-            if action in ("query", "export"):
-                fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
-                self._remember_result(telegram_user_id, fallback)
-                logger.info(
-                    "Agent resolved via %s fallback", action,
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "fallback",
-                        "agent_action": fallback.agent_action,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return fallback
-
-        # 6c. Unknown action
-        logger.warning("LLM returned unknown action '%s' for: %.100s", action, text)
-        return AgentResult(response_text="No pude encontrar informacion sobre eso en el sistema.")
