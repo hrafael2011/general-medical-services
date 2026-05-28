@@ -16,13 +16,17 @@ from typing import Any
 from backend.app.application.telegram.intent_classifier import (
     ClassifiedIntent,
     IntentClassifier,
+    NLUEngine,
+    NLUResult,
 )
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
+from backend.app.application.telegram.nl_response import generate_response
 from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.sanitize import format_rows as shared_format_rows
 from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
+from backend.app.application.telegram.tool_registry import ToolRegistry
 from backend.app.application.telegram.types import AgentResult
 
 logger = logging.getLogger(__name__)
@@ -137,6 +141,8 @@ class ConversationalAgent:
         calendar_query_service = None,
         semantic_layer_resolver: SemanticLayerResolver | None = None,
         intent_classifier: IntentClassifier | None = None,
+        nlu_engine: NLUEngine | None = None,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self._llm = llm
         self._router = router
@@ -149,6 +155,8 @@ class ConversationalAgent:
         self._calendar_query_service = calendar_query_service
         self._semantic_layer_resolver = semantic_layer_resolver
         self._intent_classifier = intent_classifier
+        self._nlu_engine = nlu_engine
+        self._tool_registry = tool_registry
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -641,43 +649,249 @@ class ConversationalAgent:
         user_info: dict | None = None,
         actor_id: str | None = None,
     ) -> AgentResult:
-        """
-        Process a user message and return an AgentResult.
+        """Process a user message through the LLM-first NLU pipeline.
 
-        1. Loads conversation history (if memory available)
-        2. Calls LLM to translate message to command JSON
-        3. Routes: router (fast), query_executor (fallback), reply, or ToolGateway (legacy)
-        4. Returns final response
+        1. Load conversation history
+        2. Single NLU call (entity extraction + tool selection + params)
+        3. Tool dispatch → NL response generation
         """
         start = time.perf_counter()
-        # 1. Load history
+
+        # Phase 1: Load conversation history
         history: list[dict] = []
         if self._memory and telegram_user_id:
             try:
                 history = self._memory.load_history(telegram_user_id)
             except Exception:
                 logger.warning("Failed to load history for %s", telegram_user_id, exc_info=True)
-                history = []
 
-        # 2. Pre-process entities
+        # Phase 2: NLU — use new engine when available, fall back to legacy
+        if self._nlu_engine is not None:
+            return self._process_llm_first(text, telegram_user_id, history, start)
+
+        # Legacy path: EntityResolver + IntentClassifier + if-elif chain
+        return self._process_legacy(text, telegram_user_id, history, start)
+
+    # ------------------------------------------------------------------
+    # LLM-First pipeline (new)
+    # ------------------------------------------------------------------
+
+    def _process_llm_first(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+        history: list[dict],
+        start: float,
+    ) -> AgentResult:
+        """New pipeline: single LLM call → tool dispatch → NL response."""
+        # NLU: entity extraction + tool selection + params in one call
+        nlu_result = self._nlu_engine.classify(
+            text,
+            conversation_history=history,
+        )
+        logger.info(
+            "NLU classified",
+            extra={
+                "telegram_event": "nlu_classified",
+                "tool": nlu_result.tool,
+                "params": nlu_result.params,
+                "confidence": nlu_result.confidence,
+            },
+        )
+
+        # Clarification needed
+        if nlu_result.needs_clarification:
+            return AgentResult(
+                response_text=nlu_result.clarification_question or (
+                    "¿Podrías ser más específico? No entendí bien tu consulta."
+                ),
+                agent_action="ambiguous",
+            )
+
+        # Reply tool (greetings, help, etc.)
+        if nlu_result.tool == "reply":
+            return self._handle_reply(text, nlu_result)
+
+        # Tool dispatch
+        tool_result = self._dispatch_tool(nlu_result.tool, nlu_result.params, text)
+
+        # Generate NL response
+        response_text = self._generate_nl_response(text, nlu_result, tool_result, history)
+
+        agent_result = AgentResult(
+            response_text=response_text,
+            agent_action="query",
+            tool_name=nlu_result.tool,
+            tool_entities={"tool": nlu_result.tool, "params": nlu_result.params},
+            tool_result=tool_result,
+        )
+
+        self._remember_result(
+            telegram_user_id,
+            agent_result,
+            query_type=nlu_result.tool,
+            params=nlu_result.params,
+        )
+        logger.info(
+            "Agent resolved via LLM-first pipeline",
+            extra={
+                "telegram_event": "agent_route_completed",
+                "match_type": "llm_first",
+                "tool": nlu_result.tool,
+                "latency_ms": round((time.perf_counter() - start) * 1000),
+            },
+        )
+        return agent_result
+
+    def _dispatch_tool(
+        self,
+        tool_name: str,
+        params: dict[str, Any],
+        user_text: str,
+    ) -> dict[str, Any] | None:
+        """Dispatch to the appropriate deterministic tool and return structured output."""
+        try:
+            # Tool Registry (new)
+            if self._tool_registry is not None:
+                handler = self._tool_registry.get(tool_name)
+                if handler is not None:
+                    return handler(**params)
+
+            # Doctor tools
+            if tool_name in ("list_doctors", "count_doctors", "doctors_by_sex",
+                             "doctors_by_rank", "doctors_by_department"):
+                if self._doctor_query_service is not None:
+                    result = self._doctor_query_service.execute(user_text, params)
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            if tool_name in ("doctor_last_service", "doctor_service_load", "unassigned_doctors"):
+                if self._semantic_layer_resolver is not None:
+                    result = self._semantic_layer_resolver.resolve(
+                        user_text=user_text,
+                        domain="medicos",
+                        action="query",
+                        entities=params,
+                        is_followup=False,
+                        previous_metric=None,
+                    )
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # Calendar tools
+            if tool_name in ("calendar_assignments", "calendar_assigned_count", "calendar_status"):
+                if self._calendar_query_service is not None:
+                    result = self._calendar_query_service.execute(tool_name, params)
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # IntentRouter fallback for registered query types
+            if self._router is not None:
+                entry = self._router.registry.get(tool_name)
+                if entry is not None:
+                    result = self._router.handle(
+                        action="query",
+                        query_type=tool_name,
+                        params=params,
+                        user_message=user_text,
+                    )
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # SQL Agent fallback
+            if tool_name == "sql_query":
+                result = self._fallback_to_query_db(params.get("question", user_text))
+                return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # Last resort: try SQL agent with original text
+            if self._query_executor is not None:
+                result = self._fallback_to_query_db(user_text)
+                return result.__dict__ if hasattr(result, '__dict__') else result
+
+        except Exception:
+            logger.warning("Tool dispatch failed for %s", tool_name, exc_info=True)
+
+        return None
+
+    def _generate_nl_response(
+        self,
+        user_text: str,
+        nlu_result: NLUResult,
+        tool_result: dict[str, Any] | None,
+        history: list[dict],
+    ) -> str:
+        """Generate natural language response from tool output."""
+        try:
+            return generate_response(
+                self._llm,
+                user_text,
+                nlu_result.tool,
+                tool_result or {},
+                history,
+            )
+        except Exception:
+            logger.warning("NL response generation failed, using fallback")
+            if tool_result and isinstance(tool_result, dict):
+                rows = tool_result.get("rows", tool_result.get("data", {}).get("rows", []))
+                columns = tool_result.get("columns", tool_result.get("data", {}).get("columns", []))
+                if rows:
+                    return _format_rows(rows, columns)
+            return "No se encontraron resultados." if not tool_result else str(tool_result)
+
+    def _handle_reply(self, text: str, nlu_result: NLUResult) -> AgentResult:
+        """Handle conversational replies (greetings, help, etc.)."""
+        response_type = nlu_result.params.get("response_type", "unknown")
+        if response_type == "greeting":
+            return AgentResult(
+                response_text="¡Hola! Soy el asistente de turnos médicos. ¿En qué puedo ayudarte?",
+                agent_action="reply",
+            )
+        if response_type == "help":
+            return AgentResult(
+                response_text=(
+                    "Puedes consultarme sobre:\n"
+                    "• Doctores disponibles y sus horarios\n"
+                    "• Calendarios de guardias\n"
+                    "• Misiones médicas\n"
+                    "• Carga de servicio por doctor\n\n"
+                    "Ejemplos:\n"
+                    "• \"¿Cuántos doctores hay en cirugía?\"\n"
+                    "• \"¿Quiénes están de guardia el lunes?\"\n"
+                    "• \"Muéstrame las doctoras disponibles\""
+                ),
+                agent_action="reply",
+            )
+        if response_type == "farewell":
+            return AgentResult(
+                response_text="¡Hasta luego! Estoy aquí cuando me necesites.",
+                agent_action="reply",
+            )
+        return AgentResult(
+            response_text="¿En qué más puedo ayudarte con los turnos médicos?",
+            agent_action="reply",
+        )
+
+    # ------------------------------------------------------------------
+    # Legacy pipeline (fallback)
+    # ------------------------------------------------------------------
+
+    def _process_legacy(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+        history: list[dict],
+        start: float,
+    ) -> AgentResult:
+        """Legacy pipeline: EntityResolver + IntentClassifier + if-elif routing chain."""
+
+        # Pre-process entities
         entity_hints = ""
         resolved_entities: dict = {}
-        ambiguous_entities: list[dict] = []
         if self._entity_resolver is not None:
             try:
                 pre = self._entity_resolver.pre_process(text)
                 entity_hints = pre.get("hints", "")
                 resolved_entities = pre.get("resolved", {})
-                ambiguous_entities = pre.get("ambiguous", [])
-                if entity_hints or ambiguous_entities:
-                    logger.info(
-                        "Telegram entities pre-processed",
-                        extra={
-                            "telegram_event": "entities_preprocessed",
-                            "entity_hints": entity_hints,
-                            "ambiguous_count": len(ambiguous_entities),
-                        },
-                    )
             except Exception:
                 logger.warning("EntityResolver.pre_process failed", exc_info=True)
 
@@ -687,208 +901,98 @@ class ConversationalAgent:
             context_applied,
             followup_operation,
         ) = self._merge_followup_context(
-            telegram_user_id,
-            resolved_entities,
-            entity_hints,
-            text,
+            telegram_user_id, resolved_entities, entity_hints, text,
         )
-        if context_applied:
-            logger.info(
-                "Telegram follow-up context applied",
-                extra={
-                    "telegram_event": "followup_context_applied",
-                    "entity_hints": entity_hints,
-                    "filter_dim_count": _count_filter_dims(entity_hints),
-                },
-            )
-
-        session_state: SessionState | None = None
-        if self._session_store is not None and telegram_user_id is not None:
-            try:
-                session_state = self._session_store.get(telegram_user_id)
-            except Exception:
-                logger.warning("Failed to load Telegram session state", exc_info=True)
 
         mission_followup = self._mission_contextual_followup_result(text, telegram_user_id)
         if mission_followup is not None:
             self._remember_result(
-                telegram_user_id,
-                mission_followup,
-                query_type=(
-                    mission_followup.tool_entities or {}
-                ).get("query_type"),
+                telegram_user_id, mission_followup,
+                query_type=(mission_followup.tool_entities or {}).get("query_type"),
                 params={},
-            )
-            logger.info(
-                "Agent resolved via mission contextual follow-up",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "mission_contextual_followup",
-                    "agent_action": mission_followup.agent_action,
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
             )
             return mission_followup
 
-        # ---- LLM-First Intent Classification ----
         classified = self._classify_intent(
             text=text,
             entity_hints=entity_hints,
             resolved_entities=resolved_entities,
         )
-        logger.info(
-            "Intent classified",
-            extra={
-                "telegram_event": "intent_classified",
-                "domain": classified.domain,
-                "action": classified.action,
-                "metric": classified.metric,
-                "query_type": classified.query_type,
-                "confidence": classified.confidence,
-            },
-        )
 
-        # ---- Route based on classified intent ----
-
-        # Direct reply / ambiguous
         if classified.action in ("reply", "ambiguous"):
             return AgentResult(
                 response_text=classified.response_text
                 or "Necesito que me indiques que informacion del sistema quieres consultar.",
                 agent_action=classified.action,
-                tool_entities={"classified_intent": classified.__dict__},
             )
 
-        # Semantic Layer metric route
+        # Semantic Layer
         if classified.metric and self._semantic_layer_resolver is not None:
             try:
                 entities_for_semantic = dict(resolved_entities)
                 entities_for_semantic.update(classified.params)
                 semantic_result = self._semantic_layer_resolver.resolve(
-                    user_text=text,
-                    domain=classified.domain,
-                    action=classified.action,
-                    entities=entities_for_semantic,
-                    is_followup=False,
-                    previous_metric=None,
+                    user_text=text, domain=classified.domain, action=classified.action,
+                    entities=entities_for_semantic, is_followup=False, previous_metric=None,
                 )
                 if semantic_result is not None:
                     agent_result = self._semantic_layer_resolver.to_agent_result(
-                        semantic_result,
-                        user_text=text,
-                        format=classified.format,
+                        semantic_result, user_text=text, format=classified.format,
                     )
                     self._remember_result(
-                        telegram_user_id,
-                        agent_result,
+                        telegram_user_id, agent_result,
                         query_type=f"semantic:{semantic_result.metric_name}",
                         params=classified.params,
                     )
-                    logger.info(
-                        "Agent resolved via semantic layer (LLM-classified)",
-                        extra={
-                            "telegram_event": "agent_route_completed",
-                            "match_type": "semantic_layer",
-                            "metric": semantic_result.metric_name,
-                            "agent_action": agent_result.agent_action,
-                            "latency_ms": round((time.perf_counter() - start) * 1000),
-                        },
-                    )
                     return agent_result
             except Exception:
-                logger.warning("SemanticLayerResolver failed, falling through", exc_info=True)
+                logger.warning("SemanticLayerResolver failed", exc_info=True)
 
-        # Doctor query route
+        # Doctor query
         if classified.domain == "medicos" and self._doctor_query_service is not None:
             try:
                 result = self._doctor_query_service.execute(text, resolved_entities)
                 if result is not None:
                     self._remember_result(telegram_user_id, result)
-                    logger.info(
-                        "Agent resolved via doctor query service (LLM-classified)",
-                        extra={
-                            "telegram_event": "agent_route_completed",
-                            "match_type": "doctor_query_service",
-                            "agent_action": result.agent_action,
-                            "latency_ms": round((time.perf_counter() - start) * 1000),
-                        },
-                    )
                     return result
             except Exception:
-                logger.warning("DoctorQueryService failed, falling through", exc_info=True)
+                logger.warning("DoctorQueryService failed", exc_info=True)
 
-        # Calendar query route
+        # Calendar query
         if classified.domain == "calendario" and self._calendar_query_service is not None:
             try:
                 result = self._calendar_query_service.execute(
-                    classified.query_type or "list_calendar_assignments",
-                    classified.params,
+                    classified.query_type or "list_calendar_assignments", classified.params,
                 )
                 if result is not None:
                     self._remember_result(
-                        telegram_user_id,
-                        result,
+                        telegram_user_id, result,
                         query_type=classified.query_type or "list_calendar_assignments",
                         params=classified.params,
                     )
-                    logger.info(
-                        "Agent resolved via calendar query service (LLM-classified)",
-                        extra={
-                            "telegram_event": "agent_route_completed",
-                            "match_type": "calendar_query_service",
-                            "agent_action": result.agent_action,
-                            "latency_ms": round((time.perf_counter() - start) * 1000),
-                        },
-                    )
                     return result
             except Exception:
-                logger.warning("CalendarQueryService failed, falling through", exc_info=True)
+                logger.warning("CalendarQueryService failed", exc_info=True)
 
-        # IntentRouter route (query_type from classifier)
+        # IntentRouter
         if classified.query_type:
             router_result = self._route_via_router(
                 classified.action if classified.action == "export" else "query",
-                classified.query_type,
-                classified.params,
-                text,
-                format=classified.format,
+                classified.query_type, classified.params, text, format=classified.format,
             )
             if router_result is not None:
                 self._remember_result(
-                    telegram_user_id,
-                    router_result,
-                    query_type=classified.query_type,
-                    params=classified.params,
-                )
-                logger.info(
-                    "Agent resolved via IntentRouter (LLM-classified)",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "intent_router",
-                        "agent_action": router_result.agent_action,
-                        "query_type": classified.query_type,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
+                    telegram_user_id, router_result,
+                    query_type=classified.query_type, params=classified.params,
                 )
                 return router_result
 
-        # Final fallback: QueryExecutor (NL-to-SQL) if entity hints >= 1
+        # QueryExecutor fallback
         if _count_filter_dims(entity_hints) >= 1 and self._query_executor is not None:
-            logger.info("Falling back to QueryExecutor (LLM-classified)")
             result = self._fallback_to_query_db(text, entity_hints=entity_hints)
             self._remember_result(telegram_user_id, result)
-            logger.info(
-                "Agent resolved via QueryExecutor fallback",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "query_executor_fallback",
-                    "agent_action": result.agent_action,
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
             return result
 
-        # Last resort: ask for clarification
         return AgentResult(
             response_text=(
                 classified.response_text

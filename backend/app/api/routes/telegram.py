@@ -96,12 +96,17 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     from backend.app.application.telegram.calendar_query_service import CalendarQueryService
     from backend.app.application.telegram.doctor_query_service import DoctorQueryService
     from backend.app.application.telegram.entity_resolver import EntityResolver
-    from backend.app.application.telegram.intent_classifier import IntentClassifier
+    from backend.app.application.telegram.intent_classifier import (
+        IntentClassifier,
+        NLUEngine,
+    )
     from backend.app.application.telegram.intent_router import IntentRouter
     from backend.app.application.telegram.llm import DeepSeekProvider, FakeLLMProvider
     from backend.app.application.telegram.memory import MemoryManager, SessionStore
     from backend.app.application.telegram.orchestrator import TelegramOrchestrator
     from backend.app.application.telegram.query_executor import QueryExecutor
+    from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
+    from backend.app.application.telegram.tool_registry import ToolRegistry
     from backend.app.infrastructure.repositories.telegram import TelegramRepository
     from backend.app.infrastructure.repositories.users import UserRepository
 
@@ -115,6 +120,53 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         router.set_session(session)
 
     intent_classifier = IntentClassifier(llm) if use_real else None
+    nlu_engine = NLUEngine(llm) if use_real else None
+
+    doctor_svc = DoctorQueryService(session=session)
+    calendar_svc = CalendarQueryService(session=session)
+    entity_resolver = EntityResolver(session=session)
+    semantic_layer = SemanticLayerResolver(session)
+
+    # Wire tool registry with deterministic handlers
+    tool_registry = ToolRegistry()
+    if use_real:
+
+        def _doctor_handler(**params):
+            resolved = entity_resolver.pre_process(
+                " ".join(f"{k}={v}" for k, v in params.items())
+            ).get("resolved", params)
+            return doctor_svc.execute(
+                " ".join(f"{k}={v}" for k, v in params.items()),
+                resolved,
+            )
+
+        tool_registry.register("list_doctors", _doctor_handler)
+        tool_registry.register("count_doctors", _doctor_handler)
+        tool_registry.register("doctors_by_sex", _doctor_handler)
+        tool_registry.register("doctors_by_rank", _doctor_handler)
+        tool_registry.register("doctors_by_department", _doctor_handler)
+
+        tool_registry.register(
+            "calendar_assignments",
+            lambda **params: calendar_svc.execute("list_calendar_assignments_by_date_range", params),
+        )
+        tool_registry.register(
+            "calendar_assigned_count",
+            lambda **params: calendar_svc.execute("count_assigned_doctors_by_month", params),
+        )
+        tool_registry.register(
+            "calendar_status",
+            lambda **params: calendar_svc.execute("calendar_status", params),
+        )
+
+        def _sql_handler(**params):
+            result = query_executor.execute(
+                nl_query=params.get("question", ""),
+                user_text=params.get("question", ""),
+            )
+            return result
+
+        tool_registry.register("sql_query", _sql_handler)
 
     memory = MemoryManager(TelegramRepository(session))
     agent = ConversationalAgent(
@@ -123,10 +175,13 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         query_executor=query_executor,
         memory=memory,
         session_store=SessionStore(ttl_seconds=1800, telegram_repo=TelegramRepository(session)),
-        entity_resolver=EntityResolver(session=session),
-        doctor_query_service=DoctorQueryService(session=session),
-        calendar_query_service=CalendarQueryService(session=session),
+        entity_resolver=entity_resolver,
+        doctor_query_service=doctor_svc,
+        calendar_query_service=calendar_svc,
+        semantic_layer_resolver=semantic_layer,
         intent_classifier=intent_classifier,
+        nlu_engine=nlu_engine,
+        tool_registry=tool_registry,
     )
 
     return TelegramOrchestrator(
