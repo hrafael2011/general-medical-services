@@ -8,21 +8,46 @@ import { adminApi, UserRead } from "../../api/admin";
 
 const ROLES = ["encargado", "admin"] as const;
 
-const PERMISSION_DEFINITIONS = [
-  { key: "manage_doctors", label: "Gestionar Medicos" },
-  { key: "manage_calendars", label: "Gestionar Calendarios" },
-  { key: "manage_missions", label: "Gestionar Misiones" },
-  { key: "manage_availability", label: "Gestionar Disponibilidad" },
-  { key: "manage_catalogs", label: "Gestionar Catalogos" },
-  { key: "manage_users", label: "Gestionar Usuarios" },
-  { key: "manage_admins", label: "Gestionar Administradores" },
-  { key: "manage_trash", label: "Gestionar Papelera" },
-  { key: "view_audit", label: "Ver Auditoria" },
-  { key: "view_notifications", label: "Ver Notificaciones" },
-  { key: "manage_confirmations", label: "Gestionar Confirmaciones" },
-  { key: "manage_alerts", label: "Gestionar Alertas" },
-  { key: "export_reports", label: "Exportar Reportes" },
-  { key: "receive_escalation_alerts", label: "Recibir Alertas de Escalamiento" },
+const PERMISSION_GROUPS = [
+  {
+    category: "Gestion Medica",
+    permissions: [
+      { key: "manage_doctors", label: "Gestionar Medicos" },
+      { key: "manage_availability", label: "Gestionar Disponibilidad" },
+      { key: "manage_missions", label: "Gestionar Misiones" },
+    ],
+  },
+  {
+    category: "Calendarios",
+    permissions: [
+      { key: "manage_calendars", label: "Gestionar Calendarios" },
+      { key: "manage_confirmations", label: "Gestionar Confirmaciones" },
+    ],
+  },
+  {
+    category: "Administracion",
+    permissions: [
+      { key: "manage_users", label: "Gestionar Usuarios" },
+      { key: "manage_trash", label: "Gestionar Papelera" },
+      { key: "manage_catalogs", label: "Gestionar Catalogos" },
+      { key: "manage_admins", label: "Gestionar Administradores" },
+    ],
+  },
+  {
+    category: "Monitoreo",
+    permissions: [
+      { key: "view_audit", label: "Ver Auditoria" },
+      { key: "view_notifications", label: "Ver Notificaciones" },
+      { key: "manage_alerts", label: "Gestionar Alertas" },
+      { key: "receive_escalation_alerts", label: "Recibir Alertas de Escalamiento" },
+    ],
+  },
+  {
+    category: "Reportes",
+    permissions: [
+      { key: "export_reports", label: "Exportar Reportes" },
+    ],
+  },
 ];
 
 async function listAdminPanelUsers(): Promise<UserRead[]> {
@@ -137,22 +162,29 @@ export function UsersView() {
           </div>
           <div style={{ marginTop: "12px" }}>
             <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Permisos</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-              {PERMISSION_DEFINITIONS.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
-                <label key={p.key} style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={newPermissions.includes(p.key)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setNewPermissions([...newPermissions, p.key]);
-                      } else {
-                        setNewPermissions(newPermissions.filter(k => k !== p.key));
-                      }
-                    }}
-                  />
-                  {p.label}
-                </label>
+            <div className="perm-groups">
+              {PERMISSION_GROUPS.map(group => (
+                <div key={group.category} className="perm-group">
+                  <div className="perm-group-header">{group.category}</div>
+                  <div className="perm-group-body">
+                    {group.permissions.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
+                      <label key={p.key} className="perm-check">
+                        <input
+                          type="checkbox"
+                          checked={newPermissions.includes(p.key)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewPermissions([...newPermissions, p.key]);
+                            } else {
+                              setNewPermissions(newPermissions.filter(k => k !== p.key));
+                            }
+                          }}
+                        />
+                        {p.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -237,22 +269,29 @@ export function UsersView() {
                         ) : (
                           <div>
                             <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "4px" }}>Permisos</label>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
-                              {PERMISSION_DEFINITIONS.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
-                                <label key={p.key} style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={editPermissions.includes(p.key)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setEditPermissions([...editPermissions, p.key]);
-                                      } else {
-                                        setEditPermissions(editPermissions.filter(k => k !== p.key));
-                                      }
-                                    }}
-                                  />
-                                  {p.label}
-                                </label>
+                            <div className="perm-groups">
+                              {PERMISSION_GROUPS.map(group => (
+                                <div key={group.category} className="perm-group">
+                                  <div className="perm-group-header">{group.category}</div>
+                                  <div className="perm-group-body">
+                                    {group.permissions.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
+                                      <label key={p.key} className="perm-check">
+                                        <input
+                                          type="checkbox"
+                                          checked={editPermissions.includes(p.key)}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setEditPermissions([...editPermissions, p.key]);
+                                            } else {
+                                              setEditPermissions(editPermissions.filter(k => k !== p.key));
+                                            }
+                                          }}
+                                        />
+                                        {p.label}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           </div>
