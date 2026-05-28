@@ -42,10 +42,6 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
-def normalize_user_message(text: str) -> str:
-    """Public alias for text normalization used by conversation_planner."""
-    return _normalize_text(text)
-
 
 def _tokens(text: str) -> set[str]:
     return set(_normalize_text(text).split())

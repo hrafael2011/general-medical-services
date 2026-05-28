@@ -333,20 +333,6 @@ def test_agent_low_confidence_returns_clarification(db_session) -> None:
     assert "específico" in result.response_text.lower()
 
 
-def test_agent_uses_conversation_planner_before_llm_for_unclear_data_request(db_session) -> None:
-    """Mensajes operativos demasiado ambiguos se aclaran antes de llamar al LLM."""
-    llm = FakeLLMProvider(responses={
-        "dame eso": '{"action": "query", "query_type": "count_doctors_total", "params": {}}',
-    })
-    agent = _make_agent(llm=llm)
-
-    result = agent.process(text="dame eso")
-
-    assert result.agent_action == "ambiguous"
-    assert "necesito" in result.response_text.lower()
-    assert llm.calls == []
-
-
 def test_agent_missing_fields_triggers_prompt(db_session) -> None:
     """missing_fields not empty → agent asks for the missing info."""
     llm = FakeLLMProvider(responses={

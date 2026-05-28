@@ -191,6 +191,7 @@ def webhook(
                 )
                 break  # success → exit retry loop
             except Exception:
+                session.rollback()
                 if attempt == 0:
                     logger.warning(
                         "Webhook retry for user=%s chat=%s",
