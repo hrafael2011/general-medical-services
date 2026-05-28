@@ -204,6 +204,7 @@ def test_update_user_changes_fields(db_session) -> None:
         email="original@example.local",
         temporary_password="TempEnc123!",
     ).user
+    admin.is_superadmin = True
     db_session.commit()
 
     updated = service.update_user(

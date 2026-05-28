@@ -61,6 +61,8 @@ def admin_user(session):
         new_password="Permanent123!",
     )
     session.commit()
+    result.user.is_superadmin = True
+    session.commit()
     return result.user
 
 

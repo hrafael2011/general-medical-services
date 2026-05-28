@@ -302,6 +302,8 @@ class AccountService:
             user.name = name.strip()
             changed["name"] = user.name
         if role is not None:
+            if not actor.is_superadmin:
+                raise PermissionDeniedError("Solo el superadmin puede cambiar roles.")
             user.role = role
             changed["role"] = role
         if active is not None:
