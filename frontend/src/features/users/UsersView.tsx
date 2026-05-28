@@ -260,7 +260,7 @@ export function UsersView() {
 
           {/* Buttons */}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
-            <button className="btn-secondary" onClick={() => { setShowCreate(false); setNewRole("encargado"); }}>
+            <button className="btn-secondary" onClick={() => { setShowCreate(false); setNewName(""); setNewEmail(""); setNewPermissions([]); setNewRole("encargado"); }}>
               Cancelar
             </button>
             <button
