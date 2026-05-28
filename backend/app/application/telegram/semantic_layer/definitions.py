@@ -324,10 +324,11 @@ LEFT JOIN ranks r ON r.id = d.rank_id
 LEFT JOIN departments dep ON dep.id = d.department_id
 LEFT JOIN service_areas sa ON sa.id = ca.service_area_id
 WHERE c.deleted_at IS NULL
+  AND cv.deleted_at IS NULL
   AND cv.version_number = (
       SELECT MAX(cv2.version_number)
       FROM calendar_versions cv2
-      WHERE cv2.calendar_id = c.id
+      WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
   ){where_sql}
 {group}
 {order}
@@ -351,10 +352,11 @@ LEFT JOIN ranks r ON r.id = d.rank_id
 LEFT JOIN departments dep ON dep.id = d.department_id
 LEFT JOIN service_areas sa ON sa.id = ca.service_area_id
 WHERE c.deleted_at IS NULL
+  AND cv.deleted_at IS NULL
   AND cv.version_number = (
       SELECT MAX(cv2.version_number)
       FROM calendar_versions cv2
-      WHERE cv2.calendar_id = c.id
+      WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
   ){where_sql}
 {group}
 {order}
@@ -392,10 +394,11 @@ WHERE d.active = TRUE
         AND c.year = :year
         AND c.month = :month
         AND c.deleted_at IS NULL
+        AND cv.deleted_at IS NULL
         AND cv.version_number = (
             SELECT MAX(cv2.version_number)
             FROM calendar_versions cv2
-            WHERE cv2.calendar_id = c.id
+            WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
         )
   ){where_sql}
 {order}
@@ -427,10 +430,11 @@ WHERE d.active = TRUE
   AND d.service_active = TRUE
   AND d.deleted_at IS NULL
   AND c.deleted_at IS NULL
+  AND cv.deleted_at IS NULL
   AND cv.version_number = (
       SELECT MAX(cv2.version_number)
       FROM calendar_versions cv2
-      WHERE cv2.calendar_id = c.id
+      WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
   ){where_sql}
 {group}
 {order}
@@ -464,10 +468,11 @@ JOIN calendars c ON c.id = cv.calendar_id
 WHERE c.year = :year
   AND c.month = :month
   AND c.deleted_at IS NULL
+  AND cv.deleted_at IS NULL
   AND cv.version_number = (
       SELECT MAX(cv2.version_number)
       FROM calendar_versions cv2
-      WHERE cv2.calendar_id = c.id
+      WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
   ){where_sql}
 {group}
 {order}
@@ -492,19 +497,22 @@ def _tpl_operational_summary(sq: SemanticQuery) -> tuple[str, dict[str, Any]]:
      JOIN calendar_versions cv ON cv.id = ca.calendar_version_id
      JOIN calendars c ON c.id = cv.calendar_id
      WHERE c.year = :year AND c.month = :month AND c.deleted_at IS NULL
-       AND cv.version_number = (SELECT MAX(cv2.version_number) FROM calendar_versions cv2 WHERE cv2.calendar_id = c.id)
+       AND cv.deleted_at IS NULL
+       AND cv.version_number = (SELECT MAX(cv2.version_number) FROM calendar_versions cv2 WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL)
     ) AS total_servicios,
     (SELECT COUNT(DISTINCT ca.doctor_id) FROM calendar_assignments ca
      JOIN calendar_versions cv ON cv.id = ca.calendar_version_id
      JOIN calendars c ON c.id = cv.calendar_id
      WHERE c.year = :year AND c.month = :month AND c.deleted_at IS NULL
-       AND cv.version_number = (SELECT MAX(cv2.version_number) FROM calendar_versions cv2 WHERE cv2.calendar_id = c.id)
+       AND cv.deleted_at IS NULL
+       AND cv.version_number = (SELECT MAX(cv2.version_number) FROM calendar_versions cv2 WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL)
     ) AS medicos_asignados,
     (SELECT COUNT(*) FROM unresolved_gaps ug
      JOIN calendar_versions cv ON cv.id = ug.calendar_version_id
      JOIN calendars c ON c.id = cv.calendar_id
      WHERE c.year = :year AND c.month = :month AND c.deleted_at IS NULL
-       AND cv.version_number = (SELECT MAX(cv2.version_number) FROM calendar_versions cv2 WHERE cv2.calendar_id = c.id)
+       AND cv.deleted_at IS NULL
+       AND cv.version_number = (SELECT MAX(cv2.version_number) FROM calendar_versions cv2 WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL)
     ) AS huecos_sin_resolver,
     (SELECT status FROM calendars WHERE year = :year AND month = :month AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1) AS estado_calendario{where_sql}""".strip()
     params = {"year": year, "month": month, **where_params}
@@ -547,10 +555,11 @@ JOIN service_areas sa ON sa.id = ca.service_area_id
 JOIN calendar_versions cv ON cv.id = ca.calendar_version_id
 JOIN calendars c ON c.id = cv.calendar_id
 WHERE c.deleted_at IS NULL
+  AND cv.deleted_at IS NULL
   AND cv.version_number = (
       SELECT MAX(cv2.version_number)
       FROM calendar_versions cv2
-      WHERE cv2.calendar_id = c.id
+      WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
   )
   AND ca.confirmed = FALSE{where_sql}
 ORDER BY ca.service_date ASC
@@ -578,10 +587,11 @@ WHERE d.active = TRUE
   AND d.service_active = TRUE
   AND d.deleted_at IS NULL
   AND c.deleted_at IS NULL
+  AND cv.deleted_at IS NULL
   AND cv.version_number = (
       SELECT MAX(cv2.version_number)
       FROM calendar_versions cv2
-      WHERE cv2.calendar_id = c.id
+      WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
   ){where_sql}
 {group}
 {order}
@@ -614,10 +624,11 @@ LEFT JOIN calendar_assignments ca ON ca.calendar_version_id = cv.id
 WHERE c.year = :year
   AND c.month = :month
   AND c.deleted_at IS NULL
+  AND cv.deleted_at IS NULL
   AND cv.version_number = (
       SELECT MAX(cv2.version_number)
       FROM calendar_versions cv2
-      WHERE cv2.calendar_id = c.id
+      WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL
   ){where_sql}
 GROUP BY c.id""".strip()
     params = {"year": year, "month": month, **where_params}

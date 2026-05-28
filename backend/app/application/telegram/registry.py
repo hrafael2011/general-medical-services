@@ -171,13 +171,13 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "doctors_working_date",
-        "sql_template": "SELECT d.name, sa.display_name AS area FROM doctors d JOIN calendar_assignments ca ON ca.doctor_id = d.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE ca.service_date = :date",
+        "sql_template": "SELECT d.name, sa.display_name AS area FROM doctors d JOIN calendar_assignments ca ON ca.doctor_id = d.id JOIN calendar_versions cv ON ca.calendar_version_id = cv.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE ca.service_date = :date AND cv.deleted_at IS NULL",
         "params_schema": {"date": "str"},
         "description": "Medicos que trabajaron en una fecha especifica.",
     },
     {
         "query_type": "assignment_count_by_date_range",
-        "sql_template": "SELECT d.name, COUNT(*) AS total FROM doctors d JOIN calendar_assignments ca ON ca.doctor_id = d.id WHERE ca.service_date BETWEEN :start_date AND :end_date GROUP BY d.name ORDER BY total DESC",
+        "sql_template": "SELECT d.name, COUNT(*) AS total FROM doctors d JOIN calendar_assignments ca ON ca.doctor_id = d.id JOIN calendar_versions cv ON ca.calendar_version_id = cv.id WHERE ca.service_date BETWEEN :start_date AND :end_date AND cv.deleted_at IS NULL GROUP BY d.name ORDER BY total DESC",
         "params_schema": {"start_date": "date", "end_date": "date"},
         "description": "Cantidad de servicios por medico en un rango de fechas.",
     },
@@ -189,9 +189,10 @@ DEFAULT_QUERY_TYPES = [
             "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
             "JOIN calendars c ON cv.calendar_id = c.id "
             "WHERE c.year = :year AND c.month = :month "
+            "AND cv.deleted_at IS NULL "
             "AND cv.version_number = ("
             " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
-            " WHERE cv2.calendar_id = c.id"
+            " WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL"
             ")"
         ),
         "params_schema": {"year": "int", "month": "int"},
@@ -205,9 +206,10 @@ DEFAULT_QUERY_TYPES = [
             "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
             "JOIN calendars c ON cv.calendar_id = c.id "
             "WHERE c.year = :year AND c.month = :month "
+            "AND cv.deleted_at IS NULL "
             "AND cv.version_number = ("
             " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
-            " WHERE cv2.calendar_id = c.id"
+            " WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL"
             ")"
         ),
         "params_schema": {"year": "int", "month": "int"},
@@ -222,9 +224,10 @@ DEFAULT_QUERY_TYPES = [
             "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
             "JOIN calendars c ON cv.calendar_id = c.id "
             "WHERE c.year = :year AND c.month = :month "
+            "AND cv.deleted_at IS NULL "
             "AND cv.version_number = ("
             " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
-            " WHERE cv2.calendar_id = c.id"
+            " WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL"
             ") "
             "GROUP BY d.name "
             "ORDER BY d.name"
@@ -243,9 +246,10 @@ DEFAULT_QUERY_TYPES = [
             " JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
             " JOIN calendars c ON cv.calendar_id = c.id "
             " WHERE ca.doctor_id = d.id AND c.year = :year AND c.month = :month "
+            " AND cv.deleted_at IS NULL "
             " AND cv.version_number = ("
             "  SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
-            "  WHERE cv2.calendar_id = c.id"
+            "  WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL"
             " )"
             ") "
             "ORDER BY d.name"
@@ -287,22 +291,22 @@ DEFAULT_QUERY_TYPES = [
         "sql_template": (
             "SELECT "
             "(SELECT COUNT(*) FROM doctors WHERE active = TRUE AND service_active = TRUE) AS active_doctors, "
-            "(SELECT status FROM calendars WHERE year = :year AND month = :month LIMIT 1) AS calendar_status, "
+            "(SELECT status FROM calendars WHERE year = :year AND month = :month AND deleted_at IS NULL LIMIT 1) AS calendar_status, "
             "(SELECT COUNT(*) FROM calendar_assignments ca "
             " JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
             " JOIN calendars c ON cv.calendar_id = c.id "
-            " WHERE c.year = :year AND c.month = :month) AS total_assignments, "
+            " WHERE c.year = :year AND c.month = :month AND cv.deleted_at IS NULL) AS total_assignments, "
             "(SELECT COUNT(*) FROM unresolved_gaps ug "
             " JOIN calendar_versions cv ON ug.calendar_version_id = cv.id "
             " JOIN calendars c ON cv.calendar_id = c.id "
-            " WHERE c.year = :year AND c.month = :month) AS unresolved_gaps"
+            " WHERE c.year = :year AND c.month = :month AND cv.deleted_at IS NULL) AS unresolved_gaps"
         ),
         "params_schema": {"year": "int", "month": "int"},
         "description": "Resumen operativo del sistema para un periodo.",
     },
     {
         "query_type": "doctor_history_60d",
-        "sql_template": "SELECT ca.service_date, sa.display_name AS area, ca.assignment_source FROM calendar_assignments ca JOIN service_areas sa ON ca.service_area_id = sa.id WHERE ca.doctor_id = :doctor_id AND ca.service_date >= CURRENT_DATE - INTERVAL '60 days' ORDER BY ca.service_date DESC",
+        "sql_template": "SELECT ca.service_date, sa.display_name AS area, ca.assignment_source FROM calendar_assignments ca JOIN calendar_versions cv ON ca.calendar_version_id = cv.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE cv.deleted_at IS NULL AND ca.doctor_id = :doctor_id AND ca.service_date >= CURRENT_DATE - INTERVAL '60 days' ORDER BY ca.service_date DESC",
         "params_schema": {"doctor_id": "str"},
         "description": "Historial de servicios de un medico en los ultimos 60 dias.",
     },
@@ -320,19 +324,19 @@ DEFAULT_QUERY_TYPES = [
     },
     {
         "query_type": "doctor_history_by_name",
-        "sql_template": "SELECT ca.service_date, sa.display_name AS area, ca.assignment_source FROM calendar_assignments ca JOIN service_areas sa ON ca.service_area_id = sa.id JOIN doctors d ON ca.doctor_id = d.id WHERE d.name LIKE '%' || :search || '%' AND ca.service_date >= CURRENT_DATE - INTERVAL '60 days' ORDER BY ca.service_date DESC",
+        "sql_template": "SELECT ca.service_date, sa.display_name AS area, ca.assignment_source FROM calendar_assignments ca JOIN calendar_versions cv ON ca.calendar_version_id = cv.id JOIN service_areas sa ON ca.service_area_id = sa.id JOIN doctors d ON ca.doctor_id = d.id WHERE cv.deleted_at IS NULL AND d.name LIKE '%' || :search || '%' AND ca.service_date >= CURRENT_DATE - INTERVAL '60 days' ORDER BY ca.service_date DESC",
         "params_schema": {"search": "str"},
         "description": "Historial de servicios de un medico en los ultimos 60 dias, buscando por nombre en vez de UUID.",
     },
     {
         "query_type": "assignments_by_area",
-        "sql_template": "SELECT d.name AS doctor_name, ca.service_date, sa.display_name AS area FROM calendar_assignments ca JOIN doctors d ON ca.doctor_id = d.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE sa.code LIKE :area_code AND ca.service_date BETWEEN :start_date AND :end_date ORDER BY ca.service_date, d.name",
+        "sql_template": "SELECT d.name AS doctor_name, ca.service_date, sa.display_name AS area FROM calendar_assignments ca JOIN calendar_versions cv ON ca.calendar_version_id = cv.id JOIN doctors d ON ca.doctor_id = d.id JOIN service_areas sa ON ca.service_area_id = sa.id WHERE cv.deleted_at IS NULL AND sa.code LIKE :area_code AND ca.service_date BETWEEN :start_date AND :end_date ORDER BY ca.service_date, d.name",
         "params_schema": {"area_code": "str", "start_date": "date", "end_date": "date"},
         "description": "Asignaciones en un area especifica durante un rango de fechas.",
     },
     {
         "query_type": "unresolved_gaps_month",
-        "sql_template": "SELECT ug.service_date, sa.display_name AS area, ug.reason_code, ug.description FROM unresolved_gaps ug JOIN service_areas sa ON ug.service_area_id = sa.id JOIN calendar_versions cv ON ug.calendar_version_id = cv.id JOIN calendars c ON cv.calendar_id = c.id WHERE c.year = :year AND c.month = :month ORDER BY ug.service_date",
+        "sql_template": "SELECT ug.service_date, sa.display_name AS area, ug.reason_code, ug.description FROM unresolved_gaps ug JOIN service_areas sa ON ug.service_area_id = sa.id JOIN calendar_versions cv ON ug.calendar_version_id = cv.id JOIN calendars c ON cv.calendar_id = c.id WHERE c.year = :year AND c.month = :month AND cv.deleted_at IS NULL ORDER BY ug.service_date",
         "params_schema": {"year": "int", "month": "int"},
         "description": "Huecos sin medico asignado en un mes y ano especifico.",
     },
@@ -372,10 +376,11 @@ DEFAULT_QUERY_TYPES = [
             "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
             "JOIN calendars c ON cv.calendar_id = c.id "
             "WHERE c.year = :year AND c.month = :month "
+            "AND cv.deleted_at IS NULL "
             "AND ca.confirmed = FALSE "
             "AND cv.version_number = ("
             " SELECT MAX(cv2.version_number) FROM calendar_versions cv2 "
-            " WHERE cv2.calendar_id = c.id"
+            " WHERE cv2.calendar_id = c.id AND cv2.deleted_at IS NULL"
             ") "
             "ORDER BY ca.service_date, d.name"
         ),
@@ -394,6 +399,7 @@ DEFAULT_QUERY_TYPES = [
             "WHERE ca.service_date BETWEEN :start_date AND :end_date "
             "AND c.status = 'approved' AND cv.status = 'approved' "
             "AND c.deleted_at IS NULL "
+            "AND cv.deleted_at IS NULL "
             "ORDER BY ca.service_date, sa.display_name, d.name"
         ),
         "params_schema": {"start_date": "date", "end_date": "date"},
