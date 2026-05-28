@@ -217,7 +217,7 @@ class IntentClassifier:
         except json.JSONDecodeError:
             # Try to extract JSON from markdown code blocks
             import re
-            match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+            match = re.search(r'\{.*\}', response, re.DOTALL)
             if match:
                 try:
                     return json.loads(match.group(0))

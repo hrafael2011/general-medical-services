@@ -96,6 +96,7 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     from backend.app.application.telegram.calendar_query_service import CalendarQueryService
     from backend.app.application.telegram.doctor_query_service import DoctorQueryService
     from backend.app.application.telegram.entity_resolver import EntityResolver
+    from backend.app.application.telegram.intent_classifier import IntentClassifier
     from backend.app.application.telegram.intent_router import IntentRouter
     from backend.app.application.telegram.llm import DeepSeekProvider, FakeLLMProvider
     from backend.app.application.telegram.memory import MemoryManager, SessionStore
@@ -113,6 +114,8 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     if session:
         router.set_session(session)
 
+    intent_classifier = IntentClassifier(llm) if use_real else None
+
     memory = MemoryManager(TelegramRepository(session))
     agent = ConversationalAgent(
         llm=llm,
@@ -123,6 +126,7 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         entity_resolver=EntityResolver(session=session),
         doctor_query_service=DoctorQueryService(session=session),
         calendar_query_service=CalendarQueryService(session=session),
+        intent_classifier=intent_classifier,
     )
 
     return TelegramOrchestrator(
