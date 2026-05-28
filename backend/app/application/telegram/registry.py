@@ -382,4 +382,21 @@ DEFAULT_QUERY_TYPES = [
         "params_schema": {"year": "int", "month": "int"},
         "description": "Medicos que no han confirmado servicio en un mes y ano.",
     },
+    {
+        "query_type": "list_calendar_assignments_by_date_range",
+        "sql_template": (
+            "SELECT ca.service_date, d.name AS doctor_name, sa.display_name AS area "
+            "FROM calendar_assignments ca "
+            "JOIN calendar_versions cv ON ca.calendar_version_id = cv.id "
+            "JOIN calendars c ON cv.calendar_id = c.id "
+            "JOIN doctors d ON ca.doctor_id = d.id "
+            "JOIN service_areas sa ON ca.service_area_id = sa.id "
+            "WHERE ca.service_date BETWEEN :start_date AND :end_date "
+            "AND c.status = 'approved' AND cv.status = 'approved' "
+            "AND c.deleted_at IS NULL "
+            "ORDER BY ca.service_date, sa.display_name, d.name"
+        ),
+        "params_schema": {"start_date": "date", "end_date": "date"},
+        "description": "Lista las asignaciones de servicio en un rango de fechas del calendario aprobado.",
+    },
 ]

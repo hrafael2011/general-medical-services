@@ -82,12 +82,15 @@ class QueryExecutor:
             user_text=user_text,
             entity_hints=entity_hints,
         )
-        # Inject latency for observability
+        # Inject latency for observability + backward-compat row_count
         if result.get("ok"):
             result.setdefault("data", {})
             result["data"]["elapsed_seconds"] = round(
                 time.perf_counter() - start, 2
             )
+            # Backward-compat: row_count at top level
+            if "row_count" not in result and "row_count" in result.get("data", {}):
+                result["row_count"] = result["data"]["row_count"]
         # Backward-compat: keep legacy source tag
         if result.get("source") == "nl_to_sql_agent":
             result["source"] = "nl_to_sql"

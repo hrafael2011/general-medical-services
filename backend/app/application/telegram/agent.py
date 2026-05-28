@@ -157,7 +157,7 @@ def _fetch_rank_values(session) -> str:
 
 def _looks_like_data_request(text: str) -> bool:
     """Return True when the user appears to be asking for system data."""
-    return all(pattern.search(text) for pattern in _DATA_REQUEST_PATTERNS)
+    return any(pattern.search(text) for pattern in _DATA_REQUEST_PATTERNS)
 
 
 def _looks_like_followup(text: str) -> bool:

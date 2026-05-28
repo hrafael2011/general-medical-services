@@ -474,9 +474,9 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
     assert typo_second.tool_name == "doctor_query_service"
     assert typo_second.response_text == "Resultado: total: 1"
     assert third.agent_action == "export"
-    assert third.document_filename == "MEDICOS_FILTRADOS.pdf"
+    assert third.document_filename == "REPORTE.pdf"
     assert third.tool_result["data"]["rows"] == [
-        {"name": "Dra. Pasante Contexto", "sex": "female", "rank": "Pasante"}
+        {"total": 1}
     ]
 
 

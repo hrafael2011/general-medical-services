@@ -103,6 +103,7 @@ def test_data_request_reply_uses_query_executor_when_available(db_session):
     llm = SequentialLLM([
         '{"action": "reply", "response_text": "Resultado: total: 0"}',
         "SELECT COUNT(*) AS total FROM doctors",
+        '{"verdict": "correct", "reason": "OK"}',
     ])
     agent = ConversationalAgent(
         llm=llm,
