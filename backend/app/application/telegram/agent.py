@@ -1,18 +1,16 @@
 """Conversational agent — translates natural language to system commands.
 
 Architecture:
-  1. Single LLM call translates user message to {action, query_type, params}
-  2. IntentRouter executes pre-registered queries (fast path)
+  1. IntentClassifier (LLM) classifies user intent
+  2. Route to SemanticLayer, DoctorQuery, CalendarQuery, or IntentRouter
   3. QueryExecutor fallback for unregistered questions (slow path)
-  4. ToolGateway kept for backward compatibility with old-format responses
 """
 
 import json
 import logging
 import re
 import time
-from calendar import monthrange
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 
 from backend.app.application.telegram.intent_classifier import (
@@ -25,45 +23,9 @@ from backend.app.application.telegram.memory import MemoryManager, SessionState,
 from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.sanitize import format_rows as shared_format_rows
 from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
-from backend.app.application.telegram.tools import ToolGateway
 from backend.app.application.telegram.types import AgentResult
 
 logger = logging.getLogger(__name__)
-
-# Patterns that suggest hallucinated data in reply text
-_HALLUCINATION_PATTERNS = [
-    re.compile(r"\bResultado:\s*total\s*:\s*\d+\b", re.IGNORECASE),
-    # "Tienes N doctores/medicos/..." or "hay N medicos/..."
-    re.compile(
-        r"(?:tienes?|hay)\s+\d+\s+"
-        r"(?:doctor(?:es)?|asignac(?:ion|iones)|medicos?|servicios?)",
-        re.IGNORECASE,
-    ),
-    # Specific doctor name patterns (Dr. / Dra. + capitalized name)
-    re.compile(r"(?:Dr\.?|Dra\.?)\s+[A-ZÁÉÍÓÚ][a-záéíóú]+", re.IGNORECASE),
-]
-
-
-def _reply_has_hallucination(text: str) -> bool:
-    """Check if *text* contains hallucination patterns."""
-    for pattern in _HALLUCINATION_PATTERNS:
-        if pattern.search(text):
-            return True
-    return False
-
-
-_DATA_REQUEST_PATTERNS = [
-    re.compile(
-        r"\b(cuant[oa]s?|cauant[oa]s?|lista|dame|muestra|mu[eé]strame|"
-        r"exporta|esporta|reporte|pdf|excel)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(m[eé]dicos?|doctores?|cabos?|sargentos?|pasantes?|turnos?|servicios?)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\bmisi[oó]n(?:es)?\b", re.IGNORECASE),
-]
 
 _FOLLOWUP_PATTERNS = [
     re.compile(
@@ -116,49 +78,6 @@ _MONTH_NAME_TO_NUMBER = {
     "diciembre": 12,
 }
 
-_WEEK_ORDINAL_TO_NUMBER = {
-    "primera": 1,
-    "primer": 1,
-    "primea": 1,
-    "segunda": 2,
-    "seguna": 2,
-    "tercera": 3,
-    "cuarta": 4,
-    "quinta": 5,
-}
-
-
-def _fetch_rank_values(session) -> str:
-    """Query the DB for all rank normalized_names and format for the system prompt.
-
-    Returns an empty string if session is None or query fails, so the prompt
-    still works even without DB access (e.g. in tests).
-    """
-    if session is None:
-        return ""
-    try:
-        from sqlalchemy import text as sa_text
-
-        result = session.execute(
-            sa_text(
-                "SELECT normalized_name FROM ranks "
-                "WHERE active = TRUE ORDER BY name"
-            )
-        )
-        vals = [row[0] for row in result.fetchall()]
-        if not vals:
-            return ""
-        formatted = ", ".join(f"'{v}'" for v in vals)
-        return f"- ranks.normalized_name usa valores en minusculas:\n  {formatted}"
-    except Exception:
-        return ""
-
-
-def _looks_like_data_request(text: str) -> bool:
-    """Return True when the user appears to be asking for system data."""
-    return any(pattern.search(text) for pattern in _DATA_REQUEST_PATTERNS)
-
-
 def _looks_like_followup(text: str) -> bool:
     """Return True for short contextual follow-up requests."""
     return any(pattern.search(text) for pattern in _FOLLOWUP_PATTERNS)
@@ -183,248 +102,6 @@ def _extract_month_year(text: str) -> tuple[int, int] | None:
     return month, year
 
 
-def _calendar_assignment_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    """Map clear monthly assignment questions to safe registered queries."""
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-
-    mentions_assignment = re.search(
-        r"\b(asignad[oa]s?|servicios?|turnos?)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-    if not mentions_assignment or not mentions_doctors:
-        return None
-
-    month, year = period
-    params = {"month": month, "year": year}
-
-    if re.search(r"\b(no|sin)\s+(?:fueron\s+)?asignad", normalized, re.IGNORECASE):
-        return "unassigned_doctors_by_month", params
-    if re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE):
-        return "count_assigned_doctors_by_month", params
-    if re.search(r"\b(lista|listado|dame|muestra|mu[eé]strame|dime|di)\b", normalized, re.IGNORECASE):
-        return "list_assigned_doctors_by_month", params
-    return None
-
-
-_WEEKDAY_TO_NUMBER = {
-    "lunes": 0,
-    "martes": 1,
-    "miercoles": 2,
-    "miércoles": 2,
-    "jueves": 3,
-    "viernes": 4,
-    "sabado": 5,
-    "sábado": 5,
-    "domingo": 6,
-}
-
-_ORDINAL_TO_NUMBER = {
-    "primer": 1,
-    "primea": 1,
-    "primera": 1,
-    "segundo": 2,
-    "seguna": 2,
-    "segunda": 2,
-    "tercer": 3,
-    "tercera": 3,
-    "cuarto": 4,
-    "cuarta": 4,
-    "quinto": 5,
-    "quinta": 5,
-}
-
-
-def _specific_weekday_query_intent(text: str) -> tuple[str, dict[str, str]] | None:
-    """Map 'primer lunes de mayo' to a specific date query."""
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-
-    month, year = period
-
-    # Match patterns like: "primer lunes de mayo", "segundo martes de junio"
-    match = re.search(
-        r"\b(primer|primea|primera|segundo|seguna|segunda|tercer|tercera|cuarto|cuarta|quinto|quinta)\s+"
-        r"(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    if not match:
-        return None
-
-    ordinal_str = match.group(1).lower()
-    weekday_str = match.group(2).lower()
-
-    ordinal = _ORDINAL_TO_NUMBER.get(ordinal_str)
-    target_weekday = _WEEKDAY_TO_NUMBER.get(weekday_str)
-    if ordinal is None or target_weekday is None:
-        return None
-
-    mentions_assignment = re.search(
-        r"\b(asignad[oa]s?|servicios?|turnos?|calendario|trabajaron?|estuvieron?|hcieron|hicieron)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-    if not mentions_assignment and not mentions_doctors:
-        return None
-
-    # Calculate the date of the Nth occurrence of the weekday in the month
-    first_weekday, days_in_month = monthrange(year, month)
-    # first_weekday is the weekday of the 1st of the month (0=Monday)
-    # Days from the 1st until the first occurrence of target_weekday
-    days_until_first = (target_weekday - first_weekday) % 7
-    first_occurrence = 1 + days_until_first
-    target_day = first_occurrence + (ordinal - 1) * 7
-
-    if target_day > days_in_month:
-        return None
-
-    target_date = date(year, month, target_day)
-    return "doctors_working_date", {"date": target_date.isoformat()}
-
-
-def _calendar_service_query_intent(
-    text: str,
-    session_state: SessionState | None = None,
-) -> tuple[str, dict[str, Any]] | None:
-    """Map calendar questions to deterministic CalendarQueryService calls."""
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-
-    if period is not None:
-        month, year = period
-        week_match = re.search(
-            r"\b(primera|primer|primea|segunda|seguna|tercera|cuarta|quinta)\s+semana\b",
-            normalized,
-            re.IGNORECASE,
-        )
-        if week_match is None:
-            week_match = re.search(
-                r"\bsemana\s+(primera|primer|primea|segunda|seguna|tercera|cuarta|quinta)\b",
-                normalized,
-                re.IGNORECASE,
-            )
-        mentions_calendar_assignments = re.search(
-            r"\b(calendario|servicio|servicios|turno|turnos|asignad[oa]s?|incluid[oa]s?)\b",
-            normalized,
-            re.IGNORECASE,
-        )
-        mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-        if week_match and (mentions_calendar_assignments or mentions_doctors):
-            week_number = _WEEK_ORDINAL_TO_NUMBER[week_match.group(1).lower()]
-            start_day = ((week_number - 1) * 7) + 1
-            last_day = monthrange(year, month)[1]
-            if start_day > last_day:
-                return None
-            end_day = min(start_day + 6, last_day)
-            return (
-                "list_calendar_assignments_by_date_range",
-                {
-                    "start_date": date(year, month, start_day).isoformat(),
-                    "end_date": date(year, month, end_day).isoformat(),
-                },
-            )
-        if (
-            mentions_calendar_assignments
-            and mentions_doctors
-            and re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE)
-        ):
-            return "count_assigned_doctors_by_month", {"year": year, "month": month}
-
-    if session_state is None or session_state.last_domain != "calendar_assignments":
-        return None
-    if not _looks_like_followup(normalized):
-        return None
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-    month, detected_year = period
-    explicit_year = re.search(r"\b(20\d{2})\b", normalized)
-    previous_period = session_state.last_period or {}
-    year = detected_year if explicit_year else int(previous_period.get("year") or detected_year)
-
-    if session_state.last_query_type == "list_calendar_assignments_by_date_range":
-        start_date = previous_period.get("start_date")
-        end_date = previous_period.get("end_date")
-        if not start_date or not end_date:
-            return None
-        previous_start = date.fromisoformat(str(start_date))
-        previous_end = date.fromisoformat(str(end_date))
-        last_day = monthrange(year, month)[1]
-        start_day = min(previous_start.day, last_day)
-        end_day = min(previous_end.day, last_day)
-        return (
-            "list_calendar_assignments_by_date_range",
-            {
-                "start_date": date(year, month, start_day).isoformat(),
-                "end_date": date(year, month, end_day).isoformat(),
-            },
-        )
-    if session_state.last_query_type == "count_assigned_doctors_by_month":
-        return "count_assigned_doctors_by_month", {"year": year, "month": month}
-    return None
-
-
-def _mission_ranking_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    """Map mission ranking questions to the registered deterministic query."""
-    normalized = text.lower()
-    if not re.search(r"\branking\b", normalized, re.IGNORECASE):
-        return None
-    if not re.search(r"\bmision(?:es)?\b", normalized, re.IGNORECASE):
-        return None
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-    month, year = period
-    return "mission_ranking", {"year": year, "month": month}
-
-
-def _active_missions_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    """Map active mission questions to the registered deterministic query."""
-    normalized = text.lower()
-    if not re.search(r"\bmisi[oó]n(?:es)?\b", normalized, re.IGNORECASE):
-        return None
-    if re.search(r"\branking\b", normalized, re.IGNORECASE):
-        return None
-    if not re.search(
-        r"\b(activa?s?|vigentes?|programadas?|creadas?|confirmadas?)\b",
-        normalized,
-        re.IGNORECASE,
-    ):
-        return None
-    return "list_active_missions", {}
-
-
-def _looks_like_contextual_export(text: str) -> bool:
-    """Return True for requests to export the previous result/listing."""
-    normalized = text.lower()
-    if re.search(
-        r"\b(exportalo|exportalos|exportarlo|exportarlos|"
-        r"esportalo|esportalos|esportarlo|esportarlos)\b",
-        normalized,
-    ):
-        return True
-    asks_export = re.search(
-        r"\b(exporta|exportar|exportalo|exportalos|exportarlo|exportarlos|"
-        r"esporta|esportar|esportalo|esportalos|reporte|pdf|excel|xlsx)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    references_context = re.search(
-        r"\b(eso|esa|ese|esos|esas|listado|lista|resultado|resultados|anterior)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    return bool(asks_export and references_context)
-
-
 def _count_filter_dims(entity_hints: str) -> int:
     """Count how many filter dimensions are present in entity hints."""
     if not entity_hints:
@@ -437,46 +114,6 @@ def _count_filter_dims(entity_hints: str) -> int:
             dims_seen.add(_FILTER_DIM_ALIASES.get(key, key))
     return len(dims_seen)
 
-_SYSTEM_PROMPT = """\
-Eres un asistente de un sistema de gestion de turnos medicos.
-Traduce el mensaje del usuario a un comando del sistema.
-
-CONSULTAS DISPONIBLES:
-{query_types}
-
-ACCIONES:
-- query: Ejecutar una consulta para obtener datos del sistema.
-- export: Exportar datos a PDF o Excel (cuando piden "reporte", "pdf", "excel").
-- reply: Responder directamente (saludos, conversacion general, preguntas fuera del sistema).
-- ambiguous: Cuando la consulta no esta clara o falta informacion necesaria.
-
-FORMATO DE EXPORT:
-- Incluye "format": "excel" cuando el usuario pide especificamente Excel, XLSX u hoja de calculo.
-- Incluye "format": "pdf" cuando pide PDF o no especifica formato.
-- Si pide "reporte" sin formato, no incluyas el campo format (se usa PDF por defecto).
-
-VALORES EXACTOS de columnas (usa estos siempre):
-- doctors.sex usa 'male' (masculino) y 'female' (femenino)
-{rank_values}
-
-Responde UNICAMENTE con JSON en este formato:
-{{"action": "query|export|reply|ambiguous", "query_type": "nombre_consulta",
-"params": {{...}}, "response_text": "...", "format": "pdf|excel"}}
-
-REGLAS:
-- Para query/export: elige el query_type mas adecuado de CONSULTAS DISPONIBLES.
-- Para reply/ambiguous: incluye response_text con tu respuesta directa.
-- Usa los valores EXACTOS de parametros indicados arriba.
-- Responde en el MISMO IDIOMA del usuario.
-REGLAS PARA action=reply:
-- NUNCA inventes nombres de medicos, cantidades, ni estadisticas.
-- NUNCA digas 'tienes X medicos' o 'hay Y servicios' a menos que
-  los datos vengan de una consulta SQL ejecutada (action=query).
-- Si no estas seguro, usa action=ambiguous y pide clarificacion.
-- En modo reply, solo describe tus capacidades en terminos generales.
-- NO menciones nombres especificos de doctores a menos que vengan de la BD.
-Sin explicaciones ni markdown.
-"""
 
 
 def _format_rows(rows: list[dict], columns: list[str]) -> str:
@@ -492,7 +129,6 @@ class ConversationalAgent:
         llm: LLMProvider,
         router: IntentRouter,
         query_executor: QueryExecutor | None = None,
-        tools: ToolGateway | None = None,
         memory: MemoryManager | None = None,
         session_store: SessionStore | None = None,
         entity_resolver = None,
@@ -505,7 +141,6 @@ class ConversationalAgent:
         self._llm = llm
         self._router = router
         self._query_executor = query_executor
-        self._tools = tools
         self._memory = memory
         self._session_store = session_store
         self._entity_resolver = entity_resolver
@@ -519,40 +154,6 @@ class ConversationalAgent:
     # Prompt building
     # ------------------------------------------------------------------
 
-    def _build_system_prompt(self, user_info: dict | None = None, entity_hints: str = "") -> str:
-        query_types_lines = []
-        for entry in self._router.registry.list_all():
-            params_str = (
-                ", ".join(f"{k}: {v}" for k, v in entry["params_schema"].items())
-                or "ninguno"
-            )
-            query_types_lines.append(
-                f"- {entry['query_type']}: {entry['description']} "
-                f"Params: {params_str}"
-            )
-
-        # Fetch available ranks from DB for dynamic prompt
-        rank_vals = _fetch_rank_values(self._session)
-
-        prompt = _SYSTEM_PROMPT.format(
-            query_types="\n".join(query_types_lines),
-            rank_values=rank_vals,
-        )
-
-        if entity_hints:
-            prompt += (
-                f"\n\nENTIDADES DETECTADAS:\n{entity_hints}\n"
-                f"Usa estos IDs/valores reales para generar parametros, no los nombres textuales."
-            )
-
-        if user_info:
-            prompt += (
-                f"\n\nInformacion del usuario:\n"
-                f"Nombre: {user_info.get('name', 'Desconocido')}\n"
-                f"Rol: {user_info.get('role', 'Desconocido')}\n"
-            )
-
-        return prompt
 
     # ------------------------------------------------------------------
     # Intent classification
@@ -593,21 +194,6 @@ class ConversationalAgent:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract_json(text: str) -> dict | None:
-        """Extract JSON from LLM response, handling markdown code blocks."""
-        text = text.strip()
-        code_block = re.search(
-            r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL
-        )
-        if code_block:
-            text = code_block.group(1)
-
-        if text.startswith("{") and text.endswith("}"):
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError:
-                return None
-        return None
 
     # ------------------------------------------------------------------
     # Routing
@@ -863,40 +449,6 @@ class ConversationalAgent:
         )
         self._session_store.set(telegram_user_id, state)
 
-    def _calendar_followup_query_intent(
-        self,
-        text: str,
-        telegram_user_id: str | None,
-    ) -> tuple[str, dict[str, int]] | None:
-        """Reuse the previous calendar assignment question for month follow-ups."""
-        if self._session_store is None or telegram_user_id is None:
-            return None
-        try:
-            state = self._session_store.get(telegram_user_id)
-        except Exception:
-            logger.warning("Failed to load Telegram session state", exc_info=True)
-            return None
-        if state is None or state.last_domain != "calendar_assignments":
-            return None
-        if state.last_query_type not in {
-            "count_assigned_doctors_by_month",
-            "list_assigned_doctors_by_month",
-            "unassigned_doctors_by_month",
-        }:
-            return None
-
-        period = _extract_month_year(text)
-        if period is None:
-            return None
-        month, detected_year = period
-        explicit_year = re.search(r"\b(20\d{2})\b", text)
-        previous_period = state.last_period or {}
-        year = (
-            detected_year
-            if explicit_year
-            else int(previous_period.get("year") or detected_year)
-        )
-        return state.last_query_type, {"year": year, "month": month}
 
     def _mission_contextual_followup_result(
         self,
@@ -1006,53 +558,6 @@ class ConversationalAgent:
             },
         )
 
-    def _contextual_export_result(
-        self,
-        text: str,
-        telegram_user_id: str | None,
-    ) -> AgentResult | None:
-        """Export the last operational result when the user says 'ese listado'."""
-        if not _looks_like_contextual_export(text):
-            return None
-        if self._session_store is None or telegram_user_id is None:
-            return None
-        try:
-            state = self._session_store.get(telegram_user_id)
-        except Exception:
-            logger.warning("Failed to load Telegram session state", exc_info=True)
-            return None
-        if state is None or not state.last_results:
-            return None
-
-        rows = state.last_results
-        columns = list(rows[0].keys()) if rows and isinstance(rows[0], dict) else []
-        if not rows or not columns:
-            return None
-
-        fmt = "excel" if re.search(r"\b(excel|xlsx|xls)\b", text, re.IGNORECASE) else "pdf"
-        query_type = state.last_query_type or "contextual_export"
-        try:
-            result = self._router._build_document(rows, columns, fmt, query_type)  # noqa: SLF001
-        except Exception:
-            logger.warning("Contextual export failed", exc_info=True)
-            return None
-
-        result.agent_action = "export"
-        result.tool_name = state.last_tool_name or "contextual_export"
-        result.tool_entities = {
-            "operation": "contextual_export",
-            "query_type": query_type,
-            "format": fmt,
-            "reused_last_result": True,
-        }
-        result.tool_result = {
-            "ok": True,
-            "source": "session_context",
-            "query_type": query_type,
-            "row_count": len(rows),
-            "data": {"columns": columns, "rows": rows},
-        }
-        return result
 
     def _filters_from_query_context(
         self,
@@ -1128,100 +633,6 @@ class ConversationalAgent:
     # Backward-compat handler for old-format LLM responses
     # ------------------------------------------------------------------
 
-    def _handle_old_tool_format(
-        self,
-        parsed: dict,
-        user_text: str,
-        actor_id: str | None = None,
-    ) -> AgentResult:
-        """Handle legacy {action: 'call_tool', tool: '...', entities: {...}}."""
-        tool_name = parsed.get("tool", "")
-        entities = dict(parsed.get("entities", {}))
-        # Inject actor_id for write operations (create_mission, etc.)
-        if actor_id:
-            entities["_actor_id"] = actor_id
-
-        if self._tools is None:
-            return AgentResult(
-                response_text="No tengo informacion sobre eso en el sistema."
-            )
-
-        result = self._tools.execute(tool_name, entities)
-
-        if not result.get("ok"):
-            error = result.get("error", "")
-            if error == "out_of_domain":
-                return AgentResult(
-                    response_text="No tengo informacion sobre eso en el sistema.",
-                    agent_action="call_tool",
-                    tool_name=tool_name,
-                    tool_entities=entities,
-                    tool_result=result,
-                )
-            return AgentResult(
-                response_text="Ocurrio un error al consultar los datos. Intenta de nuevo.",
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        data = result["data"]
-
-        # Two-step confirmation flow
-        if isinstance(data, dict) and data.get("requires_confirmation"):
-            return AgentResult(
-                response_text=data.get("message", "Confirma la accion para continuar."),
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        # Document response (PDF/Excel)
-        document_bytes = result.get("document_bytes")
-        document_filename = result.get("document_filename")
-        if document_bytes and document_filename:
-            return AgentResult(
-                response_text="Aqui tienes el reporte solicitado.",
-                document_bytes=document_bytes,
-                document_filename=document_filename,
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        # Plain data — format via LLM (legacy 2nd call)
-        data_str = json.dumps(data, ensure_ascii=False, default=str)
-        format_prompt = (
-            "Con los siguientes datos del sistema de turnos medicos, "
-            "genera una respuesta natural y amigable para el medico.\n\n"
-            f"DATOS:\n{data_str}\n\n"
-            f"Pregunta original: {user_text}\n\n"
-            "Responde en el mismo idioma que la pregunta original, "
-            "de forma clara y concisa."
-        )
-        format_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Eres un asistente amable que explica datos del sistema "
-                    "de turnos medicos. Responde en el mismo idioma "
-                    "de la pregunta original, de forma clara y concisa."
-                ),
-            },
-            {"role": "user", "content": format_prompt},
-        ]
-
-        response = self._llm.chat_complete(format_messages, temperature=0.3)
-        return AgentResult(
-            response_text=response.strip(),
-            agent_action="call_tool",
-            tool_name=tool_name,
-            tool_entities=entities,
-            tool_result=result,
-        )
 
     # ------------------------------------------------------------------
     # Main entry point
