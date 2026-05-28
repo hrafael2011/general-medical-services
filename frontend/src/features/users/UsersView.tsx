@@ -347,9 +347,9 @@ export function UsersView() {
                     <tr>
                       <td colSpan={5} style={{ padding: "8px 12px", background: "#f9fafb" }}>
                         {editRole === "admin" ? (
-                          <span style={{ fontSize: "0.8rem", color: "#666" }}>
-                            Los administradores tienen acceso completo.
-                          </span>
+                          <p style={{ color: "#64748b", fontSize: "0.85rem", fontStyle: "italic", margin: 0 }}>
+                            Los administradores tienen acceso completo a todas las funciones del sistema.
+                          </p>
                         ) : (
                           <div>
                             <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "4px" }}>Permisos</label>
