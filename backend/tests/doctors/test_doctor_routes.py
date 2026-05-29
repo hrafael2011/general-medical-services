@@ -168,7 +168,7 @@ def test_create_doctor_success(client, mock_service):
 
     resp = client.post(
         "/api/doctors",
-        json={"first_name": "Juan", "last_name": "Pérez", "sex": "male"},
+        json={"first_name": "Juan", "last_name": "Pérez", "sex": "male", "whatsapp_phone": "+584141234567"},
     )
     assert resp.status_code == 201
     assert resp.json()["first_name"] == "Juan"

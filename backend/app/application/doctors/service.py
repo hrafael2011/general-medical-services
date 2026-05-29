@@ -328,6 +328,7 @@ class DoctorService:
                                 "rank_name": ranks.get(doctor.rank_id),
                                 "department_name": depts.get(doctor.department_id),
                                 "phone": doctor.phone,
+                                "whatsapp_phone": doctor.whatsapp_phone,
                                 "recurring_tag": None,
                             })
                             days[dow]["count"] = len(days[dow]["doctors"])
@@ -350,6 +351,7 @@ class DoctorService:
                             "rank_name": ranks.get(doctor.rank_id),
                             "department_name": depts.get(doctor.department_id),
                             "phone": doctor.phone,
+                            "whatsapp_phone": doctor.whatsapp_phone,
                             "recurring_tag": tag,
                         })
                         days[dow]["count"] = len(days[dow]["doctors"])

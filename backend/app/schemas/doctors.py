@@ -37,7 +37,7 @@ class CreateDoctorRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
     service_active: bool = True
     participa_misiones: bool = True
-    whatsapp_phone: str | None = Field(default=None, max_length=40)
+    whatsapp_phone: str = Field(..., max_length=40)
     monthly_service_target: int = Field(default=3, ge=0)
     monthly_service_max: int = Field(default=3, ge=0)
     monthly_service_limit_mode: str = Field(default="warn_only", pattern="^(warn_only|hard_limit)$")
@@ -88,6 +88,7 @@ class DoctorByDayItem(BaseModel):
     rank_name: str | None = None
     department_name: str | None = None
     phone: str | None = None
+    whatsapp_phone: str | None = None
     recurring_tag: str | None = None
 
     model_config = {"from_attributes": True}

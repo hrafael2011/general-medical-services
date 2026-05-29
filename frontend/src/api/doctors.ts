@@ -127,6 +127,7 @@ export interface DoctorByDayItem {
   rank_name: string | null;
   department_name: string | null;
   phone: string | null;
+  whatsapp_phone: string | null;
   recurring_tag: string | null;
 }
 
