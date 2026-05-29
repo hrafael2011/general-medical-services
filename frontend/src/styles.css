@@ -1605,6 +1605,8 @@ select {
 
 .perm-check input {
   accent-color: #075985;
+  width: auto;
+  min-height: auto;
 }
 
 /* ===== Form section helpers ===== */
