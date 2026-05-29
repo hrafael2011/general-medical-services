@@ -29,12 +29,6 @@ export interface NotificationListResponse {
   total: number;
 }
 
-export interface ProcessNotificationsResponse {
-  sent: number;
-  failed: number;
-  skipped: number;
-}
-
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -47,6 +41,4 @@ export const notificationsApi = {
     const qs = params.toString();
     return apiFetch<NotificationListResponse>(`/notifications${qs ? `?${qs}` : ""}`);
   },
-  process: () =>
-    apiFetch<ProcessNotificationsResponse>("/notifications/process", { method: "POST" }),
 };
