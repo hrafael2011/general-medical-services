@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Hand } from "lucide-react";
 
 interface WelcomeToastProps {
@@ -9,19 +9,18 @@ interface WelcomeToastProps {
 export function WelcomeToast({ userName, onDone }: WelcomeToastProps) {
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
-    // Trigger enter animation on next frame
     const enterTimer = requestAnimationFrame(() => setVisible(true));
 
-    // Start exit after 5s
     const exitTimer = setTimeout(() => {
       setExiting(true);
     }, 5000);
 
-    // Fire onDone after exit animation completes (600ms)
     const doneTimer = setTimeout(() => {
-      onDone();
+      onDoneRef.current();
     }, 5600);
 
     return () => {
@@ -29,7 +28,7 @@ export function WelcomeToast({ userName, onDone }: WelcomeToastProps) {
       clearTimeout(exitTimer);
       clearTimeout(doneTimer);
     };
-  }, [onDone]);
+  }, []);
 
   return (
     <div className={`welcome-toast ${visible ? "welcome-toast--visible" : ""} ${exiting ? "welcome-toast--exit" : ""}`}>
