@@ -755,7 +755,10 @@ class ConversationalAgent:
             if self._tool_registry is not None:
                 handler = self._tool_registry.get(tool_name)
                 if handler is not None:
-                    return handler(**params)
+                    result = handler(**params)
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+                    return None
 
             # Doctor tools
             if tool_name in ("list_doctors", "count_doctors", "doctors_by_sex",
