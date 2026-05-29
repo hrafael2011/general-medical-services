@@ -58,13 +58,14 @@ def seed_doctor(engine):
         sex="male",
         rank_id=None,
         department_id=None,
-        whatsapp_phone="123456789",
+        phone="123456789",
         notes=None,
         active=True,
         service_active=True,
         service_inactive_reason_id=None,
         service_inactive_detail=None,
         participa_misiones=True,
+        whatsapp_phone=None,
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",
@@ -104,9 +105,9 @@ def _make_doctor(**overrides) -> DoctorModel:
     fields = dict(
         id=str(uuid4()), first_name=None, last_name=None,
         name="Dr. Default", normalized_name="dr. default", sex="male",
-        rank_id=None, department_id=None, notes=None,
+        rank_id=None, department_id=None, phone=None, notes=None,
         active=True, service_active=True, service_inactive_reason_id=None,
-        service_inactive_detail=None, participa_misiones=True, whatsapp_phone="+18095551234",
+        service_inactive_detail=None, participa_misiones=True, whatsapp_phone=None,
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
@@ -167,7 +168,7 @@ def test_create_doctor_success(client, mock_service):
 
     resp = client.post(
         "/api/doctors",
-        json={"first_name": "Juan", "last_name": "Pérez", "sex": "male", "whatsapp_phone": "+18095551234"},
+        json={"first_name": "Juan", "last_name": "Pérez", "sex": "male", "whatsapp_phone": "+584141234567"},
     )
     assert resp.status_code == 201
     assert resp.json()["first_name"] == "Juan"

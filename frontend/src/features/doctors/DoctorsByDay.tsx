@@ -118,7 +118,7 @@ export function DoctorsByDay() {
                       <th>Nombre</th>
                       <th>Rango</th>
                       <th>Departamento</th>
-                      <th>Teléfono</th>
+                      <th>WhatsApp</th>
                     </tr>
                   </thead>
                   <tbody>

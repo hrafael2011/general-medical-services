@@ -129,7 +129,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
       first_name: cleanFirstName,
       last_name: cleanLastName,
       name: fullName,
-      sex, whatsapp_phone: phone, participa_misiones: participaMisiones,
+      sex, whatsapp_phone: phone.trim(), participa_misiones: participaMisiones,
       rank_id: rankId || null,
       department_id: departmentId || null,
       availability_mode: availabilityMode,
@@ -231,8 +231,8 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
           <div className="form-row">
             <label>
-              WhatsApp
-              <input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="+18095551234" />
+              WhatsApp *
+              <input required value={phone} onChange={e => setPhone(e.target.value)} />
             </label>
           </div>
 

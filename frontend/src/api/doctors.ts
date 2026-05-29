@@ -4,12 +4,12 @@ export interface DoctorRead {
   id: string; first_name?: string | null; last_name?: string | null;
   name: string; sex: string;
   rank_id: string | null; department_id: string | null;
-  notes: string | null;
+  phone: string | null; notes: string | null;
   active: boolean; service_active: boolean;
   service_inactive_reason_id: string | null;
   service_inactive_detail: string | null;
   participa_misiones: boolean;
-  whatsapp_phone: string;
+  whatsapp_phone: string | null;
   monthly_service_target: number; monthly_service_max: number;
   monthly_service_limit_mode: string; availability_mode: string;
   allowed_area_ids: string[];
@@ -21,10 +21,10 @@ export interface CreateDoctorPayload {
   first_name?: string | null; last_name?: string | null;
   name?: string; sex: string;
   rank_id?: string | null; department_id?: string | null;
-  notes?: string | null;
+  phone?: string | null; notes?: string | null;
   participa_misiones: boolean;
   service_active?: boolean;  // <-- ADD THIS
-  whatsapp_phone: string;
+  whatsapp_phone?: string | null;
   monthly_service_target: number; monthly_service_max: number;
   monthly_service_limit_mode: string; availability_mode: string;
   allowed_area_ids: string[];
@@ -126,6 +126,7 @@ export interface DoctorByDayItem {
   name: string;
   rank_name: string | null;
   department_name: string | null;
+  phone: string | null;
   whatsapp_phone: string | null;
   recurring_tag: string | null;
 }

@@ -66,10 +66,11 @@ class DoctorService:
         last_name: str | None = None,
         rank_id: str | None = None,
         department_id: str | None = None,
+        phone: str | None = None,
         notes: str | None = None,
         participa_misiones: bool = True,
         service_active: bool = True,
-        whatsapp_phone: str,
+        whatsapp_phone: str | None = None,
         monthly_service_target: int = 3,
         monthly_service_max: int = 3,
         monthly_service_limit_mode: str = "warn_only",
@@ -111,13 +112,14 @@ class DoctorService:
             sex=sex,
             rank_id=rank_id,
             department_id=department_id,
+            phone=_strip_html(phone),
             notes=_strip_html(notes),
             active=True,
             service_active=service_active,
             service_inactive_reason_id=None,
             service_inactive_detail=None,
             participa_misiones=participa_misiones,
-            whatsapp_phone=_strip_html(whatsapp_phone),
+            whatsapp_phone=whatsapp_phone,
             monthly_service_target=monthly_service_target,
             monthly_service_max=monthly_service_max,
             monthly_service_limit_mode=monthly_service_limit_mode,
@@ -144,6 +146,7 @@ class DoctorService:
         sex: str | None = None,
         rank_id: str | None | object = _MISSING,
         department_id: str | None | object = _MISSING,
+        phone: str | None | object = _MISSING,
         notes: str | None | object = _MISSING,
         participa_misiones: bool | None = None,
         service_active: bool | None = None,
@@ -241,6 +244,9 @@ class DoctorService:
         if department_id is not _MISSING:
             doctor.department_id = department_id
             changed_fields["department_id"] = department_id
+        if phone is not _MISSING:
+            doctor.phone = _strip_html(phone)
+            changed_fields["phone"] = doctor.phone
         if notes is not _MISSING:
             doctor.notes = _strip_html(notes)
             changed_fields["notes"] = doctor.notes
@@ -321,6 +327,7 @@ class DoctorService:
                                 "name": doctor.name,
                                 "rank_name": ranks.get(doctor.rank_id),
                                 "department_name": depts.get(doctor.department_id),
+                                "phone": doctor.phone,
                                 "whatsapp_phone": doctor.whatsapp_phone,
                                 "recurring_tag": None,
                             })
@@ -343,6 +350,7 @@ class DoctorService:
                             "name": doctor.name,
                             "rank_name": ranks.get(doctor.rank_id),
                             "department_name": depts.get(doctor.department_id),
+                            "phone": doctor.phone,
                             "whatsapp_phone": doctor.whatsapp_phone,
                             "recurring_tag": tag,
                         })

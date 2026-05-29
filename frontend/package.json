@@ -29,6 +29,7 @@
     "@types/react-dom": "latest",
     "eslint": "latest",
     "jsdom": "latest",
+    "playwright": "^1.60.0",
     "typescript-eslint": "latest",
     "vitest": "latest"
   }

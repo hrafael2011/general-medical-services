@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from backend.app.domain.accounts import Permission
+
 
 class UserRead(BaseModel):
     id: str
@@ -46,6 +48,15 @@ class CreateEncargadoRequest(BaseModel):
     temporary_password: str | None = Field(default=None, min_length=10)
     permissions: list[str] = Field(default=[])
 
+    @field_validator("permissions")
+    @classmethod
+    def validate_permissions(cls, v: list[str]) -> list[str]:
+        valid = set(p.value for p in Permission)
+        invalid = [p for p in v if p not in valid]
+        if invalid:
+            raise ValueError(f"Permisos inválidos: {', '.join(invalid)}")
+        return v
+
 
 class TemporaryPasswordResponse(BaseModel):
     user: UserRead
@@ -61,6 +72,17 @@ class UpdateUserRequest(BaseModel):
     role: str | None = Field(default=None, pattern=r"^(admin|encargado)$")
     active: bool | None = None
     permissions: list[str] | None = None
+
+    @field_validator("permissions")
+    @classmethod
+    def validate_permissions(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        valid = set(p.value for p in Permission)
+        invalid = [p for p in v if p not in valid]
+        if invalid:
+            raise ValueError(f"Permisos inválidos: {', '.join(invalid)}")
+        return v
 
 
 class ForgotPasswordRequest(BaseModel):
