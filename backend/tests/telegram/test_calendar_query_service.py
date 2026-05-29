@@ -51,6 +51,7 @@ def _seed_doctor(session, name: str) -> DoctorModel:
         service_active=True,
         availability_mode="monthly",
         participa_misiones=True,
+        whatsapp_phone="0000000000",
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",

@@ -1,13 +1,17 @@
 """Tests for NL-to-SQL primary path and natural language response formatting."""
 from backend.app.application.telegram.agent import ConversationalAgent
+from backend.app.application.telegram.entity_resolver import EntityResolver
+from backend.app.application.telegram.intent_classifier import IntentClassifier
 from backend.app.application.telegram.types import AgentResult as AR
 
 
 class FakeLLMForNL:
     """Fake LLM that returns action=query for router path, then scripted SQL for fallback."""
 
+    name = "fake-nl"
+
     def __init__(self, intent_json="", sql_response="", format_response=""):
-        self.intent_json = intent_json or '{"action": "query", "query_type": "nonexistent"}'
+        self.intent_json = intent_json or '{"domain": "medicos", "action": "query", "query_type": "nonexistent", "metric": null, "params": {}, "confidence": 1.0, "response_text": null, "format": null}'
         self.sql_response = sql_response
         self.format_response = format_response
         self.calls = []
@@ -80,11 +84,18 @@ class FakeQueryExecutor:
 def test_router_not_found_triggers_nl_fallback():
     """When router returns 'No pude encontrar', QueryExecutor fallback runs."""
     llm = FakeLLMForNL(
-        intent_json='{"action": "query", "query_type": "nonexistent"}',
+        intent_json='{"domain": "medicos", "action": "query", "query_type": "nonexistent", "metric": null, "params": {}, "confidence": 1.0, "response_text": null, "format": null}',
         format_response="Tienes 15 medicos masculinos en el sistema.",
     )
     qe = FakeQueryExecutor(rows=[{"total": 15}], columns=["total"])
-    agent = ConversationalAgent(llm=llm, router=FakeRouterNotFound(), query_executor=qe)
+    classifier = IntentClassifier(llm)
+    agent = ConversationalAgent(
+        llm=llm,
+        router=FakeRouterNotFound(),
+        query_executor=qe,
+        intent_classifier=classifier,
+        entity_resolver=EntityResolver(session=None),
+    )
 
     result = agent.process("cuantos medicos masculinos hay")
     assert result.agent_action == "query_db"
@@ -95,15 +106,23 @@ def test_router_empty_results_triggers_nl_fallback():
     """When router returns empty results, QueryExecutor fallback is triggered."""
     llm = FakeLLMForNL(
         intent_json=(
-            '{"action": "query", "query_type": "count_by_specific_rank", '
-            '"params": {"rank": "cabo"}}'
+            '{"domain": "medicos", "action": "query", "query_type": "count_by_specific_rank", '
+            '"params": {"rank": "cabo"}, "metric": null, "confidence": 1.0, '
+            '"response_text": null, "format": null}'
         ),
         format_response="Tienes 8 cabos en el sistema.",
     )
     qe = FakeQueryExecutor(rows=[{"total": 8}], columns=["total"])
-    agent = ConversationalAgent(llm=llm, router=FakeRouterEmpty(), query_executor=qe)
+    classifier = IntentClassifier(llm)
+    agent = ConversationalAgent(
+        llm=llm,
+        router=FakeRouterEmpty(),
+        query_executor=qe,
+        intent_classifier=classifier,
+        entity_resolver=EntityResolver(session=None),
+    )
 
-    result = agent.process("cuantos cabos hay")
+    result = agent.process("cuantos cabos masculinos hay")
     assert result.agent_action == "query_db"
     assert "8" in result.response_text
 
@@ -111,13 +130,12 @@ def test_router_empty_results_triggers_nl_fallback():
 def test_entity_hints_passed_to_query_executor():
     """EntityResolver hints are forwarded to QueryExecutor for better SQL generation."""
     llm = FakeLLMForNL(
-        intent_json='{"action": "query", "query_type": "nonexistent"}',
+        intent_json='{"domain": "medicos", "action": "query", "query_type": "nonexistent", "metric": null, "params": {}, "confidence": 1.0, "response_text": null, "format": null}',
         sql_response="SELECT COUNT(*) AS total FROM doctors WHERE rank_id='r1'",
         format_response="Hay 8 cabos.",
     )
     qe = FakeQueryExecutor(rows=[{"total": 8}], columns=["total"])
-    from backend.app.application.telegram.entity_resolver import EntityResolver
-
+    classifier = IntentClassifier(llm)
     resolver = EntityResolver(session=None)
 
     agent = ConversationalAgent(
@@ -125,8 +143,9 @@ def test_entity_hints_passed_to_query_executor():
         router=FakeRouterNotFound(),
         query_executor=qe,
         entity_resolver=resolver,
+        intent_classifier=classifier,
     )
-    agent.process("cuantos cabos hay")
+    agent.process("cuantos cabos masculinos hay")
     # Entity hints should have been passed to QueryExecutor
     assert qe.last_entity_hints is not None
 
@@ -134,12 +153,19 @@ def test_entity_hints_passed_to_query_executor():
 def test_nl_empty_response_when_no_data():
     """When QueryExecutor returns no rows, LLM formats a natural explanation."""
     llm = FakeLLMForNL(
-        intent_json='{"action": "query", "query_type": "nonexistent"}',
+        intent_json='{"domain": "medicos", "action": "query", "query_type": "nonexistent", "metric": null, "params": {}, "confidence": 1.0, "response_text": null, "format": null}',
         format_response="No encontre ningun medico con ese nombre en la base de datos.",
     )
     qe = FakeQueryExecutor(rows=[], columns=["id", "name"])
-    agent = ConversationalAgent(llm=llm, router=FakeRouterNotFound(), query_executor=qe)
+    classifier = IntentClassifier(llm)
+    agent = ConversationalAgent(
+        llm=llm,
+        router=FakeRouterNotFound(),
+        query_executor=qe,
+        intent_classifier=classifier,
+        entity_resolver=EntityResolver(session=None),
+    )
 
-    result = agent.process("busca al doctor xyz")
+    result = agent.process("busca al doctor masculino xyz")
     assert result.agent_action == "query_db"
     assert "No encontre" in result.response_text

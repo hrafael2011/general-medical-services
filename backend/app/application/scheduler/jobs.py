@@ -66,7 +66,7 @@ def send_pre_service_reminders() -> dict:
     from backend.app.application.notifications.providers import FakeProvider
     from backend.app.infrastructure.db.models.doctors import DoctorModel
     from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
-    from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel
+    from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel, CalendarVersionModel
     from sqlalchemy import select as sa_select
 
     now = datetime.now(UTC)
@@ -76,8 +76,11 @@ def send_pre_service_reminders() -> dict:
     try:
         assignments = list(
             session.scalars(
-                sa_select(CalendarAssignmentModel).where(
-                    CalendarAssignmentModel.service_date == tomorrow
+                sa_select(CalendarAssignmentModel)
+                .join(CalendarVersionModel, CalendarAssignmentModel.calendar_version_id == CalendarVersionModel.id)
+                .where(
+                    CalendarAssignmentModel.service_date == tomorrow,
+                    CalendarVersionModel.deleted_at.is_(None),
                 )
             )
         )

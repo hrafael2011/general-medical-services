@@ -8,6 +8,7 @@ from backend.app.application.admin.trash_service import TrashService, TrashServi
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.audit import AuditRepository
+from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -20,6 +21,7 @@ def get_trash_service(session: Annotated[Session, Depends(get_db_session)]) -> T
         DoctorRepository(session),
         UserRepository(session),
         CatalogRepository(session),
+        calendars=CalendarRepository(session),
         audit=AuditRepository(session),
     )
 
@@ -52,6 +54,10 @@ def list_trash(
             data["normalized_name"] = getattr(item, "normalized_name", "")
         elif type == "deactivation_reasons":
             data["code"] = getattr(item, "code", "")
+        elif type == "calendars":
+            data["year"] = getattr(item, "year", None)
+            data["month"] = getattr(item, "month", None)
+            data["status"] = getattr(item, "status", "")
         result.append(data)
     return result
 
@@ -67,6 +73,7 @@ def get_trash_counts(
         "ranks": len(service.list_deleted("ranks")),
         "departments": len(service.list_deleted("departments")),
         "deactivation_reasons": len(service.list_deleted("deactivation_reasons")),
+        "calendars": len(service.list_deleted("calendars")),
     }
 
 

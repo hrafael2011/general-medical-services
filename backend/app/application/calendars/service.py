@@ -122,6 +122,38 @@ class CalendarService:
         if self.audit is not None:
             self.audit.log_calendar_deleted(actor_id=actor_id, calendar=calendar)
 
+    def restore_calendar(self, *, actor_id: str, calendar_id: str) -> CalendarModel:
+        """Restore a soft-deleted calendar and all its versions."""
+        calendar = self.repo.get_calendar_by_id_including_deleted(calendar_id)
+        if calendar is None:
+            raise CalendarServiceError(
+                "calendar_not_found",
+                f"Calendario con id {calendar_id} no encontrado.",
+            )
+        if calendar.deleted_at is None:
+            raise CalendarServiceError(
+                "calendar_not_deleted",
+                "El calendario no está eliminado.",
+            )
+        self.repo.restore_calendar(calendar_id)
+        if self.audit is not None:
+            self.audit.log_calendar_restored(actor_id=actor_id, calendar=calendar)
+        return calendar
+
+    def hard_delete_calendar(self, *, actor_id: str, calendar_id: str) -> None:
+        """Permanently remove a calendar and all related data."""
+        calendar = self.repo.get_calendar_by_id_including_deleted(calendar_id)
+        if calendar is None:
+            raise CalendarServiceError(
+                "calendar_not_found",
+                f"Calendario con id {calendar_id} no encontrado.",
+            )
+        self.repo.hard_delete_calendar(calendar_id)
+
+    def list_deleted_calendars(self) -> list[CalendarModel]:
+        """List soft-deleted calendars for trash/recovery UI."""
+        return self.repo.list_deleted_calendars()
+
     def approve_version(
         self,
         *,

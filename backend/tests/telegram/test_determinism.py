@@ -2,6 +2,7 @@
 import pytest
 from backend.app.application.telegram.llm import FakeLLMProvider
 from backend.app.application.telegram.agent import ConversationalAgent
+from backend.app.application.telegram.intent_classifier import IntentClassifier
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.types import AgentResult
 
@@ -15,9 +16,10 @@ class DeterminismRouterStub(IntentRouter):
 def test_intent_classification_uses_temperature_zero():
     """Intent classification must call chat_complete with temperature=0.0."""
     llm = FakeLLMProvider(responses={
-        "medicos": '{"action": "query", "response_text": "Hay 10 medicos activos."}',
+        "medicos": '{"domain": "medicos", "action": "query", "metric": "total_doctors", "query_type": null, "params": {}, "confidence": 0.95, "response_text": null, "format": null}',
     })
-    agent = ConversationalAgent(llm=llm, router=DeterminismRouterStub())
+    classifier = IntentClassifier(llm)
+    agent = ConversationalAgent(llm=llm, router=DeterminismRouterStub(), intent_classifier=classifier)
     agent.process("cuantos medicos hay")
 
     # Verify temperature=0.0 was passed to chat_complete
@@ -31,9 +33,10 @@ def test_intent_classification_uses_temperature_zero():
 def test_same_input_produces_same_action():
     """Same input should produce same action with deterministic LLM."""
     llm = FakeLLMProvider(responses={
-        "medicos": '{"action": "query", "response_text": "Hay 10 medicos activos."}',
+        "medicos": '{"domain": "medicos", "action": "query", "metric": "total_doctors", "query_type": null, "params": {}, "confidence": 0.95, "response_text": null, "format": null}',
     })
-    agent = ConversationalAgent(llm=llm, router=DeterminismRouterStub())
+    classifier = IntentClassifier(llm)
+    agent = ConversationalAgent(llm=llm, router=DeterminismRouterStub(), intent_classifier=classifier)
 
     result1 = agent.process("cuantos medicos hay")
     result2 = agent.process("cuantos medicos hay")
