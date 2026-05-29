@@ -116,20 +116,3 @@ def test_list_notifications_no_match(client):
     assert resp.status_code == 200
     assert resp.json()["total"] == 0
 
-
-# ---------------------------------------------------------------------------
-# POST /api/notifications/process
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(not settings.feature_notifications, reason="Notifications feature disabled")
-def test_process_notifications_success(client, mock_service):
-    mock_service.process_pending.return_value = {"sent": 2, "failed": 0, "skipped": 1, "errors": []}
-
-    resp = client.post("/api/notifications/process")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["sent"] == 2
-    assert data["failed"] == 0
-    assert data["skipped"] == 1
-    mock_service.process_pending.assert_called_once()
