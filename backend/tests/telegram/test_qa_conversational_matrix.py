@@ -1,7 +1,6 @@
 from pathlib import Path
 
-
-QA_MATRIX_PATH = Path("docs/qa-telegram-conversacional-matriz.md")
+QA_MATRIX_PATH = Path(__file__).resolve().parents[3] / "docs" / "qa-telegram-conversacional-matriz.md"
 
 
 def test_qa_matrix_document_exists() -> None:
