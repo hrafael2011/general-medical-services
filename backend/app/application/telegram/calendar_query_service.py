@@ -157,6 +157,7 @@ class CalendarQueryService:
                 CalendarModel.status == status,
                 CalendarVersionModel.status == status,
                 CalendarModel.deleted_at.is_(None),
+                CalendarVersionModel.deleted_at.is_(None),
             )
             .order_by(CalendarAssignmentModel.service_date, ServiceAreaModel.display_name, DoctorModel.name)
         )
@@ -173,6 +174,7 @@ class CalendarQueryService:
                 CalendarModel.status == status,
                 CalendarVersionModel.status == status,
                 CalendarModel.deleted_at.is_(None),
+                CalendarVersionModel.deleted_at.is_(None),
             )
         )
         return int(self._session.execute(stmt).scalar() or 0)
@@ -189,6 +191,7 @@ class CalendarQueryService:
                 CalendarModel.status == status,
                 CalendarVersionModel.status == status,
                 CalendarModel.deleted_at.is_(None),
+                CalendarVersionModel.deleted_at.is_(None),
             )
         )
         return int(self._session.execute(stmt).scalar() or 0)

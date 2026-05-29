@@ -42,10 +42,6 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
-def normalize_user_message(text: str) -> str:
-    """Public alias for text normalization used by conversation_planner."""
-    return _normalize_text(text)
-
 
 def _tokens(text: str) -> set[str]:
     return set(_normalize_text(text).split())
@@ -428,14 +424,14 @@ class EntityResolver:
         has_female = bool(_FEMALE_WORDS & msg_words)
         has_male = bool(_MALE_WORDS & msg_words)
         if has_female and has_male:
-            resolved["sex"] = ["male", "female"]
-            hints_parts.append("sex='male|female'")
+            resolved["sex"] = ["M", "F"]
+            hints_parts.append("sex='M|F'")
         elif has_female:
-            resolved["sex"] = "female"
-            hints_parts.append("sex='female'")
+            resolved["sex"] = "F"
+            hints_parts.append("sex='F'")
         elif has_male:
-            resolved["sex"] = "male"
-            hints_parts.append("sex='male'")
+            resolved["sex"] = "M"
+            hints_parts.append("sex='M'")
 
         return {
             "resolved": resolved,

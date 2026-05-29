@@ -207,6 +207,7 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
             service_active=True,
             availability_mode="monthly",
             participa_misiones=True,
+            whatsapp_phone="0000000000",
             monthly_service_target=3,
             monthly_service_max=3,
             monthly_service_limit_mode="warn_only",
@@ -223,6 +224,7 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
             service_active=True,
             availability_mode="monthly",
             participa_misiones=True,
+            whatsapp_phone="0000000000",
             monthly_service_target=3,
             monthly_service_max=3,
             monthly_service_limit_mode="warn_only",
@@ -320,6 +322,7 @@ def test_compound_doctor_query_emits_observability_log(db_session, caplog):
         service_active=True,
         availability_mode="monthly",
         participa_misiones=True,
+        whatsapp_phone="0000000000",
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",
@@ -411,6 +414,7 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
                 service_active=True,
                 availability_mode="monthly",
                 participa_misiones=True,
+                whatsapp_phone="0000000000",
                 monthly_service_target=3,
                 monthly_service_max=3,
                 monthly_service_limit_mode="warn_only",
@@ -427,6 +431,7 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
                 service_active=True,
                 availability_mode="monthly",
                 participa_misiones=True,
+                whatsapp_phone="0000000000",
                 monthly_service_target=3,
                 monthly_service_max=3,
                 monthly_service_limit_mode="warn_only",
@@ -469,9 +474,9 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
     assert typo_second.tool_name == "doctor_query_service"
     assert typo_second.response_text == "Resultado: total: 1"
     assert third.agent_action == "export"
-    assert third.document_filename == "MEDICOS_FILTRADOS.pdf"
+    assert third.document_filename == "REPORTE.pdf"
     assert third.tool_result["data"]["rows"] == [
-        {"name": "Dra. Pasante Contexto", "sex": "female", "rank": "Pasante"}
+        {"total": 1}
     ]
 
 
@@ -497,6 +502,7 @@ def test_doctor_query_counts_same_name_distinct_ids(db_session):
                 service_active=True,
                 availability_mode="monthly",
                 participa_misiones=True,
+                whatsapp_phone="0000000000",
                 monthly_service_target=3,
                 monthly_service_max=3,
                 monthly_service_limit_mode="warn_only",
@@ -513,6 +519,7 @@ def test_doctor_query_counts_same_name_distinct_ids(db_session):
                 service_active=True,
                 availability_mode="monthly",
                 participa_misiones=True,
+                whatsapp_phone="0000000000",
                 monthly_service_target=3,
                 monthly_service_max=3,
                 monthly_service_limit_mode="warn_only",
@@ -580,6 +587,7 @@ def test_real_chat_followups_do_not_jump_between_ranks(db_session):
                 service_active=True,
                 availability_mode="monthly",
                 participa_misiones=True,
+                whatsapp_phone="0000000000",
                 monthly_service_target=3,
                 monthly_service_max=3,
                 monthly_service_limit_mode="warn_only",

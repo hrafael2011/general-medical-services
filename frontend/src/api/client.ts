@@ -17,6 +17,7 @@ export function getToken() {
 export async function apiFetch<T>(path: string, init: RequestInit = {}, responseType?: "blob"): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init.headers as Record<string, string> ?? {}),
   };
