@@ -62,15 +62,6 @@ class ScheduledJobRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# --- Process Notifications Response ---
-
-class ProcessNotificationsResponse(BaseModel):
-    """Result of processing the notification queue."""
-    sent: int
-    failed: int
-    skipped: int
-
-
 def _redact_confirmation_commands(message: str) -> str:
     lines = []
     for line in message.splitlines():

@@ -13,7 +13,6 @@ from backend.app.infrastructure.repositories.notifications import NotificationRe
 from backend.app.schemas.notifications import (
     NotificationEventRead,
     NotificationListResponse,
-    ProcessNotificationsResponse,
 )
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -51,13 +50,3 @@ def list_notifications(
         total=len(items),
     )
 
-
-@router.post("/process", response_model=ProcessNotificationsResponse)
-def process_notifications(
-    _current_user: Annotated[UserModel, Depends(require_permission("view_notifications"))],
-    service: Annotated[NotificationService, Depends(get_notification_service)],
-    session: Annotated[Session, Depends(get_db_session)],
-) -> ProcessNotificationsResponse:
-    result = service.process_pending()
-    session.commit()
-    return ProcessNotificationsResponse(**result)
