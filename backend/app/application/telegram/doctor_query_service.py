@@ -53,7 +53,7 @@ class DoctorQueryService:
     def execute(self, user_text: str, resolved: dict[str, Any]) -> AgentResult | None:
         """Return an AgentResult when the request is a supported doctor query."""
         filters = self._filters_from_resolved(resolved)
-        if not filters:
+        if filters is None:
             return None
 
         is_export = self._is_export_request(user_text)
