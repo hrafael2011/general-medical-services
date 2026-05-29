@@ -8,6 +8,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<UserRead>;
   logout: () => void;
   setCurrentUser: (user: UserRead) => void;
+  justLoggedIn: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -15,6 +16,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(() => Boolean(getToken()));
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
 
   useEffect(() => {
     const storedToken = getToken();
@@ -47,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await apiLogin(email, password);
     setToken(res.access_token);
     setCurrentUser(res.user);
+    setJustLoggedIn(true);
     return res.user;
   }
 
@@ -57,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ currentUser, isAuthLoading, login, logout, setCurrentUser }}>
+    <AuthContext.Provider value={{ currentUser, isAuthLoading, justLoggedIn, login, logout, setCurrentUser }}>
       {children}
     </AuthContext.Provider>
   );
