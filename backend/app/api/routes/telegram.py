@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
@@ -195,6 +195,19 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
 # ---------------------------------------------------------------------------
 # Webhook
 # ---------------------------------------------------------------------------
+
+@router.get("/webhook")
+def webhook_verify(
+    hub_mode: str = Query(default="", alias="hub.mode"),
+    hub_verify_token: str = Query(default="", alias="hub.verify_token"),
+    hub_challenge: str = Query(default="", alias="hub.challenge"),
+) -> str:
+    """Handle Telegram webhook verification GET request."""
+    secret = settings.telegram_webhook_secret
+    if hub_mode == "subscribe" and secret and hub_verify_token == secret:
+        return hub_challenge
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
 
 @router.post("/webhook", status_code=200)
 def webhook(
