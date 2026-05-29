@@ -16,32 +16,32 @@ const SHARED_ITEMS = [
   { to: "/missions",  icon: Target,            label: "Misiones" },
 ];
 
+const ROLE_LABELS: Record<string, { label: string; color: string }> = {
+  admin: { label: "Administrador", color: "#3b82f6" },
+  superadmin: { label: "Super Admin", color: "#8b5cf6" },
+  encargado: { label: "Encargado", color: "#10b981" },
+};
+
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return `hsl(${h}, 55%, 45%)`;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
 
 export function Sidebar() {
   const { currentUser, logout } = useAuth();
-
-  const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-    admin: { label: "Administrador", color: "#3b82f6" },
-    superadmin: { label: "Super Admin", color: "#8b5cf6" },
-    encargado: { label: "Encargado", color: "#10b981" },
-  };
-
-  function avatarColor(name: string): string {
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const h = Math.abs(hash) % 360;
-    return `hsl(${h}, 55%, 45%)`;
-  }
-
-  function initials(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
-  }
 
   const { data: alertSummary } = useQuery({
     queryKey: ["action-alerts-summary"],
