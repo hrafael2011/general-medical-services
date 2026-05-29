@@ -9,6 +9,7 @@ interface AuthContextValue {
   logout: () => void;
   setCurrentUser: (user: UserRead) => void;
   justLoggedIn: boolean;
+  resetJustLoggedIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -57,10 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setCurrentUser(null);
     setIsAuthLoading(false);
+    setJustLoggedIn(false);
+  }
+
+  function resetJustLoggedIn() {
+    setJustLoggedIn(false);
   }
 
   return (
-    <AuthContext.Provider value={{ currentUser, isAuthLoading, justLoggedIn, login, logout, setCurrentUser }}>
+    <AuthContext.Provider value={{ currentUser, isAuthLoading, justLoggedIn, resetJustLoggedIn, login, logout, setCurrentUser }}>
       {children}
     </AuthContext.Provider>
   );
