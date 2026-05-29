@@ -66,7 +66,6 @@ class DoctorService:
         last_name: str | None = None,
         rank_id: str | None = None,
         department_id: str | None = None,
-        phone: str | None = None,
         notes: str | None = None,
         participa_misiones: bool = True,
         service_active: bool = True,
@@ -112,7 +111,6 @@ class DoctorService:
             sex=sex,
             rank_id=rank_id,
             department_id=department_id,
-            phone=_strip_html(phone),
             notes=_strip_html(notes),
             active=True,
             service_active=service_active,
@@ -146,7 +144,6 @@ class DoctorService:
         sex: str | None = None,
         rank_id: str | None | object = _MISSING,
         department_id: str | None | object = _MISSING,
-        phone: str | None | object = _MISSING,
         notes: str | None | object = _MISSING,
         participa_misiones: bool | None = None,
         service_active: bool | None = None,
@@ -244,9 +241,6 @@ class DoctorService:
         if department_id is not _MISSING:
             doctor.department_id = department_id
             changed_fields["department_id"] = department_id
-        if phone is not _MISSING:
-            doctor.phone = _strip_html(phone)
-            changed_fields["phone"] = doctor.phone
         if notes is not _MISSING:
             doctor.notes = _strip_html(notes)
             changed_fields["notes"] = doctor.notes
@@ -327,7 +321,6 @@ class DoctorService:
                                 "name": doctor.name,
                                 "rank_name": ranks.get(doctor.rank_id),
                                 "department_name": depts.get(doctor.department_id),
-                                "phone": doctor.phone,
                                 "whatsapp_phone": doctor.whatsapp_phone,
                                 "recurring_tag": None,
                             })
@@ -350,7 +343,6 @@ class DoctorService:
                             "name": doctor.name,
                             "rank_name": ranks.get(doctor.rank_id),
                             "department_name": depts.get(doctor.department_id),
-                            "phone": doctor.phone,
                             "whatsapp_phone": doctor.whatsapp_phone,
                             "recurring_tag": tag,
                         })

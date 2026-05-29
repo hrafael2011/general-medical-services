@@ -1,5 +1,6 @@
 .git
 .venv
+.venv-xlsx
 venv
 backend/.venv
 frontend
@@ -17,3 +18,4 @@ htmlcov
 docs
 test_inputs
 backend/test_inputs
+2026
