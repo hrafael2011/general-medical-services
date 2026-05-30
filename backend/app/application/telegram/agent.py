@@ -186,15 +186,43 @@ class ConversationalAgent:
 
         # Fallback: basic keyword-based classification (for tests without LLM)
         text_lower = text.lower()
-        if any(w in text_lower for w in ("cuantos", "cuántos", "total", "conteo")):
-            if any(w in text_lower for w in ("medico", "doctor", "personal")):
-                return ClassifiedIntent(domain="medicos", action="query", metric="total_doctors")
-        if any(w in text_lower for w in ("hola", "buenos dias", "buenas tardes", "gracias")):
+
+        # Greetings
+        if any(w in text_lower for w in ("hola", "buenos dias", "buenas tardes", "buenas noches", "gracias", "saludos")):
             return ClassifiedIntent(
                 domain="general",
                 action="reply",
                 response_text="¡Hola! Soy el asistente de turnos medicos. ¿En que puedo ayudarte?",
             )
+
+        # Calendar queries
+        if any(w in text_lower for w in ("semana de", "primera semana", "segunda semana", "tercera semana", "cuarta semana")):
+            if any(w in text_lower for w in ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")):
+                return ClassifiedIntent(domain="calendario", action="query")
+        if "calendario" in text_lower:
+            return ClassifiedIntent(domain="calendario", action="query")
+
+        # Export
+        if any(w in text_lower for w in ("exporta", "exportar", "exportalo", "exportame", "esporta", "pdf", "excel", "xlsx")):
+            return ClassifiedIntent(domain="medicos", action="export")
+
+        # Mission ranking
+        if "mision" in text_lower or "misiones" in text_lower:
+            return ClassifiedIntent(domain="medicos", action="query", query_type="mission_ranking")
+
+        # Doctor count / list queries
+        if any(w in text_lower for w in ("cuantos", "cuántos", "cuantas", "cuántas", "total", "conteo", "lista", "listado", "listame", "dame", "muestrame", "mostrame")):
+            if any(w in text_lower for w in ("medico", "medicos", "doctor", "doctores", "doctora", "personal", "cabo", "cabos", "sargento", "sargentos", "pasante", "pasantes", "contrata", "contratas")):
+                return ClassifiedIntent(domain="medicos", action="query")
+
+        # Generic doctor domain
+        if any(w in text_lower for w in ("medico", "medicos", "doctor", "doctores", "doctora", "cabo", "cabos", "sargento", "sargentos", "pasante", "pasantes", "contrata", "contratas")):
+            return ClassifiedIntent(domain="medicos", action="query")
+
+        # Follow-ups with resolved medical entities but no obvious keywords
+        if resolved_entities and any(k in resolved_entities for k in ("rank", "sex", "department")):
+            return ClassifiedIntent(domain="medicos", action="query")
+
         return ClassifiedIntent(domain="general", action="ambiguous", confidence=0.3)
 
     # ------------------------------------------------------------------
@@ -788,6 +816,22 @@ class ConversationalAgent:
                     if result is not None:
                         return result.__dict__ if hasattr(result, '__dict__') else result
 
+            # Mission tools — route through IntentRouter (prevents SQL Agent fallback)
+            if tool_name in ("mission_list", "mission_status"):
+                if self._router is not None:
+                    query_type = (
+                        "list_active_missions" if tool_name == "mission_list"
+                        else "pending_mission_confirmation"
+                    )
+                    result = self._router.handle(
+                        action="query",
+                        query_type=query_type,
+                        params=params,
+                        user_message=user_text,
+                    )
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
             # IntentRouter fallback for registered query types
             if self._router is not None:
                 entry = self._router.registry.get(tool_name)
@@ -957,6 +1001,13 @@ class ConversationalAgent:
                 result = self._doctor_query_service.execute(text, resolved_entities)
                 if result is not None:
                     self._remember_result(telegram_user_id, result)
+                    logger.info(
+                        "Agent resolved via legacy pipeline",
+                        extra={
+                            "telegram_event": "agent_route_completed",
+                            "match_type": "legacy_doctor_query",
+                        },
+                    )
                     return result
             except Exception:
                 logger.warning("DoctorQueryService failed", exc_info=True)
@@ -973,6 +1024,13 @@ class ConversationalAgent:
                         query_type=classified.query_type or "list_calendar_assignments",
                         params=classified.params,
                     )
+                    logger.info(
+                        "Agent resolved via legacy pipeline",
+                        extra={
+                            "telegram_event": "agent_route_completed",
+                            "match_type": "legacy_calendar_query",
+                        },
+                    )
                     return result
             except Exception:
                 logger.warning("CalendarQueryService failed", exc_info=True)
@@ -987,6 +1045,13 @@ class ConversationalAgent:
                 self._remember_result(
                     telegram_user_id, router_result,
                     query_type=classified.query_type, params=classified.params,
+                )
+                logger.info(
+                    "Agent resolved via legacy pipeline",
+                    extra={
+                        "telegram_event": "agent_route_completed",
+                        "match_type": "legacy_intent_router",
+                    },
                 )
                 return router_result
 

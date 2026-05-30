@@ -159,6 +159,26 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
             lambda **params: calendar_svc.execute("calendar_status", params),
         )
 
+        # Mission tools — route through IntentRouter (prevents SQL Agent fallback)
+        def _mission_list_handler(**params):
+            result = router.handle(
+                action="query",
+                query_type="list_active_missions",
+                params=params,
+            )
+            return result
+
+        def _mission_status_handler(**params):
+            result = router.handle(
+                action="query",
+                query_type="pending_mission_confirmation",
+                params=params,
+            )
+            return result
+
+        tool_registry.register("mission_list", _mission_list_handler)
+        tool_registry.register("mission_status", _mission_status_handler)
+
         def _sql_handler(**params):
             result = query_executor.execute(
                 nl_query=params.get("question", ""),
