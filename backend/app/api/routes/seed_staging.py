@@ -100,162 +100,161 @@ def seed_staging_from_production(
     if settings.app_env != "staging":
         raise HTTPException(status_code=403, detail="Only available in staging")
 
-    try:
-        prod_engine = create_engine(PROD_DATABASE_URL, connect_args={"connect_timeout": 10})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create prod engine: {e}")
+    prod_engine = create_engine(PROD_DATABASE_URL, connect_args={"connect_timeout": 10})
 
     try:
         with prod_engine.connect() as prod:
-        # === 1. CATALOGS ===
-        catalog_counts: dict[str, int] = {}
-        for table in CATALOG_TABLES:
-            rows = prod.execute(text(f"SELECT * FROM {table}")).mappings().all()
-            if not rows:
-                catalog_counts[table] = 0
-                continue
-            session.execute(text(f"DELETE FROM {table}"))
-            for row in rows:
-                cols = ", ".join(row.keys())
-                ph = ", ".join(f":{k}" for k in row.keys())
-                session.execute(text(f"INSERT INTO {table} ({cols}) VALUES ({ph})"), dict(row))
-            catalog_counts[table] = len(rows)
-
-        # === 2. DOCTORS ===
-        prod_doctors = prod.execute(
-            text("SELECT * FROM doctors WHERE deleted_at IS NULL ORDER BY name")
-        ).mappings().all()
-
-        active = sum(1 for d in prod_doctors if d["active"])
-        inactive = len(prod_doctors) - active
-        male = sum(1 for d in prod_doctors if d["sex"] == "M")
-        female = sum(1 for d in prod_doctors if d["sex"] == "F")
-        svc_active = sum(1 for d in prod_doctors if d["service_active"])
-
-        session.execute(text("DELETE FROM doctors"))
-        now = datetime.now(UTC)
-        used_names: set[str] = set()
-        doctor_id_map: dict[str, str] = {}
-
-        for d in prod_doctors:
-            sex = d["sex"] or "M"
-            while True:
-                name = _fake_name(sex)
-                if name not in used_names:
-                    used_names.add(name)
-                    break
-
-            parts = name.split()
-            first_name = parts[0]
-            last_name = " ".join(parts[1:])
-            new_id = str(uuid.uuid4())
-            doctor_id_map[d["id"]] = new_id
-
-            session.execute(
-                text("""
-                    INSERT INTO doctors (
-                        id, first_name, last_name, name, normalized_name, sex,
-                        rank_id, department_id, notes,
-                        active, service_active,
-                        service_inactive_reason_id, service_inactive_detail,
-                        participa_misiones,
-                        whatsapp_phone,
-                        monthly_service_target, monthly_service_max,
-                        monthly_service_limit_mode, availability_mode,
-                        allowed_area_ids, created_at, updated_at
-                    ) VALUES (
-                        :id, :fn, :ln, :name, :nn, :sex,
-                        :rank_id, :dept_id, :notes,
-                        :active, :svc_active,
-                        :reason_id, :reason_detail,
-                        :participa,
-                        :wp,
-                        :mst, :msm, :mslm, :am,
-                        :areas, :now, :now
-                    )
-                """),
-                {
-                    "id": new_id, "fn": first_name, "ln": last_name,
-                    "name": name, "nn": name.lower(), "sex": sex,
-                    "rank_id": d["rank_id"], "dept_id": d["department_id"],
-                    "notes": d["notes"], "active": d["active"],
-                    "svc_active": d["service_active"],
-                    "reason_id": d["service_inactive_reason_id"],
-                    "reason_detail": d["service_inactive_detail"],
-                    "participa": d["participa_misiones"],
-                    "wp": _fake_phone(),
-                    "mst": d["monthly_service_target"],
-                    "msm": d["monthly_service_max"],
-                    "mslm": d["monthly_service_limit_mode"],
-                    "am": d["availability_mode"],
-                    "areas": d["allowed_area_ids"] or [],
-                    "now": now,
-                },
-            )
-
-        # === 3. CALENDAR ===
-        versions = prod.execute(text("SELECT * FROM calendar_versions")).mappings().all()
-        if versions:
-            session.execute(text("DELETE FROM calendar_versions"))
-            for v in versions:
-                cols = ", ".join(v.keys())
-                ph = ", ".join(f":{k}" for k in v.keys())
-                session.execute(text(f"INSERT INTO calendar_versions ({cols}) VALUES ({ph})"), dict(v))
-
-        assignments = prod.execute(
-            text("SELECT * FROM calendar_assignments")
-        ).mappings().all()
-        assignments_copied = 0
-        if assignments:
-            session.execute(text("DELETE FROM calendar_assignments"))
-            for a in assignments:
-                new_doc_id = doctor_id_map.get(a["doctor_id"])
-                if new_doc_id is None:
+            # === 1. CATALOGS ===
+            catalog_counts: dict[str, int] = {}
+            for table in CATALOG_TABLES:
+                rows = prod.execute(text(f"SELECT * FROM {table}")).mappings().all()
+                if not rows:
+                    catalog_counts[table] = 0
                     continue
-                data = dict(a)
-                data["doctor_id"] = new_doc_id
-                cols = ", ".join(data.keys())
-                ph = ", ".join(f":{k}" for k in data.keys())
-                session.execute(text(f"INSERT INTO calendar_assignments ({cols}) VALUES ({ph})"), data)
-                assignments_copied += 1
+                session.execute(text(f"DELETE FROM {table}"))
+                for row in rows:
+                    cols = ", ".join(row.keys())
+                    ph = ", ".join(f":{k}" for k in row.keys())
+                    session.execute(text(f"INSERT INTO {table} ({cols}) VALUES ({ph})"), dict(row))
+                catalog_counts[table] = len(rows)
 
-        # === 4. MISSION PARTICIPANTS ===
-        participants = prod.execute(
-            text("SELECT * FROM mission_participants")
-        ).mappings().all()
-        participants_copied = 0
-        if participants:
-            session.execute(text("DELETE FROM mission_participants"))
-            for p in participants:
-                new_doc_id = doctor_id_map.get(p["doctor_id"])
-                if new_doc_id is None:
-                    continue
-                data = dict(p)
-                data["doctor_id"] = new_doc_id
-                cols = ", ".join(data.keys())
-                ph = ", ".join(f":{k}" for k in data.keys())
+            # === 2. DOCTORS ===
+            prod_doctors = prod.execute(
+                text("SELECT * FROM doctors WHERE deleted_at IS NULL ORDER BY name")
+            ).mappings().all()
+
+            active = sum(1 for d in prod_doctors if d["active"])
+            inactive = len(prod_doctors) - active
+            male = sum(1 for d in prod_doctors if d["sex"] == "M")
+            female = sum(1 for d in prod_doctors if d["sex"] == "F")
+            svc_active = sum(1 for d in prod_doctors if d["service_active"])
+
+            session.execute(text("DELETE FROM doctors"))
+            now = datetime.now(UTC)
+            used_names: set[str] = set()
+            doctor_id_map: dict[str, str] = {}
+
+            for d in prod_doctors:
+                sex = d["sex"] or "M"
+                while True:
+                    name = _fake_name(sex)
+                    if name not in used_names:
+                        used_names.add(name)
+                        break
+
+                parts = name.split()
+                first_name = parts[0]
+                last_name = " ".join(parts[1:])
+                new_id = str(uuid.uuid4())
+                doctor_id_map[d["id"]] = new_id
+
                 session.execute(
-                    text(f"INSERT INTO mission_participants ({cols}) VALUES ({ph})"), data
+                    text("""
+                        INSERT INTO doctors (
+                            id, first_name, last_name, name, normalized_name, sex,
+                            rank_id, department_id, notes,
+                            active, service_active,
+                            service_inactive_reason_id, service_inactive_detail,
+                            participa_misiones,
+                            whatsapp_phone,
+                            monthly_service_target, monthly_service_max,
+                            monthly_service_limit_mode, availability_mode,
+                            allowed_area_ids, created_at, updated_at
+                        ) VALUES (
+                            :id, :fn, :ln, :name, :nn, :sex,
+                            :rank_id, :dept_id, :notes,
+                            :active, :svc_active,
+                            :reason_id, :reason_detail,
+                            :participa,
+                            :wp,
+                            :mst, :msm, :mslm, :am,
+                            :areas, :now, :now
+                        )
+                    """),
+                    {
+                        "id": new_id, "fn": first_name, "ln": last_name,
+                        "name": name, "nn": name.lower(), "sex": sex,
+                        "rank_id": d["rank_id"], "dept_id": d["department_id"],
+                        "notes": d["notes"], "active": d["active"],
+                        "svc_active": d["service_active"],
+                        "reason_id": d["service_inactive_reason_id"],
+                        "reason_detail": d["service_inactive_detail"],
+                        "participa": d["participa_misiones"],
+                        "wp": _fake_phone(),
+                        "mst": d["monthly_service_target"],
+                        "msm": d["monthly_service_max"],
+                        "mslm": d["monthly_service_limit_mode"],
+                        "am": d["availability_mode"],
+                        "areas": d["allowed_area_ids"] or [],
+                        "now": now,
+                    },
                 )
-                participants_copied += 1
 
-        session.commit()
+            # === 3. CALENDAR ===
+            versions = prod.execute(text("SELECT * FROM calendar_versions")).mappings().all()
+            if versions:
+                session.execute(text("DELETE FROM calendar_versions"))
+                for v in versions:
+                    cols = ", ".join(v.keys())
+                    ph = ", ".join(f":{k}" for k in v.keys())
+                    session.execute(text(f"INSERT INTO calendar_versions ({cols}) VALUES ({ph})"), dict(v))
 
-        result = SeedResult(
-            doctors_copied=len(prod_doctors),
-            active=active,
-            inactive=inactive,
-            male=male,
-            female=female,
-            service_active=svc_active,
-            ranks=catalog_counts.get("ranks", 0),
-            departments=catalog_counts.get("departments", 0),
-            service_areas=catalog_counts.get("service_areas", 0),
-            service_inactive_reasons=catalog_counts.get("service_inactive_reasons", 0),
-            calendar_versions=len(versions),
-            calendar_assignments=assignments_copied,
-            mission_participants=participants_copied,
-        )
+            assignments = prod.execute(
+                text("SELECT * FROM calendar_assignments")
+            ).mappings().all()
+            assignments_copied = 0
+            if assignments:
+                session.execute(text("DELETE FROM calendar_assignments"))
+                for a in assignments:
+                    new_doc_id = doctor_id_map.get(a["doctor_id"])
+                    if new_doc_id is None:
+                        continue
+                    data = dict(a)
+                    data["doctor_id"] = new_doc_id
+                    cols = ", ".join(data.keys())
+                    ph = ", ".join(f":{k}" for k in data.keys())
+                    session.execute(text(f"INSERT INTO calendar_assignments ({cols}) VALUES ({ph})"), data)
+                    assignments_copied += 1
 
-        logger.info("Seed from production completed: %s", result.model_dump())
-        return result
+            # === 4. MISSION PARTICIPANTS ===
+            participants = prod.execute(
+                text("SELECT * FROM mission_participants")
+            ).mappings().all()
+            participants_copied = 0
+            if participants:
+                session.execute(text("DELETE FROM mission_participants"))
+                for p in participants:
+                    new_doc_id = doctor_id_map.get(p["doctor_id"])
+                    if new_doc_id is None:
+                        continue
+                    data = dict(p)
+                    data["doctor_id"] = new_doc_id
+                    cols = ", ".join(data.keys())
+                    ph = ", ".join(f":{k}" for k in data.keys())
+                    session.execute(text(f"INSERT INTO mission_participants ({cols}) VALUES ({ph})"), data)
+                    participants_copied += 1
+
+            session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("Seed from production failed")
+        raise HTTPException(status_code=500, detail="Seed failed — check logs")
+
+    result = SeedResult(
+        doctors_copied=len(prod_doctors),
+        active=active,
+        inactive=inactive,
+        male=male,
+        female=female,
+        service_active=svc_active,
+        ranks=catalog_counts.get("ranks", 0),
+        departments=catalog_counts.get("departments", 0),
+        service_areas=catalog_counts.get("service_areas", 0),
+        service_inactive_reasons=catalog_counts.get("service_inactive_reasons", 0),
+        calendar_versions=len(versions),
+        calendar_assignments=assignments_copied,
+        mission_participants=participants_copied,
+    )
+
+    logger.info("Seed from production completed: %s", result.model_dump())
+    return result
