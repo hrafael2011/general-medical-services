@@ -41,4 +41,7 @@ api_router.include_router(webhooks_router)
 api_router.include_router(health_router, tags=["health"])
 if settings.app_env == "staging":
     from backend.app.api.routes.seed_staging import router as seed_staging_router
+    from backend.app.api.routes.seed_doctors import router as seed_doctors_router
+
     api_router.include_router(seed_staging_router)
+    api_router.include_router(seed_doctors_router)
