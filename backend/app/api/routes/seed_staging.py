@@ -100,9 +100,13 @@ def seed_staging_from_production(
     if settings.app_env != "staging":
         raise HTTPException(status_code=403, detail="Only available in staging")
 
-    prod_engine = create_engine(PROD_DATABASE_URL)
+    try:
+        prod_engine = create_engine(PROD_DATABASE_URL, connect_args={"connect_timeout": 10})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create prod engine: {e}")
 
-    with prod_engine.connect() as prod:
+    try:
+        with prod_engine.connect() as prod:
         # === 1. CATALOGS ===
         catalog_counts: dict[str, int] = {}
         for table in CATALOG_TABLES:
