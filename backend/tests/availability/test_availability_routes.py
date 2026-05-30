@@ -74,6 +74,7 @@ def seed_data(engine):
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",
         availability_mode="monthly",
+        whatsapp_phone="+18095551234",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

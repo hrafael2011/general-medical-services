@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError
 
+from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -17,7 +18,7 @@ class TrashServiceError(Exception):
 
 
 class TrashService:
-    VALID_TYPES = {"doctors", "users", "ranks", "departments", "deactivation_reasons"}
+    VALID_TYPES = {"doctors", "users", "ranks", "departments", "deactivation_reasons", "calendars"}
     _ANONYMIZABLE_TYPES = {"doctors", "users"}
 
     def __init__(
@@ -25,11 +26,13 @@ class TrashService:
         doctors: DoctorRepository,
         users: UserRepository,
         catalogs: CatalogRepository,
+        calendars: CalendarRepository,
         audit: "AuditRepository | None" = None,
     ) -> None:
         self.doctors = doctors
         self.users = users
         self.catalogs = catalogs
+        self.calendars = calendars
         self.audit = audit
 
     def list_deleted(self, entity_type: str) -> list:
@@ -43,6 +46,8 @@ class TrashService:
             return self.catalogs.list_deleted_ranks()
         if entity_type == "departments":
             return self.catalogs.list_deleted_departments()
+        if entity_type == "calendars":
+            return self.calendars.list_deleted_calendars()
         return self.catalogs.list_deleted_deactivation_reasons()
 
     def restore(self, entity_type: str, entity_id: str) -> None:
@@ -82,6 +87,8 @@ class TrashService:
             return self.catalogs.get_rank_by_id_including_deleted(entity_id)
         if entity_type == "departments":
             return self.catalogs.get_department_by_id_including_deleted(entity_id)
+        if entity_type == "calendars":
+            return self.calendars.get_calendar_by_id_including_deleted(entity_id)
         return self.catalogs.get_deactivation_reason_by_id_including_deleted(entity_id)
 
     def _restore_entity(self, entity_type: str, entity_id: str) -> None:
@@ -93,6 +100,8 @@ class TrashService:
             self.catalogs.restore_rank(entity_id)
         elif entity_type == "departments":
             self.catalogs.restore_department(entity_id)
+        elif entity_type == "calendars":
+            self.calendars.restore_calendar(entity_id)
         else:
             self.catalogs.restore_deactivation_reason(entity_id)
 
@@ -105,5 +114,7 @@ class TrashService:
             self.catalogs.hard_delete_rank(entity_id)
         elif entity_type == "departments":
             self.catalogs.hard_delete_department(entity_id)
+        elif entity_type == "calendars":
+            self.calendars.hard_delete_calendar(entity_id)
         else:
             self.catalogs.hard_delete_deactivation_reason(entity_id)

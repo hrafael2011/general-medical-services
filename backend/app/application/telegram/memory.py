@@ -24,7 +24,7 @@ def _sanitize_for_json(obj: Any) -> Any:
 
 @dataclass
 class SessionState:
-    """Conversation session state for follow-up resolution."""
+    """Conversation session state for follow-up resolution and multi-turn dialogue."""
     last_query_type: str | None = None
     last_params: dict[str, Any] | None = None
     last_results: list[dict[str, Any]] | None = None
@@ -38,6 +38,10 @@ class SessionState:
     last_total: int | None = None
     last_document_format: str | None = None
     pending_selection: dict[str, Any] | None = None
+    # Multi-turn dialogue support
+    pending_clarification: str | None = None
+    collected_slots: dict[str, Any] = field(default_factory=dict)
+    turn_count: int = 0
     created_at: float = field(default_factory=time.time)
 
 

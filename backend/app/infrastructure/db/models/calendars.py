@@ -43,6 +43,9 @@ class CalendarVersionModel(Base):
         DateTime(timezone=True), nullable=True
     )
     approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
 
 class CalendarWeekModel(Base):

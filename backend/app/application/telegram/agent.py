@@ -1,69 +1,35 @@
 """Conversational agent — translates natural language to system commands.
 
 Architecture:
-  1. Single LLM call translates user message to {action, query_type, params}
-  2. IntentRouter executes pre-registered queries (fast path)
+  1. IntentClassifier (LLM) classifies user intent
+  2. Route to SemanticLayer, DoctorQuery, CalendarQuery, or IntentRouter
   3. QueryExecutor fallback for unregistered questions (slow path)
-  4. ToolGateway kept for backward compatibility with old-format responses
 """
 
 import json
 import logging
 import re
 import time
-from calendar import monthrange
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 
-from pydantic import ValidationError
-
-from backend.app.application.telegram.conversation_contract import format_contract_for_prompt
-from backend.app.application.telegram.conversation_planner import build_conversation_plan
+from backend.app.application.telegram.intent_classifier import (
+    ClassifiedIntent,
+    IntentClassifier,
+    NLUEngine,
+    NLUResult,
+)
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.memory import MemoryManager, SessionState, SessionStore
+from backend.app.application.telegram.nl_response import generate_response
 from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.sanitize import format_rows as shared_format_rows
-from backend.app.application.telegram.schemas import IntentOutput
-from backend.app.application.telegram.tools import ToolGateway
+from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
+from backend.app.application.telegram.tool_registry import ToolRegistry
 from backend.app.application.telegram.types import AgentResult
 
 logger = logging.getLogger(__name__)
-
-# Patterns that suggest hallucinated data in reply text
-_HALLUCINATION_PATTERNS = [
-    re.compile(r"\bResultado:\s*total\s*:\s*\d+\b", re.IGNORECASE),
-    # "Tienes N doctores/medicos/..." or "hay N medicos/..."
-    re.compile(
-        r"(?:tienes?|hay)\s+\d+\s+"
-        r"(?:doctor(?:es)?|asignac(?:ion|iones)|medicos?|servicios?)",
-        re.IGNORECASE,
-    ),
-    # Specific doctor name patterns (Dr. / Dra. + capitalized name)
-    re.compile(r"(?:Dr\.?|Dra\.?)\s+[A-ZÁÉÍÓÚ][a-záéíóú]+", re.IGNORECASE),
-]
-
-
-def _reply_has_hallucination(text: str) -> bool:
-    """Check if *text* contains hallucination patterns."""
-    for pattern in _HALLUCINATION_PATTERNS:
-        if pattern.search(text):
-            return True
-    return False
-
-
-_DATA_REQUEST_PATTERNS = [
-    re.compile(
-        r"\b(cuant[oa]s?|cauant[oa]s?|lista|dame|muestra|mu[eé]strame|"
-        r"exporta|esporta|reporte|pdf|excel)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(m[eé]dicos?|doctores?|cabos?|sargentos?|pasantes?|turnos?|servicios?)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\bmisi[oó]n(?:es)?\b", re.IGNORECASE),
-]
 
 _FOLLOWUP_PATTERNS = [
     re.compile(
@@ -116,49 +82,6 @@ _MONTH_NAME_TO_NUMBER = {
     "diciembre": 12,
 }
 
-_WEEK_ORDINAL_TO_NUMBER = {
-    "primera": 1,
-    "primer": 1,
-    "primea": 1,
-    "segunda": 2,
-    "seguna": 2,
-    "tercera": 3,
-    "cuarta": 4,
-    "quinta": 5,
-}
-
-
-def _fetch_rank_values(session) -> str:
-    """Query the DB for all rank normalized_names and format for the system prompt.
-
-    Returns an empty string if session is None or query fails, so the prompt
-    still works even without DB access (e.g. in tests).
-    """
-    if session is None:
-        return ""
-    try:
-        from sqlalchemy import text as sa_text
-
-        result = session.execute(
-            sa_text(
-                "SELECT normalized_name FROM ranks "
-                "WHERE active = TRUE ORDER BY name"
-            )
-        )
-        vals = [row[0] for row in result.fetchall()]
-        if not vals:
-            return ""
-        formatted = ", ".join(f"'{v}'" for v in vals)
-        return f"- ranks.normalized_name usa valores en minusculas:\n  {formatted}"
-    except Exception:
-        return ""
-
-
-def _looks_like_data_request(text: str) -> bool:
-    """Return True when the user appears to be asking for system data."""
-    return all(pattern.search(text) for pattern in _DATA_REQUEST_PATTERNS)
-
-
 def _looks_like_followup(text: str) -> bool:
     """Return True for short contextual follow-up requests."""
     return any(pattern.search(text) for pattern in _FOLLOWUP_PATTERNS)
@@ -183,169 +106,6 @@ def _extract_month_year(text: str) -> tuple[int, int] | None:
     return month, year
 
 
-def _calendar_assignment_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    """Map clear monthly assignment questions to safe registered queries."""
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-
-    mentions_assignment = re.search(
-        r"\b(asignad[oa]s?|servicios?|turnos?)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-    if not mentions_assignment or not mentions_doctors:
-        return None
-
-    month, year = period
-    params = {"month": month, "year": year}
-
-    if re.search(r"\b(no|sin)\s+(?:fueron\s+)?asignad", normalized, re.IGNORECASE):
-        return "unassigned_doctors_by_month", params
-    if re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE):
-        return "count_assigned_doctors_by_month", params
-    if re.search(r"\b(lista|listado|dame|muestra|mu[eé]strame)\b", normalized, re.IGNORECASE):
-        return "list_assigned_doctors_by_month", params
-    return None
-
-
-def _calendar_service_query_intent(
-    text: str,
-    session_state: SessionState | None = None,
-) -> tuple[str, dict[str, Any]] | None:
-    """Map calendar questions to deterministic CalendarQueryService calls."""
-    normalized = text.lower()
-    period = _extract_month_year(normalized)
-
-    if period is not None:
-        month, year = period
-        week_match = re.search(
-            r"\b(primera|primer|primea|segunda|seguna|tercera|cuarta|quinta)\s+semana\b",
-            normalized,
-            re.IGNORECASE,
-        )
-        if week_match is None:
-            week_match = re.search(
-                r"\bsemana\s+(primera|primer|primea|segunda|seguna|tercera|cuarta|quinta)\b",
-                normalized,
-                re.IGNORECASE,
-            )
-        mentions_calendar_assignments = re.search(
-            r"\b(calendario|servicio|servicios|turno|turnos|asignad[oa]s?|incluid[oa]s?)\b",
-            normalized,
-            re.IGNORECASE,
-        )
-        mentions_doctors = re.search(r"\b(m[eé]dicos?|doctores?)\b", normalized, re.IGNORECASE)
-        if week_match and (mentions_calendar_assignments or mentions_doctors):
-            week_number = _WEEK_ORDINAL_TO_NUMBER[week_match.group(1).lower()]
-            start_day = ((week_number - 1) * 7) + 1
-            last_day = monthrange(year, month)[1]
-            if start_day > last_day:
-                return None
-            end_day = min(start_day + 6, last_day)
-            return (
-                "list_calendar_assignments_by_date_range",
-                {
-                    "start_date": date(year, month, start_day).isoformat(),
-                    "end_date": date(year, month, end_day).isoformat(),
-                },
-            )
-        if (
-            mentions_calendar_assignments
-            and mentions_doctors
-            and re.search(r"\b(cuant[oa]s?|cauant[oa]s?)\b", normalized, re.IGNORECASE)
-        ):
-            return "count_assigned_doctors_by_month", {"year": year, "month": month}
-
-    if session_state is None or session_state.last_domain != "calendar_assignments":
-        return None
-    if not _looks_like_followup(normalized):
-        return None
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-    month, detected_year = period
-    explicit_year = re.search(r"\b(20\d{2})\b", normalized)
-    previous_period = session_state.last_period or {}
-    year = detected_year if explicit_year else int(previous_period.get("year") or detected_year)
-
-    if session_state.last_query_type == "list_calendar_assignments_by_date_range":
-        start_date = previous_period.get("start_date")
-        end_date = previous_period.get("end_date")
-        if not start_date or not end_date:
-            return None
-        previous_start = date.fromisoformat(str(start_date))
-        previous_end = date.fromisoformat(str(end_date))
-        last_day = monthrange(year, month)[1]
-        start_day = min(previous_start.day, last_day)
-        end_day = min(previous_end.day, last_day)
-        return (
-            "list_calendar_assignments_by_date_range",
-            {
-                "start_date": date(year, month, start_day).isoformat(),
-                "end_date": date(year, month, end_day).isoformat(),
-            },
-        )
-    if session_state.last_query_type == "count_assigned_doctors_by_month":
-        return "count_assigned_doctors_by_month", {"year": year, "month": month}
-    return None
-
-
-def _mission_ranking_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    """Map mission ranking questions to the registered deterministic query."""
-    normalized = text.lower()
-    if not re.search(r"\branking\b", normalized, re.IGNORECASE):
-        return None
-    if not re.search(r"\bmision(?:es)?\b", normalized, re.IGNORECASE):
-        return None
-    period = _extract_month_year(normalized)
-    if period is None:
-        return None
-    month, year = period
-    return "mission_ranking", {"year": year, "month": month}
-
-
-def _active_missions_query_intent(text: str) -> tuple[str, dict[str, int]] | None:
-    """Map active mission questions to the registered deterministic query."""
-    normalized = text.lower()
-    if not re.search(r"\bmisi[oó]n(?:es)?\b", normalized, re.IGNORECASE):
-        return None
-    if re.search(r"\branking\b", normalized, re.IGNORECASE):
-        return None
-    if not re.search(
-        r"\b(activa?s?|vigentes?|programadas?|creadas?|confirmadas?)\b",
-        normalized,
-        re.IGNORECASE,
-    ):
-        return None
-    return "list_active_missions", {}
-
-
-def _looks_like_contextual_export(text: str) -> bool:
-    """Return True for requests to export the previous result/listing."""
-    normalized = text.lower()
-    if re.search(
-        r"\b(exportalo|exportalos|exportarlo|exportarlos|"
-        r"esportalo|esportalos|esportarlo|esportarlos)\b",
-        normalized,
-    ):
-        return True
-    asks_export = re.search(
-        r"\b(exporta|exportar|exportalo|exportalos|exportarlo|exportarlos|"
-        r"esporta|esportar|esportalo|esportalos|reporte|pdf|excel|xlsx)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    references_context = re.search(
-        r"\b(eso|esa|ese|esos|esas|listado|lista|resultado|resultados|anterior)\b",
-        normalized,
-        re.IGNORECASE,
-    )
-    return bool(asks_export and references_context)
-
-
 def _count_filter_dims(entity_hints: str) -> int:
     """Count how many filter dimensions are present in entity hints."""
     if not entity_hints:
@@ -358,46 +118,6 @@ def _count_filter_dims(entity_hints: str) -> int:
             dims_seen.add(_FILTER_DIM_ALIASES.get(key, key))
     return len(dims_seen)
 
-_SYSTEM_PROMPT = """\
-Eres un asistente de un sistema de gestion de turnos medicos.
-Traduce el mensaje del usuario a un comando del sistema.
-
-CONSULTAS DISPONIBLES:
-{query_types}
-
-ACCIONES:
-- query: Ejecutar una consulta para obtener datos del sistema.
-- export: Exportar datos a PDF o Excel (cuando piden "reporte", "pdf", "excel").
-- reply: Responder directamente (saludos, conversacion general, preguntas fuera del sistema).
-- ambiguous: Cuando la consulta no esta clara o falta informacion necesaria.
-
-FORMATO DE EXPORT:
-- Incluye "format": "excel" cuando el usuario pide especificamente Excel, XLSX u hoja de calculo.
-- Incluye "format": "pdf" cuando pide PDF o no especifica formato.
-- Si pide "reporte" sin formato, no incluyas el campo format (se usa PDF por defecto).
-
-VALORES EXACTOS de columnas (usa estos siempre):
-- doctors.sex usa 'male' (masculino) y 'female' (femenino)
-{rank_values}
-
-Responde UNICAMENTE con JSON en este formato:
-{{"action": "query|export|reply|ambiguous", "query_type": "nombre_consulta",
-"params": {{...}}, "response_text": "...", "format": "pdf|excel"}}
-
-REGLAS:
-- Para query/export: elige el query_type mas adecuado de CONSULTAS DISPONIBLES.
-- Para reply/ambiguous: incluye response_text con tu respuesta directa.
-- Usa los valores EXACTOS de parametros indicados arriba.
-- Responde en el MISMO IDIOMA del usuario.
-REGLAS PARA action=reply:
-- NUNCA inventes nombres de medicos, cantidades, ni estadisticas.
-- NUNCA digas 'tienes X medicos' o 'hay Y servicios' a menos que
-  los datos vengan de una consulta SQL ejecutada (action=query).
-- Si no estas seguro, usa action=ambiguous y pide clarificacion.
-- En modo reply, solo describe tus capacidades en terminos generales.
-- NO menciones nombres especificos de doctores a menos que vengan de la BD.
-Sin explicaciones ni markdown.
-"""
 
 
 def _format_rows(rows: list[dict], columns: list[str]) -> str:
@@ -413,86 +133,72 @@ class ConversationalAgent:
         llm: LLMProvider,
         router: IntentRouter,
         query_executor: QueryExecutor | None = None,
-        tools: ToolGateway | None = None,
         memory: MemoryManager | None = None,
         session_store: SessionStore | None = None,
         entity_resolver = None,
         doctor_query_service = None,
         session = None,
         calendar_query_service = None,
+        semantic_layer_resolver: SemanticLayerResolver | None = None,
+        intent_classifier: IntentClassifier | None = None,
+        nlu_engine: NLUEngine | None = None,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self._llm = llm
         self._router = router
         self._query_executor = query_executor
-        self._tools = tools
         self._memory = memory
         self._session_store = session_store
         self._entity_resolver = entity_resolver
         self._doctor_query_service = doctor_query_service
         self._session = session
         self._calendar_query_service = calendar_query_service
+        self._semantic_layer_resolver = semantic_layer_resolver
+        self._intent_classifier = intent_classifier
+        self._nlu_engine = nlu_engine
+        self._tool_registry = tool_registry
 
     # ------------------------------------------------------------------
     # Prompt building
     # ------------------------------------------------------------------
 
-    def _build_system_prompt(self, user_info: dict | None = None, entity_hints: str = "") -> str:
-        query_types_lines = []
-        for entry in self._router.registry.list_all():
-            params_str = (
-                ", ".join(f"{k}: {v}" for k, v in entry["params_schema"].items())
-                or "ninguno"
+
+    # ------------------------------------------------------------------
+    # Intent classification
+    # ------------------------------------------------------------------
+
+    def _classify_intent(
+        self,
+        text: str,
+        entity_hints: str = "",
+        resolved_entities: dict | None = None,
+    ) -> ClassifiedIntent:
+        """Classify user intent via LLM, with fallback for when LLM is unavailable."""
+        if self._intent_classifier is not None:
+            try:
+                return self._intent_classifier.classify(
+                    text,
+                    entity_hints=entity_hints,
+                    resolved_entities=resolved_entities,
+                )
+            except Exception:
+                logger.warning("IntentClassifier failed", exc_info=True)
+
+        # Fallback: basic keyword-based classification (for tests without LLM)
+        text_lower = text.lower()
+        if any(w in text_lower for w in ("cuantos", "cuántos", "total", "conteo")):
+            if any(w in text_lower for w in ("medico", "doctor", "personal")):
+                return ClassifiedIntent(domain="medicos", action="query", metric="total_doctors")
+        if any(w in text_lower for w in ("hola", "buenos dias", "buenas tardes", "gracias")):
+            return ClassifiedIntent(
+                domain="general",
+                action="reply",
+                response_text="¡Hola! Soy el asistente de turnos medicos. ¿En que puedo ayudarte?",
             )
-            query_types_lines.append(
-                f"- {entry['query_type']}: {entry['description']} "
-                f"Params: {params_str}"
-            )
-
-        # Fetch available ranks from DB for dynamic prompt
-        rank_vals = _fetch_rank_values(self._session)
-
-        prompt = _SYSTEM_PROMPT.format(
-            query_types="\n".join(query_types_lines),
-            rank_values=rank_vals,
-        )
-        prompt += f"\n\n{format_contract_for_prompt()}"
-
-        if entity_hints:
-            prompt += (
-                f"\n\nENTIDADES DETECTADAS:\n{entity_hints}\n"
-                f"Usa estos IDs/valores reales para generar parametros, no los nombres textuales."
-            )
-
-        if user_info:
-            prompt += (
-                f"\n\nInformacion del usuario:\n"
-                f"Nombre: {user_info.get('name', 'Desconocido')}\n"
-                f"Rol: {user_info.get('role', 'Desconocido')}\n"
-            )
-
-        return prompt
+        return ClassifiedIntent(domain="general", action="ambiguous", confidence=0.3)
 
     # ------------------------------------------------------------------
     # JSON parsing
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _extract_json(text: str) -> dict | None:
-        """Extract JSON from LLM response, handling markdown code blocks."""
-        text = text.strip()
-        code_block = re.search(
-            r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL
-        )
-        if code_block:
-            text = code_block.group(1)
-
-        if text.startswith("{") and text.endswith("}"):
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError:
-                return None
-        return None
-
     # ------------------------------------------------------------------
     # Routing
     # ------------------------------------------------------------------
@@ -747,40 +453,6 @@ class ConversationalAgent:
         )
         self._session_store.set(telegram_user_id, state)
 
-    def _calendar_followup_query_intent(
-        self,
-        text: str,
-        telegram_user_id: str | None,
-    ) -> tuple[str, dict[str, int]] | None:
-        """Reuse the previous calendar assignment question for month follow-ups."""
-        if self._session_store is None or telegram_user_id is None:
-            return None
-        try:
-            state = self._session_store.get(telegram_user_id)
-        except Exception:
-            logger.warning("Failed to load Telegram session state", exc_info=True)
-            return None
-        if state is None or state.last_domain != "calendar_assignments":
-            return None
-        if state.last_query_type not in {
-            "count_assigned_doctors_by_month",
-            "list_assigned_doctors_by_month",
-            "unassigned_doctors_by_month",
-        }:
-            return None
-
-        period = _extract_month_year(text)
-        if period is None:
-            return None
-        month, detected_year = period
-        explicit_year = re.search(r"\b(20\d{2})\b", text)
-        previous_period = state.last_period or {}
-        year = (
-            detected_year
-            if explicit_year
-            else int(previous_period.get("year") or detected_year)
-        )
-        return state.last_query_type, {"year": year, "month": month}
 
     def _mission_contextual_followup_result(
         self,
@@ -890,53 +562,6 @@ class ConversationalAgent:
             },
         )
 
-    def _contextual_export_result(
-        self,
-        text: str,
-        telegram_user_id: str | None,
-    ) -> AgentResult | None:
-        """Export the last operational result when the user says 'ese listado'."""
-        if not _looks_like_contextual_export(text):
-            return None
-        if self._session_store is None or telegram_user_id is None:
-            return None
-        try:
-            state = self._session_store.get(telegram_user_id)
-        except Exception:
-            logger.warning("Failed to load Telegram session state", exc_info=True)
-            return None
-        if state is None or not state.last_results:
-            return None
-
-        rows = state.last_results
-        columns = list(rows[0].keys()) if rows and isinstance(rows[0], dict) else []
-        if not rows or not columns:
-            return None
-
-        fmt = "excel" if re.search(r"\b(excel|xlsx|xls)\b", text, re.IGNORECASE) else "pdf"
-        query_type = state.last_query_type or "contextual_export"
-        try:
-            result = self._router._build_document(rows, columns, fmt, query_type)  # noqa: SLF001
-        except Exception:
-            logger.warning("Contextual export failed", exc_info=True)
-            return None
-
-        result.agent_action = "export"
-        result.tool_name = state.last_tool_name or "contextual_export"
-        result.tool_entities = {
-            "operation": "contextual_export",
-            "query_type": query_type,
-            "format": fmt,
-            "reused_last_result": True,
-        }
-        result.tool_result = {
-            "ok": True,
-            "source": "session_context",
-            "query_type": query_type,
-            "row_count": len(rows),
-            "data": {"columns": columns, "rows": rows},
-        }
-        return result
 
     def _filters_from_query_context(
         self,
@@ -1012,100 +637,6 @@ class ConversationalAgent:
     # Backward-compat handler for old-format LLM responses
     # ------------------------------------------------------------------
 
-    def _handle_old_tool_format(
-        self,
-        parsed: dict,
-        user_text: str,
-        actor_id: str | None = None,
-    ) -> AgentResult:
-        """Handle legacy {action: 'call_tool', tool: '...', entities: {...}}."""
-        tool_name = parsed.get("tool", "")
-        entities = dict(parsed.get("entities", {}))
-        # Inject actor_id for write operations (create_mission, etc.)
-        if actor_id:
-            entities["_actor_id"] = actor_id
-
-        if self._tools is None:
-            return AgentResult(
-                response_text="No tengo informacion sobre eso en el sistema."
-            )
-
-        result = self._tools.execute(tool_name, entities)
-
-        if not result.get("ok"):
-            error = result.get("error", "")
-            if error == "out_of_domain":
-                return AgentResult(
-                    response_text="No tengo informacion sobre eso en el sistema.",
-                    agent_action="call_tool",
-                    tool_name=tool_name,
-                    tool_entities=entities,
-                    tool_result=result,
-                )
-            return AgentResult(
-                response_text="Ocurrio un error al consultar los datos. Intenta de nuevo.",
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        data = result["data"]
-
-        # Two-step confirmation flow
-        if isinstance(data, dict) and data.get("requires_confirmation"):
-            return AgentResult(
-                response_text=data.get("message", "Confirma la accion para continuar."),
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        # Document response (PDF/Excel)
-        document_bytes = result.get("document_bytes")
-        document_filename = result.get("document_filename")
-        if document_bytes and document_filename:
-            return AgentResult(
-                response_text="Aqui tienes el reporte solicitado.",
-                document_bytes=document_bytes,
-                document_filename=document_filename,
-                agent_action="call_tool",
-                tool_name=tool_name,
-                tool_entities=entities,
-                tool_result=result,
-            )
-
-        # Plain data — format via LLM (legacy 2nd call)
-        data_str = json.dumps(data, ensure_ascii=False, default=str)
-        format_prompt = (
-            "Con los siguientes datos del sistema de turnos medicos, "
-            "genera una respuesta natural y amigable para el medico.\n\n"
-            f"DATOS:\n{data_str}\n\n"
-            f"Pregunta original: {user_text}\n\n"
-            "Responde en el mismo idioma que la pregunta original, "
-            "de forma clara y concisa."
-        )
-        format_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Eres un asistente amable que explica datos del sistema "
-                    "de turnos medicos. Responde en el mismo idioma "
-                    "de la pregunta original, de forma clara y concisa."
-                ),
-            },
-            {"role": "user", "content": format_prompt},
-        ]
-
-        response = self._llm.chat_complete(format_messages, temperature=0.3)
-        return AgentResult(
-            response_text=response.strip(),
-            agent_action="call_tool",
-            tool_name=tool_name,
-            tool_entities=entities,
-            tool_result=result,
-        )
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -1118,43 +649,252 @@ class ConversationalAgent:
         user_info: dict | None = None,
         actor_id: str | None = None,
     ) -> AgentResult:
-        """
-        Process a user message and return an AgentResult.
+        """Process a user message through the LLM-first NLU pipeline.
 
-        1. Loads conversation history (if memory available)
-        2. Calls LLM to translate message to command JSON
-        3. Routes: router (fast), query_executor (fallback), reply, or ToolGateway (legacy)
-        4. Returns final response
+        1. Load conversation history
+        2. Single NLU call (entity extraction + tool selection + params)
+        3. Tool dispatch → NL response generation
         """
         start = time.perf_counter()
-        # 1. Load history
+
+        # Phase 1: Load conversation history
         history: list[dict] = []
         if self._memory and telegram_user_id:
             try:
                 history = self._memory.load_history(telegram_user_id)
             except Exception:
                 logger.warning("Failed to load history for %s", telegram_user_id, exc_info=True)
-                history = []
 
-        # 2. Pre-process entities
+        # Phase 2: NLU — use new engine when available, fall back to legacy
+        if self._nlu_engine is not None:
+            return self._process_llm_first(text, telegram_user_id, history, start)
+
+        # Legacy path: EntityResolver + IntentClassifier + if-elif chain
+        return self._process_legacy(text, telegram_user_id, history, start)
+
+    # ------------------------------------------------------------------
+    # LLM-First pipeline (new)
+    # ------------------------------------------------------------------
+
+    def _process_llm_first(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+        history: list[dict],
+        start: float,
+    ) -> AgentResult:
+        """New pipeline: single LLM call → tool dispatch → NL response."""
+        # NLU: entity extraction + tool selection + params in one call
+        nlu_result = self._nlu_engine.classify(
+            text,
+            conversation_history=history,
+        )
+        logger.info(
+            "NLU classified",
+            extra={
+                "telegram_event": "nlu_classified",
+                "tool": nlu_result.tool,
+                "params": nlu_result.params,
+                "confidence": nlu_result.confidence,
+            },
+        )
+
+        # Clarification needed
+        if nlu_result.needs_clarification:
+            return AgentResult(
+                response_text=nlu_result.clarification_question or (
+                    "¿Podrías ser más específico? No entendí bien tu consulta."
+                ),
+                agent_action="ambiguous",
+            )
+
+        # Reply tool (greetings, help, etc.)
+        if nlu_result.tool == "reply":
+            return self._handle_reply(text, nlu_result)
+
+        # Tool dispatch
+        tool_result = self._dispatch_tool(nlu_result.tool, nlu_result.params, text)
+
+        # Generate NL response
+        response_text = self._generate_nl_response(text, nlu_result, tool_result, history)
+
+        agent_result = AgentResult(
+            response_text=response_text,
+            agent_action="query",
+            tool_name=nlu_result.tool,
+            tool_entities={"tool": nlu_result.tool, "params": nlu_result.params},
+            tool_result=tool_result,
+        )
+
+        self._remember_result(
+            telegram_user_id,
+            agent_result,
+            query_type=nlu_result.tool,
+            params=nlu_result.params,
+        )
+        logger.info(
+            "Agent resolved via LLM-first pipeline",
+            extra={
+                "telegram_event": "agent_route_completed",
+                "match_type": "llm_first",
+                "tool": nlu_result.tool,
+                "latency_ms": round((time.perf_counter() - start) * 1000),
+            },
+        )
+        return agent_result
+
+    def _dispatch_tool(
+        self,
+        tool_name: str,
+        params: dict[str, Any],
+        user_text: str,
+    ) -> dict[str, Any] | None:
+        """Dispatch to the appropriate deterministic tool and return structured output."""
+        try:
+            # Tool Registry (new)
+            if self._tool_registry is not None:
+                handler = self._tool_registry.get(tool_name)
+                if handler is not None:
+                    result = handler(**params)
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+                    return None
+
+            # Doctor tools
+            if tool_name in ("list_doctors", "count_doctors", "doctors_by_sex",
+                             "doctors_by_rank", "doctors_by_department"):
+                if self._doctor_query_service is not None:
+                    result = self._doctor_query_service.execute(user_text, params)
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            if tool_name in ("doctor_last_service", "doctor_service_load", "unassigned_doctors"):
+                if self._semantic_layer_resolver is not None:
+                    result = self._semantic_layer_resolver.resolve(
+                        user_text=user_text,
+                        domain="medicos",
+                        action="query",
+                        entities=params,
+                        is_followup=False,
+                        previous_metric=None,
+                    )
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # Calendar tools
+            if tool_name in ("calendar_assignments", "calendar_assigned_count", "calendar_status"):
+                if self._calendar_query_service is not None:
+                    result = self._calendar_query_service.execute(tool_name, params)
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # IntentRouter fallback for registered query types
+            if self._router is not None:
+                entry = self._router.registry.get(tool_name)
+                if entry is not None:
+                    result = self._router.handle(
+                        action="query",
+                        query_type=tool_name,
+                        params=params,
+                        user_message=user_text,
+                    )
+                    if result is not None:
+                        return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # SQL Agent fallback
+            if tool_name == "sql_query":
+                result = self._fallback_to_query_db(params.get("question", user_text))
+                return result.__dict__ if hasattr(result, '__dict__') else result
+
+            # Last resort: try SQL agent with original text
+            if self._query_executor is not None:
+                result = self._fallback_to_query_db(user_text)
+                return result.__dict__ if hasattr(result, '__dict__') else result
+
+        except Exception:
+            logger.warning("Tool dispatch failed for %s", tool_name, exc_info=True)
+
+        return None
+
+    def _generate_nl_response(
+        self,
+        user_text: str,
+        nlu_result: NLUResult,
+        tool_result: dict[str, Any] | None,
+        history: list[dict],
+    ) -> str:
+        """Generate natural language response from tool output."""
+        try:
+            return generate_response(
+                self._llm,
+                user_text,
+                nlu_result.tool,
+                tool_result or {},
+                history,
+            )
+        except Exception:
+            logger.warning("NL response generation failed, using fallback")
+            if tool_result and isinstance(tool_result, dict):
+                rows = tool_result.get("rows", tool_result.get("data", {}).get("rows", []))
+                columns = tool_result.get("columns", tool_result.get("data", {}).get("columns", []))
+                if rows:
+                    return _format_rows(rows, columns)
+            return "No se encontraron resultados." if not tool_result else str(tool_result)
+
+    def _handle_reply(self, text: str, nlu_result: NLUResult) -> AgentResult:
+        """Handle conversational replies (greetings, help, etc.)."""
+        response_type = nlu_result.params.get("response_type", "unknown")
+        if response_type == "greeting":
+            return AgentResult(
+                response_text="¡Hola! Soy el asistente de turnos médicos. ¿En qué puedo ayudarte?",
+                agent_action="reply",
+            )
+        if response_type == "help":
+            return AgentResult(
+                response_text=(
+                    "Puedes consultarme sobre:\n"
+                    "• Doctores disponibles y sus horarios\n"
+                    "• Calendarios de guardias\n"
+                    "• Misiones médicas\n"
+                    "• Carga de servicio por doctor\n\n"
+                    "Ejemplos:\n"
+                    "• \"¿Cuántos doctores hay en cirugía?\"\n"
+                    "• \"¿Quiénes están de guardia el lunes?\"\n"
+                    "• \"Muéstrame las doctoras disponibles\""
+                ),
+                agent_action="reply",
+            )
+        if response_type == "farewell":
+            return AgentResult(
+                response_text="¡Hasta luego! Estoy aquí cuando me necesites.",
+                agent_action="reply",
+            )
+        return AgentResult(
+            response_text="¿En qué más puedo ayudarte con los turnos médicos?",
+            agent_action="reply",
+        )
+
+    # ------------------------------------------------------------------
+    # Legacy pipeline (fallback)
+    # ------------------------------------------------------------------
+
+    def _process_legacy(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+        history: list[dict],
+        start: float,
+    ) -> AgentResult:
+        """Legacy pipeline: EntityResolver + IntentClassifier + if-elif routing chain."""
+
+        # Pre-process entities
         entity_hints = ""
         resolved_entities: dict = {}
-        ambiguous_entities: list[dict] = []
         if self._entity_resolver is not None:
             try:
                 pre = self._entity_resolver.pre_process(text)
                 entity_hints = pre.get("hints", "")
                 resolved_entities = pre.get("resolved", {})
-                ambiguous_entities = pre.get("ambiguous", [])
-                if entity_hints or ambiguous_entities:
-                    logger.info(
-                        "Telegram entities pre-processed",
-                        extra={
-                            "telegram_event": "entities_preprocessed",
-                            "entity_hints": entity_hints,
-                            "ambiguous_count": len(ambiguous_entities),
-                        },
-                    )
             except Exception:
                 logger.warning("EntityResolver.pre_process failed", exc_info=True)
 
@@ -1164,433 +904,102 @@ class ConversationalAgent:
             context_applied,
             followup_operation,
         ) = self._merge_followup_context(
-            telegram_user_id,
-            resolved_entities,
-            entity_hints,
-            text,
+            telegram_user_id, resolved_entities, entity_hints, text,
         )
-        if context_applied:
-            logger.info(
-                "Telegram follow-up context applied",
-                extra={
-                    "telegram_event": "followup_context_applied",
-                    "entity_hints": entity_hints,
-                    "filter_dim_count": _count_filter_dims(entity_hints),
-                },
-            )
-
-        session_state: SessionState | None = None
-        if self._session_store is not None and telegram_user_id is not None:
-            try:
-                session_state = self._session_store.get(telegram_user_id)
-            except Exception:
-                logger.warning("Failed to load Telegram session state", exc_info=True)
 
         mission_followup = self._mission_contextual_followup_result(text, telegram_user_id)
         if mission_followup is not None:
             self._remember_result(
-                telegram_user_id,
-                mission_followup,
-                query_type=(
-                    mission_followup.tool_entities or {}
-                ).get("query_type"),
+                telegram_user_id, mission_followup,
+                query_type=(mission_followup.tool_entities or {}).get("query_type"),
                 params={},
-            )
-            logger.info(
-                "Agent resolved via mission contextual follow-up",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "mission_contextual_followup",
-                    "agent_action": mission_followup.agent_action,
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
             )
             return mission_followup
 
-        conversation_plan = build_conversation_plan(
-            text,
+        classified = self._classify_intent(
+            text=text,
+            entity_hints=entity_hints,
             resolved_entities=resolved_entities,
-            session_state=session_state,
         )
-        logger.info(
-            "Telegram conversation plan built",
-            extra={
-                "telegram_event": "conversation_plan_built",
-                "domain": conversation_plan.domain,
-                "action": conversation_plan.action,
-                "route": conversation_plan.route,
-                "memory_policy": conversation_plan.memory_policy,
-                "is_followup": conversation_plan.is_followup,
-                "confidence": conversation_plan.confidence,
-            },
-        )
-        if conversation_plan.route == "clarification":
+
+        if classified.action in ("reply", "ambiguous"):
             return AgentResult(
-                response_text=(
-                    conversation_plan.clarification_question
-                    or "Necesito que me indiques que informacion del sistema quieres consultar."
-                ),
-                agent_action="ambiguous",
-                tool_entities={
-                    "conversation_plan": {
-                        "domain": conversation_plan.domain,
-                        "action": conversation_plan.action,
-                        "route": conversation_plan.route,
-                        "memory_policy": conversation_plan.memory_policy,
-                        "is_followup": conversation_plan.is_followup,
-                        "confidence": conversation_plan.confidence,
-                    }
-                },
+                response_text=classified.response_text
+                or "Necesito que me indiques que informacion del sistema quieres consultar.",
+                agent_action=classified.action,
             )
 
-        # 2a. If entity resolver found ambiguity, return it directly
-        if ambiguous_entities:
-            return AgentResult(
-                response_text=ambiguous_entities[0]["question"],
-                agent_action="ambiguous",
-            )
-
-        contextual_export = self._contextual_export_result(text, telegram_user_id)
-        if contextual_export is not None:
-            self._remember_result(
-                telegram_user_id,
-                contextual_export,
-                query_type=(
-                    contextual_export.tool_entities or {}
-                ).get("query_type"),
-                params={},
-            )
-            logger.info(
-                "Agent resolved via contextual export",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "contextual_export",
-                    "agent_action": contextual_export.agent_action,
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
-            return contextual_export
-
-        mission_ranking_query = _mission_ranking_query_intent(text)
-        if mission_ranking_query is not None:
-            query_type, params = mission_ranking_query
-            router_result = self._route_via_router("query", query_type, params, text)
-            if router_result is not None:
-                self._remember_result(
-                    telegram_user_id,
-                    router_result,
-                    query_type=query_type,
-                    params=params,
+        # Semantic Layer
+        if classified.metric and self._semantic_layer_resolver is not None:
+            try:
+                entities_for_semantic = dict(resolved_entities)
+                entities_for_semantic.update(classified.params)
+                semantic_result = self._semantic_layer_resolver.resolve(
+                    user_text=text, domain=classified.domain, action=classified.action,
+                    entities=entities_for_semantic, is_followup=False, previous_metric=None,
                 )
-                logger.info(
-                    "Agent resolved via deterministic mission ranking query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "mission_ranking",
-                        "agent_action": router_result.agent_action,
-                        "query_type": query_type,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return router_result
+                if semantic_result is not None:
+                    agent_result = self._semantic_layer_resolver.to_agent_result(
+                        semantic_result, user_text=text, format=classified.format,
+                    )
+                    self._remember_result(
+                        telegram_user_id, agent_result,
+                        query_type=f"semantic:{semantic_result.metric_name}",
+                        params=classified.params,
+                    )
+                    return agent_result
+            except Exception:
+                logger.warning("SemanticLayerResolver failed", exc_info=True)
 
-        active_missions_query = _active_missions_query_intent(text)
-        if active_missions_query is not None:
-            query_type, params = active_missions_query
-            router_result = self._route_via_router("query", query_type, params, text)
-            if router_result is not None:
-                self._remember_result(
-                    telegram_user_id,
-                    router_result,
-                    query_type=query_type,
-                    params=params,
-                )
-                logger.info(
-                    "Agent resolved via deterministic active missions query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "active_missions",
-                        "agent_action": router_result.agent_action,
-                        "query_type": query_type,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return router_result
+        # Doctor query
+        if classified.domain == "medicos" and self._doctor_query_service is not None:
+            try:
+                result = self._doctor_query_service.execute(text, resolved_entities)
+                if result is not None:
+                    self._remember_result(telegram_user_id, result)
+                    return result
+            except Exception:
+                logger.warning("DoctorQueryService failed", exc_info=True)
 
-        if self._calendar_query_service is not None:
-            service_query = _calendar_service_query_intent(text, session_state)
-            if service_query is not None:
-                query_type, params = service_query
-                result = self._calendar_query_service.execute(query_type, params)
+        # Calendar query
+        if classified.domain == "calendario" and self._calendar_query_service is not None:
+            try:
+                result = self._calendar_query_service.execute(
+                    classified.query_type or "list_calendar_assignments", classified.params,
+                )
                 if result is not None:
                     self._remember_result(
-                        telegram_user_id,
-                        result,
-                        query_type=query_type,
-                        params=params,
-                    )
-                    logger.info(
-                        "Agent resolved via deterministic calendar query service",
-                        extra={
-                            "telegram_event": "agent_route_completed",
-                            "match_type": "calendar_query_service",
-                            "agent_action": result.agent_action,
-                            "query_type": query_type,
-                            "latency_ms": round((time.perf_counter() - start) * 1000),
-                        },
+                        telegram_user_id, result,
+                        query_type=classified.query_type or "list_calendar_assignments",
+                        params=classified.params,
                     )
                     return result
+            except Exception:
+                logger.warning("CalendarQueryService failed", exc_info=True)
 
-        calendar_query = self._calendar_followup_query_intent(text, telegram_user_id)
-        calendar_match_type = "calendar_followup" if calendar_query is not None else None
-        if calendar_query is None:
-            calendar_query = _calendar_assignment_query_intent(text)
-            calendar_match_type = "deterministic_calendar" if calendar_query is not None else None
-        if calendar_query is not None:
-            query_type, params = calendar_query
-            router_result = self._route_via_router("query", query_type, params, text)
+        # IntentRouter
+        if classified.query_type:
+            router_result = self._route_via_router(
+                classified.action if classified.action == "export" else "query",
+                classified.query_type, classified.params, text, format=classified.format,
+            )
             if router_result is not None:
                 self._remember_result(
-                    telegram_user_id,
-                    router_result,
-                    query_type=query_type,
-                    params=params,
-                )
-                logger.info(
-                    "Agent resolved via deterministic calendar assignment query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": calendar_match_type,
-                        "agent_action": router_result.agent_action,
-                        "query_type": query_type,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
+                    telegram_user_id, router_result,
+                    query_type=classified.query_type, params=classified.params,
                 )
                 return router_result
 
-        # 2b. Filtered doctor queries: deterministic path first, NL-to-SQL fallback second.
-        if _count_filter_dims(entity_hints) >= 1 and self._doctor_query_service is not None:
-            doctor_query_text = text
-            asks_followup_count = bool(
-                re.search(r"\b\d+\s+o\s+\d+\b", text, re.IGNORECASE)
-                or re.search(r"\bson\b", text, re.IGNORECASE)
-            )
-            if context_applied and (
-                followup_operation in {"count", "count_by_sex"} or asks_followup_count
-            ):
-                doctor_query_text = f"cuantos {text}"
-            result = self._doctor_query_service.execute(doctor_query_text, resolved_entities)
-            if result is not None:
-                self._remember_result(telegram_user_id, result)
-                logger.info(
-                    "Agent resolved via deterministic doctor query",
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "deterministic",
-                        "agent_action": result.agent_action,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return result
-
-        if _count_filter_dims(entity_hints) >= 2 and self._query_executor is not None:
-            logger.info(
-                "Compound query detected (hints=%s), routing to QueryExecutor", entity_hints
-            )
+        # QueryExecutor fallback
+        if _count_filter_dims(entity_hints) >= 1 and self._query_executor is not None:
             result = self._fallback_to_query_db(text, entity_hints=entity_hints)
             self._remember_result(telegram_user_id, result)
-            logger.info(
-                "Agent resolved via compound fallback",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "fallback",
-                    "agent_action": result.agent_action,
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
             return result
 
-        # 3. Build prompt (with entity hints)
-        system_prompt = self._build_system_prompt(user_info, entity_hints=entity_hints)
-
-        # 4. LLM call
-        messages: list[dict] = [
-            {"role": "system", "content": system_prompt},
-        ]
-        messages.extend(history)
-        messages.append({"role": "user", "content": text})
-
-        response = self._llm.chat_complete(messages, temperature=0.0, json_mode=True)
-        response = response.strip()
-
-        # 4. Parse JSON
-        parsed = self._extract_json(response)
-
-        # Not valid JSON → retry once without json_mode (DeepSeek sometimes returns
-        # empty content with json_mode + temperature=0.0)
-        if parsed is None:
-            logger.warning(
-                "LLM returned invalid JSON (len=%s), retrying without json_mode",
-                len(response),
-            )
-            response = self._llm.chat_complete(messages, temperature=0.0, json_mode=False)
-            response = response.strip()
-            parsed = self._extract_json(response)
-            if parsed is None:
-                logger.warning("LLM retry also failed: %.200s", response)
-                return AgentResult(
-                    response_text=(
-                        response
-                        or "Lo siento, no pude procesar tu consulta. Intenta de nuevo."
-                    )
-                )
-
-        # 5. Legacy format support
-        if parsed.get("action") == "call_tool":
-            return self._handle_old_tool_format(parsed, text, actor_id=actor_id)
-
-        # 6. Validate with IntentOutput schema
-        try:
-            intent = IntentOutput.model_validate(parsed)
-        except ValidationError as exc:
-            logger.warning("LLM returned invalid IntentOutput: %.200s — %s", response, exc)
-            return AgentResult(
-                response_text="Ocurrió un error al procesar tu consulta. Intentá de nuevo.",
-                agent_action="validation_error",
-            )
-
-        # 7. Handle low confidence
-        if intent.confidence < 0.6:
-            return AgentResult(
-                response_text=(
-                    intent.response_text
-                    or "No estoy seguro de haber entendido correctamente. "
-                    "¿Podrías ser más específico?"
-                ),
-                agent_action="ambiguous",
-            )
-
-        # 8. Handle missing fields
-        if intent.missing_fields:
-            fields_str = ", ".join(intent.missing_fields)
-            return AgentResult(
-                response_text=(
-                    intent.response_text
-                    or f"Me falta información: {fields_str}. ¿Podrías indicarme?"
-                ),
-                agent_action="ambiguous",
-            )
-
-        action = intent.action
-        query_type = (intent.query_type or "").strip()
-        params = intent.params
-        response_text = intent.response_text or ""
-        fmt = intent.format
-        logger.info(
-            "LLM intent parsed",
-            extra={
-                "telegram_event": "llm_intent_parsed",
-                "agent_action": action,
-                "query_type": query_type,
-                "params": params,
-                "format": fmt,
-                "confidence": intent.confidence,
-            },
+        return AgentResult(
+            response_text=(
+                classified.response_text
+                or "No estoy seguro de haber entendido. ¿Podrias ser mas especifico?"
+            ),
+            agent_action="ambiguous",
         )
-
-        # 6a. Reply / ambiguous → direct text
-        if action == "reply":
-            if _looks_like_data_request(text):
-                logger.warning("LLM used reply for a data request, refusing ungrounded answer")
-                if self._query_executor is not None:
-                    fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
-                    self._remember_result(telegram_user_id, fallback)
-                    return fallback
-                return AgentResult(
-                    response_text=(
-                        "Para datos especificos del sistema necesito ejecutar una consulta. "
-                        "No voy a responder con informacion no verificada."
-                    ),
-                    agent_action="ambiguous",
-                )
-            if _reply_has_hallucination(response_text):
-                logger.warning("Reply contained potential hallucination, replaced with generic")
-                response_text = (
-                    "Puedo ayudarte con informacion del sistema de turnos medicos. "
-                    "Para datos especificos, preguntame algo concreto como "
-                    "'cuantos medicos activos hay' o 'dame la lista de sargentos'."
-                )
-            logger.info(
-                "Agent returned direct reply",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "reply",
-                    "agent_action": "reply",
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
-            return AgentResult(
-                response_text=response_text or "No tengo informacion sobre eso en el sistema.",
-                agent_action="reply",
-            )
-
-        if action == "ambiguous":
-            logger.info(
-                "Agent returned clarification",
-                extra={
-                    "telegram_event": "agent_route_completed",
-                    "match_type": "clarification",
-                    "agent_action": "ambiguous",
-                    "latency_ms": round((time.perf_counter() - start) * 1000),
-                },
-            )
-            return AgentResult(
-                response_text=(
-                    response_text
-                    or "Necesito un poco mas de detalle para ayudarte. "
-                       "¿Podrias ser mas especifico?"
-                ),
-                agent_action="ambiguous",
-            )
-
-        # 6b. Query / export → try router, fallback to query_db
-        if action in ("query", "export"):
-            if query_type:
-                router_result = self._route_via_router(action, query_type, params, text, format=fmt)
-                if router_result is not None:
-                    self._remember_result(
-                        telegram_user_id,
-                        router_result,
-                        query_type=query_type,
-                        params=params,
-                    )
-                    logger.info(
-                        "Agent resolved via query registry",
-                        extra={
-                            "telegram_event": "agent_route_completed",
-                            "match_type": "registry",
-                            "agent_action": router_result.agent_action,
-                            "query_type": query_type,
-                            "latency_ms": round((time.perf_counter() - start) * 1000),
-                        },
-                    )
-                    return router_result
-
-            # Fallback for query/export action
-            if action in ("query", "export"):
-                fallback = self._fallback_to_query_db(text, entity_hints=entity_hints)
-                self._remember_result(telegram_user_id, fallback)
-                logger.info(
-                    "Agent resolved via %s fallback", action,
-                    extra={
-                        "telegram_event": "agent_route_completed",
-                        "match_type": "fallback",
-                        "agent_action": fallback.agent_action,
-                        "latency_ms": round((time.perf_counter() - start) * 1000),
-                    },
-                )
-                return fallback
-
-        # 6c. Unknown action
-        logger.warning("LLM returned unknown action '%s' for: %.100s", action, text)
-        return AgentResult(response_text="No pude encontrar informacion sobre eso en el sistema.")

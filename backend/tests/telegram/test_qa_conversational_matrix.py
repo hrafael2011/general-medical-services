@@ -1,7 +1,6 @@
 from pathlib import Path
 
-
-QA_MATRIX_PATH = Path("docs/qa-telegram-conversacional-matriz.md")
+QA_MATRIX_PATH = Path(__file__).resolve().parents[3] / "docs" / "qa-telegram-conversacional-matriz.md"
 
 
 def test_qa_matrix_document_exists() -> None:
@@ -32,7 +31,7 @@ def test_qa_matrix_has_required_columns() -> None:
 
 def test_qa_matrix_covers_phase_9_required_scenarios() -> None:
     """The matrix must cover full conversations and negative cases from the plan."""
-    text = QA_MATRIX_PATH.read_text(encoding="utf-8").lower()
+    text = QA_MATRIX_PATH.read_text(encoding="utf-8").lower().replace("→", "->")
 
     required_phrases = [
         "conteo -> listado -> pdf",
@@ -40,14 +39,14 @@ def test_qa_matrix_covers_phase_9_required_scenarios() -> None:
         "pasantes femeninos -> y masculinos",
         "ranking agosto -> top 3 -> exportar",
         "calendario aprobado -> borrador",
-        "rango invalido",
+        "rango inválido",
         "mes sin calendario",
         "ranking inexistente",
         "pregunta fuera del sistema",
-        "medico inexistente",
+        "médico inexistente",
         "departamento mal escrito",
         "uuid",
-        "ingles visible",
+        "inglés visible",
     ]
     for phrase in required_phrases:
         assert phrase in text

@@ -1,5 +1,5 @@
 const configuredBase = import.meta.env.VITE_API_URL;
-const BASE = configuredBase || `${window.location.protocol}//${window.location.hostname}:8999`;
+const BASE = (configuredBase || `${window.location.protocol}//${window.location.hostname}:8999`).replace(/\/api\/?$/, "");
 const TOKEN_STORAGE_KEY = "auth_token";
 
 let token: string | null = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -17,6 +17,7 @@ export function getToken() {
 export async function apiFetch<T>(path: string, init: RequestInit = {}, responseType?: "blob"): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init.headers as Record<string, string> ?? {}),
   };

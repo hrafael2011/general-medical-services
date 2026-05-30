@@ -8,21 +8,46 @@ import { adminApi, UserRead } from "../../api/admin";
 
 const ROLES = ["encargado", "admin"] as const;
 
-const PERMISSION_DEFINITIONS = [
-  { key: "manage_doctors", label: "Gestionar Medicos" },
-  { key: "manage_calendars", label: "Gestionar Calendarios" },
-  { key: "manage_missions", label: "Gestionar Misiones" },
-  { key: "manage_availability", label: "Gestionar Disponibilidad" },
-  { key: "manage_catalogs", label: "Gestionar Catalogos" },
-  { key: "manage_users", label: "Gestionar Usuarios" },
-  { key: "manage_admins", label: "Gestionar Administradores" },
-  { key: "manage_trash", label: "Gestionar Papelera" },
-  { key: "view_audit", label: "Ver Auditoria" },
-  { key: "view_notifications", label: "Ver Notificaciones" },
-  { key: "manage_confirmations", label: "Gestionar Confirmaciones" },
-  { key: "manage_alerts", label: "Gestionar Alertas" },
-  { key: "export_reports", label: "Exportar Reportes" },
-  { key: "receive_escalation_alerts", label: "Recibir Alertas de Escalamiento" },
+const PERMISSION_GROUPS = [
+  {
+    category: "Gestión Médica",
+    permissions: [
+      { key: "manage_doctors", label: "Gestionar Médicos" },
+      { key: "manage_availability", label: "Gestionar Disponibilidad" },
+      { key: "manage_missions", label: "Gestionar Misiones" },
+    ],
+  },
+  {
+    category: "Calendarios",
+    permissions: [
+      { key: "manage_calendars", label: "Gestionar Calendarios" },
+      { key: "manage_confirmations", label: "Gestionar Confirmaciones" },
+    ],
+  },
+  {
+    category: "Administración",
+    permissions: [
+      { key: "manage_users", label: "Gestionar Usuarios" },
+      { key: "manage_trash", label: "Gestionar Papelera" },
+      { key: "manage_catalogs", label: "Gestionar Catálogos" },
+      { key: "manage_admins", label: "Gestionar Administradores" },
+    ],
+  },
+  {
+    category: "Monitoreo",
+    permissions: [
+      { key: "view_audit", label: "Ver Auditoría" },
+      { key: "view_notifications", label: "Ver Notificaciones" },
+      { key: "manage_alerts", label: "Gestionar Alertas" },
+      { key: "receive_escalation_alerts", label: "Recibir Alertas de Escalamiento" },
+    ],
+  },
+  {
+    category: "Reportes",
+    permissions: [
+      { key: "export_reports", label: "Exportar Reportes" },
+    ],
+  },
 ];
 
 async function listAdminPanelUsers(): Promise<UserRead[]> {
@@ -38,19 +63,13 @@ export function UsersView() {
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPermissions, setNewPermissions] = useState<string[]>([]);
+  const [newRole, setNewRole] = useState<string>("encargado");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editActive, setEditActive] = useState(true);
   const [editPermissions, setEditPermissions] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserRead | null>(null);
-
-  const AVAILABLE_PERMISSIONS = [
-    { key: "receive_escalation_alerts", label: "Recibir alertas de escalamiento" },
-    { key: "manage_doctors", label: "Gestionar médicos" },
-    { key: "manage_calendars", label: "Gestionar calendarios" },
-    { key: "view_reports", label: "Ver reportes" },
-  ];
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["admin-users"],
@@ -68,11 +87,31 @@ export function UsersView() {
       setNewName("");
       setNewEmail("");
       setNewPermissions([]);
+      setNewRole("encargado");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Error al crear usuario.";
       addToast("error", message || "Error al crear usuario.");
+    },
+  });
+
+  const createAdminMutation = useMutation({
+    mutationFn: () => adminApi.createAdmin(newName, newEmail),
+    onSuccess: (res) => {
+      adminApi.inviteUser(res.user.id).catch(() => {
+        addToast("error", "Administrador creado, pero no se pudo enviar la invitación.");
+      });
+      addToast("success", `Administrador creado. Invitación enviada a ${newEmail}.`);
+      setShowCreate(false);
+      setNewName("");
+      setNewEmail("");
+      setNewPermissions([]);
+      setNewRole("encargado");
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (err) => {
+      addToast("error", err instanceof Error ? err.message : "Error al crear administrador.");
     },
   });
 
@@ -137,54 +176,106 @@ export function UsersView() {
 
       {showCreate && (
         <div style={{ background: "#f9fafb", padding: "16px", borderRadius: "8px", marginBottom: "20px" }}>
-          <h4 style={{ margin: "0 0 12px", fontSize: "0.9rem" }}>Crear Encargado</h4>
+          {/* Title */}
+          <h4 style={{ margin: "0 0 12px", fontSize: "1rem" }}>
+            Crear {newRole === "admin" ? "Administrador" : "Encargado"}
+          </h4>
+
+          {/* Name + Email */}
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
             <label>Nombre <input type="text" value={newName} onChange={e => setNewName(e.target.value)} /></label>
             <label>Email <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} /></label>
           </div>
-          <div style={{ marginTop: "12px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
-            {AVAILABLE_PERMISSIONS.map(p => (
-              <label key={p.key} className="permission-checkbox">
-                <input
-                  type="checkbox"
-                  checked={newPermissions.includes(p.key)}
-                  onChange={(e) => {
-                    setNewPermissions(
-                      e.target.checked
-                        ? [...newPermissions, p.key]
-                        : newPermissions.filter(x => x !== p.key)
-                    );
-                  }}
-                />
-                {p.label}
-              </label>
-            ))}
-          </div>
-          <div style={{ marginTop: "12px" }}>
-            <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creando..." : "Crear"}
-            </button>
-          </div>
-          <div style={{ marginTop: "12px" }}>
-            <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "6px" }}>Permisos</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-              {PERMISSION_DEFINITIONS.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
-                <label key={p.key} style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={newPermissions.includes(p.key)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setNewPermissions([...newPermissions, p.key]);
-                      } else {
-                        setNewPermissions(newPermissions.filter(k => k !== p.key));
-                      }
-                    }}
-                  />
-                  {p.label}
-                </label>
-              ))}
+
+          {/* Role selector */}
+          <div className="form-section">
+            <h4 className="form-section-title">Rol</h4>
+            <p className="form-section-desc">Define el nivel de acceso del usuario</p>
+            <div className="role-cards">
+              <div
+                className={`role-card${newRole === "encargado" ? " role-card--active" : ""}`}
+                onClick={() => setNewRole("encargado")}
+              >
+                <div className="role-card-radio">
+                  <div className="role-card-radio-dot" />
+                </div>
+                <div>
+                  <div className="role-card-title">Encargado</div>
+                  <div className="role-card-desc">Acceso con permisos específicos</div>
+                </div>
+              </div>
+              <div
+                className={`role-card${newRole === "admin" ? " role-card--active" : ""}${!currentUser?.is_superadmin ? " role-card--disabled" : ""}`}
+                onClick={() => { if (currentUser?.is_superadmin) setNewRole("admin"); }}
+              >
+                <div className="role-card-radio">
+                  <div className="role-card-radio-dot" />
+                </div>
+                <div>
+                  <div className="role-card-title">Administrador</div>
+                  <div className="role-card-desc">Acceso completo al sistema</div>
+                </div>
+              </div>
             </div>
+          </div>
+
+          {/* Permissions (encargado only) */}
+          {newRole === "encargado" && (
+            <div className="form-section">
+              <h4 className="form-section-title">Permisos</h4>
+              <p className="form-section-desc">Asigna los permisos específicos para el rol Encargado</p>
+              <div className="perm-groups">
+                {PERMISSION_GROUPS.map(group => (
+                  <div key={group.category} className="perm-group">
+                    <div className="perm-group-header">{group.category}</div>
+                    <div className="perm-group-body">
+                      {group.permissions.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
+                        <label key={p.key} className="perm-check">
+                          <input
+                            type="checkbox"
+                            checked={newPermissions.includes(p.key)}
+                            onChange={(e) => {
+                              setNewPermissions(
+                                e.target.checked
+                                  ? [...newPermissions, p.key]
+                                  : newPermissions.filter(k => k !== p.key)
+                              );
+                            }}
+                          />
+                          {p.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {newRole === "admin" && (
+            <p style={{ color: "#64748b", fontSize: "0.85rem", fontStyle: "italic", margin: "12px 0" }}>
+              Los administradores tienen acceso completo a todas las funciones del sistema.
+            </p>
+          )}
+
+          {/* Buttons */}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+            <button className="btn-secondary" onClick={() => { setShowCreate(false); setNewName(""); setNewEmail(""); setNewPermissions([]); setNewRole("encargado"); }}>
+              Cancelar
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                if (newRole === "admin") {
+                  createAdminMutation.mutate();
+                } else {
+                  createMutation.mutate();
+                }
+              }}
+              disabled={createMutation.isPending || createAdminMutation.isPending}
+            >
+              {createMutation.isPending || createAdminMutation.isPending ? "Creando..." : "Crear Usuario"}
+            </button>
           </div>
         </div>
       )}
@@ -256,28 +347,35 @@ export function UsersView() {
                     <tr>
                       <td colSpan={5} style={{ padding: "8px 12px", background: "#f9fafb" }}>
                         {editRole === "admin" ? (
-                          <span style={{ fontSize: "0.8rem", color: "#666" }}>
-                            Los administradores tienen acceso completo.
-                          </span>
+                          <p style={{ color: "#64748b", fontSize: "0.85rem", fontStyle: "italic", margin: 0 }}>
+                            Los administradores tienen acceso completo a todas las funciones del sistema.
+                          </p>
                         ) : (
                           <div>
                             <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "4px" }}>Permisos</label>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
-                              {PERMISSION_DEFINITIONS.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
-                                <label key={p.key} style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={editPermissions.includes(p.key)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setEditPermissions([...editPermissions, p.key]);
-                                      } else {
-                                        setEditPermissions(editPermissions.filter(k => k !== p.key));
-                                      }
-                                    }}
-                                  />
-                                  {p.label}
-                                </label>
+                            <div className="perm-groups">
+                              {PERMISSION_GROUPS.map(group => (
+                                <div key={group.category} className="perm-group">
+                                  <div className="perm-group-header">{group.category}</div>
+                                  <div className="perm-group-body">
+                                    {group.permissions.filter(p => p.key !== "manage_admins" || currentUser?.is_superadmin).map(p => (
+                                      <label key={p.key} className="perm-check">
+                                        <input
+                                          type="checkbox"
+                                          checked={editPermissions.includes(p.key)}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setEditPermissions([...editPermissions, p.key]);
+                                            } else {
+                                              setEditPermissions(editPermissions.filter(k => k !== p.key));
+                                            }
+                                          }}
+                                        />
+                                        {p.label}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           </div>

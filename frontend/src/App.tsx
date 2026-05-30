@@ -1,11 +1,12 @@
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { Eye, EyeOff, KeyRound, LogIn, ShieldCheck } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { changePassword } from "./api/auth";
 import { ApiError } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { AlertBell } from "./components/AlertBell";
+import { WelcomeToast } from "./components/WelcomeToast";
 import { AuthGuard } from "./components/AuthGuard";
 import { DashboardView } from "./features/dashboard/DashboardView";
 import { DoctorsPage } from "./features/doctors/DoctorsPage";
@@ -55,6 +56,19 @@ export function App() {
 }
 
 function AppShell() {
+  const { justLoggedIn, currentUser } = useAuth();
+  const [showToast, setShowToast] = useState(false);
+
+  useEffect(() => {
+    if (justLoggedIn && currentUser) {
+      setShowToast(true);
+    }
+  }, [justLoggedIn, currentUser]);
+
+  function handleToastDone() {
+    setShowToast(false);
+  }
+
   return (
     <div className="app-layout">
       <Sidebar />
@@ -64,6 +78,9 @@ function AppShell() {
         </div>
         <Outlet />
       </main>
+      {showToast && (
+        <WelcomeToast userName={currentUser?.name ?? ""} onDone={handleToastDone} />
+      )}
     </div>
   );
 }

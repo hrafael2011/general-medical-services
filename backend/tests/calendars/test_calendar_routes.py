@@ -391,3 +391,30 @@ def test_replace_assignment_success(client, mock_assignment_service):
     )
     assert resp.status_code == 200
     assert resp.json()["doctor_id"] == "doc-2"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/calendars/{calendar_id}/restore
+# ---------------------------------------------------------------------------
+
+
+def test_restore_calendar_success(client, mock_calendar_service):
+    resp = client.post("/api/calendars/cal-1/restore")
+    assert resp.status_code == 204
+    mock_calendar_service.restore_calendar.assert_called_once()
+
+
+def test_restore_calendar_not_found(client, mock_calendar_service):
+    mock_calendar_service.restore_calendar.side_effect = CalendarServiceError(
+        "calendar_not_found", "Calendar not found"
+    )
+    resp = client.post("/api/calendars/unknown/restore")
+    assert resp.status_code == 404
+
+
+def test_restore_calendar_not_deleted(client, mock_calendar_service):
+    mock_calendar_service.restore_calendar.side_effect = CalendarServiceError(
+        "calendar_not_deleted", "Calendar is not deleted"
+    )
+    resp = client.post("/api/calendars/cal-1/restore")
+    assert resp.status_code == 422

@@ -1,151 +1,68 @@
 """
 QueryExecutor — converts natural language questions to SQL and executes them.
 
+This module is now a thin backward-compatible wrapper around the SQL Agent
+orchestrator, which provides iterative self-correction (up to 3 turns) for
+much higher accuracy on complex ad-hoc queries.
+
 Security: only SELECT statements are allowed. DML/DDL are blocked.
 """
 
-import re
+from __future__ import annotations
+
 import time
 from typing import Any
 
-from sqlalchemy import text
-
-# Import models so metadata knows all tables
-import backend.app.infrastructure.db.models.audit  # noqa: F401
-import backend.app.infrastructure.db.models.availability  # noqa: F401
-import backend.app.infrastructure.db.models.calendars  # noqa: F401
-import backend.app.infrastructure.db.models.catalogs  # noqa: F401
-import backend.app.infrastructure.db.models.doctors  # noqa: F401
-import backend.app.infrastructure.db.models.missions  # noqa: F401
-import backend.app.infrastructure.db.models.notifications  # noqa: F401
-import backend.app.infrastructure.db.models.telegram  # noqa: F401
-import backend.app.infrastructure.db.models.user  # noqa: F401
-from backend.app.application.telegram.sanitize import _is_uuid_column
-from backend.app.infrastructure.db.base import Base as _Base
-
-_FORBIDDEN_KEYWORDS = [
-    "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE",
-    "CREATE", "REPLACE", "EXEC", "EXECUTE", "CALL", "MERGE",
-    "GRANT", "REVOKE", "LOCK", "UNLOCK",
-    "INTO", "COPY", "PG_SLEEP", "PG_CANCEL_BACKEND",
-]
-
-# Also block CTEs that start with WITH … DELETE/UPDATE/INSERT
-_CTE_DML = re.compile(
-    r"\bWITH\s+\w+\s+AS\s*\([^)]*\)\s*(DELETE|UPDATE|INSERT)",
-    re.DOTALL | re.IGNORECASE,
+from backend.app.application.telegram.sql_agent import SQLAgentOrchestrator
+from backend.app.application.telegram.sql_agent.example_store import ExampleStore
+from backend.app.application.telegram.sql_agent.prompt_builder import PromptBuilder
+from backend.app.application.telegram.sql_agent.security import (
+    _EXCLUDE_TABLES,
+    build_schema_summary,
+    extract_sql_from_markdown,
+    validate_sql,
 )
 
-_EXCLUDE_TABLES = {
-    "alembic_version",
-    "telegram_interactions",
-    "telegram_user_links",
-    "telegram_link_tokens",
-    "audit_logs",
-    "users",  # NEVER expose credentials table to LLM
-}
-
-_INTERNAL_IDENTIFIER_RE = re.compile(r"(^id$|_id$)", re.IGNORECASE)
-
-_TABLE_DESCRIPTIONS = {
-    "doctors": "Medicos del sistema. Datos personales y estado.",
-    "doctor_allowed_areas": "Areas de servicio que cada medico puede cubrir.",
-    "calendars": "Calendarios mensuales de turnos.",
-    "calendar_versions": "Versiones de cada calendario.",
-    "calendar_assignments": "Asignaciones de medicos a servicios en fechas.",
-    "unresolved_gaps": "Huecos sin medico asignado en el calendario.",
-    "doctor_availability": "Disponibilidad semanal/variable de medicos.",
-    "doctor_restrictions": "Restricciones temporales de medicos.",
-    "mission_assignments": "Misiones programadas.",
-    "mission_participants": "Medicos asignados a cada mision.",
-    "mission_candidate_rankings": "Rankings de candidatos para misiones por periodo.",
-    "mission_candidate_ranking_entries": "Puntajes individuales del ranking.",
-    "service_areas": "Areas de servicio (codigo y nombre visible).",
-    "ranks": "Rangos/grados de los medicos.",
-    "departments": "Departamentos de los medicos.",
-    "deactivation_reasons": "Razones de baja de servicios.",
-    "system_settings": "Configuraciones del sistema.",
-    "users": "Usuarios del sistema (credenciales de acceso).",
-    "notifications": "Historial de notificaciones enviadas.",
-}
-
-
-def _build_schema_summary(session: Any | None = None) -> str:
-    """Build a schema description string from SQLAlchemy metadata.
-
-    If *session* is provided, real DISTINCT values for critical columns
-    are appended so the LLM generates correct SQL predicates.
-    """
-    lines: list[str] = []
-
-    for name in sorted(_Base.metadata.tables):
-        if name in _EXCLUDE_TABLES:
-            continue
-        table = _Base.metadata.tables[name]
-        desc = _TABLE_DESCRIPTIONS.get(name, "")
-        to_append = []
-        if desc:
-            to_append.append(f"TABLE {name}: {desc}")
-        else:
-            to_append.append(f"TABLE {name}:")
-        for col in table.columns:
-            parts = [f"  - {col.name}: {col.type}"]
-            if col.primary_key:
-                parts.append(" PK")
-            if not col.nullable:
-                parts.append(" NOT NULL")
-            if col.default is not None:
-                parts.append(f" DEFAULT {col.default.arg}")
-            for fk in col.foreign_keys:
-                ref = fk.column
-                parts.append(f" REFERENCES {ref.table.name}({ref.name})")
-            to_append.append("".join(parts))
-        lines.extend(to_append)
-        lines.append("")
-
-    # Append real column values so the LLM generates correct predicates.
-    if session is not None:
-        try:
-            from sqlalchemy import text as _sql_text
-
-            _KNOWN_COLUMNS: dict[str, tuple[str, str]] = {
-                "doctors.sex": ("doctors", "sex"),
-                "doctors.availability_mode": ("doctors", "availability_mode"),
-                "ranks.normalized_name": ("ranks", "normalized_name"),
-            }
-            lines.append("\n--- VALORES REALES DE COLUMNAS CRITICAS ---")
-            for label, (tbl, col) in _KNOWN_COLUMNS.items():
-                try:
-                    result = session.execute(
-                        _sql_text(
-                            f"SELECT DISTINCT \"{col}\" FROM \"{tbl}\""
-                            f" WHERE \"{col}\" IS NOT NULL ORDER BY 1"
-                        )
-                    )
-                    vals = [str(row[0]) for row in result.fetchall()]
-                    if vals:
-                        lines.append(
-                            f"{label} → {', '.join(vals)}"
-                        )
-                except Exception:
-                    pass  # best-effort
-            lines.append("--- FIN VALORES REALES ---\n")
-        except Exception:
-            pass  # best-effort
-
-    return "\n".join(lines)
+# Re-export for backward compatibility in existing tests
+_build_schema_summary = build_schema_summary
 
 
 class QueryExecutor:
-    """Executes natural language database queries with LLM-generated SQL."""
+    """Backward-compatible wrapper that delegates to SQLAgentOrchestrator."""
 
-    def __init__(self, session: Any, llm: Any) -> None:
+    def __init__(self, session: Any, llm: Any, example_store: ExampleStore | None = None) -> None:
         self._session = session
         self._llm = llm
-        self._schema_summary = _build_schema_summary(session)
+        # Keep schema summary accessible for diagnostics / prompts
+        self._schema_summary = build_schema_summary(session)
+        # Optional few-shot prompting
+        prompt_builder = PromptBuilder(example_store) if example_store else None
+        # Internal orchestrator with multi-turn self-correction
+        self._agent = SQLAgentOrchestrator(session, llm, prompt_builder=prompt_builder)
 
     def get_schema_summary(self) -> str:
         return self._schema_summary
+
+    # ------------------------------------------------------------------
+    # Backward-compat helpers (used by existing tests)
+    # ------------------------------------------------------------------
+    def _validate_sql(self, sql: str) -> bool:
+        return validate_sql(sql)
+
+    def _extract_sql(self, text: str) -> str:
+        return extract_sql_from_markdown(text)
+
+    def _run_sql(self, sql: str) -> dict:
+        from backend.app.application.telegram.sql_agent.executor import SafeSQLExecutor
+        return SafeSQLExecutor(self._session).run(sql)
+
+    def _generate_sql(self, user_text: str) -> str:
+        """Legacy single-turn generation (used by integration tests)."""
+        from backend.app.application.telegram.sql_agent.generator import QueryGenerator
+        from backend.app.application.telegram.sql_agent.schema_linker import SchemaLinker
+        reduced = SchemaLinker(self._schema_summary).reduce(user_text)
+        sql, _ = QueryGenerator(self._llm).generate(user_text, reduced)
+        return sql
 
     def execute(
         self,
@@ -153,146 +70,28 @@ class QueryExecutor:
         user_text: str = "",
         entity_hints: str = "",
     ) -> dict:
-        """
-        Convert a natural language query to SQL, validate, execute, return results.
+        """Execute a natural-language query via the SQL Agent.
 
         Returns:
-            {"ok": True, "data": {"columns": [...], "rows": [...], "row_count": N, ...}}
+            {"ok": True, "data": {...}, "sql": "...", "row_count": N, ...}
             or {"ok": False, "error": "..."}
         """
-        sql = self._generate_sql(nl_query, user_text, entity_hints=entity_hints)
-        if not sql:
-            return {"ok": False, "error": "No se pudo generar una consulta SQL."}
-
-        sql_clean = self._extract_sql(sql)
-        if not sql_clean:
-            return {"ok": False, "error": "No se pudo extraer SQL de la respuesta."}
-
-        if not self._validate_sql(sql_clean):
-            return {
-                "ok": False,
-                "error": "Solo se permiten consultas SELECT.",
-            }
-
-        result = self._run_sql(sql_clean)
-        if result.get("ok"):
-            row_count = result.get("data", {}).get("row_count", 0)
-            result["source"] = "nl_to_sql"
-            result["sql"] = sql_clean
-            result["row_count"] = row_count
-        return result
-
-    def _extract_sql(self, text: str) -> str:
-        """Extract SQL from markdown code blocks if present."""
-        text = text.strip()
-        m = re.search(
-            r"```(?:sql)?\s*(.*?)\s*```", text, re.DOTALL
+        start = time.perf_counter()
+        result = self._agent.execute(
+            nl_query=nl_query,
+            user_text=user_text,
+            entity_hints=entity_hints,
         )
-        if m:
-            return m.group(1).strip()
-        # No code block — assume the whole response is SQL
-        return text
-
-    def _generate_sql(self, nl_query: str, user_text: str = "", entity_hints: str = "") -> str:
-        """Send schema + query to LLM and extract SQL."""
-        context = user_text or nl_query
-
-        entity_section = ""
-        if entity_hints:
-            entity_section = (
-                f"\n\nENTIDADES DETECTADAS (usa estos valores exactos en los predicados SQL):\n"
-                f"{entity_hints}\n"
+        # Inject latency for observability + backward-compat row_count
+        if result.get("ok"):
+            result.setdefault("data", {})
+            result["data"]["elapsed_seconds"] = round(
+                time.perf_counter() - start, 2
             )
-
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Eres un generador de consultas SQL para PostgreSQL. "
-                    "Genera unicamente SELECTs. Sin explicaciones."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Esquema de la base de datos:\n\n"
-                    f"{self._schema_summary}"
-                    f"{entity_section}\n\n"
-                    f"Pregunta: {context}\n\n"
-                    f"Genera una consulta SELECT de PostgreSQL para responder. "
-                    f"Usa los nombres exactos de tablas y columnas. "
-                    f"Incluye LIMIT 100. "
-                    f"Usa alias en espanol con AS para las columnas. "
-                    f"Responde SOLO con el SQL, sin explicaciones ni markdown."
-                ),
-            },
-        ]
-        return self._llm.chat_complete(messages, temperature=0.1)
-
-    def _validate_sql(self, sql: str) -> bool:
-        """Validate SQL is SELECT-only and contains no forbidden keywords."""
-        # Block CTE-based DML: WITH … AS (…) DELETE/UPDATE/INSERT
-        if _CTE_DML.search(sql):
-            return False
-
-        cleaned = re.sub(r"'[^']*'", "", sql)
-        cleaned = re.sub(r'"[^"]*"', "", cleaned)
-        cleaned = cleaned.strip().upper()
-
-        if not cleaned.startswith("SELECT"):
-            return False
-        for kw in _FORBIDDEN_KEYWORDS:
-            if re.search(rf"\b{kw}\b", cleaned):
-                return False
-        for table_name in _EXCLUDE_TABLES:
-            if re.search(rf"\b{re.escape(table_name.upper())}\b", cleaned):
-                return False
-        return True
-
-    def _run_sql(self, sql: str) -> dict:
-        """Execute validated SQL and return results safely."""
-        import logging
-
-        logger = logging.getLogger(__name__)
-        try:
-            # Set real PostgreSQL statement timeout (10 seconds)
-            # Silently ignored by SQLite — only takes effect on PostgreSQL
-            try:
-                self._session.execute(text("SET LOCAL statement_timeout = '10000'"))
-            except Exception:
-                pass
-
-            start = time.time()
-            result = self._session.execute(text(sql))
-            elapsed = time.time() - start
-
-            rows = result.fetchmany(101)
-            truncated = len(rows) > 100
-            if truncated:
-                rows = rows[:100]
-
-            raw_columns = list(result.keys())
-            raw_rows = [dict(zip(raw_columns, row, strict=False)) for row in rows]
-            columns = [
-                column for column in raw_columns
-                if not _INTERNAL_IDENTIFIER_RE.search(column)
-                and not _is_uuid_column(raw_rows, column)
-            ]
-            cleaned_rows = [
-                {column: row.get(column) for column in columns}
-                for row in raw_rows
-            ]
-            return {
-                "ok": True,
-                "data": {
-                    "columns": columns,
-                    "rows": cleaned_rows,
-                    "row_count": len(cleaned_rows),
-                    "truncated": truncated,
-                    "elapsed_seconds": round(elapsed, 2),
-                },
-            }
-        except Exception as exc:
-            logger.warning("Query SQL failed: %s | %s", sql[:120], exc)
-            self._session.rollback()
-            return {"ok": False, "error": f"Error en la consulta: {exc}"}
+            # Backward-compat: row_count at top level
+            if "row_count" not in result and "row_count" in result.get("data", {}):
+                result["row_count"] = result["data"]["row_count"]
+        # Backward-compat: keep legacy source tag
+        if result.get("source") == "nl_to_sql_agent":
+            result["source"] = "nl_to_sql"
+        return result

@@ -67,13 +67,6 @@ def render_twelve_hour_reminder(
     )
 
 
-def render_escalamiento_encargado(doctor_name: str, service_info: str = "") -> str:
-    base = f"El Dr. {doctor_name} no ha confirmado sus turnos asignados."
-    if service_info:
-        base += f" Servicio: {service_info}."
-    return base + " Por favor, contacte al médico para verificar su disponibilidad."
-
-
 def render_mission_participant(
     mission_date: str,
     location: str | None,
@@ -181,3 +174,11 @@ def render_escalamiento_encargado(doctor_name: str, service_info: str = "") -> s
     if service_info:
         base += f" Servicio: {service_info}."
     return base + " Por favor, contacte al médico para verificar su disponibilidad."
+
+
+def render_escalamiento_consolidado(doctor_names: list[str]) -> str:
+    lines = ["Los siguientes médicos no han confirmado sus turnos asignados:\n"]
+    for name in doctor_names:
+        lines.append(f"- Dr. {name}")
+    lines.append(f"\nTotal: {len(doctor_names)} sin confirmar. Revise el panel y contacte a los médicos.")
+    return "\n".join(lines)

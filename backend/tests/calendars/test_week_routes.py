@@ -143,6 +143,7 @@ def _create_doctor(session, *, doctor_id: str, name: str) -> DoctorModel:
         active=True,
         service_active=True,
         participa_misiones=True,
+        whatsapp_phone="0000000000",
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",

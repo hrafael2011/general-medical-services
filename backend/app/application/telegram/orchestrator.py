@@ -273,10 +273,27 @@ class TelegramOrchestrator:
             self._bot_client.send_message(chat_id, msg)
             return msg
 
-        existing = self._telegram_repo.get_link_by_user_id(token_record.user_id)
-        if existing is not None:
+        existing_by_user = self._telegram_repo.get_link_by_user_id(token_record.user_id)
+        if existing_by_user is not None:
             self._telegram_repo.mark_token_used(token_record.id)
             msg = "Ya estás vinculado al sistema."
+            self._bot_client.send_message(chat_id, msg)
+            return msg
+
+        existing_by_telegram = self._telegram_repo.get_link_by_telegram_id(telegram_user_id)
+        if existing_by_telegram is not None:
+            self._telegram_repo.mark_token_used(token_record.id)
+            if existing_by_telegram.active:
+                msg = "Esta cuenta de Telegram ya está vinculada a otro usuario."
+            else:
+                # Reactivate the inactive link and update its user
+                existing_by_telegram.user_id = token_record.user_id
+                existing_by_telegram.active = True
+                existing_by_telegram.linked_by = token_record.created_by
+                existing_by_telegram.linked_at = datetime.now(UTC)
+                existing_by_telegram.last_used_at = datetime.now(UTC)
+                existing_by_telegram.telegram_username = telegram_username
+                msg = "¡Vinculación exitosa! Ya puedes usar el asistente de turnos médicos."
             self._bot_client.send_message(chat_id, msg)
             return msg
 

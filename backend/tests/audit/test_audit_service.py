@@ -27,10 +27,9 @@ def create_doctor(db_session, service, *, name="Dr Test", sex="male"):
         sex=sex,
         rank_id=None,
         department_id=None,
-        phone=None,
         notes=None,
         participa_misiones=True,
-        whatsapp_phone=None,
+        whatsapp_phone="+18095551234",
         monthly_service_target=3,
         monthly_service_max=3,
         monthly_service_limit_mode="warn_only",
@@ -175,8 +174,8 @@ def test_filter_by_actor_id(db_session) -> None:
     # actor-1 creates a doctor
     doctor_service_a.create_doctor(
         actor_id="actor-1", name="Dr A", sex="male",
-        rank_id=None, department_id=None, phone=None, notes=None,
-        participa_misiones=True, whatsapp_phone=None,
+        rank_id=None, department_id=None, notes=None,
+        participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],
@@ -184,8 +183,8 @@ def test_filter_by_actor_id(db_session) -> None:
     # actor-2 creates another doctor
     doctor_service_b.create_doctor(
         actor_id="actor-2", name="Dr B", sex="female",
-        rank_id=None, department_id=None, phone=None, notes=None,
-        participa_misiones=True, whatsapp_phone=None,
+        rank_id=None, department_id=None, notes=None,
+        participa_misiones=True, whatsapp_phone="+18095551234",
         monthly_service_target=3, monthly_service_max=3,
         monthly_service_limit_mode="warn_only", availability_mode="monthly",
         allowed_area_ids=[],

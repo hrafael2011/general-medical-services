@@ -283,7 +283,6 @@ describe("MissionView", () => {
           sex: "female",
           rank_id: null,
           department_id: null,
-          phone: null,
           notes: null,
           active: true,
           service_active: true,

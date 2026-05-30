@@ -16,6 +16,8 @@ _VALUE_LABELS: dict[str, dict[Any, str]] = {
     "sex": {
         "male": "Masculino",
         "female": "Femenino",
+        "M": "Masculino",
+        "F": "Femenino",
     },
     "status": {
         "draft": "Borrador",

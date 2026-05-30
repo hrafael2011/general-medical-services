@@ -5,7 +5,9 @@ from alembic.script import ScriptDirectory
 def test_alembic_has_single_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
-    assert script.get_heads() == ["20260524_0040"]
+    heads = script.get_heads()
+    assert len(heads) == 1, f"Expected single head, got: {heads}"
+    assert heads == ["20260527_0041"]
 
 
 def test_set_password_tokens_table_has_migration():

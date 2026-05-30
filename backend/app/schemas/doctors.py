@@ -9,18 +9,17 @@ class DoctorRead(BaseModel):
     sex: str
     rank_id: str | None
     department_id: str | None
-    phone: str | None
     notes: str | None
     active: bool
     service_active: bool
     service_inactive_reason_id: str | None
     service_inactive_detail: str | None
     participa_misiones: bool
-    whatsapp_phone: str | None
-    monthly_service_target: int
-    monthly_service_max: int
-    monthly_service_limit_mode: str
-    availability_mode: str
+    whatsapp_phone: str | None = None
+    monthly_service_target: int | None = None
+    monthly_service_max: int | None = None
+    monthly_service_limit_mode: str | None = None
+    availability_mode: str | None = None
     allowed_area_ids: list[str] = []
 
     model_config = {"from_attributes": True}
@@ -33,7 +32,6 @@ class CreateDoctorRequest(BaseModel):
     sex: str = Field(pattern="^(male|female)$")
     rank_id: str | None = None
     department_id: str | None = None
-    phone: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=500)
     service_active: bool = True
     participa_misiones: bool = True
@@ -60,7 +58,6 @@ class UpdateDoctorRequest(BaseModel):
     sex: str | None = Field(default=None, pattern="^(male|female)$")
     rank_id: str | None = None
     department_id: str | None = None
-    phone: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=500)
     service_active: bool | None = None
     participa_misiones: bool | None = None
@@ -87,7 +84,7 @@ class DoctorByDayItem(BaseModel):
     name: str
     rank_name: str | None = None
     department_name: str | None = None
-    phone: str | None = None
+    whatsapp_phone: str | None = None
     recurring_tag: str | None = None
 
     model_config = {"from_attributes": True}

@@ -18,7 +18,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [firstName, setFirstName] = useState(initialNameParts.firstName);
   const [lastName, setLastName] = useState(initialNameParts.lastName);
   const [sex, setSex] = useState(doctor?.sex ?? "male");
-  const [phone, setPhone] = useState(doctor?.phone ?? "");
+  const [phone, setPhone] = useState(doctor?.whatsapp_phone ?? "");
   const [participaMisiones, setParticipaMisiones] = useState(doctor?.participa_misiones ?? true);
   const [doesService, setDoesService] = useState(doctor?.service_active ?? true);
   const [target, setTarget] = useState(String(doctor?.monthly_service_target ?? 3));
@@ -123,12 +123,13 @@ export function DoctorForm({ doctor, onClose }: Props) {
     const cleanLastName = lastName.trim();
     const fullName = [cleanFirstName, cleanLastName].filter(Boolean).join(" ");
     if (!cleanFirstName || !cleanLastName) { setError("Nombre y apellido son obligatorios."); return; }
+    if (!phone.trim()) { setError("WhatsApp es obligatorio."); return; }
 
     save.mutate({
       first_name: cleanFirstName,
       last_name: cleanLastName,
       name: fullName,
-      sex, phone: phone || null, participa_misiones: participaMisiones,
+      sex, whatsapp_phone: phone.trim(), participa_misiones: participaMisiones,
       rank_id: rankId || null,
       department_id: departmentId || null,
       availability_mode: availabilityMode,
@@ -230,8 +231,8 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
           <div className="form-row">
             <label>
-              Teléfono
-              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Opcional" />
+              WhatsApp *
+              <input required value={phone} onChange={e => setPhone(e.target.value)} />
             </label>
           </div>
 

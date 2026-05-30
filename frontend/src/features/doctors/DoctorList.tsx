@@ -357,7 +357,7 @@ function DoctorProfileModal({
           <div className="profile-grid">
             <ProfileItem label="Sexo" value={doctor.sex === "male" ? "Masculino" : "Femenino"} />
             <ProfileItem label="Departamento" value={departmentName ?? "Sin departamento"} />
-            <ProfileItem label="Teléfono" value={doctor.phone ?? "No registrado"} />
+            <ProfileItem label="WhatsApp" value={doctor.whatsapp_phone ?? "No registrado"} />
             <ProfileItem
               label="Misiones"
               value={doctor.service_active && doctor.participa_misiones ? "Participa" : "No participa"}
