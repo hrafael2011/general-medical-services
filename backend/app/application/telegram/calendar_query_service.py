@@ -24,10 +24,12 @@ class CalendarQueryService:
         self._session = session
 
     def execute(self, query_type: str, params: dict[str, Any]) -> AgentResult | None:
-        if query_type == "list_calendar_assignments_by_date_range":
+        if query_type in ("list_calendar_assignments_by_date_range", "calendar_assignments"):
             return self._list_assignments_by_date_range(params)
-        if query_type == "count_assigned_doctors_by_month":
+        if query_type in ("count_assigned_doctors_by_month", "calendar_assigned_count"):
             return self._count_assigned_doctors_by_month(params)
+        if query_type in ("calendar_status",):
+            return self._check_calendar_status(params)
         return None
 
     def _count_assigned_doctors_by_month(self, params: dict[str, Any]) -> AgentResult:
@@ -47,6 +49,7 @@ class CalendarQueryService:
                 tool_entities={"query_type": "count_assigned_doctors_by_month", "period": period},
                 tool_result={
                     "ok": True,
+                    "calendar_exists": True,
                     "status_used": "approved",
                     "draft_count": draft_total,
                     "data": {"columns": columns, "rows": rows},
@@ -64,6 +67,7 @@ class CalendarQueryService:
                 tool_entities={"query_type": "count_assigned_doctors_by_month", "period": period},
                 tool_result={
                     "ok": True,
+                    "calendar_exists": True,
                     "status_used": "approved",
                     "draft_count": draft_total,
                     "data": {"columns": columns, "rows": [{"total": 0}]},
@@ -78,6 +82,7 @@ class CalendarQueryService:
             tool_entities={"query_type": "count_assigned_doctors_by_month", "period": period},
             tool_result={
                 "ok": True,
+                "calendar_exists": False,
                 "status_used": "approved",
                 "draft_count": 0,
                 "data": {"columns": columns, "rows": rows},
@@ -104,6 +109,7 @@ class CalendarQueryService:
                 tool_entities={"query_type": "list_calendar_assignments_by_date_range", "period": period},
                 tool_result={
                     "ok": True,
+                    "calendar_exists": True,
                     "status_used": "approved",
                     "draft_count": draft_count,
                     "data": {"columns": columns, "rows": approved_rows},
@@ -121,6 +127,7 @@ class CalendarQueryService:
                 tool_entities={"query_type": "list_calendar_assignments_by_date_range", "period": period},
                 tool_result={
                     "ok": True,
+                    "calendar_exists": True,
                     "status_used": "approved",
                     "draft_count": draft_count,
                     "data": {"columns": columns, "rows": []},
@@ -134,6 +141,7 @@ class CalendarQueryService:
             tool_entities={"query_type": "list_calendar_assignments_by_date_range", "period": period},
             tool_result={
                 "ok": True,
+                "calendar_exists": False,
                 "status_used": "approved",
                 "draft_count": 0,
                 "data": {"columns": columns, "rows": []},
@@ -195,3 +203,57 @@ class CalendarQueryService:
             )
         )
         return int(self._session.execute(stmt).scalar() or 0)
+
+    def _check_calendar_status(self, params: dict[str, Any]) -> AgentResult:
+        """Check whether a calendar exists for a given month/year and return its status."""
+        year = int(params.get("year") or date.today().year)
+        month = int(params.get("month") or date.today().month)
+        requested_status = params.get("status")
+
+        stmt = select(CalendarModel).where(
+            CalendarModel.year == year,
+            CalendarModel.month == month,
+            CalendarModel.deleted_at.is_(None),
+        )
+        if requested_status:
+            stmt = stmt.where(CalendarModel.status == requested_status)
+
+        calendars = self._session.execute(stmt).scalars().all()
+        columns = ["status", "created_at"]
+        period = {"year": year, "month": month}
+
+        if not calendars:
+            return AgentResult(
+                response_text=(
+                    f"No existe un calendario para {month:02d}/{year}. "
+                    "¿Quieres crear uno desde el módulo de administración?"
+                ),
+                agent_action="query",
+                tool_name="calendar_query_service",
+                tool_entities={"query_type": "calendar_status", "period": period},
+                tool_result={
+                    "ok": True,
+                    "calendar_exists": False,
+                    "data": {"columns": columns, "rows": []},
+                },
+            )
+
+        rows = [
+            {"status": cal.status, "created_at": str(cal.created_at)}
+            for cal in calendars
+        ]
+        statuses = ", ".join(r["status"] for r in rows)
+        return AgentResult(
+            response_text=(
+                f"El calendario de {month:02d}/{year} existe "
+                f"con estado: {statuses}."
+            ),
+            agent_action="query",
+            tool_name="calendar_query_service",
+            tool_entities={"query_type": "calendar_status", "period": period},
+            tool_result={
+                "ok": True,
+                "calendar_exists": True,
+                "data": {"columns": columns, "rows": rows},
+            },
+        )
