@@ -102,6 +102,13 @@ def seed_staging_from_production(
 
     prod_engine = create_engine(PROD_DATABASE_URL, connect_args={"connect_timeout": 10})
 
+    # Quick connectivity test first
+    try:
+        with prod_engine.connect() as test_conn:
+            test_conn.execute(text("SELECT 1"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot connect to PROD: {e}")
+
     try:
         with prod_engine.connect() as prod:
             # === 1. CATALOGS ===
