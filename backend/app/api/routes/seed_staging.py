@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_admin
@@ -526,20 +526,19 @@ def cleanup_soft_deleted_calendars(
     if settings.app_env != "staging":
         raise HTTPException(status_code=403, detail="Only available in staging")
 
+    from backend.app.infrastructure.db.models.calendars import CalendarModel
+
     result = session.execute(
-        text("SELECT id, year, month FROM calendars WHERE deleted_at IS NOT NULL")
-    ).fetchall()
+        select(CalendarModel).where(CalendarModel.deleted_at.is_not(None))
+    ).scalars().all()
 
     if not result:
         return {"deleted": 0, "entries": []}
 
-    deleted = []
-    for row in result:
-        deleted.append({"id": row[0], "year": row[1], "month": row[2]})
+    deleted = [{"id": c.id, "year": c.year, "month": c.month} for c in result]
 
-    session.execute(
-        text("DELETE FROM calendars WHERE deleted_at IS NOT NULL")
-    )
+    for calendar in result:
+        session.delete(calendar)
     session.commit()
 
     return {"deleted": len(deleted), "entries": deleted}
