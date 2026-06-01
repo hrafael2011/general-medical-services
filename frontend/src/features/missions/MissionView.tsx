@@ -330,6 +330,16 @@ export function MissionView() {
           )}
           {ranking && entries.length > 0 && (
             <div className="table-wrapper">
+              <details style={{ marginBottom: 10, fontSize: 12, color: "#6b7280" }}>
+                <summary style={{ cursor: "pointer", fontWeight: 500 }}>
+                  ¿Cómo se calcula la puntuación?
+                </summary>
+                <ul style={{ marginTop: 6, paddingLeft: 16, lineHeight: 1.6 }}>
+                  <li><strong>Carga mensual:</strong> Suma de los pesos de las áreas donde el médico fue asignado en el mes. Cada área tiene un peso (ej. Emergencia=1.67, Consulta=1.0). No es cantidad de servicios, es carga ponderada.</li>
+                  <li><strong>Carga total:</strong> Carga mensual + 50% de la carga de los últimos 60 días + misiones del mes.</li>
+                  <li><strong>Posición:</strong> Orden de menor a mayor carga total. Menor carga = mayor prioridad para ser seleccionado en misiones.</li>
+                </ul>
+              </details>
               <table className="data-table">
                 <thead>
                   <tr><th>Pos.</th><th>Médico</th><th>Carga total</th><th>Carga mensual</th><th>Elegible</th></tr>
