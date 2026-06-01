@@ -10,4 +10,5 @@ def get_feature_flags() -> dict[str, bool]:
     return {
         "notifications": settings.feature_notifications,
         "telegram": settings.feature_telegram,
+        "confirmations": settings.feature_notifications,
     }
