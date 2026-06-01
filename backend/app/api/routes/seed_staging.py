@@ -522,7 +522,7 @@ def seed_staging(
 def cleanup_soft_deleted_calendars(
     session: Annotated[Session, Depends(get_db_session)] = None,
 ):
-    """Hard-delete all soft-deleted calendars to free unique constraint slots."""
+    """Move soft-deleted calendars out of the way by negating their year/month."""
     if settings.app_env != "staging":
         raise HTTPException(status_code=403, detail="Only available in staging")
 
@@ -535,10 +535,11 @@ def cleanup_soft_deleted_calendars(
     if not result:
         return {"deleted": 0, "entries": []}
 
-    deleted = [{"id": c.id, "year": c.year, "month": c.month} for c in result]
-
-    for calendar in result:
-        session.delete(calendar)
+    moved = []
+    for c in result:
+        moved.append({"id": c.id, "old_year": c.year, "old_month": c.month})
+        c.year = -c.year
+        c.month = -c.month
     session.commit()
 
-    return {"deleted": len(deleted), "entries": deleted}
+    return {"moved": len(moved), "entries": moved}
