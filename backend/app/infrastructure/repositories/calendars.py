@@ -177,7 +177,7 @@ class CalendarRepository:
                 CalendarModel.year == year,
                 CalendarModel.month == month,
                 CalendarModel.status.in_(["approved", "partial"]),
-                CalendarVersionModel.status == "approved",
+                CalendarVersionModel.status.in_(["approved", "draft"]),
                 *_not_deleted(),
                 *_version_not_deleted(),
             )
