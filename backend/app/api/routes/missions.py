@@ -264,8 +264,8 @@ def _approved_version_or_409(
             detail={
                 "code": "approved_calendar_required",
                 "message": (
-                    f"No hay calendario aprobado para {year}/{month:02d}. "
-                    "Apruebe el calendario antes de consultar el ranking."
+                    f"No hay calendario con semanas aprobadas para {year}/{month:02d}. "
+                    "Apruebe al menos una semana antes de consultar el ranking."
                 ),
             },
         )

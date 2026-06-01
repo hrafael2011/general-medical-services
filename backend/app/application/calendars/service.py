@@ -422,6 +422,17 @@ class CalendarService:
 
             elif calendar.status == "draft":
                 calendar.status = "partial"
+
+                # Generate mission ranking when entering partial (first week approved)
+                if self.mission_ranking_service is not None:
+                    version = self.repo.get_version_by_id(week.calendar_version_id)
+                    if version is not None:
+                        self.mission_ranking_service.generate_ranking(
+                            actor_id=actor_id,
+                            year=calendar.year,
+                            month=calendar.month,
+                            calendar_version_id=version.id,
+                        )
             calendar.updated_at = now
             self.repo.session.flush()
 

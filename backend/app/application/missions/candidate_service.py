@@ -49,7 +49,7 @@ class MissionCandidateService:
         if approved_version is None:
             raise MissionServiceError(
                 "approved_calendar_required",
-                "No existe un calendario aprobado para este período.",
+                "No existe un calendario con semanas aprobadas para este período.",
             )
         ranking = self.mission_repo.get_ranking_by_period(
             year,
@@ -59,7 +59,7 @@ class MissionCandidateService:
         if ranking is None:
             raise MissionServiceError(
                 "ranking_not_found",
-                "No existe un ranking para el calendario aprobado.",
+                "No existe un ranking para este período.",
             )
         return ranking
 

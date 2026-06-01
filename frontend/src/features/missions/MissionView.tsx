@@ -323,7 +323,7 @@ export function MissionView() {
           </div>
           {rankingQuery.isLoading && <p style={{ color: "#6b7280", fontSize: 13 }}>Cargando ranking…</p>}
           {rankingQuery.isError && rankingErrorCode === "approved_calendar_required" && (
-            <p style={{ color: "#92400e", fontSize: 13 }}>Este mes no tiene calendario aprobado. Aprueba el calendario para ver su ranking.</p>
+            <p style={{ color: "#92400e", fontSize: 13 }}>Este mes no tiene semanas aprobadas. Aprueba al menos una semana para ver el ranking.</p>
           )}
           {rankingQuery.isError && rankingErrorCode !== "approved_calendar_required" && (
             <p style={{ color: "#6b7280", fontSize: 13 }}>Sin ranking generado para este periodo.</p>
