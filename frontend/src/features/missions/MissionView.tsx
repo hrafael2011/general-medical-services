@@ -335,9 +335,10 @@ export function MissionView() {
                   ¿Cómo se calcula la puntuación?
                 </summary>
                 <ul style={{ marginTop: 6, paddingLeft: 16, lineHeight: 1.6 }}>
-                  <li><strong>Carga mensual:</strong> Suma de los pesos de las áreas donde el médico fue asignado en el mes. Cada área tiene un peso (ej. Emergencia=1.67, Consulta=1.0). No es cantidad de servicios, es carga ponderada.</li>
-                  <li><strong>Carga total:</strong> Carga mensual + 50% de la carga de los últimos 60 días + misiones del mes.</li>
-                  <li><strong>Posición:</strong> Orden de menor a mayor carga total. Menor carga = mayor prioridad para ser seleccionado en misiones.</li>
+                  <li><strong>Pesos por área:</strong> Emergencia = 3, Pista = 2, Disponible = 1.</li>
+                  <li><strong>Carga mensual:</strong> Suma de los pesos de las áreas asignadas en el mes. No es cantidad de servicios.</li>
+                  <li><strong>Carga total:</strong> Carga mensual + 50% de carga de últimos 60 días + 0.5 por cada misión del mes.</li>
+                  <li><strong>Posición:</strong> Orden de menor a mayor carga total. Menor carga = mayor prioridad.</li>
                 </ul>
               </details>
               <table className="data-table">
