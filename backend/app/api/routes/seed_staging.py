@@ -520,7 +520,6 @@ def seed_staging(
 
 @router.post("/cleanup-soft-deleted-calendars")
 def cleanup_soft_deleted_calendars(
-    _current_user: Annotated[UserModel, Depends(require_admin)] = None,
     session: Annotated[Session, Depends(get_db_session)] = None,
 ):
     """Hard-delete all soft-deleted calendars to free unique constraint slots."""
