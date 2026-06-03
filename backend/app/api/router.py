@@ -14,6 +14,7 @@ from backend.app.api.routes.feature_flags import router as feature_flags_router
 from backend.app.api.routes.health import router as health_router
 from backend.app.api.routes.missions import router as missions_router
 from backend.app.api.routes.notifications import router as notifications_router
+from backend.app.api.routes.notifications import scheduler_router
 from backend.app.api.routes.reports import router as reports_router
 from backend.app.api.routes.telegram import router as telegram_router
 from backend.app.api.routes.webhooks import router as webhooks_router
@@ -34,6 +35,7 @@ api_router.include_router(feature_flags_router)
 api_router.include_router(missions_router)
 if settings.feature_notifications:
     api_router.include_router(notifications_router)
+api_router.include_router(scheduler_router)
 api_router.include_router(reports_router)
 if settings.feature_telegram:
     api_router.include_router(telegram_router)

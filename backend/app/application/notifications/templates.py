@@ -1,7 +1,3 @@
-def _with_whatsapp_confirmation(message: str) -> str:
-    return f"{message}\n\nResponda 1 para confirmar su turno."
-
-
 def render_initial_assignment(
     service_date: str, service_area: str, service_start: str | None
 ) -> str:
