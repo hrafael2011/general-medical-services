@@ -175,8 +175,10 @@ export function NotificationLog() {
               <tr>
                 <th>Tipo</th>
                 <th>Destinatario</th>
+                <th>Provider</th>
                 <th>Estado</th>
                 <th>Reintentos</th>
+                <th>Error</th>
                 <th>Fecha</th>
                 <th>Vista previa</th>
               </tr>
@@ -188,12 +190,24 @@ export function NotificationLog() {
                     {TYPE_LABELS[item.notification_type] ?? item.notification_type}
                   </td>
                   <td className="cell-id">{recipient(item)}</td>
+                  <td style={{ fontSize: "0.75rem", fontFamily: "monospace" }}>
+                    {item.provider || "—"}
+                  </td>
                   <td>
                     <span style={statusBadgeStyle(item.status)}>
                       {STATUS_LABELS[item.status] ?? item.status}
                     </span>
                   </td>
                   <td style={{ textAlign: "center" }}>{item.retry_count}</td>
+                  <td style={{ fontSize: "0.75rem", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {item.error_message ? (
+                      <span title={item.error_message} style={{ color: "#991b1b" }}>
+                        {item.error_message.slice(0, 50)}{item.error_message.length > 50 ? "…" : ""}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="cell-date">{formatDate(item.created_at)}</td>
                   <td className="cell-detail">
                     <span className="snapshot-hint">{messagePreview(item)}</span>
