@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_permission
@@ -16,6 +16,9 @@ from backend.app.schemas.notifications import (
 )
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+# Separate router for scheduler health — included independently in router.py
+scheduler_router = APIRouter(prefix="/scheduler", tags=["scheduler"])
 
 
 def get_notification_service(
@@ -49,4 +52,24 @@ def list_notifications(
         items=[NotificationEventRead.model_validate(n) for n in items],
         total=len(items),
     )
+
+
+@scheduler_router.get("/health")
+def get_scheduler_health(request: Request) -> dict:
+    """Return APScheduler status and next-run times for all jobs."""
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        return {"scheduler_running": False, "jobs": []}
+
+    jobs = []
+    for job in scheduler.get_jobs():
+        jobs.append({
+            "id": job.id,
+            "name": job.name,
+            "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+        })
+    return {
+        "scheduler_running": True,
+        "jobs": jobs,
+    }
 
