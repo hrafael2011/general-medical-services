@@ -63,6 +63,18 @@ class MetaCloudAPIProvider:
             return msg_id
         except Exception as exc:
             error_code = getattr(exc, "code", None)
-            logger.warning("Meta send failed (code=%s): %s", error_code, exc, exc_info=True)
+            error_msg = str(exc)
+            if error_code == 131026 or "template" in error_msg.lower():
+                logger.warning(
+                    "Meta template required — message not sent. "
+                    "Approve a template in Meta Business Manager or use a "
+                    "pre-approved template. message=%s, error=%s",
+                    message[:120],
+                    error_msg,
+                )
+            else:
+                logger.warning(
+                    "Meta send failed (code=%s): %s", error_code, exc, exc_info=True
+                )
             exc.error_code = error_code  # type: ignore[attr-defined]
             raise
