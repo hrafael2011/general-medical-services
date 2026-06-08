@@ -44,6 +44,9 @@ class DoctorModel(Base):
         Boolean, nullable=False, default=True
     )
     whatsapp_phone: Mapped[str] = mapped_column(String(40), nullable=False)
+    telegram_chat_id: Mapped[str | None] = mapped_column(
+        String(60), nullable=True, unique=True, default=None
+    )
     monthly_service_target: Mapped[int] = mapped_column(
         Integer, nullable=False, default=3
     )
