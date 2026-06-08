@@ -17,6 +17,7 @@ from backend.app.api.routes.notifications import router as notifications_router
 from backend.app.api.routes.notifications import scheduler_router
 from backend.app.api.routes.reports import router as reports_router
 from backend.app.api.routes.telegram import router as telegram_router
+from backend.app.api.routes.telegram_notification_webhook import router as telegram_notification_webhook_router
 from backend.app.api.routes.webhooks import router as webhooks_router
 from backend.app.core.config import settings
 
@@ -40,6 +41,7 @@ api_router.include_router(reports_router)
 if settings.feature_telegram:
     api_router.include_router(telegram_router)
 api_router.include_router(webhooks_router)
+api_router.include_router(telegram_notification_webhook_router)
 api_router.include_router(health_router, tags=["health"])
 if settings.app_env == "staging":
     from backend.app.api.routes.seed_staging import router as seed_staging_router
