@@ -32,32 +32,39 @@ async def telegram_notification_webhook(
         chat_id = str(msg.get("chat", {}).get("id", ""))
         text = (msg.get("text") or "").strip()
 
-        # /start — show welcome + contact share button
+        # /start — ask for phone number (text, not contact share)
         if text == "/start":
+            # Check if already linked
+            existing = session.scalars(
+                select(DoctorModel).where(DoctorModel.telegram_chat_id == chat_id)
+            ).first()
+            if existing:
+                return _send_telegram_message(
+                    chat_id,
+                    f"Ya esta vinculado, Dr. {existing.name}.",
+                )
+
             return _send_telegram_message(
                 chat_id,
                 "Bienvenido al sistema de turnos medicos.\n\n"
-                "Presione el boton para vincularse y recibir sus "
-                "notificaciones de turnos.",
-                reply_markup={
-                    "keyboard": [[
-                        {"text": "📱 Compartir contacto", "request_contact": True}
-                    ]],
-                    "resize_keyboard": True,
-                    "one_time_keyboard": True,
-                },
+                "Escriba su numero de telefono para vincularse.\n"
+                "Ejemplo: 8091234567",
             )
 
-        # Contact shared — link doctor
-        contact = msg.get("contact")
-        if contact:
-            phone = _normalize_phone(contact.get("phone_number", ""))
-            if not phone:
-                return _send_telegram_message(
-                    chat_id,
-                    "No se pudo leer su numero de telefono. Intente nuevamente.",
-                )
+        # Already linked — ignore other text
+        existing = session.scalars(
+            select(DoctorModel).where(DoctorModel.telegram_chat_id == chat_id)
+        ).first()
+        if existing:
+            return _send_telegram_message(
+                chat_id,
+                f"Ya esta vinculado, Dr. {existing.name}. "
+                "Recibira sus notificaciones de turnos por este medio.",
+            )
 
+        # Try to match text as phone number
+        if text and text.replace(" ", "").isdigit():
+            phone = _normalize_phone(text)
             # Match by last 8 digits of whatsapp_phone
             doctors = session.scalars(
                 select(DoctorModel).where(DoctorModel.whatsapp_phone.is_not(None))
@@ -77,7 +84,7 @@ async def telegram_notification_webhook(
                 return _send_telegram_message(
                     chat_id,
                     "No se encontro un medico registrado con ese numero. "
-                    "Contacte al encargado.",
+                    "Verifique e intente de nuevo, o contacte al encargado.",
                 )
 
             doctor.telegram_chat_id = chat_id
@@ -88,7 +95,6 @@ async def telegram_notification_webhook(
                 chat_id,
                 f"Vinculado exitosamente, Dr. {doctor.name}.\n\n"
                 "Recibira sus notificaciones de turnos por este medio.",
-                reply_markup={"remove_keyboard": True},
             )
 
         # Unknown text — hint
