@@ -178,3 +178,18 @@ def render_escalamiento_consolidado(doctor_names: list[str]) -> str:
         lines.append(f"- Dr. {name}")
     lines.append(f"\nTotal: {len(doctor_names)} sin confirmar. Revise el panel y contacte a los médicos.")
     return "\n".join(lines)
+
+
+def with_telegram_buttons(message: str, confirmation_id: str) -> dict:
+    """Build payload for Telegram message with inline confirmation button."""
+    return {
+        "text": message,
+        "reply_markup": {
+            "inline_keyboard": [[
+                {
+                    "text": "✓ Confirmar asistencia",
+                    "callback_data": f"confirm:{confirmation_id}",
+                }
+            ]]
+        }
+    }

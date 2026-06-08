@@ -83,7 +83,7 @@ def get_calendar_service(
     from backend.app.application.audit.service import AuditService
     from backend.app.application.confirmations.service import ConfirmationRequestService
     from backend.app.application.missions.ranking_service import MissionRankingService
-    from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider
+    from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider, TelegramNotificationProvider
     from backend.app.application.notifications.service import NotificationService
     from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.audit import AuditRepository
@@ -96,7 +96,12 @@ def get_calendar_service(
     audit = AuditService(AuditRepository(session))
     calendar_repo = CalendarRepository(session)
     doctor_repo = DoctorRepository(session)
-    provider = MetaCloudAPIProvider() if (settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id) else FakeProvider()
+    if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+        provider = MetaCloudAPIProvider()
+    elif settings.telegram_notification_bot_token:
+        provider = TelegramNotificationProvider()
+    else:
+        provider = FakeProvider()
     triggers = NotificationTriggers(
         notification_service=NotificationService(
             repo=NotificationRepository(session),
@@ -149,7 +154,7 @@ def get_assignment_service(
 ) -> AssignmentService:
     from backend.app.application.audit.service import AuditService
     from backend.app.application.confirmations.service import ConfirmationRequestService
-    from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider
+    from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider, TelegramNotificationProvider
     from backend.app.application.notifications.service import NotificationService
     from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.audit import AuditRepository
@@ -159,7 +164,12 @@ def get_assignment_service(
     from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
     doctor_repo = DoctorRepository(session)
-    provider = MetaCloudAPIProvider() if (settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id) else FakeProvider()
+    if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+        provider = MetaCloudAPIProvider()
+    elif settings.telegram_notification_bot_token:
+        provider = TelegramNotificationProvider()
+    else:
+        provider = FakeProvider()
     triggers = NotificationTriggers(
         notification_service=NotificationService(
             repo=NotificationRepository(session),
