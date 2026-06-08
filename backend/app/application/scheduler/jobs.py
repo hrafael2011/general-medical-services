@@ -20,6 +20,7 @@ def process_notification_queue() -> dict:
     from backend.app.core.config import settings
     from backend.app.application.notifications.providers import (
         MetaCloudAPIProvider,
+        TelegramNotificationProvider,
         FakeProvider,
     )
     from backend.app.application.action_alerts.service import ActionAlertService
@@ -31,6 +32,8 @@ def process_notification_queue() -> dict:
     try:
         if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
             provider = MetaCloudAPIProvider()
+        elif settings.telegram_notification_bot_token:
+            provider = TelegramNotificationProvider()
         else:
             provider = FakeProvider()
         service = NotificationService(
@@ -65,6 +68,7 @@ def send_pre_service_reminders() -> dict:
     )
     from backend.app.application.notifications.providers import (
         MetaCloudAPIProvider,
+        TelegramNotificationProvider,
         FakeProvider,
     )
     from backend.app.infrastructure.db.models.doctors import DoctorModel
@@ -121,6 +125,8 @@ def send_pre_service_reminders() -> dict:
             )
             if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
                 provider = MetaCloudAPIProvider()
+            elif settings.telegram_notification_bot_token:
+                provider = TelegramNotificationProvider()
             else:
                 provider = FakeProvider()
             svc = NotificationService(
@@ -165,6 +171,7 @@ def check_unconfirmed_escalamiento() -> dict:
     )
     from backend.app.application.notifications.providers import (
         MetaCloudAPIProvider,
+        TelegramNotificationProvider,
         FakeProvider,
     )
     from backend.app.core.config import settings
@@ -201,11 +208,12 @@ def check_unconfirmed_escalamiento() -> dict:
         if not encargados:
             return {"escalations": 0}
 
-        provider = (
-            MetaCloudAPIProvider()
-            if (settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id)
-            else FakeProvider()
-        )
+        if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+            provider = MetaCloudAPIProvider()
+        elif settings.telegram_notification_bot_token:
+            provider = TelegramNotificationProvider()
+        else:
+            provider = FakeProvider()
         svc = NotificationService(
             repo=NotificationRepository(session), provider=provider
         )

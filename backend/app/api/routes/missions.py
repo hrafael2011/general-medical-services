@@ -91,7 +91,7 @@ def get_candidate_service(
     from backend.app.application.action_alerts.service import ActionAlertService
     from backend.app.application.audit.service import AuditService
     from backend.app.application.confirmations.service import ConfirmationRequestService
-    from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider
+    from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider, TelegramNotificationProvider
     from backend.app.application.notifications.service import NotificationService
     from backend.app.application.notifications.triggers import NotificationTriggers
     from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
@@ -102,7 +102,12 @@ def get_candidate_service(
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
-    provider = MetaCloudAPIProvider() if (settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id) else FakeProvider()
+    if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+        provider = MetaCloudAPIProvider()
+    elif settings.telegram_notification_bot_token:
+        provider = TelegramNotificationProvider()
+    else:
+        provider = FakeProvider()
     triggers = NotificationTriggers(
         notification_service=NotificationService(
             repo=NotificationRepository(session),

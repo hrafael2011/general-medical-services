@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import require_permission
-from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider
+from backend.app.application.notifications.providers import FakeProvider, MetaCloudAPIProvider, TelegramNotificationProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.user import UserModel
@@ -29,6 +29,8 @@ def get_notification_service(
 
     if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
         provider = MetaCloudAPIProvider()
+    elif settings.telegram_notification_bot_token:
+        provider = TelegramNotificationProvider()
     else:
         provider = FakeProvider()
     return NotificationService(
