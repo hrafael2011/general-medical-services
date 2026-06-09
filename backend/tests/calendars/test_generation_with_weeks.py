@@ -16,13 +16,14 @@ def test_generate_creates_weeks():
     weeks = compute_weeks(year=2026, month=5)
     assert len(weeks) == 5
     assert weeks[0][1] == "1RA SEMANA"
-    assert weeks[0][2:8] == (2026, 4, 27, 2026, 5, 3)
+    # Week 1: Sun Apr 26 - Sat May 2 (touches May)
+    assert weeks[0][2:8] == (2026, 4, 26, 2026, 5, 2)
 
 
 def test_week_for_date():
     """Verify a service_date falls into the correct week."""
     weeks = compute_weeks(year=2026, month=5)
-    # May 5, 2026 is in Week 2 because Week 1 is Apr 27-May 3.
+    # May 5, 2026 is in Week 2: Sun May 3 - Sat May 9.
     test_date = date(2026, 5, 5)
     found_week = None
     for w in weeks:
@@ -36,9 +37,9 @@ def test_week_for_date():
 
 
 def test_week_for_date_cross_month():
-    """Verify cross-month dates are assigned to the month where Sunday falls."""
+    """Verify cross-month dates appear in both months when week spans boundary."""
     weeks = compute_weeks(year=2026, month=5)
-    # May 1, 2026 is in May's Week 1 (Apr 27 - May 3)
+    # May 1, 2026 is in May's Week 1 (Sun Apr 26 - Sat May 2)
     test_date = date(2026, 5, 1)
     found_week = None
     for w in weeks:
@@ -50,11 +51,13 @@ def test_week_for_date_cross_month():
     assert found_week is not None
     assert found_week[0] == 1  # week_number 1
 
+    # With the new rule, the week containing May 1 (Apr 26-May 2) also appears
+    # in April because it contains April days (Apr 26-30).
     april_weeks = compute_weeks(year=2026, month=4)
-    assert all(
-        not (date(w[2], w[3], w[4]) <= test_date <= date(w[5], w[6], w[7]))
+    assert any(
+        date(w[2], w[3], w[4]) <= test_date <= date(w[5], w[6], w[7])
         for w in april_weeks
-    )
+    ), "May 1 should be in April too because week Apr 26-May 2 touches both months"
 
 
 def test_generate_creates_weeks_in_service():
