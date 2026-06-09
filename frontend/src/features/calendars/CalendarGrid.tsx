@@ -317,7 +317,7 @@ export function CalendarGrid() {
         }}>
           {calendarStatusLabel}
         </span>
-        {isDraft && !hasApprovedWeeks && (
+        {isDraft && !hasApprovedWeeks && slots.length === 0 && (
           <>
             <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
               <Wand2 size={15} /> {generateMutation.isPending ? "Generando…" : "Generar calendario con reglas"}
