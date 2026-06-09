@@ -60,6 +60,7 @@ _ERROR_STATUS: dict[str, int] = {
     "week_not_found": status.HTTP_404_NOT_FOUND,
     "week_already_approved": status.HTTP_409_CONFLICT,
     "week_not_approved": status.HTTP_409_CONFLICT,
+    "week_empty": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "week_locked": status.HTTP_409_CONFLICT,
     "calendar_not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
