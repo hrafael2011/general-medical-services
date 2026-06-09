@@ -11,6 +11,7 @@ from backend.app.api.routes.catalogs import router as catalogs_router
 from backend.app.api.routes.confirmations import router as confirmations_router
 from backend.app.api.routes.doctors import router as doctors_router
 from backend.app.api.routes.feature_flags import router as feature_flags_router
+from backend.app.api.routes.admin_cleanup import router as admin_cleanup_router
 from backend.app.api.routes.health import router as health_router
 from backend.app.api.routes.missions import router as missions_router
 from backend.app.api.routes.notifications import router as notifications_router
@@ -42,6 +43,7 @@ if settings.feature_telegram:
     api_router.include_router(telegram_router)
 api_router.include_router(webhooks_router)
 api_router.include_router(telegram_notification_webhook_router)
+api_router.include_router(admin_cleanup_router)
 api_router.include_router(health_router, tags=["health"])
 if settings.app_env == "staging":
     from backend.app.api.routes.seed_staging import router as seed_staging_router
