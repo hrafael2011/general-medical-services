@@ -10,6 +10,7 @@ from backend.app.application.missions.candidate_service import MissionCandidateS
 from backend.app.application.missions.errors import MissionServiceError
 from backend.app.application.missions.ranking_service import MissionRankingService
 from backend.app.core.config import settings
+from backend.app.infrastructure.db.models.calendars import CalendarVersionModel
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -277,6 +278,31 @@ def _approved_version_or_409(
     return version
 
 
+def _latest_version_or_404(
+    session: Session,
+    *,
+    year: int,
+    month: int,
+) -> CalendarVersionModel:
+    """Return the latest calendar version for the period regardless of status.
+
+    Raises HTTP 404 if no calendar/version exists at all.
+    """
+    version = CalendarRepository(session).get_latest_version_by_period(year, month)
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "calendar_not_found",
+                "message": (
+                    f"No hay calendario para {year}/{month:02d}. "
+                    "Cree un calendario primero."
+                ),
+            },
+        )
+    return version
+
+
 # ---------------------------------------------------------------------------
 # Ranking endpoints
 # ---------------------------------------------------------------------------
@@ -314,11 +340,11 @@ def get_ranking(
     service: Annotated[MissionRankingService, Depends(get_ranking_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MissionCandidateRankingRead:
-    approved_version = _approved_version_or_409(session, year=year, month=month)
+    version = _latest_version_or_404(session, year=year, month=month)
     ranking = service.get_ranking(
         year=year,
         month=month,
-        calendar_version_id=approved_version.id,
+        calendar_version_id=version.id,
     )
     if ranking is None:
         raise HTTPException(
