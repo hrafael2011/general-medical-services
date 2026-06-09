@@ -21,6 +21,8 @@ class DoctorRead(BaseModel):
     monthly_service_limit_mode: str | None = None
     availability_mode: str | None = None
     allowed_area_ids: list[str] = []
+    removed_assignments: int | None = None
+    affected_calendar_ids: list[str] | None = None
 
     model_config = {"from_attributes": True}
 

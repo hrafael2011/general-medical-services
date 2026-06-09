@@ -1,3 +1,4 @@
+import threading
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
@@ -44,12 +45,67 @@ class AssignmentService:
         availability_repo: AvailabilityRepository,
         audit: AuditService | None = None,
         triggers: NotificationTriggers | None = None,
+        mission_ranking_service=None,
     ) -> None:
         self.calendar_repo = calendar_repo
         self.doctor_repo = doctor_repo
         self.availability_repo = availability_repo
         self.audit = audit
         self.triggers = triggers
+        self._mission_ranking_service = mission_ranking_service
+        self._ranking_timers: dict[str, threading.Timer] = {}
+
+    # ------------------------------------------------------------------
+    # Ranking auto-refresh (debounced)
+    # ------------------------------------------------------------------
+
+    def _schedule_ranking_refresh(
+        self,
+        calendar_version_id: str,
+        year: int,
+        month: int,
+        actor_id: str,
+    ) -> None:
+        """Schedule a debounced ranking refresh (5s delay, resets on each call)."""
+        if self._mission_ranking_service is None:
+            return
+
+        key = f"{year}-{month}"
+        if key in self._ranking_timers:
+            self._ranking_timers[key].cancel()
+
+        timer = threading.Timer(
+            5.0,
+            self._do_ranking_refresh,
+            args=[calendar_version_id, year, month, actor_id],
+        )
+        timer.daemon = True
+        self._ranking_timers[key] = timer
+        timer.start()
+
+    def _do_ranking_refresh(
+        self,
+        calendar_version_id: str,
+        year: int,
+        month: int,
+        actor_id: str,
+    ) -> None:
+        """Execute the ranking refresh (called by the timer)."""
+        try:
+            self._mission_ranking_service.generate_ranking(
+                actor_id=actor_id,
+                year=year,
+                month=month,
+                calendar_version_id=calendar_version_id,
+            )
+        except Exception:
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.exception(
+                "Failed to auto-refresh ranking for %d/%02d", year, month
+            )
+        finally:
+            self._ranking_timers.pop(f"{year}-{month}", None)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -759,6 +815,19 @@ class AssignmentService:
         if self._is_unlocked_approved_version(version):
             self._notify_assignment_added(actor_id=actor_id, assignment=assignment)
 
+        # Schedule debounced ranking refresh
+        if self._mission_ranking_service is not None:
+            version_obj = self.calendar_repo.get_version_by_id(version_id)
+            if version_obj is not None:
+                calendar = self.calendar_repo.get_calendar_by_id(version_obj.calendar_id)
+                if calendar is not None:
+                    self._schedule_ranking_refresh(
+                        calendar_version_id=version_id,
+                        year=calendar.year,
+                        month=calendar.month,
+                        actor_id=actor_id,
+                    )
+
         return assignment
 
     def remove_assignment(
@@ -793,6 +862,17 @@ class AssignmentService:
 
         service_area_name = self._service_area_name(assignment.service_area_id)
         should_notify = self._is_unlocked_approved_version(version)
+        version_id = assignment.calendar_version_id
+
+        # Capture calendar info for ranking refresh before deletion
+        _year = None
+        _month = None
+        if self._mission_ranking_service is not None and version is not None:
+            cal = self.calendar_repo.get_calendar_by_id(version.calendar_id)
+            if cal is not None:
+                _year = cal.year
+                _month = cal.month
+
         self.calendar_repo.delete_assignment(assignment_id)
 
         if self.audit is not None:
@@ -803,6 +883,15 @@ class AssignmentService:
                 actor_id=actor_id,
                 assignment=assignment,
                 service_area_name=service_area_name,
+            )
+
+        # Schedule debounced ranking refresh
+        if self._mission_ranking_service is not None and _year is not None:
+            self._schedule_ranking_refresh(
+                calendar_version_id=version_id,
+                year=_year,
+                month=_month,
+                actor_id=actor_id,
             )
 
     def replace_assignment(
@@ -919,6 +1008,19 @@ class AssignmentService:
                 assignment=assignment,
                 service_area_name=service_area_name,
             )
+
+        # Schedule debounced ranking refresh
+        if self._mission_ranking_service is not None:
+            version_obj = self.calendar_repo.get_version_by_id(assignment.calendar_version_id)
+            if version_obj is not None:
+                calendar = self.calendar_repo.get_calendar_by_id(version_obj.calendar_id)
+                if calendar is not None:
+                    self._schedule_ranking_refresh(
+                        calendar_version_id=assignment.calendar_version_id,
+                        year=calendar.year,
+                        month=calendar.month,
+                        actor_id=actor_id,
+                    )
 
         return assignment
 

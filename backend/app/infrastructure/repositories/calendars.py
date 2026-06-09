@@ -11,6 +11,12 @@ from backend.app.infrastructure.db.models.calendars import (
     UnresolvedGapModel,
 )
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
+from backend.app.infrastructure.db.models.missions import (
+    MissionCandidateRankingEntryModel,
+    MissionCandidateRankingModel,
+)
+from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 
 
 def _not_deleted() -> tuple:
@@ -101,11 +107,51 @@ class CalendarRepository:
         return self.session.scalar(stmt)
 
     def hard_delete_calendar(self, calendar_id: str) -> None:
-        """Permanently remove a calendar and all its related data."""
+        """Permanently remove a calendar and all its related data.
+
+        Cascades through: confirmation_requests → notification_events →
+        calendar_assignments → unresolved_gaps → calendar_weeks →
+        mission_candidate_ranking_entries → mission_candidate_rankings →
+        calendar_versions → calendar.
+        """
         version_subquery = (
             select(CalendarVersionModel.id)
             .where(CalendarVersionModel.calendar_id == calendar_id)
         )
+
+        # 1. Delete mission ranking entries and rankings
+        ranking_subquery = (
+            select(MissionCandidateRankingModel.id)
+            .where(MissionCandidateRankingModel.calendar_version_id.in_(version_subquery))
+        )
+        self.session.execute(
+            delete(MissionCandidateRankingEntryModel)
+            .where(MissionCandidateRankingEntryModel.mission_candidate_ranking_id.in_(ranking_subquery))
+        )
+        self.session.execute(
+            delete(MissionCandidateRankingModel)
+            .where(MissionCandidateRankingModel.calendar_version_id.in_(version_subquery))
+        )
+
+        # 2. Delete notification events and confirmation requests referencing assignments
+        assignment_subquery = (
+            select(CalendarAssignmentModel.id)
+            .where(CalendarAssignmentModel.calendar_version_id.in_(version_subquery))
+        )
+        notification_subquery = (
+            select(NotificationEventModel.id)
+            .where(NotificationEventModel.assignment_id.in_(assignment_subquery))
+        )
+        self.session.execute(
+            delete(ConfirmationRequestModel)
+            .where(ConfirmationRequestModel.notification_id.in_(notification_subquery))
+        )
+        self.session.execute(
+            delete(NotificationEventModel)
+            .where(NotificationEventModel.assignment_id.in_(assignment_subquery))
+        )
+
+        # 3. Delete assignments and gaps
         self.session.execute(
             delete(CalendarAssignmentModel)
             .where(CalendarAssignmentModel.calendar_version_id.in_(version_subquery))
@@ -114,14 +160,20 @@ class CalendarRepository:
             delete(UnresolvedGapModel)
             .where(UnresolvedGapModel.calendar_version_id.in_(version_subquery))
         )
+
+        # 4. Delete weeks
         self.session.execute(
             delete(CalendarWeekModel)
             .where(CalendarWeekModel.calendar_version_id.in_(version_subquery))
         )
+
+        # 5. Delete versions
         self.session.execute(
             delete(CalendarVersionModel)
             .where(CalendarVersionModel.calendar_id == calendar_id)
         )
+
+        # 6. Delete calendar
         self.session.execute(
             delete(CalendarModel)
             .where(CalendarModel.id == calendar_id)
@@ -185,6 +237,102 @@ class CalendarRepository:
             .limit(1)
         )
         return self.session.scalar(stmt)
+
+    def get_latest_version_by_period(
+        self,
+        year: int,
+        month: int,
+    ) -> CalendarVersionModel | None:
+        """Return the latest version for the given period regardless of status."""
+        stmt = (
+            select(CalendarVersionModel)
+            .join(CalendarModel, CalendarVersionModel.calendar_id == CalendarModel.id)
+            .where(
+                CalendarModel.year == year,
+                CalendarModel.month == month,
+                *_not_deleted(),
+                *_version_not_deleted(),
+            )
+            .order_by(CalendarVersionModel.version_number.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def delete_assignments_for_doctor_in_active_calendars(
+        self,
+        doctor_id: str,
+    ) -> tuple[int, list[str]]:
+        """Delete all assignments for a doctor in draft/partial calendars.
+
+        Returns (deleted_count, affected_calendar_ids).
+        """
+        from sqlalchemy import delete as sql_delete
+
+        active_calendar_ids = (
+            select(CalendarModel.id)
+            .where(
+                CalendarModel.status.in_(["draft", "partial"]),
+                CalendarModel.deleted_at.is_(None),
+            )
+        )
+
+        active_version_ids = (
+            select(CalendarVersionModel.id)
+            .where(
+                CalendarVersionModel.calendar_id.in_(active_calendar_ids),
+                CalendarVersionModel.deleted_at.is_(None),
+            )
+        )
+
+        # Query assignments that will be deleted (needed for affected calendars + notification cleanup)
+        assignment_ids_to_delete = self.session.execute(
+            select(CalendarAssignmentModel.id)
+            .where(
+                CalendarAssignmentModel.doctor_id == doctor_id,
+                CalendarAssignmentModel.calendar_version_id.in_(active_version_ids),
+            )
+        ).scalars().all()
+
+        if not assignment_ids_to_delete:
+            return 0, []
+
+        # Query affected calendar IDs before deletion
+        affected = self.session.execute(
+            select(CalendarVersionModel.calendar_id)
+            .where(
+                CalendarVersionModel.id.in_(
+                    select(CalendarAssignmentModel.calendar_version_id)
+                    .where(CalendarAssignmentModel.id.in_(assignment_ids_to_delete))
+                )
+            )
+            .distinct()
+        ).scalars().all()
+
+        # Collect notification event IDs that reference these assignments
+        notification_ids = self.session.execute(
+            select(NotificationEventModel.id)
+            .where(NotificationEventModel.assignment_id.in_(assignment_ids_to_delete))
+        ).scalars().all()
+
+        if notification_ids:
+            # Delete confirmation requests referencing these notification events
+            self.session.execute(
+                sql_delete(ConfirmationRequestModel)
+                .where(ConfirmationRequestModel.notification_id.in_(notification_ids))
+            )
+            # Delete the notification events
+            self.session.execute(
+                sql_delete(NotificationEventModel)
+                .where(NotificationEventModel.id.in_(notification_ids))
+            )
+
+        # Delete the assignments
+        stmt = (
+            sql_delete(CalendarAssignmentModel)
+            .where(CalendarAssignmentModel.id.in_(assignment_ids_to_delete))
+        )
+        result = self.session.execute(stmt)
+        return result.rowcount, list(affected)
 
     # --- Calendar Assignment ---
 

@@ -95,6 +95,23 @@ class CalendarService:
         if self.audit is not None:
             self.audit.log_calendar_created(actor_id=actor_id, calendar=calendar)
 
+        # Generate empty initial ranking (no assignments yet, but ranking record exists)
+        if self.mission_ranking_service is not None:
+            try:
+                self.mission_ranking_service.generate_ranking(
+                    actor_id=actor_id,
+                    year=year,
+                    month=month,
+                    calendar_version_id=version.id,
+                )
+            except Exception:
+                import logging
+                _logger = logging.getLogger(__name__)
+                _logger.exception(
+                    "Failed to generate initial ranking for %d/%02d (non-fatal)",
+                    year, month,
+                )
+
         return calendar
 
     def get_calendar(self, calendar_id: str) -> CalendarModel:
@@ -110,14 +127,14 @@ class CalendarService:
         return self.repo.list_calendars()
 
     def soft_delete_calendar(self, *, actor_id: str, calendar_id: str) -> None:
-        """Soft-delete a calendar so it no longer appears in list/get queries."""
+        """Permanently delete a calendar and all its related data."""
         calendar = self.repo.get_calendar_by_id(calendar_id)
         if calendar is None:
             raise CalendarServiceError(
                 "calendar_not_found",
                 f"Calendario con id {calendar_id} no encontrado.",
             )
-        self.repo.soft_delete_calendar(calendar_id)
+        self.repo.hard_delete_calendar(calendar_id)
 
         if self.audit is not None:
             self.audit.log_calendar_deleted(actor_id=actor_id, calendar=calendar)
@@ -504,6 +521,20 @@ class CalendarService:
         if calendar is not None and calendar.status == "approved":
             calendar.status = "partial"
             calendar.updated_at = now
-            self.repo.session.flush()
+
+        # Reset version status to draft (mirrors unlock_calendar)
+        version = self.repo.get_version_by_id(week.calendar_version_id)
+        if version is not None:
+            version.status = "draft"
+            version.approved_at = None
+            version.approved_by = None
+            # snapshot hash for change detection on re-approval
+            original_reason = version.reason
+            if assignments_hash:
+                version.reason = f"__unlock__{assignments_hash}"
+                if original_reason:
+                    version.reason += f"__orig__{original_reason}"
+
+        self.repo.session.flush()
 
         return week
