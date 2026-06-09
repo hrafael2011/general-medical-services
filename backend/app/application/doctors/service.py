@@ -55,6 +55,7 @@ class DoctorService:
         self.audit = audit
         self.mission_repo = mission_repo
         self.action_alerts = action_alerts
+        self._last_cleanup_info: dict = {}
 
     def create_doctor(
         self,
@@ -305,11 +306,18 @@ class DoctorService:
         """Remove all assignments for a doctor in draft/partial calendars.
 
         Returns the count of removed assignments.
+        Stores result in self._last_cleanup_info for the route layer to read.
         """
         from backend.app.infrastructure.repositories.calendars import CalendarRepository
 
         repo = CalendarRepository(self.doctors.session)
-        return repo.delete_assignments_for_doctor_in_active_calendars(doctor_id)
+        count, calendar_ids = repo.delete_assignments_for_doctor_in_active_calendars(doctor_id)
+        if count > 0:
+            self._last_cleanup_info = {
+                "removed_assignments": count,
+                "affected_calendar_ids": calendar_ids,
+            }
+        return count
 
     WEEKDAY_LABELS = {
         0: "Lunes", 1: "Martes", 2: "Miércoles",

@@ -209,10 +209,10 @@ class CalendarRepository:
     def delete_assignments_for_doctor_in_active_calendars(
         self,
         doctor_id: str,
-    ) -> int:
+    ) -> tuple[int, list[str]]:
         """Delete all assignments for a doctor in draft/partial calendars.
 
-        Returns the number of deleted rows.
+        Returns (deleted_count, affected_calendar_ids).
         """
         from sqlalchemy import delete as sql_delete
 
@@ -232,6 +232,19 @@ class CalendarRepository:
             )
         )
 
+        # Query affected calendar IDs before deletion
+        affected = self.session.execute(
+            select(CalendarVersionModel.calendar_id)
+            .where(
+                CalendarVersionModel.id.in_(
+                    select(CalendarAssignmentModel.calendar_version_id)
+                    .where(CalendarAssignmentModel.doctor_id == doctor_id)
+                    .where(CalendarAssignmentModel.calendar_version_id.in_(active_version_ids))
+                )
+            )
+            .distinct()
+        ).scalars().all()
+
         stmt = (
             sql_delete(CalendarAssignmentModel)
             .where(
@@ -240,7 +253,7 @@ class CalendarRepository:
             )
         )
         result = self.session.execute(stmt)
-        return result.rowcount
+        return result.rowcount, list(affected)
 
     # --- Calendar Assignment ---
 

@@ -134,7 +134,13 @@ def update_doctor(
         )
         raise HTTPException(status_code=status_code, detail={"code": exc.code, "message": exc.message}) from exc
     session.commit()
-    return _to_read(doctor, DoctorRepository(session))
+    doctor_read = _to_read(doctor, DoctorRepository(session))
+    cleanup = getattr(service, '_last_cleanup_info', {})
+    if cleanup.get('removed_assignments', 0) > 0:
+        doctor_read.removed_assignments = cleanup['removed_assignments']
+        doctor_read.affected_calendar_ids = cleanup.get('affected_calendar_ids', [])
+        service._last_cleanup_info = {}
+    return doctor_read
 
 
 @router.post("/{doctor_id}/deactivate-service", response_model=DoctorRead)
