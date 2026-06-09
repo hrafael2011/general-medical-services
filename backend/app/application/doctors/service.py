@@ -260,8 +260,19 @@ class DoctorService:
             doctor.monthly_service_limit_mode = monthly_service_limit_mode
             changed_fields["monthly_service_limit_mode"] = monthly_service_limit_mode
         if availability_mode is not None:
+            old_availability_mode = doctor.availability_mode
             doctor.availability_mode = availability_mode
             changed_fields["availability_mode"] = availability_mode
+            if old_availability_mode != availability_mode:
+                removed = self._cleanup_calendar_assignments(doctor_id)
+                if removed > 0:
+                    import logging
+                    _logger = logging.getLogger(__name__)
+                    _logger.info(
+                        "Cleaned up %d calendar assignments for doctor %s "
+                        "due to availability_mode change (%s → %s)",
+                        removed, doctor_id, old_availability_mode, availability_mode,
+                    )
 
         if service_active is not None:
             doctor.service_active = service_active
@@ -270,6 +281,14 @@ class DoctorService:
                 AvailabilityRepository(self.doctors.session).delete_all_for_doctor(doctor_id)
                 self.doctors.set_allowed_areas(doctor_id, [])
                 changed_fields["allowed_area_ids"] = []
+                removed = self._cleanup_calendar_assignments(doctor_id)
+                if removed > 0:
+                    import logging
+                    _logger = logging.getLogger(__name__)
+                    _logger.info(
+                        "Cleaned up %d calendar assignments for deactivated doctor %s",
+                        removed, doctor_id,
+                    )
 
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
@@ -281,6 +300,16 @@ class DoctorService:
             self.audit.log_doctor_updated(actor_id=actor_id, doctor=doctor, changed_fields=changed_fields)
 
         return doctor
+
+    def _cleanup_calendar_assignments(self, doctor_id: str) -> int:
+        """Remove all assignments for a doctor in draft/partial calendars.
+
+        Returns the count of removed assignments.
+        """
+        from backend.app.infrastructure.repositories.calendars import CalendarRepository
+
+        repo = CalendarRepository(self.doctors.session)
+        return repo.delete_assignments_for_doctor_in_active_calendars(doctor_id)
 
     WEEKDAY_LABELS = {
         0: "Lunes", 1: "Martes", 2: "Miércoles",
