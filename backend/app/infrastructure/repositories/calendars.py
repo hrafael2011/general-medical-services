@@ -186,6 +186,62 @@ class CalendarRepository:
         )
         return self.session.scalar(stmt)
 
+    def get_latest_version_by_period(
+        self,
+        year: int,
+        month: int,
+    ) -> CalendarVersionModel | None:
+        """Return the latest version for the given period regardless of status."""
+        stmt = (
+            select(CalendarVersionModel)
+            .join(CalendarModel, CalendarVersionModel.calendar_id == CalendarModel.id)
+            .where(
+                CalendarModel.year == year,
+                CalendarModel.month == month,
+                *_not_deleted(),
+                *_version_not_deleted(),
+            )
+            .order_by(CalendarVersionModel.version_number.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def delete_assignments_for_doctor_in_active_calendars(
+        self,
+        doctor_id: str,
+    ) -> int:
+        """Delete all assignments for a doctor in draft/partial calendars.
+
+        Returns the number of deleted rows.
+        """
+        from sqlalchemy import delete as sql_delete
+
+        active_calendar_ids = (
+            select(CalendarModel.id)
+            .where(
+                CalendarModel.status.in_(["draft", "partial"]),
+                CalendarModel.deleted_at.is_(None),
+            )
+        )
+
+        active_version_ids = (
+            select(CalendarVersionModel.id)
+            .where(
+                CalendarVersionModel.calendar_id.in_(active_calendar_ids),
+                CalendarVersionModel.deleted_at.is_(None),
+            )
+        )
+
+        stmt = (
+            sql_delete(CalendarAssignmentModel)
+            .where(
+                CalendarAssignmentModel.doctor_id == doctor_id,
+                CalendarAssignmentModel.calendar_version_id.in_(active_version_ids),
+            )
+        )
+        result = self.session.execute(stmt)
+        return result.rowcount
+
     # --- Calendar Assignment ---
 
     def add_assignment(self, assignment: CalendarAssignmentModel) -> CalendarAssignmentModel:
