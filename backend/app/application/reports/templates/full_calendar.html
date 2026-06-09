@@ -223,13 +223,11 @@
           <td class="{% if day_data['day_name'] in ('SÁBADO', 'DOMINGO') %}weekend{% endif %}{% if not day_data.get('is_current_month', true) %} outside-month{% endif %}">
             <div class="day-num{% if not day_data.get('is_current_month', true) %} day-num--outside{% endif %}">{{ day_data['day'] }}</div>
             {% for assgn in day_data['assignments'] %}
-            {% if day_data.get('is_current_month', true) or assgn['doctor'] != '—' %}
             <div class="assignment{% if assgn['doctor'] == '—' %} cal-gap{% endif %}">
               <span class="area-dot{% if assgn['doctor'] == '—' %} area-dot--empty{% endif %}" style="background-color: {{ area_colors.get(assgn['area'], '#6b7280') }};"></span>
               {% if assgn['doctor'] != '—' %}<span class="rank-label">{{ assgn['doctor_rank'] }} </span>{% endif %}
               {{ assgn['doctor'] }}
             </div>
-            {% endif %}
             {% endfor %}
           </td>
         {% endfor %}
