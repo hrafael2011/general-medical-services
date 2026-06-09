@@ -14,7 +14,7 @@ def test_generate_creates_weeks():
     """After generate(), CalendarWeek rows should be created for the month."""
     # Verify compute_weeks works correctly for the integration test
     weeks = compute_weeks(year=2026, month=5)
-    assert len(weeks) == 5
+    assert len(weeks) == 6
     assert weeks[0][1] == "1RA SEMANA"
     # Week 1: Sun Apr 26 - Sat May 2 (touches May)
     assert weeks[0][2:8] == (2026, 4, 26, 2026, 5, 2)
