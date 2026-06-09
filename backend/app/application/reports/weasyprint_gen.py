@@ -231,13 +231,13 @@ def generate_workload_pdf(data: dict) -> bytes:
 
 
 def _build_calendar_weeks(grid_data: dict) -> list[list[dict | None]]:
-    """Build a calendar matrix: list of weeks, each week is 7 day slots (Sun-Sat).
+    """Build a calendar matrix: list of weeks, each week is 7 day slots (Mon-Sun).
 
-    Uses the same rule as compute_weeks: includes every Sunday-Saturday week
-    that contains at least one day of the target month. Days from adjacent
-    months use real assignments from adjacent_cells.
+    Uses the same rule as compute_weeks: a week belongs to the month where
+    its Monday falls. Days after the last Sunday of the month appear as
+    outside-month (using adjacent_cells data).
 
-    Each day slot is either None or:
+    Each day slot is:
     {
         "day": int,
         "day_name": str,
@@ -261,28 +261,23 @@ def _build_calendar_weeks(grid_data: dict) -> list[list[dict | None]]:
     area_codes = grid_data.get("area_codes", [])
     adjacent_cells = grid_data.get("adjacent_cells", {})  # "YYYY-MM-DD" -> area_code -> doctor_info
 
-    # English weekday name for adjacent-month day labels
     _DAY_ES = {
         "Monday": "LUNES", "Tuesday": "MARTES", "Wednesday": "MIÉRCOLES",
         "Thursday": "JUEVES", "Friday": "VIERNES", "Saturday": "SÁBADO", "Sunday": "DOMINGO",
     }
 
-    # Find first Sunday ≤ 1st of month (same rule as compute_weeks)
+    # Find first Monday in the month (same rule as compute_weeks)
     first_day_dt = date(year, month, 1)
-    days_since_sunday = (first_day_dt.weekday() + 1) % 7
-    current_sunday = first_day_dt - timedelta(days=days_since_sunday)
+    days_until_monday = (7 - first_day_dt.weekday()) % 7
+    current_monday = first_day_dt + timedelta(days=days_until_monday)
 
     weeks: list[list[dict | None]] = []
 
-    while True:
-        current_saturday = current_sunday + timedelta(days=6)
-        # Stop when the week no longer contains ANY day of the target month
-        if current_sunday.month != month and current_saturday.month != month:
-            break
-
+    while current_monday.month == month:
+        current_sunday = current_monday + timedelta(days=6)
         week_days: list[dict | None] = []
         for i in range(7):
-            d = current_sunday + timedelta(days=i)
+            d = current_monday + timedelta(days=i)
             is_current = d.month == month
             if is_current and 1 <= d.day <= last_day:
                 row = rows_by_day.get(d.day, {"day": d.day, "day_name": "", "cells": {}})
@@ -304,7 +299,7 @@ def _build_calendar_weeks(grid_data: dict) -> list[list[dict | None]]:
                     "is_current_month": True,
                 })
             else:
-                # Adjacent-month day: look up real assignments from the adjacent month's calendar
+                # Adjacent-month day (Sunday in the next month)
                 date_str = d.isoformat()
                 day_cells = adjacent_cells.get(date_str, {})
                 adjacent_assignments = []
@@ -330,7 +325,7 @@ def _build_calendar_weeks(grid_data: dict) -> list[list[dict | None]]:
                     "is_current_month": False,
                 })
         weeks.append(week_days)
-        current_sunday += timedelta(days=7)
+        current_monday += timedelta(days=7)
 
     return weeks
 
