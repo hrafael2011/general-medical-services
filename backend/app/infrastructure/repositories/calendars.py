@@ -11,6 +11,7 @@ from backend.app.infrastructure.db.models.calendars import (
     UnresolvedGapModel,
 )
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 
 
@@ -257,11 +258,23 @@ class CalendarRepository:
             .distinct()
         ).scalars().all()
 
-        # Delete notification events referencing these assignments
-        self.session.execute(
-            sql_delete(NotificationEventModel)
+        # Collect notification event IDs that reference these assignments
+        notification_ids = self.session.execute(
+            select(NotificationEventModel.id)
             .where(NotificationEventModel.assignment_id.in_(assignment_ids_to_delete))
-        )
+        ).scalars().all()
+
+        if notification_ids:
+            # Delete confirmation requests referencing these notification events
+            self.session.execute(
+                sql_delete(ConfirmationRequestModel)
+                .where(ConfirmationRequestModel.notification_id.in_(notification_ids))
+            )
+            # Delete the notification events
+            self.session.execute(
+                sql_delete(NotificationEventModel)
+                .where(NotificationEventModel.id.in_(notification_ids))
+            )
 
         # Delete the assignments
         stmt = (
