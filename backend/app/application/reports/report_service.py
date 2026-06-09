@@ -693,10 +693,12 @@ class ReportService:
         area_list = self.calendar_repo.list_service_areas()
         areas = sorted(area_list, key=lambda a: a.code)
 
-        # Build cell grid: {day: {area_code: {name: str, rank: str}}}
-        cell_map: dict[int, dict[str, dict]] = {}
+        # Build cell grid: keyed by full date to avoid collisions from
+        # cross-boundary days (e.g., Apr 28 and May 28 in the same calendar
+        # version must not share a key).
+        cell_map: dict[date, dict[str, dict]] = {}
         for a in assignments:
-            d = a.service_date.day
+            d = a.service_date
             if d not in cell_map:
                 cell_map[d] = {}
             area_name = ""
@@ -758,7 +760,7 @@ class ReportService:
             dt = date(year, month, d)
             cells = {}
             for area in areas:
-                info = cell_map.get(d, {}).get(area.code)
+                info = cell_map.get(dt, {}).get(area.code)
                 if info and info.get("name") and info["name"] != "—":
                     rank = info.get("rank", "")
                     name = info.get("name", "")
