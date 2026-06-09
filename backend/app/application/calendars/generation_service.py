@@ -56,6 +56,7 @@ class GenerationService:
         mission_repo: MissionRepository,
         catalog_repo: CatalogRepository,
         audit: AuditService | None = None,
+        mission_ranking_service=None,
     ) -> None:
         self.calendar_repo = calendar_repo
         self.doctor_repo = doctor_repo
@@ -63,6 +64,7 @@ class GenerationService:
         self.mission_repo = mission_repo
         self.catalog_repo = catalog_repo
         self.audit = audit
+        self.mission_ranking_service = mission_ranking_service
 
     def generate(
         self,
@@ -241,6 +243,15 @@ class GenerationService:
                     "gaps": summary_raw.gap_count,
                     "generation_mode": generation_mode,
                 },
+            )
+
+        # Generate ranking immediately after batch assignment (no debounce needed)
+        if self.mission_ranking_service is not None:
+            self.mission_ranking_service.generate_ranking(
+                actor_id=actor_id,
+                year=calendar.year,
+                month=calendar.month,
+                calendar_version_id=version.id,
             )
 
         return summary_raw
