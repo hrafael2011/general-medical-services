@@ -394,6 +394,19 @@ class CalendarService:
                 f"La semana {week_id} ya está aprobada.",
             )
 
+        # Require at least one assignment to approve a week
+        week_assignments = self.repo.list_assignments(week.calendar_version_id)
+        assignments_in_week = [
+            a for a in week_assignments
+            if week.start_date <= a.service_date <= week.end_date
+        ]
+        if not assignments_in_week:
+            raise CalendarServiceError(
+                "week_empty",
+                "No puedes aprobar una semana sin médicos asignados. "
+                "Asigna al menos un médico antes de aprobar.",
+            )
+
         now = datetime.now(UTC)
         self.repo.update_week_status(
             week_id=week_id,
