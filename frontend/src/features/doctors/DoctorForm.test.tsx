@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { DoctorForm } from "./DoctorForm";
 
 const mockSetWeekly = vi.fn().mockResolvedValue({});
@@ -14,7 +15,9 @@ vi.mock("../../api/doctors", () => ({
     create: (...args: unknown[]) => mockCreateDoctor(...args),
     update: (...args: unknown[]) => mockUpdateDoctor(...args),
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-    listServiceAreas: vi.fn().mockResolvedValue([]),
+    listServiceAreas: vi.fn().mockResolvedValue([
+      { id: "area-e", display_name: "Emergencia", code: "emergencia", active: true },
+    ]),
     listRanks: vi.fn().mockResolvedValue([
       { id: "rank-active", name: "Capitán", abbreviation: "Cap.", active: true },
       { id: "rank-inactive", name: "Mayor", abbreviation: "May.", active: false },
@@ -30,11 +33,23 @@ vi.mock("../../api/doctors", () => ({
   },
 }));
 
+vi.mock("../../api/calendars", () => ({
+  calendarsApi: {
+    fillGaps: vi.fn().mockResolvedValue({ filled: 0, remaining: 0, message: "ok" }),
+  },
+}));
+
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ addToast: vi.fn() }),
+}));
+
 function renderForm() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DoctorForm onClose={vi.fn()} />
+      <MemoryRouter>
+        <DoctorForm onClose={vi.fn()} />
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -83,11 +98,15 @@ describe("DoctorForm availability", () => {
     fireEvent.change(screen.getByLabelText("Apellido"), {
       target: { value: "García" },
     });
+    fireEvent.change(screen.getByLabelText(/WhatsApp/), {
+      target: { value: "8095551234" },
+    });
     await screen.findByText("Recursos Humanos");
     fireEvent.change(screen.getByLabelText("Departamento"), {
       target: { value: "dept-1" },
     });
     fireEvent.click(screen.getByLabelText("Lun"));
+    fireEvent.click(screen.getByLabelText("Emergencia"));
     fireEvent.click(screen.getByRole("button", { name: /Guardar/i }));
 
     await waitFor(() => {

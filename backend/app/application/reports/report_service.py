@@ -758,7 +758,13 @@ class ReportService:
             dt = date(year, month, d)
             cells = {}
             for area in areas:
-                cells[area.display_name] = cell_map.get(d, {}).get(area.code, {"name": "—", "rank": ""})
+                info = cell_map.get(d, {}).get(area.code)
+                if info and info.get("name") and info["name"] != "—":
+                    rank = info.get("rank", "")
+                    name = info.get("name", "")
+                    cells[area.display_name] = f"{rank} {name}".strip() if rank else name
+                else:
+                    cells[area.display_name] = "—"
             rows.append({
                 "day": d,
                 "day_name": DAY_NAMES[dt.weekday()],
