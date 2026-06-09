@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 import { doctorsApi, availabilityApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
+import { calendarsApi } from "../../api/calendars";
 
 interface Props {
   doctor?: DoctorRead;
@@ -54,6 +55,10 @@ export function DoctorForm({ doctor, onClose }: Props) {
     setSelectedDates(dates ?? []);
   }
   const [error, setError] = useState("");
+  const [gapPrompt, setGapPrompt] = useState<{
+    removed: number; calendarIds: string[]; doctorName: string;
+  } | null>(null);
+  const [fillingGaps, setFillingGaps] = useState(false);
 
   const { data: serviceAreas } = useQuery({
     queryKey: ["service-areas"],
@@ -166,10 +171,45 @@ export function DoctorForm({ doctor, onClose }: Props) {
           }
         }
         qc.invalidateQueries({ queryKey: ["doctors"] });
+
+        // Check if assignments were cleaned up due to mode change
+        const removed = savedDoctor.removed_assignments;
+        const calendarIds = savedDoctor.affected_calendar_ids ?? [];
+        if (removed && removed > 0 && calendarIds.length > 0) {
+          setGapPrompt({
+            removed,
+            calendarIds,
+            doctorName: savedDoctor.name,
+          });
+          return; // Don't close yet — wait for user choice
+        }
+
         onClose();
       },
       onError: (err: Error) => setError(err.message),
     });
+  }
+
+  async function handleFillGaps() {
+    if (!gapPrompt) return;
+    setFillingGaps(true);
+    try {
+      for (const calId of gapPrompt.calendarIds) {
+        await calendarsApi.fillGaps(calId);
+      }
+      qc.invalidateQueries({ queryKey: ["calendars"] });
+    } catch {
+      // Silently continue — gaps can be filled manually later
+    } finally {
+      setFillingGaps(false);
+      setGapPrompt(null);
+      onClose();
+    }
+  }
+
+  function handleManualFill() {
+    setGapPrompt(null);
+    onClose();
   }
 
   function toggleArea(id: string) {
@@ -396,6 +436,40 @@ export function DoctorForm({ doctor, onClose }: Props) {
           </div>
         </form>
       </div>
+
+      {gapPrompt && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-panel" style={{ maxWidth: 420 }}>
+            <h3 style={{ margin: "0 0 12px" }}>Asignaciones eliminadas</h3>
+            <p style={{ color: "#64748b", fontSize: "0.9rem", margin: "0 0 16px" }}>
+              Se eliminaron <strong>{gapPrompt.removed}</strong> asignaciones
+              de <strong>{gapPrompt.doctorName}</strong>{" "}
+              en {gapPrompt.calendarIds.length > 1
+                ? `${gapPrompt.calendarIds.length} calendarios`
+                : "1 calendario"}
+              . ¿Desea rellenar los huecos automáticamente o prefiere hacerlo manualmente?
+            </p>
+            <div className="form-footer" style={{ gap: 8 }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={fillingGaps}
+                onClick={handleFillGaps}
+              >
+                {fillingGaps ? "Llenando…" : "Automático"}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={fillingGaps}
+                onClick={handleManualFill}
+              >
+                Manual
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
