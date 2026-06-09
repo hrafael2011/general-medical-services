@@ -170,7 +170,10 @@ def get_assignment_service(
     from backend.app.infrastructure.repositories.audit import AuditRepository
     from backend.app.infrastructure.repositories.availability import AvailabilityRepository
     from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
+    from backend.app.application.missions.ranking_service import MissionRankingService
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.missions import MissionRepository
     from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
     doctor_repo = DoctorRepository(session)
