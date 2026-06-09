@@ -32,20 +32,30 @@ interface CalendarDay {
   isCurrentMonth: boolean;
 }
 
-/** Same logic as backend compute_weeks: every week is Monday-Sunday, and
- *  belongs to the month where its Sunday falls. */
+/** Same logic as backend compute_weeks: every week is Sunday-Saturday, and a
+ *  month includes every week that touches it (≥1 day in the month). */
 function buildCalendarDays(year: number, month: number): CalendarDay[] {
   const firstDay = new Date(year, month - 1, 1);
   const days: CalendarDay[] = [];
-  const daysUntilSunday = (7 - firstDay.getDay()) % 7;
-  const currentSunday = new Date(year, month - 1, 1 + daysUntilSunday);
 
-  while (currentSunday.getMonth() + 1 === month) {
-    const monday = new Date(currentSunday);
-    monday.setDate(currentSunday.getDate() - 6);
+  // Find the first Sunday ≤ the 1st of the month.
+  // getDay(): 0=Sunday, 1=Monday, ..., 6=Saturday.
+  const daysSinceSunday = firstDay.getDay(); // 0 if 1st is Sunday
+  const currentSunday = new Date(firstDay);
+  currentSunday.setDate(firstDay.getDate() - daysSinceSunday);
+
+  while (true) {
+    const currentSaturday = new Date(currentSunday);
+    currentSaturday.setDate(currentSunday.getDate() + 6);
+
+    // Stop when the week no longer contains ANY day of the target month.
+    if (currentSunday.getMonth() + 1 !== month && currentSaturday.getMonth() + 1 !== month) {
+      break;
+    }
+
     for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
+      const d = new Date(currentSunday);
+      d.setDate(currentSunday.getDate() + i);
       const m = d.getMonth() + 1;
       days.push({
         day: d.getDate(),

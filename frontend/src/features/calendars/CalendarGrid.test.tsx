@@ -17,11 +17,12 @@ vi.mock("../../api/calendars", () => ({
       gaps: [],
     }),
     listWeeks: vi.fn().mockResolvedValue([
-      { id: "w1", week_number: 1, label: "Semana 1 (Abr 27 - May 3)", start_date: "2026-04-27", end_date: "2026-05-03", status: "approved", assignment_count: 5, approved_by: null, approved_at: null, doctor_assignment_counts: [{ doctor_id: "d1", doctor_name: "GARCÍA", count: 2 }] },
-      { id: "w2", week_number: 2, label: "Semana 2 (May 4 - May 10)", start_date: "2026-05-04", end_date: "2026-05-10", status: "approved", assignment_count: 4, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
-      { id: "w3", week_number: 3, label: "Semana 3 (May 11 - May 17)", start_date: "2026-05-11", end_date: "2026-05-17", status: "draft", assignment_count: 3, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
-      { id: "w4", week_number: 4, label: "Semana 4 (May 18 - May 24)", start_date: "2026-05-18", end_date: "2026-05-24", status: "draft", assignment_count: 2, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
-      { id: "w5", week_number: 5, label: "Semana 5 (May 25 - May 31)", start_date: "2026-05-25", end_date: "2026-05-31", status: "draft", assignment_count: 0, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+      { id: "w1", week_number: 1, label: "Semana 1 (Abr 26 - May 2)", start_date: "2026-04-26", end_date: "2026-05-02", status: "approved", assignment_count: 5, approved_by: null, approved_at: null, doctor_assignment_counts: [{ doctor_id: "d1", doctor_name: "GARCÍA", count: 2 }] },
+      { id: "w2", week_number: 2, label: "Semana 2 (May 3 - May 9)", start_date: "2026-05-03", end_date: "2026-05-09", status: "approved", assignment_count: 4, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+      { id: "w3", week_number: 3, label: "Semana 3 (May 10 - May 16)", start_date: "2026-05-10", end_date: "2026-05-16", status: "draft", assignment_count: 3, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+      { id: "w4", week_number: 4, label: "Semana 4 (May 17 - May 23)", start_date: "2026-05-17", end_date: "2026-05-23", status: "draft", assignment_count: 2, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+      { id: "w5", week_number: 5, label: "Semana 5 (May 24 - May 30)", start_date: "2026-05-24", end_date: "2026-05-30", status: "draft", assignment_count: 0, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+      { id: "w6", week_number: 6, label: "Semana 6 (May 31 - Jun 6)", start_date: "2026-05-31", end_date: "2026-06-06", status: "draft", assignment_count: 0, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
     ]),
     approveWeek: vi.fn(),
     unlockWeek: vi.fn(),
@@ -71,11 +72,12 @@ beforeEach(() => {
 });
 
 const allDraftWeeks = [
-  { id: "w1", week_number: 1, label: "Semana 1 (Abr 27 - May 3)", start_date: "2026-04-27", end_date: "2026-05-03", status: "draft", assignment_count: 5, approved_by: null, approved_at: null, doctor_assignment_counts: [{ doctor_id: "d1", doctor_name: "GARCÍA", count: 2 }] },
-  { id: "w2", week_number: 2, label: "Semana 2 (May 4 - May 10)", start_date: "2026-05-04", end_date: "2026-05-10", status: "draft", assignment_count: 4, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
-  { id: "w3", week_number: 3, label: "Semana 3 (May 11 - May 17)", start_date: "2026-05-11", end_date: "2026-05-17", status: "draft", assignment_count: 3, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
-  { id: "w4", week_number: 4, label: "Semana 4 (May 18 - May 24)", start_date: "2026-05-18", end_date: "2026-05-24", status: "draft", assignment_count: 2, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
-  { id: "w5", week_number: 5, label: "Semana 5 (May 25 - May 31)", start_date: "2026-05-25", end_date: "2026-05-31", status: "draft", assignment_count: 0, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+  { id: "w1", week_number: 1, label: "Semana 1 (Abr 26 - May 2)", start_date: "2026-04-26", end_date: "2026-05-02", status: "draft", assignment_count: 5, approved_by: null, approved_at: null, doctor_assignment_counts: [{ doctor_id: "d1", doctor_name: "GARCÍA", count: 2 }] },
+  { id: "w2", week_number: 2, label: "Semana 2 (May 3 - May 9)", start_date: "2026-05-03", end_date: "2026-05-09", status: "draft", assignment_count: 4, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+  { id: "w3", week_number: 3, label: "Semana 3 (May 10 - May 16)", start_date: "2026-05-10", end_date: "2026-05-16", status: "draft", assignment_count: 3, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+  { id: "w4", week_number: 4, label: "Semana 4 (May 17 - May 23)", start_date: "2026-05-17", end_date: "2026-05-23", status: "draft", assignment_count: 2, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+  { id: "w5", week_number: 5, label: "Semana 5 (May 24 - May 30)", start_date: "2026-05-24", end_date: "2026-05-30", status: "draft", assignment_count: 0, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
+  { id: "w6", week_number: 6, label: "Semana 6 (May 31 - Jun 6)", start_date: "2026-05-31", end_date: "2026-06-06", status: "draft", assignment_count: 0, approved_by: null, approved_at: null, doctor_assignment_counts: [] },
 ];
 
 function renderGrid() {
@@ -104,6 +106,12 @@ describe("CalendarGrid", () => {
 
   it("muestra botón Generar calendario con reglas en modo draft", async () => {
     vi.mocked(calendarsApi.listWeeks).mockResolvedValueOnce(allDraftWeeks);
+    vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
+      calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
+      version: { id: "v1", calendar_id: "c1", version_number: 1, status: "draft", created_by: null, reason: null, created_at: "" },
+      slots: [],
+      gaps: [],
+    });
     renderGrid();
     expect(await screen.findByRole("button", { name: /generar calendario con reglas/i })).toBeInTheDocument();
   });
@@ -112,6 +120,12 @@ describe("CalendarGrid", () => {
     const { calendarsApi } = await import("../../api/calendars");
     const userEvent = await import("@testing-library/user-event");
     vi.mocked(calendarsApi.listWeeks).mockResolvedValueOnce(allDraftWeeks);
+    vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
+      calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
+      version: { id: "v1", calendar_id: "c1", version_number: 1, status: "draft", created_by: null, reason: null, created_at: "" },
+      slots: [],
+      gaps: [],
+    });
     renderGrid();
 
     await screen.findByText("Semanas");
@@ -140,20 +154,21 @@ describe("CalendarGrid", () => {
     expect(headers).toHaveLength(7);
   });
 
-  it("muestra el día 1 en la posición correcta (viernes, columna 5)", async () => {
+  it("muestra el día 1 en la posición correcta (viernes, columna 6)", async () => {
     const { container } = renderGrid();
     await screen.findByText("1");
     const grid = container.querySelector(".calendar-grid");
-    // May 1, 2026 is Friday; Monday-first offset = 4 (column index 4, 0-based)
-    // In flat layout: 7 headers (idx 0-6) + 4 padding cells (idx 7-10) + May 1 cell = idx 11
-    expect(grid?.children[11]?.querySelector(".calendar-day-number")?.textContent).toBe("1");
+    // May 1, 2026 is Friday; Sunday-first offset = 5 (column index 5, 0-based)
+    // In flat layout: 7 headers (idx 0-6) + 5 days before May 1 (idx 7-11) + May 1 = idx 12
+    expect(grid?.children[12]?.querySelector(".calendar-day-number")?.textContent).toBe("1");
   });
 
   it("etiqueta los días de otro mes en semanas cruzadas", async () => {
     const { container } = renderGrid();
-    await screen.findByText("abr 27");
+    await screen.findByText("abr 26");
     const grid = container.querySelector(".calendar-grid");
-    expect(grid?.children[7]?.querySelector(".calendar-day-number")?.textContent).toBe("abr 27");
+    // First cell after headers (index 7) is Sun Apr 26 (outside-month)
+    expect(grid?.children[7]?.querySelector(".calendar-day-number")?.textContent).toBe("abr 26");
   });
 
   it("muestra las áreas con colores correctos", async () => {
@@ -177,7 +192,8 @@ describe("CalendarGrid", () => {
     const { container } = renderGrid();
     await screen.findByText("Semanas");
     const grid = container.querySelector(".calendar-grid");
-    const mayFirstCell = grid?.children[11] as HTMLElement;
+    // May 1 is at index 12 in the new Sun-Sat layout (7 headers + 5 outside-month days)
+    const mayFirstCell = grid?.children[12] as HTMLElement;
 
     expect(within(mayFirstCell).queryByText("+ Asignar médico")).not.toBeInTheDocument();
     expect(within(mayFirstCell).getByText(/GARCÍA/)).toBeInTheDocument();
@@ -227,11 +243,11 @@ describe("CalendarGrid", () => {
     expect(await screen.findByText("Parcial")).toBeInTheDocument();
   });
 
-  it("muestra el panel de semanas con 5 semanas", async () => {
+  it("muestra el panel de semanas con 6 semanas", async () => {
     renderGrid();
     expect(await screen.findByText("Semanas")).toBeInTheDocument();
     expect(screen.getByText(/Semana 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Semana 5/)).toBeInTheDocument();
+    expect(screen.getByText(/Semana 6/)).toBeInTheDocument();
   });
 
   it("muestra estados aprobada/borrador correctamente", async () => {
@@ -240,8 +256,8 @@ describe("CalendarGrid", () => {
     const approvedBadges = screen.getAllByText("Aprobada");
     const draftBadges = screen.getAllByText("Borrador");
     expect(approvedBadges).toHaveLength(2);
-    // 3 week-level Borrador badges + 1 calendar-level Borrador badge
-    expect(draftBadges).toHaveLength(4);
+    // 4 week-level Borrador badges + 1 calendar-level Borrador badge = 5
+    expect(draftBadges).toHaveLength(5);
   });
 
   it("muestra conteo de asignaciones por semana", async () => {
@@ -250,7 +266,7 @@ describe("CalendarGrid", () => {
     // "5" and "4" appear as both day numbers and week assignment counts
     expect(screen.getAllByText("5").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("4").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
   });
 
   it("no muestra nombres de médicos en la columna de asignaciones semanales", async () => {
