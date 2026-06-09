@@ -353,12 +353,34 @@ export function CalendarGrid() {
               <div key={cd.dateStr} className="calendar-cell calendar-cell--outside">
                 <span className="calendar-day-number calendar-day-number--outside">{dayLabel(cd)}</span>
                 {assignments.map((areaAss) => {
+                  const color = areaColor(areaAss.areaName);
                   const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
-                  if (!doctor) return null;
+                  const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
+                  const isEditableSlot = isDraft;
+                  const handleAreaClick = () => {
+                    if (!isEditableSlot) return;
+                    if (areaAss.slot?.assignment) {
+                      setAssignTarget({ date: cd.dateStr, areaId: areaAss.areaId, areaName: areaAss.areaName, currentAssignmentId: areaAss.slot.assignment.id, currentDoctorId: areaAss.slot.assignment.doctor_id });
+                    } else {
+                      setAssignTarget({ date: cd.dateStr, areaId: areaAss.areaId, areaName: areaAss.areaName });
+                    }
+                    setAssignmentWarning(null);
+                  };
                   return (
-                    <div key={areaAss.areaId} className="calendar-area-row" style={{ opacity: 0.5 }}>
-                      <span className="calendar-area-dot" style={{ backgroundColor: areaColor(areaAss.areaName) }} />
-                      <span>{doctor.name}</span>
+                    <div key={areaAss.areaId}
+                      className={`calendar-area-row${isEditableSlot ? " calendar-area-row--clickable" : ""}${!doctor && isEditableSlot ? " calendar-area-row--empty" : ""}`}
+                      role="button" tabIndex={0}
+                      onClick={handleAreaClick}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleAreaClick(); } }}
+                    >
+                      <span className={`calendar-area-dot ${doctor ? "" : "calendar-area-dot--empty"}`} style={{ backgroundColor: color }} />
+                      {doctor ? (
+                        <span>{rank ? rankDisplayName(rank.name) + " " : ""}{doctor.name}</span>
+                      ) : isEditableSlot ? (
+                        <span className="calendar-assign-label">+ Asignar médico</span>
+                      ) : (
+                        <span style={{ color: "#e2e8f0" }}>—</span>
+                      )}
                     </div>
                   );
                 })}

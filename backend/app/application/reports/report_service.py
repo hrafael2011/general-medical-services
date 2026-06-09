@@ -785,6 +785,7 @@ class ReportService:
             "areas": [a.display_name for a in areas],
             "area_codes": [a.code for a in areas],
             "rows": rows,
+            "cell_map": {k.isoformat(): v for k, v in cell_map.items()},
             "adjacent_cells": adjacent_cells,
             "summary": {
                 "total_services": total_services,
