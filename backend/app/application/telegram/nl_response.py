@@ -15,10 +15,10 @@ _NL_SYSTEM_PROMPT = """Eres un asistente médico-militar conciso que responde co
 
 Reglas:
 - Usa SOLO los datos proporcionados abajo. NO inventes información.
-- Si los datos están vacíos o no existen, explica la causa probable:
-  * Sin doctores que coincidan → "No encontré doctores con ese criterio."
-  * Sin calendario → "No hay un calendario creado para ese mes. ¿Quieres crear uno?"
-  * Sin asignaciones → "Ese calendario existe pero no tiene guardias asignadas todavía."
+- Si los datos están vacíos o no existen, usa estas señales explícitas para decidir:
+  * calendar_exists: false → "No hay un calendario creado para ese mes. ¿Quieres crear uno?"
+  * calendar_exists: true y rows vacío → "Ese calendario existe pero no tiene guardias asignadas todavía."
+  * Sin estas señales, explica la causa más probable basada en los datos disponibles.
 - Para conteos: responde en una frase. Ej: "Hay 22 doctoras activas en el servicio."
 - Para listas (≤10 items): usa viñetas con nombre, rango y departamento.
 - Para listas (>10 items): da un resumen numérico y ofrece detallar si el usuario quiere.
@@ -29,7 +29,10 @@ _NL_EMPTY_PROMPT = """Eres un asistente médico-militar. El usuario hizo una con
 
 Genera una respuesta natural en español que:
 1. Reconozca la consulta del usuario
-2. Explique por qué no hay datos (sin calendario, sin doctores con ese criterio, etc.)
+2. Explique por qué no hay datos usando estas señales si están disponibles:
+   - calendar_exists: false → el calendario no existe para ese mes
+   - calendar_exists: true con rows vacío → el calendario existe pero sin asignaciones
+   - Sin calendar_exists → interpreta según el contexto de la herramienta
 3. Sugiera una acción o alternativa
 
 Contexto de la herramienta usada: {tool_name}
@@ -59,6 +62,14 @@ def generate_response(
     """
     if tool_result is None:
         return _generate_error_response(llm, user_message, tool_name)
+
+    # If the tool already generated a natural-language response, use it directly.
+    # This preserves carefully crafted messages (e.g. draft warnings, status
+    # reports) instead of discarding them and asking the LLM to improvise.
+    if isinstance(tool_result, dict) and tool_result.get("response_text"):
+        pre_formatted = tool_result["response_text"]
+        if isinstance(pre_formatted, str) and len(pre_formatted.strip()) > 20:
+            return pre_formatted.strip()
 
     # Extract the meaningful data from the tool result
     data = _extract_data(tool_result)

@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Annotated
@@ -30,7 +33,13 @@ async def receive_whatsapp_message(
     request: Request,
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict:
-    body = await request.json()
+    # Read raw body for HMAC signature validation
+    body_bytes = await request.body()
+
+    # Validate X-Hub-Signature-256 from Meta
+    _verify_webhook_signature(request, body_bytes)
+
+    body = json.loads(body_bytes)
     try:
         messages = body.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {}).get("messages", [])
         for msg in messages:
@@ -164,6 +173,24 @@ def diagnostic(
         ],
         "webhook_log": _webhook_log,
     }
+
+
+def _verify_webhook_signature(request: Request, body_bytes: bytes) -> None:
+    """Validate the X-Hub-Signature-256 header from Meta.
+
+    Meta signs every webhook request with HMAC-SHA256 using the App Secret.
+    If the signature is missing or doesn't match, the request is rejected.
+    When app_secret is not configured, skips validation with a warning.
+    """
+    app_secret = settings.meta_whatsapp_app_secret
+    if not app_secret:
+        logger.warning("Webhook signature verification skipped — META_WHATSAPP_APP_SECRET not configured")
+        return
+
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    expected = f"sha256={hmac.digest(app_secret.encode(), body_bytes, hashlib.sha256).hex()}"
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid signature")
 
 
 def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> None:

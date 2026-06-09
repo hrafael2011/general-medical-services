@@ -176,8 +176,8 @@ class CalendarRepository:
             .where(
                 CalendarModel.year == year,
                 CalendarModel.month == month,
-                CalendarModel.status == "approved",
-                CalendarVersionModel.status == "approved",
+                CalendarModel.status.in_(["approved", "partial"]),
+                CalendarVersionModel.status.in_(["approved", "draft"]),
                 *_not_deleted(),
                 *_version_not_deleted(),
             )

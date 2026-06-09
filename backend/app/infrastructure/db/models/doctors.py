@@ -1,9 +1,10 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.infrastructure.db.base import Base
+from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
 
 
 class DoctorModel(Base):
@@ -23,6 +24,13 @@ class DoctorModel(Base):
     department_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("departments.id"), nullable=True, index=True
     )
+    # ORM relationships (eager-loaded by default via lazy="joined")
+    rank: Mapped[RankModel | None] = relationship(
+        "RankModel", foreign_keys=[rank_id], lazy="joined"
+    )
+    department: Mapped[DepartmentModel | None] = relationship(
+        "DepartmentModel", foreign_keys=[department_id], lazy="joined"
+    )
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     service_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -36,6 +44,9 @@ class DoctorModel(Base):
         Boolean, nullable=False, default=True
     )
     whatsapp_phone: Mapped[str] = mapped_column(String(40), nullable=False)
+    telegram_chat_id: Mapped[str | None] = mapped_column(
+        String(60), nullable=True, unique=True, default=None
+    )
     monthly_service_target: Mapped[int] = mapped_column(
         Integer, nullable=False, default=3
     )

@@ -323,13 +323,24 @@ export function MissionView() {
           </div>
           {rankingQuery.isLoading && <p style={{ color: "#6b7280", fontSize: 13 }}>Cargando ranking…</p>}
           {rankingQuery.isError && rankingErrorCode === "approved_calendar_required" && (
-            <p style={{ color: "#92400e", fontSize: 13 }}>Este mes no tiene calendario aprobado. Aprueba el calendario para ver su ranking.</p>
+            <p style={{ color: "#92400e", fontSize: 13 }}>Este mes no tiene semanas aprobadas. Aprueba al menos una semana para ver el ranking.</p>
           )}
           {rankingQuery.isError && rankingErrorCode !== "approved_calendar_required" && (
             <p style={{ color: "#6b7280", fontSize: 13 }}>Sin ranking generado para este periodo.</p>
           )}
           {ranking && entries.length > 0 && (
             <div className="table-wrapper">
+              <details style={{ marginBottom: 10, fontSize: 12, color: "#6b7280" }}>
+                <summary style={{ cursor: "pointer", fontWeight: 500 }}>
+                  ¿Cómo se calcula la puntuación?
+                </summary>
+                <ul style={{ marginTop: 6, paddingLeft: 16, lineHeight: 1.6 }}>
+                  <li><strong>Pesos por área:</strong> Emergencia = 3, Pista = 2, Disponible = 1.</li>
+                  <li><strong>Carga mensual:</strong> Suma de los pesos de las áreas asignadas en el mes. No es cantidad de servicios.</li>
+                  <li><strong>Carga total:</strong> Carga mensual + 50% de carga de últimos 60 días + 0.5 por cada misión del mes.</li>
+                  <li><strong>Posición:</strong> Orden de menor a mayor carga total. Menor carga = mayor prioridad.</li>
+                </ul>
+              </details>
               <table className="data-table">
                 <thead>
                   <tr><th>Pos.</th><th>Médico</th><th>Carga total</th><th>Carga mensual</th><th>Elegible</th></tr>

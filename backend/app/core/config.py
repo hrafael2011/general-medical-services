@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     telegram_bot_username: str = "MedicalSchedule_bot"
     telegram_bot_token: str | None = None
     telegram_webhook_secret: str | None = None
+    telegram_notification_bot_token: str | None = None  # @TurnosMedicosBot
 
     deepseek_api_key: str | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
@@ -45,6 +46,7 @@ class Settings(BaseSettings):
     meta_whatsapp_api_version: str = "22.0"
     meta_whatsapp_business_account_id: str | None = None
     meta_webhook_verify_token: str | None = None
+    meta_whatsapp_app_secret: str | None = None
 
     # ── Service scheduling ─────────────────────────────────────────────
     service_start_hour: int = 7  # DEPRECATED: se usa ServiceAreaModel.start_hour

@@ -13,6 +13,11 @@ MAX_RETRIES = 3
 BACKOFF_SECONDS = 60
 
 
+def _backoff_seconds(retry_count: int) -> int:
+    """Exponential backoff: 60s -> 120s -> 240s."""
+    return 60 * (2 ** retry_count)
+
+
 class NotificationRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -48,8 +53,9 @@ class NotificationRepository:
         return list(self.session.scalars(stmt))
 
     def list_pending(self, limit: int = 50) -> list[NotificationEventModel]:
-        """Return pending notifications scheduled for now or earlier."""
+        """Return pending notifications with exponential backoff applied."""
         now = datetime.now(UTC)
+        # SQL pre-filter: skip events retried within the minimum backoff
         cutoff = now - timedelta(seconds=BACKOFF_SECONDS)
         stmt = (
             select(NotificationEventModel)
@@ -66,7 +72,21 @@ class NotificationRepository:
             .order_by(NotificationEventModel.created_at)
             .limit(limit)
         )
-        return list(self.session.scalars(stmt))
+        candidates = list(self.session.scalars(stmt))
+
+        # Apply exponential backoff per row
+        result: list[NotificationEventModel] = []
+        for notification in candidates:
+            backoff = _backoff_seconds(notification.retry_count)
+            retry_cutoff = now - timedelta(seconds=backoff)
+            if (
+                notification.last_retried_at is None
+                or notification.last_retried_at <= retry_cutoff
+            ):
+                result.append(notification)
+            if len(result) >= limit:
+                break
+        return result
 
     def list_all(
         self,
