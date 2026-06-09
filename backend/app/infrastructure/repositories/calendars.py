@@ -11,6 +11,7 @@ from backend.app.infrastructure.db.models.calendars import (
     UnresolvedGapModel,
 )
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 
 
 def _not_deleted() -> tuple:
@@ -232,25 +233,40 @@ class CalendarRepository:
             )
         )
 
+        # Query assignments that will be deleted (needed for affected calendars + notification cleanup)
+        assignment_ids_to_delete = self.session.execute(
+            select(CalendarAssignmentModel.id)
+            .where(
+                CalendarAssignmentModel.doctor_id == doctor_id,
+                CalendarAssignmentModel.calendar_version_id.in_(active_version_ids),
+            )
+        ).scalars().all()
+
+        if not assignment_ids_to_delete:
+            return 0, []
+
         # Query affected calendar IDs before deletion
         affected = self.session.execute(
             select(CalendarVersionModel.calendar_id)
             .where(
                 CalendarVersionModel.id.in_(
                     select(CalendarAssignmentModel.calendar_version_id)
-                    .where(CalendarAssignmentModel.doctor_id == doctor_id)
-                    .where(CalendarAssignmentModel.calendar_version_id.in_(active_version_ids))
+                    .where(CalendarAssignmentModel.id.in_(assignment_ids_to_delete))
                 )
             )
             .distinct()
         ).scalars().all()
 
+        # Delete notification events referencing these assignments
+        self.session.execute(
+            sql_delete(NotificationEventModel)
+            .where(NotificationEventModel.assignment_id.in_(assignment_ids_to_delete))
+        )
+
+        # Delete the assignments
         stmt = (
             sql_delete(CalendarAssignmentModel)
-            .where(
-                CalendarAssignmentModel.doctor_id == doctor_id,
-                CalendarAssignmentModel.calendar_version_id.in_(active_version_ids),
-            )
+            .where(CalendarAssignmentModel.id.in_(assignment_ids_to_delete))
         )
         result = self.session.execute(stmt)
         return result.rowcount, list(affected)
