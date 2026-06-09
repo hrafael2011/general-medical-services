@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Save, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 import { doctorsApi, availabilityApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
 import { calendarsApi } from "../../api/calendars";
+import { useToast } from "../../components/Toast";
 
 interface Props {
   doctor?: DoctorRead;
@@ -13,6 +15,7 @@ interface Props {
 
 export function DoctorForm({ doctor, onClose }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const isEdit = !!doctor;
 
   const initialNameParts = splitDoctorName(doctor);
@@ -190,26 +193,37 @@ export function DoctorForm({ doctor, onClose }: Props) {
     });
   }
 
+  const { addToast } = useToast();
+
   async function handleFillGaps() {
     if (!gapPrompt) return;
     setFillingGaps(true);
+    const targetCalId = gapPrompt.calendarIds[0];
     try {
       for (const calId of gapPrompt.calendarIds) {
         await calendarsApi.fillGaps(calId);
       }
       qc.invalidateQueries({ queryKey: ["calendars"] });
+      addToast("success", "Huecos rellenados. Revise el calendario.");
     } catch {
-      // Silently continue — gaps can be filled manually later
+      addToast("error", "No se pudieron rellenar todos los huecos.");
     } finally {
       setFillingGaps(false);
       setGapPrompt(null);
       onClose();
+      if (targetCalId) {
+        navigate(`/calendars/${targetCalId}`);
+      }
     }
   }
 
   function handleManualFill() {
+    const targetCalId = gapPrompt?.calendarIds?.[0];
     setGapPrompt(null);
     onClose();
+    if (targetCalId) {
+      navigate(`/calendars/${targetCalId}`);
+    }
   }
 
   function toggleArea(id: string) {
