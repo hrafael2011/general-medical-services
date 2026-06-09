@@ -513,6 +513,20 @@ class CalendarService:
         if calendar is not None and calendar.status == "approved":
             calendar.status = "partial"
             calendar.updated_at = now
-            self.repo.session.flush()
+
+        # Reset version status to draft (mirrors unlock_calendar)
+        version = self.repo.get_version_by_id(week.calendar_version_id)
+        if version is not None:
+            version.status = "draft"
+            version.approved_at = None
+            version.approved_by = None
+            # snapshot hash for change detection on re-approval
+            if assignments_hash:
+                version.reason = f"__unlock__{assignments_hash}"
+                original_reason = version.reason
+                if original_reason and not original_reason.startswith("__unlock__"):
+                    version.reason = f"__unlock__{assignments_hash}__orig__{original_reason}"
+
+        self.repo.session.flush()
 
         return week
