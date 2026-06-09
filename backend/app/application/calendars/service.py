@@ -529,11 +529,11 @@ class CalendarService:
             version.approved_at = None
             version.approved_by = None
             # snapshot hash for change detection on re-approval
+            original_reason = version.reason
             if assignments_hash:
                 version.reason = f"__unlock__{assignments_hash}"
-                original_reason = version.reason
-                if original_reason and not original_reason.startswith("__unlock__"):
-                    version.reason = f"__unlock__{assignments_hash}__orig__{original_reason}"
+                if original_reason:
+                    version.reason += f"__orig__{original_reason}"
 
         self.repo.session.flush()
 
