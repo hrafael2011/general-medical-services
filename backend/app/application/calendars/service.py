@@ -127,14 +127,14 @@ class CalendarService:
         return self.repo.list_calendars()
 
     def soft_delete_calendar(self, *, actor_id: str, calendar_id: str) -> None:
-        """Soft-delete a calendar so it no longer appears in list/get queries."""
+        """Permanently delete a calendar and all its related data."""
         calendar = self.repo.get_calendar_by_id(calendar_id)
         if calendar is None:
             raise CalendarServiceError(
                 "calendar_not_found",
                 f"Calendario con id {calendar_id} no encontrado.",
             )
-        self.repo.soft_delete_calendar(calendar_id)
+        self.repo.hard_delete_calendar(calendar_id)
 
         if self.audit is not None:
             self.audit.log_calendar_deleted(actor_id=actor_id, calendar=calendar)

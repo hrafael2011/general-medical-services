@@ -274,23 +274,6 @@ def delete_calendar(
     session.commit()
 
 
-@router.post("/{calendar_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
-def restore_calendar(
-    calendar_id: str,
-    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
-    service: Annotated[CalendarService, Depends(get_calendar_service)],
-    session: Annotated[Session, Depends(get_db_session)],
-) -> None:
-    try:
-        service.restore_calendar(
-            actor_id=current_user.id,
-            calendar_id=calendar_id,
-        )
-    except CalendarServiceError as exc:
-        raise _http_exc(exc) from exc
-    session.commit()
-
-
 @router.get("/{calendar_id}/grid", response_model=CalendarGridResponse)
 def get_calendar_grid(
     calendar_id: str,
