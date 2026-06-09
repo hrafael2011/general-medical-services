@@ -534,7 +534,6 @@ class AssignmentService:
             mission_assignments=mission_dicts,
             required_areas=[],
             area_weights=area_weights,
-            strong_area_ids=strong_uuids,
             monthly_service_targets={d.id: getattr(d, "monthly_service_target", 3) for d in doctors},
             monthly_service_maxes={d.id: getattr(d, "monthly_service_max", 3) for d in doctors},
         )
