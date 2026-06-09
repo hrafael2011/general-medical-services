@@ -95,6 +95,15 @@ class CalendarService:
         if self.audit is not None:
             self.audit.log_calendar_created(actor_id=actor_id, calendar=calendar)
 
+        # Generate empty initial ranking (no assignments yet, but ranking record exists)
+        if self.mission_ranking_service is not None:
+            self.mission_ranking_service.generate_ranking(
+                actor_id=actor_id,
+                year=year,
+                month=month,
+                calendar_version_id=version.id,
+            )
+
         return calendar
 
     def get_calendar(self, calendar_id: str) -> CalendarModel:
