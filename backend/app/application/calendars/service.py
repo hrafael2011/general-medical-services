@@ -97,12 +97,20 @@ class CalendarService:
 
         # Generate empty initial ranking (no assignments yet, but ranking record exists)
         if self.mission_ranking_service is not None:
-            self.mission_ranking_service.generate_ranking(
-                actor_id=actor_id,
-                year=year,
-                month=month,
-                calendar_version_id=version.id,
-            )
+            try:
+                self.mission_ranking_service.generate_ranking(
+                    actor_id=actor_id,
+                    year=year,
+                    month=month,
+                    calendar_version_id=version.id,
+                )
+            except Exception:
+                import logging
+                _logger = logging.getLogger(__name__)
+                _logger.exception(
+                    "Failed to generate initial ranking for %d/%02d (non-fatal)",
+                    year, month,
+                )
 
         return calendar
 

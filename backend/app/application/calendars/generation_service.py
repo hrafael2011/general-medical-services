@@ -248,12 +248,20 @@ class GenerationService:
 
         # Generate ranking immediately after batch assignment (no debounce needed)
         if self.mission_ranking_service is not None:
-            self.mission_ranking_service.generate_ranking(
-                actor_id=actor_id,
-                year=calendar.year,
-                month=calendar.month,
-                calendar_version_id=version.id,
-            )
+            try:
+                self.mission_ranking_service.generate_ranking(
+                    actor_id=actor_id,
+                    year=calendar.year,
+                    month=calendar.month,
+                    calendar_version_id=version.id,
+                )
+            except Exception:
+                import logging
+                _logger = logging.getLogger(__name__)
+                _logger.exception(
+                    "Failed to generate ranking after batch generation for %d/%02d (non-fatal)",
+                    calendar.year, calendar.month,
+                )
 
         return summary_raw
 
@@ -434,12 +442,20 @@ class GenerationService:
 
         # Generate ranking after filling gaps
         if self.mission_ranking_service is not None:
-            self.mission_ranking_service.generate_ranking(
-                actor_id=actor_id,
-                year=calendar.year,
-                month=calendar.month,
-                calendar_version_id=version.id,
-            )
+            try:
+                self.mission_ranking_service.generate_ranking(
+                    actor_id=actor_id,
+                    year=calendar.year,
+                    month=calendar.month,
+                    calendar_version_id=version.id,
+                )
+            except Exception:
+                import logging
+                _logger = logging.getLogger(__name__)
+                _logger.exception(
+                    "Failed to generate ranking after fill_gaps for %d/%02d (non-fatal)",
+                    calendar.year, calendar.month,
+                )
 
         return {
             "filled": filled,
