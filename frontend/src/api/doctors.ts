@@ -13,6 +13,8 @@ export interface DoctorRead {
   monthly_service_target: number; monthly_service_max: number;
   monthly_service_limit_mode: string; availability_mode: string;
   allowed_area_ids: string[];
+  removed_assignments?: number | null;
+  affected_calendar_ids?: string[] | null;
 }
 
 export interface DoctorListResponse { items: DoctorRead[]; total: number; }

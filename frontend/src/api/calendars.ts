@@ -178,6 +178,12 @@ export const calendarsApi = {
   generate: (calendarId: string) =>
     apiFetch<GenerationResponse>(`/calendars/${calendarId}/generate`, { method: "POST" }),
 
+  fillGaps: (calendarId: string) =>
+    apiFetch<{ filled: number; remaining: number; message: string }>(
+      `/calendars/${calendarId}/fill-gaps`,
+      { method: "POST" },
+    ),
+
   delete: (calendarId: string) =>
     apiFetch<void>(`/calendars/${calendarId}`, { method: "DELETE" }),
 
