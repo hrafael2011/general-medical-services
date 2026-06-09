@@ -533,6 +533,28 @@ def generate_calendar(
     )
 
 
+@router.post(
+    "/{calendar_id}/fill-gaps",
+    status_code=status.HTTP_200_OK,
+)
+def fill_gaps(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
+    service: Annotated[GenerationService, Depends(get_generation_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> dict:
+    """Fill only unresolved gaps without touching existing assignments."""
+    try:
+        result = service.fill_gaps(
+            actor_id=current_user.id,
+            calendar_id=calendar_id,
+        )
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+    session.commit()
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Week endpoints
 # ---------------------------------------------------------------------------

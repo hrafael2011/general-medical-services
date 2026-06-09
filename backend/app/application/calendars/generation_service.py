@@ -3,9 +3,10 @@ from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
+from backend.app.domain.availability_rules import belongs_to_operational_month
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import AREA_WEIGHTS
-from backend.app.domain.calendars.types import GenerationSummary
+from backend.app.domain.calendars.types import GenerationSummary, SlotRequest
 from backend.app.application.calendars.service import CALENDAR_GENERATION_MODES
 from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
@@ -255,3 +256,193 @@ class GenerationService:
             )
 
         return summary_raw
+
+    def fill_gaps(
+        self,
+        *,
+        actor_id: str,
+        calendar_id: str,
+    ) -> dict:
+        """Fill only unresolved gaps without touching existing assignments.
+
+        Returns a dict with ``filled`` (int) and ``remaining`` (int).
+        """
+        calendar = self.calendar_repo.get_calendar_by_id(calendar_id)
+        if calendar is None:
+            raise CalendarServiceError("calendar_not_found", f"Calendar {calendar_id} not found.")
+
+        version = self.calendar_repo.get_latest_version(calendar_id)
+        if version is None:
+            raise CalendarServiceError("version_not_found", f"No version found for calendar {calendar_id}.")
+
+        if version.status == "approved":
+            raise CalendarServiceError(
+                "version_is_approved",
+                "Cannot fill gaps in an approved version.",
+            )
+
+        gaps = self.calendar_repo.list_gaps(version.id)
+        if not gaps:
+            return {"filled": 0, "remaining": 0, "message": "No hay huecos por llenar."}
+
+        # Build code↔uuid mapper
+        mapper = _AreaMapper(self.calendar_repo.session)
+
+        # Load all service-active doctors
+        doctors = self.doctor_repo.list_service_active()
+
+        # Load allowed areas per doctor (UUIDs → codes)
+        allowed_areas: dict[str, list[str]] = {}
+        for d in doctors:
+            area_uuids = self.doctor_repo.get_allowed_areas(d.id)
+            allowed_areas[d.id] = [mapper.code(uid) for uid in area_uuids]
+
+        # Load availability per doctor
+        availability: dict[str, list] = {}
+        for d in doctors:
+            availability[d.id] = self.availability_repo.list_availability_for_doctor(d.id)
+
+        # Load active restrictions
+        first_day = date(calendar.year, calendar.month, 1)
+        restrictions: dict[str, list] = {}
+        for d in doctors:
+            restrictions[d.id] = self.availability_repo.list_active_restrictions_for_doctor(
+                d.id, on_date=first_day
+            )
+
+        # Load existing assignments
+        existing = self.calendar_repo.list_assignments(version.id)
+        existing_dicts = [
+            {"doctor_id": a.doctor_id, "service_date": a.service_date, "service_area_id": mapper.code(a.service_area_id)}
+            for a in existing
+        ]
+
+        # Load historical context
+        history_end = first_day - timedelta(days=1)
+        history_start = first_day - timedelta(days=60)
+        historical = self.calendar_repo.list_assignments_in_date_range(history_start, history_end)
+        historical_dicts = [
+            {"doctor_id": a.doctor_id, "service_date": a.service_date, "service_area_id": mapper.code(a.service_area_id)}
+            for a in historical
+        ]
+
+        confirmed_missions = self.mission_repo.list_confirmed_in_range(history_start, history_end)
+        mission_assignments_raw: list[dict] = []
+        for _mission, participants in confirmed_missions:
+            for p in participants:
+                mission_assignments_raw.append({
+                    "doctor_id": p.doctor_id,
+                    "mission_date": _mission.mission_date,
+                })
+
+        area_weights_dict: dict[str, float] = {
+            sa.id: float(sa.load_weight)
+            for sa in self.catalog_repo.list_service_areas()
+        }
+
+        ctx = GenerationContext(
+            year=calendar.year,
+            month=calendar.month,
+            doctors=doctors,
+            allowed_areas=allowed_areas,
+            availability=availability,
+            restrictions=restrictions,
+            existing_assignments=existing_dicts,
+            historical_assignments=historical_dicts,
+            mission_assignments=mission_assignments_raw,
+            required_areas=REQUIRED_AREA_CODES,
+            area_weights=AREA_WEIGHTS,
+            monthly_service_targets={d.id: d.monthly_service_target for d in doctors},
+            monthly_service_maxes={d.id: d.monthly_service_max for d in doctors},
+        )
+
+        engine = CalendarEngine()
+        now = datetime.now(UTC)
+        filled = 0
+
+        for gap in gaps:
+            area_code = mapper.code(gap.service_area_id)
+            slot = SlotRequest(
+                date=gap.service_date,
+                service_area_id=area_code,
+                area_weight=area_weights_dict.get(gap.service_area_id, 1.0),
+            )
+
+            # Get eligible doctors for this slot, considering current assignments
+            current_snapshot = [
+                a for a in existing_dicts
+                if a["service_date"] != gap.service_date or a["service_area_id"] != area_code
+            ]
+            eligible = engine.get_eligible_doctors(slot, ctx, current_snapshot)
+            if not eligible:
+                continue
+
+            # Pick best candidate: fewest monthly assignments so far
+            monthly_counts = {}
+            for a in existing_dicts:
+                if belongs_to_operational_month(a["service_date"], calendar.year, calendar.month):
+                    monthly_counts[a["doctor_id"]] = monthly_counts.get(a["doctor_id"], 0) + 1
+
+            best = min(eligible, key=lambda d: monthly_counts.get(d.id, 0))
+
+            # Create assignment
+            area_uuid = mapper.uuid(area_code)
+            assignment = CalendarAssignmentModel(
+                id=str(uuid4()),
+                calendar_version_id=version.id,
+                service_date=gap.service_date,
+                service_area_id=area_uuid,
+                doctor_id=best.id,
+                assignment_source="generated",
+                rationale={"fill_gaps": True, "reason": "Auto-filled from gap"},
+                created_by=actor_id,
+                created_at=now,
+            )
+            area = self.calendar_repo.session.get(ServiceAreaModel, area_uuid)
+            if area and area.start_hour is not None:
+                assignment.service_start_at = datetime(
+                    gap.service_date.year, gap.service_date.month, gap.service_date.day,
+                    area.start_hour, 0, 0, tzinfo=UTC,
+                )
+            self.calendar_repo.add_assignment(assignment)
+
+            # Update the running snapshot
+            existing_dicts.append({
+                "doctor_id": best.id,
+                "service_date": gap.service_date,
+                "service_area_id": area_code,
+            })
+
+            # Remove the gap
+            self.calendar_repo.session.delete(gap)
+            filled += 1
+
+        self.calendar_repo.session.flush()
+
+        if self.audit is not None:
+            self.audit._create(
+                actor_id=actor_id,
+                action_type="calendar_gaps_filled",
+                entity_type="calendar_version",
+                entity_id=version.id,
+                metadata={
+                    "calendar_id": calendar_id,
+                    "filled": filled,
+                    "remaining": len(gaps) - filled,
+                },
+            )
+
+        # Generate ranking after filling gaps
+        if self.mission_ranking_service is not None:
+            self.mission_ranking_service.generate_ranking(
+                actor_id=actor_id,
+                year=calendar.year,
+                month=calendar.month,
+                calendar_version_id=version.id,
+            )
+
+        return {
+            "filled": filled,
+            "remaining": len(gaps) - filled,
+            "message": f"Se llenaron {filled} huecos. {len(gaps) - filled} pendientes.",
+        }
