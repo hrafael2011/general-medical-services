@@ -139,6 +139,8 @@ def get_generation_service(
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.infrastructure.repositories.missions import MissionRepository
 
+    from backend.app.application.missions.ranking_service import MissionRankingService
+
     return GenerationService(
         CalendarRepository(session),
         DoctorRepository(session),
@@ -146,6 +148,13 @@ def get_generation_service(
         MissionRepository(session),
         CatalogRepository(session),
         audit=AuditService(AuditRepository(session)),
+        mission_ranking_service=MissionRankingService(
+            MissionRepository(session),
+            DoctorRepository(session),
+            CalendarRepository(session),
+            CatalogRepository(session),
+            audit=AuditService(AuditRepository(session)),
+        ),
     )
 
 
@@ -182,12 +191,21 @@ def get_assignment_service(
         confirmation_due_hours=settings.confirmation_overdue_hours,
     )
 
+    mission_ranking_service = MissionRankingService(
+        MissionRepository(session),
+        doctor_repo,
+        CalendarRepository(session),
+        CatalogRepository(session),
+        audit=AuditService(AuditRepository(session)),
+    )
+
     return AssignmentService(
         CalendarRepository(session),
         doctor_repo,
         AvailabilityRepository(session),
         audit=AuditService(AuditRepository(session)),
         triggers=triggers,
+        mission_ranking_service=mission_ranking_service,
     )
 
 
