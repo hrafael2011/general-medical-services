@@ -522,24 +522,22 @@ def seed_staging(
 def cleanup_soft_deleted_calendars(
     session: Annotated[Session, Depends(get_db_session)] = None,
 ):
-    """Move soft-deleted calendars out of the way by negating their year/month."""
+    """Hard-delete all soft-deleted calendars and their related data."""
     if settings.app_env != "staging":
         raise HTTPException(status_code=403, detail="Only available in staging")
 
-    from backend.app.infrastructure.db.models.calendars import CalendarModel
+    from backend.app.infrastructure.repositories.calendars import CalendarRepository
 
-    result = session.execute(
-        select(CalendarModel).where(CalendarModel.deleted_at.is_not(None))
-    ).scalars().all()
+    repo = CalendarRepository(session)
+    deleted = repo.list_deleted_calendars()
 
-    if not result:
+    if not deleted:
         return {"deleted": 0, "entries": []}
 
-    moved = []
-    for c in result:
-        moved.append({"id": c.id, "old_year": c.year, "old_month": c.month})
-        c.year = -c.year
-        c.month = -c.month
-    session.commit()
+    entries = []
+    for c in deleted:
+        entries.append({"id": c.id, "year": c.year, "month": c.month})
+        repo.hard_delete_calendar(c.id)
 
-    return {"moved": len(moved), "entries": moved}
+    session.commit()
+    return {"deleted": len(entries), "entries": entries}
