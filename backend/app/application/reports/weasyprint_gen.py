@@ -259,7 +259,8 @@ def _build_calendar_weeks(grid_data: dict) -> list[list[dict | None]]:
 
     areas = grid_data.get("areas", [])
     area_codes = grid_data.get("area_codes", [])
-    adjacent_cells = grid_data.get("adjacent_cells", {})  # "YYYY-MM-DD" -> area_code -> doctor_info
+    cell_map = grid_data.get("cell_map", {})  # "YYYY-MM-DD" -> area_code -> doctor_info (current version)
+    adjacent_cells = grid_data.get("adjacent_cells", {})  # "YYYY-MM-DD" -> area_code -> doctor_info (adjacent month)
 
     _DAY_ES = {
         "Monday": "LUNES", "Tuesday": "MARTES", "Wednesday": "MIÉRCOLES",
@@ -299,9 +300,10 @@ def _build_calendar_weeks(grid_data: dict) -> list[list[dict | None]]:
                     "is_current_month": True,
                 })
             else:
-                # Adjacent-month day (Sunday in the next month)
+                # Adjacent-month day: check current version's cell_map first,
+                # then fall back to adjacent month's calendar data
                 date_str = d.isoformat()
-                day_cells = adjacent_cells.get(date_str, {})
+                day_cells = cell_map.get(date_str) or adjacent_cells.get(date_str, {})
                 adjacent_assignments = []
                 for idx, area in enumerate(areas):
                     area_code = area_codes[idx] if idx < len(area_codes) else area
