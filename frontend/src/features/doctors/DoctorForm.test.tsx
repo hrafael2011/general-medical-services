@@ -33,16 +33,6 @@ vi.mock("../../api/doctors", () => ({
   },
 }));
 
-vi.mock("../../api/calendars", () => ({
-  calendarsApi: {
-    fillGaps: vi.fn().mockResolvedValue({ filled: 0, remaining: 0, message: "ok" }),
-  },
-}));
-
-vi.mock("../../components/Toast", () => ({
-  useToast: () => ({ addToast: vi.fn() }),
-}));
-
 function renderForm() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(

@@ -5,8 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 import { doctorsApi, availabilityApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
-import { calendarsApi } from "../../api/calendars";
-import { useToast } from "../../components/Toast";
 
 interface Props {
   doctor?: DoctorRead;
@@ -61,7 +59,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [gapPrompt, setGapPrompt] = useState<{
     removed: number; calendarIds: string[]; doctorName: string;
   } | null>(null);
-  const [fillingGaps, setFillingGaps] = useState(false);
 
   const { data: serviceAreas } = useQuery({
     queryKey: ["service-areas"],
@@ -193,31 +190,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
     });
   }
 
-  const { addToast } = useToast();
-
-  async function handleFillGaps() {
-    if (!gapPrompt) return;
-    setFillingGaps(true);
-    const targetCalId = gapPrompt.calendarIds[0];
-    try {
-      for (const calId of gapPrompt.calendarIds) {
-        await calendarsApi.fillGaps(calId);
-      }
-      qc.invalidateQueries({ queryKey: ["calendars"] });
-      addToast("success", "Huecos rellenados. Revise el calendario.");
-    } catch {
-      addToast("error", "No se pudieron rellenar todos los huecos.");
-    } finally {
-      setFillingGaps(false);
-      setGapPrompt(null);
-      onClose();
-      if (targetCalId) {
-        navigate(`/calendars/${targetCalId}`);
-      }
-    }
-  }
-
-  function handleManualFill() {
+  function handleAcceptGapPrompt() {
     const targetCalId = gapPrompt?.calendarIds?.[0];
     setGapPrompt(null);
     onClose();
@@ -461,24 +434,15 @@ export function DoctorForm({ doctor, onClose }: Props) {
               en {gapPrompt.calendarIds.length > 1
                 ? `${gapPrompt.calendarIds.length} calendarios`
                 : "1 calendario"}
-              . ¿Desea rellenar los huecos automáticamente o prefiere hacerlo manualmente?
+              . Debe sustituir al médico manualmente en el calendario.
             </p>
             <div className="form-footer" style={{ gap: 8 }}>
               <button
                 type="button"
                 className="btn-primary"
-                disabled={fillingGaps}
-                onClick={handleFillGaps}
+                onClick={handleAcceptGapPrompt}
               >
-                {fillingGaps ? "Llenando…" : "Automático"}
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                disabled={fillingGaps}
-                onClick={handleManualFill}
-              >
-                Manual
+                Aceptar
               </button>
             </div>
           </div>
