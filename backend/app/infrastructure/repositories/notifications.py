@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.infrastructure.db.models.notifications import (
@@ -64,20 +64,22 @@ class NotificationRepository:
         stmt = (
             select(NotificationEventModel)
             .where(
-                (
-                    (NotificationEventModel.status == "pending")
-                    | (
-                        (NotificationEventModel.status == "sending")
-                        & (NotificationEventModel.updated_at <= stuck_cutoff)
-                    )
+                or_(
+                    NotificationEventModel.status == "pending",
+                    and_(
+                        NotificationEventModel.status == "sending",
+                        NotificationEventModel.updated_at <= stuck_cutoff,
+                    ),
                 ),
                 NotificationEventModel.retry_count < MAX_RETRIES,
-                (
-                    NotificationEventModel.last_retried_at.is_(None)
-                    | (NotificationEventModel.last_retried_at <= cutoff)
+                or_(
+                    NotificationEventModel.last_retried_at.is_(None),
+                    NotificationEventModel.last_retried_at <= cutoff,
                 ),
-                (NotificationEventModel.scheduled_for.is_(None))
-                | (NotificationEventModel.scheduled_for <= now),
+                or_(
+                    NotificationEventModel.scheduled_for.is_(None),
+                    NotificationEventModel.scheduled_for <= now,
+                ),
             )
             .order_by(NotificationEventModel.created_at)
             .limit(limit)
