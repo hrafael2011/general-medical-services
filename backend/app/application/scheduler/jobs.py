@@ -124,7 +124,9 @@ def send_pre_service_reminders() -> dict:
 
             area = session.get(ServiceAreaModel, a.service_area_id)
             area_name = area.display_name if area else str(a.service_area_id)
-            start_str = f"{start_dt.hour:02d}:{start_dt.minute:02d}"
+            hour_12 = start_dt.hour % 12 or 12
+            ampm = "AM" if start_dt.hour < 12 else "PM"
+            start_str = f"{hour_12}:{start_dt.minute:02d} {ampm}"
 
             message = render_twelve_hour_reminder(
                 service_date=str(a.service_date),
