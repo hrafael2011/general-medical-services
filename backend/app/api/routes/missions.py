@@ -103,10 +103,10 @@ def get_candidate_service(
     from backend.app.infrastructure.repositories.doctors import DoctorRepository
     from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
-    if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-        provider = MetaCloudAPIProvider()
-    elif settings.telegram_notification_bot_token:
+    if settings.telegram_notification_bot_token:
         provider = TelegramNotificationProvider()
+    elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+        provider = MetaCloudAPIProvider()
     else:
         provider = FakeProvider()
     triggers = NotificationTriggers(

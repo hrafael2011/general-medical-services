@@ -30,10 +30,10 @@ def process_notification_queue() -> dict:
 
     session = SessionLocal()
     try:
-        if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-            provider = MetaCloudAPIProvider()
-        elif settings.telegram_notification_bot_token:
+        if settings.telegram_notification_bot_token:
             provider = TelegramNotificationProvider()
+        elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+            provider = MetaCloudAPIProvider()
         else:
             provider = FakeProvider()
         service = NotificationService(
@@ -123,10 +123,10 @@ def send_pre_service_reminders() -> dict:
                 service_area=area_name,
                 service_start=start_str,
             )
-            if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-                provider = MetaCloudAPIProvider()
-            elif settings.telegram_notification_bot_token:
+            if settings.telegram_notification_bot_token:
                 provider = TelegramNotificationProvider()
+            elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+                provider = MetaCloudAPIProvider()
             else:
                 provider = FakeProvider()
             svc = NotificationService(
@@ -208,10 +208,10 @@ def check_unconfirmed_escalamiento() -> dict:
         if not encargados:
             return {"escalations": 0}
 
-        if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-            provider = MetaCloudAPIProvider()
-        elif settings.telegram_notification_bot_token:
+        if settings.telegram_notification_bot_token:
             provider = TelegramNotificationProvider()
+        elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+            provider = MetaCloudAPIProvider()
         else:
             provider = FakeProvider()
         svc = NotificationService(

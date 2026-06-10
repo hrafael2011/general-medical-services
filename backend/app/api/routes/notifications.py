@@ -27,10 +27,10 @@ def get_notification_service(
     from backend.app.application.action_alerts.service import ActionAlertService
     from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 
-    if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-        provider = MetaCloudAPIProvider()
-    elif settings.telegram_notification_bot_token:
+    if settings.telegram_notification_bot_token:
         provider = TelegramNotificationProvider()
+    elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+        provider = MetaCloudAPIProvider()
     else:
         provider = FakeProvider()
     return NotificationService(
