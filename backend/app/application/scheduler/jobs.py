@@ -200,7 +200,7 @@ def check_unconfirmed_escalamiento() -> dict:
         encargados = session.scalars(
             select(UserModel).where(
                 UserModel.active.is_(True),
-                UserModel.whatsapp_phone.is_not(None),
+                UserModel.telegram_chat_id.is_not(None),
                 UserModel.permissions.contains(["receive_escalation_alerts"]),
             )
         ).all()
@@ -239,7 +239,7 @@ def check_unconfirmed_escalamiento() -> dict:
                 notification_type="escalamiento",
                 idempotency_key=f"escalamiento:consolidated:{now.strftime('%Y%m%d%H')}:{encargado.id}",
                 recipient_doctor_id=None,
-                recipient_phone=encargado.whatsapp_phone,
+                recipient_phone=encargado.telegram_chat_id,
                 payload={"message": message},
                 created_by=encargado.id,
             )
