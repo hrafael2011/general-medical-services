@@ -124,14 +124,36 @@ export function DoctorsByDepartment() {
                       <th>Nombre</th>
                       <th>Rango</th>
                       <th>Departamento</th>
+                      <th>Estatus</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dept.doctors.map((doc) => (
-                      <tr key={doc.id}>
+                      <tr key={doc.id} style={doc.service_active ? undefined : { opacity: 0.75 }}>
                         <td>{doc.name}</td>
                         <td style={{ color: "#6b7280" }}>{doc.rank_name || "Sin rango"}</td>
                         <td style={{ color: "#6b7280" }}>{doc.department_name || "Sin departamento"}</td>
+                        <td>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "3px 10px",
+                              borderRadius: 9999,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              background: doc.service_active ? "#d1fae5" : "#fee2e2",
+                              color: doc.service_active ? "#065f46" : "#991b1b",
+                              cursor: !doc.service_active ? "help" : undefined,
+                            }}
+                            title={!doc.service_active
+                              ? `${doc.service_inactive_reason_name || "Sin razón"}${doc.service_inactive_detail ? ` — ${doc.service_inactive_detail}` : ""}`
+                              : undefined}
+                          >
+                            {doc.service_active ? "Activo" : "Inactivo"}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

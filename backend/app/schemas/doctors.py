@@ -128,6 +128,9 @@ class DoctorByDepartmentItem(BaseModel):
     name: str
     rank_name: str | None = None
     department_name: str | None = None
+    service_active: bool = True
+    service_inactive_reason_name: str | None = None
+    service_inactive_detail: str | None = None
 
     model_config = {"from_attributes": True}
 
