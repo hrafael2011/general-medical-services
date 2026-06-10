@@ -128,7 +128,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
     const cleanLastName = lastName.trim();
     const fullName = [cleanFirstName, cleanLastName].filter(Boolean).join(" ");
     if (!cleanFirstName || !cleanLastName) { setError("Nombre y apellido son obligatorios."); return; }
-    if (!phone.trim()) { setError("WhatsApp es obligatorio."); return; }
+    if (!phone.trim()) { setError("Teléfono es obligatorio."); return; }
 
     save.mutate({
       first_name: cleanFirstName,
@@ -258,7 +258,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
           <div className="form-row">
             <label>
-              WhatsApp *
+              Teléfono *
               <input required value={phone} onChange={e => setPhone(e.target.value)} />
             </label>
           </div>
