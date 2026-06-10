@@ -323,3 +323,47 @@ def test_mission_participants_changed_notifies_removed_and_confirms_added(db_ses
     assert len(confirmations) == 1
     assert confirmations[0].confirmation_type == "mission"
     assert confirmations[0].doctor_id == added.id
+
+
+# ---------------------------------------------------------------------------
+# Tests — _resolve_recipient_phone
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_recipient_phone_prefers_telegram(db_session):
+    """When a doctor has telegram_chat_id, it should be used as
+    recipient_phone instead of whatsapp_phone."""
+    from backend.app.application.notifications.triggers import _resolve_recipient_phone
+
+    doctor = _create_doctor(
+        db_session,
+        name="Dr. Telegram",
+        whatsapp_phone="+18095559999",
+    )
+    # Manually set telegram_chat_id since _create_doctor may not support it
+    doctor.telegram_chat_id = "123456789"
+    db_session.flush()
+
+    result = _resolve_recipient_phone(doctor)
+    assert result == "123456789"
+
+
+def test_resolve_recipient_phone_falls_back_to_whatsapp(db_session):
+    """When a doctor has no telegram_chat_id, fall back to whatsapp_phone."""
+    from backend.app.application.notifications.triggers import _resolve_recipient_phone
+
+    doctor = _create_doctor(
+        db_session,
+        name="Dr. NoTelegram",
+        whatsapp_phone="+18095558888",
+    )
+
+    result = _resolve_recipient_phone(doctor)
+    assert result == "+18095558888"
+
+
+def test_resolve_recipient_phone_returns_none_for_none_doctor():
+    """None input should return None."""
+    from backend.app.application.notifications.triggers import _resolve_recipient_phone
+
+    assert _resolve_recipient_phone(None) is None
