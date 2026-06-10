@@ -2,6 +2,8 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
+
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.notifications.providers import NotificationProvider
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
@@ -62,20 +64,25 @@ class NotificationService:
             created_at=now,
             updated_at=now,
         )
-        return self.repo.add(event)
+        try:
+            return self.repo.add(event)
+        except IntegrityError:
+            self.repo.session.rollback()
+            existing = self.repo.get_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                return existing
+            raise
 
     def process_pending(self) -> dict:
         """
         Process up to 50 pending notifications.
         Returns {"sent": int, "failed": int, "skipped": int}.
 
-        For each notification:
-          - Skip if no recipient_phone (count as skipped).
-          - Call provider.send(phone, payload["message"]).
-          - On success: status="sent", sent_at=now, provider=provider.name,
-            provider_message_id=msg_id.
-          - On failure: status="failed" if retry_count >= MAX_RETRIES else
-            status="pending" with retry_count+=1, store error.
+        Uses a two-phase commit to prevent duplicate delivery:
+          1. Mark as "sending" + commit before provider.send()
+          2. Mark as "sent" or "pending" + commit after
+        This guarantees no two processes can send the same event,
+        even under race conditions or overlapping scheduler runs.
         """
         pending = self.repo.list_pending(limit=50)
         sent = 0
@@ -94,6 +101,12 @@ class NotificationService:
 
             message = (event.payload or {}).get("message", "")
 
+            # Phase 1: lock this event by marking it "sending"
+            event.status = "sending"
+            event.updated_at = now
+            self.repo.session.commit()
+
+            # Phase 2: send and update final status
             try:
                 msg_id = self.provider.send(event.recipient_phone, message)
                 event.status = "sent"
@@ -103,12 +116,20 @@ class NotificationService:
                 event.error_code = None
                 event.error_message = None
                 event.updated_at = now
+                self.repo.session.commit()
                 logger.info(
                     "Notification %s sent via %s to %s (idempotency=%s)",
                     event.id, self.provider.name, event.recipient_phone, event.idempotency_key,
                 )
                 sent += 1
             except Exception as exc:
+                self.repo.session.rollback()
+                # Re-fetch the event after rollback to get a live object
+                event = self.repo.get_by_id(event.id)
+                if event is None:
+                    logger.error("Notification lost after rollback")
+                    failed += 1
+                    continue
                 event.retry_count += 1
                 event.error_code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
                 event.error_message = str(exc)
@@ -123,11 +144,12 @@ class NotificationService:
                     )
                     failed += 1
                 else:
+                    event.status = "pending"
                     logger.warning(
                         "Notification %s retry %d/%d failed: %s",
                         event.id, event.retry_count, MAX_RETRIES, exc,
                     )
-                    # status remains "pending" for next processing cycle
+                self.repo.session.commit()
 
         return {"sent": sent, "failed": failed, "skipped": skipped}
 

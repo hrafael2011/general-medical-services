@@ -67,3 +67,50 @@ class TestTelegramNotificationProvider:
             TelegramNotificationProvider,
         )
         assert TelegramNotificationProvider.name == "telegram"
+
+    def test_send_with_dict_message_includes_reply_markup(self):
+        """When message is a dict with text and reply_markup, both are sent."""
+        provider = self._make_provider()
+        dict_msg = {
+            "text": "Confirm your shift",
+            "reply_markup": {
+                "inline_keyboard": [[
+                    {"text": "✓ Confirmar asistencia", "callback_data": "confirm:abc123"}
+                ]]
+            },
+        }
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True, "result": {"message_id": 42}}
+
+        with patch("httpx.post") as mock_post:
+            mock_post.return_value = mock_resp
+            msg_id = provider.send("123456789", dict_msg)
+
+        assert msg_id == "42"
+        _, kwargs = mock_post.call_args
+        payload = kwargs["json"]
+        assert payload["chat_id"] == "123456789"
+        assert payload["text"] == "Confirm your shift"
+        assert "reply_markup" in payload
+        assert payload["reply_markup"] == dict_msg["reply_markup"]
+        assert payload["parse_mode"] == "HTML"
+
+    def test_send_with_string_message_still_works(self):
+        """String messages should still work as before."""
+        provider = self._make_provider()
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True, "result": {"message_id": 77}}
+
+        with patch("httpx.post") as mock_post:
+            mock_post.return_value = mock_resp
+            msg_id = provider.send("123456789", "Plain text")
+
+        assert msg_id == "77"
+        _, kwargs = mock_post.call_args
+        payload = kwargs["json"]
+        assert payload["text"] == "Plain text"
+        assert "reply_markup" not in payload

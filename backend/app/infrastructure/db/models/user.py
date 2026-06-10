@@ -36,6 +36,9 @@ class UserModel(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
     whatsapp_phone: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
+    telegram_chat_id: Mapped[str | None] = mapped_column(
+        String(60), nullable=True, unique=True, default=None
+    )
 
 
 class LoginAttemptModel(Base):

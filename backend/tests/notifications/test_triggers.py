@@ -323,3 +323,98 @@ def test_mission_participants_changed_notifies_removed_and_confirms_added(db_ses
     assert len(confirmations) == 1
     assert confirmations[0].confirmation_type == "mission"
     assert confirmations[0].doctor_id == added.id
+
+
+# ---------------------------------------------------------------------------
+# Tests — _resolve_recipient_phone
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_recipient_phone_prefers_telegram(db_session):
+    """When a doctor has telegram_chat_id, it should be used as
+    recipient_phone instead of whatsapp_phone."""
+    from backend.app.application.notifications.triggers import _resolve_recipient_phone
+
+    doctor = _create_doctor(
+        db_session,
+        name="Dr. Telegram",
+        whatsapp_phone="+18095559999",
+    )
+    # Manually set telegram_chat_id since _create_doctor may not support it
+    doctor.telegram_chat_id = "123456789"
+    db_session.flush()
+
+    result = _resolve_recipient_phone(doctor)
+    assert result == "123456789"
+
+
+def test_resolve_recipient_phone_returns_none_without_telegram(db_session):
+    """When a doctor has no telegram_chat_id, return None (whatsapp fallback removed)."""
+    from backend.app.application.notifications.triggers import _resolve_recipient_phone
+
+    doctor = _create_doctor(
+        db_session,
+        name="Dr. NoTelegram",
+        whatsapp_phone="+18095558888",
+    )
+
+    result = _resolve_recipient_phone(doctor)
+    assert result is None
+
+
+def test_resolve_recipient_phone_returns_none_for_none_doctor():
+    """None input should return None."""
+    from backend.app.application.notifications.triggers import _resolve_recipient_phone
+
+    assert _resolve_recipient_phone(None) is None
+
+
+# ---------------------------------------------------------------------------
+# Tests — _build_confirmation_message
+# ---------------------------------------------------------------------------
+
+
+def test_build_confirmation_message_returns_dict_for_telegram_doctor():
+    """When a doctor has telegram_chat_id, returns a dict with reply_markup."""
+    from types import SimpleNamespace
+    from backend.app.application.notifications.triggers import (
+        _build_confirmation_message,
+    )
+
+    doctor = SimpleNamespace(telegram_chat_id="12345")
+    result = _build_confirmation_message("Test message", doctor, "conf-abc")
+
+    assert isinstance(result, dict)
+    assert "text" in result
+    assert "Test message" in result["text"]
+    assert "reply_markup" in result
+    keyboard = result["reply_markup"]["inline_keyboard"]
+    assert len(keyboard) == 1
+    assert keyboard[0][0]["callback_data"] == "confirm:conf-abc"
+
+
+def test_build_confirmation_message_returns_string_for_whatsapp_doctor():
+    """When a doctor has no telegram_chat_id, returns a plain string."""
+    from types import SimpleNamespace
+    from backend.app.application.notifications.triggers import (
+        _build_confirmation_message,
+    )
+
+    doctor = SimpleNamespace(telegram_chat_id=None, whatsapp_phone="+18095559999")
+    result = _build_confirmation_message("Test message", doctor, "conf-xyz")
+
+    assert isinstance(result, str)
+    assert "Responda 1" in result
+    assert "Test message" in result
+
+
+def test_build_confirmation_message_handles_none_doctor():
+    """None doctor should still work (fallback to WhatsApp text)."""
+    from backend.app.application.notifications.triggers import (
+        _build_confirmation_message,
+    )
+
+    result = _build_confirmation_message("Test message", None, "conf-null")
+
+    assert isinstance(result, str)
+    assert "Responda 1" in result

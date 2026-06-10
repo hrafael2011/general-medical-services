@@ -30,10 +30,10 @@ def process_notification_queue() -> dict:
 
     session = SessionLocal()
     try:
-        if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-            provider = MetaCloudAPIProvider()
-        elif settings.telegram_notification_bot_token:
+        if settings.telegram_notification_bot_token:
             provider = TelegramNotificationProvider()
+        elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+            provider = MetaCloudAPIProvider()
         else:
             provider = FakeProvider()
         service = NotificationService(
@@ -92,10 +92,18 @@ def send_pre_service_reminders() -> dict:
                 )
             )
         )
+        from backend.app.application.notifications.templates import with_telegram_buttons
+        from backend.app.infrastructure.db.models.confirmations import (
+            ConfirmationRequestModel,
+        )
+
         sent = 0
         for a in assignments:
             doctor = session.get(DoctorModel, a.doctor_id)
-            if not doctor or not doctor.whatsapp_phone:
+            if not doctor:
+                continue
+            recipient = doctor.telegram_chat_id or None
+            if not recipient:
                 continue
 
             if a.service_start_at:
@@ -116,17 +124,35 @@ def send_pre_service_reminders() -> dict:
 
             area = session.get(ServiceAreaModel, a.service_area_id)
             area_name = area.display_name if area else str(a.service_area_id)
-            start_str = f"{start_dt.hour:02d}:{start_dt.minute:02d}"
+            hour_12 = start_dt.hour % 12 or 12
+            ampm = "AM" if start_dt.hour < 12 else "PM"
+            start_str = f"{hour_12}:{start_dt.minute:02d} {ampm}"
 
             message = render_twelve_hour_reminder(
                 service_date=str(a.service_date),
                 service_area=area_name,
                 service_start=start_str,
             )
-            if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-                provider = MetaCloudAPIProvider()
-            elif settings.telegram_notification_bot_token:
+
+            # Build payload — use Telegram inline button when possible
+            msg_payload: str | dict = message
+            if doctor.telegram_chat_id:
+                confirmation = session.scalars(
+                    sa_select(ConfirmationRequestModel)
+                    .where(
+                        ConfirmationRequestModel.assignment_id == a.id,
+                        ConfirmationRequestModel.status == "pending",
+                    )
+                    .order_by(ConfirmationRequestModel.created_at.desc())
+                    .limit(1)
+                ).first()
+                if confirmation:
+                    msg_payload = with_telegram_buttons(message, confirmation.id)
+
+            if settings.telegram_notification_bot_token:
                 provider = TelegramNotificationProvider()
+            elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+                provider = MetaCloudAPIProvider()
             else:
                 provider = FakeProvider()
             svc = NotificationService(
@@ -137,8 +163,8 @@ def send_pre_service_reminders() -> dict:
                 notification_type="reminder_12h",
                 idempotency_key=f"reminder_12h:{a.id}:{doctor.id}:{tomorrow.isoformat()}",
                 recipient_doctor_id=doctor.id,
-                recipient_phone=doctor.whatsapp_phone,
-                payload={"message": message},
+                recipient_phone=recipient,
+                payload={"message": msg_payload},
                 assignment_id=a.id,
             )
             sent += 1
@@ -200,7 +226,7 @@ def check_unconfirmed_escalamiento() -> dict:
         encargados = session.scalars(
             select(UserModel).where(
                 UserModel.active.is_(True),
-                UserModel.whatsapp_phone.is_not(None),
+                UserModel.telegram_chat_id.is_not(None),
                 UserModel.permissions.contains(["receive_escalation_alerts"]),
             )
         ).all()
@@ -208,10 +234,10 @@ def check_unconfirmed_escalamiento() -> dict:
         if not encargados:
             return {"escalations": 0}
 
-        if settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
-            provider = MetaCloudAPIProvider()
-        elif settings.telegram_notification_bot_token:
+        if settings.telegram_notification_bot_token:
             provider = TelegramNotificationProvider()
+        elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+            provider = MetaCloudAPIProvider()
         else:
             provider = FakeProvider()
         svc = NotificationService(
@@ -239,7 +265,7 @@ def check_unconfirmed_escalamiento() -> dict:
                 notification_type="escalamiento",
                 idempotency_key=f"escalamiento:consolidated:{now.strftime('%Y%m%d%H')}:{encargado.id}",
                 recipient_doctor_id=None,
-                recipient_phone=encargado.whatsapp_phone,
+                recipient_phone=encargado.telegram_chat_id,
                 payload={"message": message},
                 created_by=encargado.id,
             )

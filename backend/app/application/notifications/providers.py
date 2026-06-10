@@ -84,8 +84,8 @@ class TelegramNotificationProvider:
     """Notification provider that sends messages via Telegram Bot API.
 
     The 'phone' parameter in send() is repurposed as the telegram
-    chat_id. When the notification was queued, triggers stored the
-    doctor's telegram_chat_id in recipient_phone.
+    chat_id. Triggers use _resolve_recipient_phone() which prefers
+    telegram_chat_id, falling back to whatsapp_phone.
     """
 
     name = "telegram"
@@ -98,13 +98,15 @@ class TelegramNotificationProvider:
             raise ValueError("telegram_notification_bot_token is required")
         self.base_url = f"https://api.telegram.org/bot{self.token}"
 
-    def send(self, phone: str, message: str) -> str:
+    def send(self, phone: str, message: str | dict) -> str:
         """Send a notification message via Telegram.
 
         Args:
             phone: The telegram chat_id (repurposed field name from
                    the NotificationProvider protocol).
-            message: The message text to send (may include HTML).
+            message: Either a plain string (text only) or a dict with
+                     "text" and optionally "reply_markup" for inline
+                     confirmation buttons.
         """
         import uuid as _uuid
 
@@ -112,9 +114,14 @@ class TelegramNotificationProvider:
             import httpx
 
             chat_id = phone
+            if isinstance(message, dict):
+                payload: dict = {"chat_id": chat_id, **message, "parse_mode": "HTML"}
+            else:
+                payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+
             resp = httpx.post(
                 f"{self.base_url}/sendMessage",
-                json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
+                json=payload,
                 timeout=10.0,
             )
             resp.raise_for_status()

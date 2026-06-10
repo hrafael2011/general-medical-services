@@ -80,7 +80,7 @@ export function PublicConfirmationPage() {
           {data.status !== "confirmed" && (
             <div className="info-banner" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px", background: "#eff6ff", borderRadius: "8px", marginBottom: "16px", color: "#1e40af", fontSize: "0.9rem" }}>
               <MessageCircle size={16} />
-              <span>También puede confirmar respondiendo &quot;1&quot; al mensaje de WhatsApp que recibió.</span>
+              <span>También puede confirmar usando el botón de confirmación en el mensaje de Telegram.</span>
             </div>
           )}
           <div className="auth-form">

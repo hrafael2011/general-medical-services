@@ -30,6 +30,8 @@ const TYPE_LABELS: Record<string, string> = {
   mission_participant_removed: "Participante removido",
   mission_details_updated: "Misión actualizada",
   availability: "Disponibilidad",
+  service_confirmed: "Servicio confirmado",
+  mission_confirmed: "Misión confirmada",
 };
 
 const STATUS_OPTIONS = [
@@ -54,6 +56,8 @@ const TYPE_OPTIONS = [
   { value: "mission_participant_removed", label: "Participante removido" },
   { value: "mission_details_updated", label: "Misión actualizada" },
   { value: "availability", label: "Disponibilidad" },
+  { value: "service_confirmed", label: "Servicio confirmado" },
+  { value: "mission_confirmed", label: "Misión confirmada" },
 ];
 
 // ---------------------------------------------------------------------------
