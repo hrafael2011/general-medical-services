@@ -53,14 +53,23 @@ class NotificationRepository:
         return list(self.session.scalars(stmt))
 
     def list_pending(self, limit: int = 50) -> list[NotificationEventModel]:
-        """Return pending notifications with exponential backoff applied."""
+        """Return pending notifications with exponential backoff applied.
+
+        Also recovers events stuck in 'sending' status for more than
+        5 minutes (process crashed mid-send).
+        """
         now = datetime.now(UTC)
-        # SQL pre-filter: skip events retried within the minimum backoff
+        stuck_cutoff = now - timedelta(minutes=5)
         cutoff = now - timedelta(seconds=BACKOFF_SECONDS)
         stmt = (
             select(NotificationEventModel)
             .where(
-                NotificationEventModel.status == "pending",
+                (
+                    NotificationEventModel.status == "pending"
+                ) | (
+                    NotificationEventModel.status == "sending",
+                    NotificationEventModel.updated_at <= stuck_cutoff,
+                ),
                 NotificationEventModel.retry_count < MAX_RETRIES,
                 (
                     NotificationEventModel.last_retried_at.is_(None)
