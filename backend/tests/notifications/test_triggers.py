@@ -367,3 +367,54 @@ def test_resolve_recipient_phone_returns_none_for_none_doctor():
     from backend.app.application.notifications.triggers import _resolve_recipient_phone
 
     assert _resolve_recipient_phone(None) is None
+
+
+# ---------------------------------------------------------------------------
+# Tests — _build_confirmation_message
+# ---------------------------------------------------------------------------
+
+
+def test_build_confirmation_message_returns_dict_for_telegram_doctor():
+    """When a doctor has telegram_chat_id, returns a dict with reply_markup."""
+    from types import SimpleNamespace
+    from backend.app.application.notifications.triggers import (
+        _build_confirmation_message,
+    )
+
+    doctor = SimpleNamespace(telegram_chat_id="12345")
+    result = _build_confirmation_message("Test message", doctor, "conf-abc")
+
+    assert isinstance(result, dict)
+    assert "text" in result
+    assert "Test message" in result["text"]
+    assert "reply_markup" in result
+    keyboard = result["reply_markup"]["inline_keyboard"]
+    assert len(keyboard) == 1
+    assert keyboard[0][0]["callback_data"] == "confirm:conf-abc"
+
+
+def test_build_confirmation_message_returns_string_for_whatsapp_doctor():
+    """When a doctor has no telegram_chat_id, returns a plain string."""
+    from types import SimpleNamespace
+    from backend.app.application.notifications.triggers import (
+        _build_confirmation_message,
+    )
+
+    doctor = SimpleNamespace(telegram_chat_id=None, whatsapp_phone="+18095559999")
+    result = _build_confirmation_message("Test message", doctor, "conf-xyz")
+
+    assert isinstance(result, str)
+    assert "Responda 1" in result
+    assert "Test message" in result
+
+
+def test_build_confirmation_message_handles_none_doctor():
+    """None doctor should still work (fallback to WhatsApp text)."""
+    from backend.app.application.notifications.triggers import (
+        _build_confirmation_message,
+    )
+
+    result = _build_confirmation_message("Test message", None, "conf-null")
+
+    assert isinstance(result, str)
+    assert "Responda 1" in result

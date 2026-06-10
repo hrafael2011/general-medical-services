@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from backend.app.application.confirmations.service import ConfirmationRequestService
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.templates import (
+    _with_telegram_confirmation,
     render_initial_assignment,
     render_mission_details_updated,
     render_mission_participant,
@@ -36,6 +37,19 @@ def _resolve_recipient_phone(doctor) -> str | None:
     if chat_id:
         return chat_id
     return getattr(doctor, "whatsapp_phone", None)
+
+
+def _build_confirmation_message(message: str, doctor, confirmation_id: str) -> str | dict:
+    """Build confirmation message payload — Telegram buttons or WhatsApp text.
+
+    Returns a dict with inline keyboard button when the doctor has
+    telegram_chat_id, otherwise a plain string with WhatsApp confirmation
+    instructions.
+    """
+    chat_id = getattr(doctor, "telegram_chat_id", None)
+    if chat_id:
+        return _with_telegram_confirmation(message, confirmation_id)
+    return _with_whatsapp_confirmation(message)
 
 
 class NotificationTriggers:
@@ -91,7 +105,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_whatsapp_confirmation(message),
+                        "message": _build_confirmation_message(message, doctor, confirmation.id),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -157,7 +171,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_whatsapp_confirmation(message),
+                        "message": _build_confirmation_message(message, doctor, confirmation.id),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -267,7 +281,7 @@ class NotificationTriggers:
                 )
                 notification.payload = {
                     **(notification.payload or {}),
-                    "message": _with_whatsapp_confirmation(message),
+                    "message": _build_confirmation_message(message, doctor, confirmation.id),
                     "confirmation_request_id": confirmation.id,
                 }
             return 1
@@ -322,7 +336,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_whatsapp_confirmation(message),
+                        "message": _build_confirmation_message(message, doctor, confirmation.id),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -429,7 +443,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _with_whatsapp_confirmation(message),
+                        "message": _build_confirmation_message(message, doctor, confirmation.id),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1

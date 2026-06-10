@@ -193,3 +193,15 @@ def with_telegram_buttons(message: str, confirmation_id: str) -> dict:
             ]]
         }
     }
+
+
+def _with_telegram_confirmation(message: str, confirmation_id: str) -> dict:
+    """Build Telegram message dict with inline confirmation button.
+
+    Returns a dict suitable for TelegramNotificationProvider.send():
+        {"text": "...", "reply_markup": {"inline_keyboard": [[...]]}}
+
+    This is a thin alias for with_telegram_buttons() following the same
+    naming convention as _with_whatsapp_confirmation().
+    """
+    return with_telegram_buttons(message, confirmation_id)
