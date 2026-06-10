@@ -144,7 +144,7 @@ class NotificationTriggers:
                     area_name = area.display_name if area else assignment.service_area_id
                 else:
                     area_name = assignment.service_area_id
-                service_start = str(assignment.service_start_at) if getattr(assignment, 'service_start_at', None) else None
+                service_start = assignment.service_start_at.strftime("%H:%M") if getattr(assignment, 'service_start_at', None) else None
                 message = render_initial_assignment(
                     service_date=str(assignment.service_date),
                     service_area=area_name,
