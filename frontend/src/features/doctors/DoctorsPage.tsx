@@ -3,10 +3,11 @@ import { DoctorList } from "./DoctorList";
 import { DoctorForm } from "./DoctorForm";
 import { DoctorsByDay } from "./DoctorsByDay";
 import { DoctorsByArea } from "./DoctorsByArea";
+import { DoctorsByDepartment } from "./DoctorsByDepartment";
 import { DoctorRead } from "../../api/doctors";
 import { useAuth } from "../../context/AuthContext";
 
-type Tab = "list" | "by-day" | "by-area";
+type Tab = "list" | "by-day" | "by-area" | "by-department";
 
 export function DoctorsPage() {
   const [editingDoctor, setEditingDoctor] = useState<DoctorRead | undefined>();
@@ -48,6 +49,15 @@ export function DoctorsPage() {
               Por Área
             </button>
           )}
+          {isEncargadoPlus && (
+            <button
+              className={tab === "by-department" ? "btn-primary" : "btn-ghost"}
+              style={{ padding: "8px 16px", borderRadius: "6px 6px 0 0", border: "none", fontSize: 13 }}
+              onClick={() => setTab("by-department")}
+            >
+              Por Departamento
+            </button>
+          )}
         </div>
 
         {tab === "list" ? (
@@ -65,8 +75,10 @@ export function DoctorsPage() {
           </>
         ) : tab === "by-day" ? (
           <DoctorsByDay />
-        ) : (
+        ) : tab === "by-area" ? (
           <DoctorsByArea />
+        ) : (
+          <DoctorsByDepartment />
         )}
       </div>
     </>

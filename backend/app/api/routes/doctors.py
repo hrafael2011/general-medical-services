@@ -15,6 +15,7 @@ from backend.app.schemas.doctors import (
     DeactivateDoctorServiceRequest,
     DoctorByAreaResponse,
     DoctorByDayResponse,
+    DoctorByDepartmentResponse,
     DoctorListResponse,
     DoctorRead,
     UpdateDoctorRequest,
@@ -76,6 +77,14 @@ def list_doctors_by_area(
     service: Annotated[DoctorService, Depends(get_doctor_service)],
 ) -> dict:
     return service.list_by_area()
+
+
+@router.get("/by-department", response_model=DoctorByDepartmentResponse)
+def list_doctors_by_department(
+    _user: Annotated[UserModel, Depends(require_encargado_or_admin)],
+    service: Annotated[DoctorService, Depends(get_doctor_service)],
+) -> dict:
+    return service.list_by_department()
 
 
 @router.get("/{doctor_id}", response_model=DoctorRead)

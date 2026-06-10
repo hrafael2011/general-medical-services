@@ -123,6 +123,8 @@ export const doctorsApi = {
     apiFetch<DoctorByDayResponse>("/doctors/by-day"),
   listByArea: () =>
     apiFetch<DoctorByAreaResponse>("/doctors/by-area"),
+  listByDepartment: () =>
+    apiFetch<DoctorByDepartmentResponse>("/doctors/by-department"),
 };
 
 export interface DoctorByDayItem {
@@ -161,6 +163,24 @@ export interface AreaGroup {
 
 export interface DoctorByAreaResponse {
   areas: Record<string, AreaGroup>;
+}
+
+export interface DoctorByDepartmentItem {
+  id: string;
+  name: string;
+  rank_name: string | null;
+  department_name: string | null;
+}
+
+export interface DepartmentGroup {
+  department_id: string;
+  label: string;
+  count: number;
+  doctors: DoctorByDepartmentItem[];
+}
+
+export interface DoctorByDepartmentResponse {
+  departments: Record<string, DepartmentGroup>;
 }
 
 export const availabilityApi = {
