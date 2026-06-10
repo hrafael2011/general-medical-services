@@ -2,6 +2,8 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
+
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.notifications.providers import NotificationProvider
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
@@ -62,7 +64,14 @@ class NotificationService:
             created_at=now,
             updated_at=now,
         )
-        return self.repo.add(event)
+        try:
+            return self.repo.add(event)
+        except IntegrityError:
+            self.repo.session.rollback()
+            existing = self.repo.get_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                return existing
+            raise
 
     def process_pending(self) -> dict:
         """

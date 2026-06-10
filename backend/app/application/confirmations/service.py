@@ -2,6 +2,8 @@ import secrets
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
+
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
@@ -59,7 +61,14 @@ class ConfirmationRequestService:
             created_at=now,
             updated_at=now,
         )
-        return self.repo.add(request)
+        try:
+            return self.repo.add(request)
+        except IntegrityError:
+            self.repo.session.rollback()
+            existing = self.repo.get_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                return existing
+            raise
 
     def mark_received_by_token(
         self,
