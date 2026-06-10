@@ -23,6 +23,8 @@ class UserRead(BaseModel):
     def false_if_none(cls, v: object) -> object:
         return False if v is None else v
 
+    telegram_chat_id: str | None = None
+
     model_config = {"from_attributes": True}
 
 
