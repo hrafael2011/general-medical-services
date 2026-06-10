@@ -46,9 +46,8 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   });
 
   const { data: deactivationReasons } = useQuery({
-    queryKey: ["deactivation-reasons", selectedDoctor?.sex],
-    queryFn: () => doctorsApi.listDeactivationReasons(selectedDoctor?.sex),
-    enabled: !!selectedDoctor,
+    queryKey: ["deactivation-reasons"],
+    queryFn: () => doctorsApi.listDeactivationReasons(),
   });
 
   const { data: availability } = useQuery({
@@ -205,6 +204,10 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                   <td>
                     <span
                       className={`service-status-pill${doc.service_active ? " service-status-pill--active" : " service-status-pill--inactive"}`}
+                      title={!doc.service_active
+                        ? `${reasonMap[doc.service_inactive_reason_id ?? ""] || "Sin razón"}${doc.service_inactive_detail ? ` — ${doc.service_inactive_detail}` : ""}`
+                        : undefined}
+                      style={!doc.service_active ? { cursor: "help" } : undefined}
                     >
                       <span className="service-status-pill__track">
                         <span className="service-status-pill__knob" />
