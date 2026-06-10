@@ -82,7 +82,8 @@ class NotificationService:
           - Skip if no recipient_phone (count as skipped).
           - Call provider.send(phone, payload["message"]).
           - On success: status="sent", sent_at=now, provider=provider.name,
-            provider_message_id=msg_id.
+            provider_message_id=msg_id.  Commits immediately to prevent
+            duplicate sends.
           - On failure: status="failed" if retry_count >= MAX_RETRIES else
             status="pending" with retry_count+=1, store error.
         """
@@ -112,12 +113,14 @@ class NotificationService:
                 event.error_code = None
                 event.error_message = None
                 event.updated_at = now
+                self.repo.session.commit()
                 logger.info(
                     "Notification %s sent via %s to %s (idempotency=%s)",
                     event.id, self.provider.name, event.recipient_phone, event.idempotency_key,
                 )
                 sent += 1
             except Exception as exc:
+                self.repo.session.rollback()
                 event.retry_count += 1
                 event.error_code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
                 event.error_message = str(exc)
@@ -136,7 +139,8 @@ class NotificationService:
                         "Notification %s retry %d/%d failed: %s",
                         event.id, event.retry_count, MAX_RETRIES, exc,
                     )
-                    # status remains "pending" for next processing cycle
+                # Retry count changes must persist even on failure
+                self.repo.session.commit()
 
         return {"sent": sent, "failed": failed, "skipped": skipped}
 

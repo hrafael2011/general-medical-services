@@ -124,6 +124,7 @@ async def lifespan(app: FastAPI):
         IntervalTrigger(seconds=30),
         id="process_notifications",
         name="Process notification queue",
+        max_instances=1,
     )
     scheduler.add_job(
         send_pre_service_reminders,
