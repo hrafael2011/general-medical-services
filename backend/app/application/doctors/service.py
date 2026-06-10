@@ -387,6 +387,48 @@ class DoctorService:
 
         return {str(i): days[i] for i in range(7)}
 
+    def list_by_area(self) -> dict:
+        active_doctors = self.doctors.list_all(active_only=True)
+        doctor_ids = [d.id for d in active_doctors]
+
+        # Bulk-load allowed areas: doctor_id -> [area_id, ...]
+        areas_by_doctor = self.doctors.get_allowed_areas_bulk(doctor_ids)
+
+        # Load all active service areas
+        all_areas = self.catalog_repo.list_service_areas() if self.catalog_repo else []
+        active_areas = [a for a in all_areas if a.active]
+
+        # Load rank/department names
+        ranks = {r.id: r.name for r in self.catalog_repo.list_ranks()} if self.catalog_repo else {}
+        depts = {d.id: d.name for d in self.catalog_repo.list_departments()} if self.catalog_repo else {}
+
+        # Initialize result: one entry per active area
+        areas: dict[str, dict] = {
+            a.id: {
+                "area_id": a.id,
+                "code": a.code,
+                "label": a.display_name,
+                "count": 0,
+                "doctors": [],
+            }
+            for a in active_areas
+        }
+
+        for doctor in active_doctors:
+            doc_area_ids = areas_by_doctor.get(doctor.id, [])
+            for area_id in doc_area_ids:
+                if area_id not in areas:
+                    continue  # skip areas that are inactive or unknown
+                areas[area_id]["doctors"].append({
+                    "id": doctor.id,
+                    "name": doctor.name,
+                    "rank_name": ranks.get(doctor.rank_id),
+                    "department_name": depts.get(doctor.department_id),
+                })
+                areas[area_id]["count"] = len(areas[area_id]["doctors"])
+
+        return {"areas": areas}
+
     def deactivate_service(
         self,
         doctor_id: str,
