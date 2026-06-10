@@ -28,15 +28,13 @@ def _resolve_recipient_phone(doctor) -> str | None:
     """Return the best contact target for a doctor.
 
     Returns telegram_chat_id when available (Telegram is the primary
-    notification channel), falling back to whatsapp_phone for future
-    WhatsApp integration.
+    notification channel).  Returns None when the doctor has no
+    telegram_chat_id — whatsapp_phone numbers are not valid Telegram
+    chat IDs and would produce 400 Bad Request.
     """
     if doctor is None:
         return None
-    chat_id = getattr(doctor, "telegram_chat_id", None)
-    if chat_id:
-        return chat_id
-    return getattr(doctor, "whatsapp_phone", None)
+    return getattr(doctor, "telegram_chat_id", None) or None
 
 
 def _build_confirmation_message(message: str, doctor, confirmation_id: str) -> str | dict:

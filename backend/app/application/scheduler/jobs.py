@@ -102,7 +102,7 @@ def send_pre_service_reminders() -> dict:
             doctor = session.get(DoctorModel, a.doctor_id)
             if not doctor:
                 continue
-            recipient = doctor.telegram_chat_id or doctor.whatsapp_phone
+            recipient = doctor.telegram_chat_id or None
             if not recipient:
                 continue
 

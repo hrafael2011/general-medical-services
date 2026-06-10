@@ -348,8 +348,8 @@ def test_resolve_recipient_phone_prefers_telegram(db_session):
     assert result == "123456789"
 
 
-def test_resolve_recipient_phone_falls_back_to_whatsapp(db_session):
-    """When a doctor has no telegram_chat_id, fall back to whatsapp_phone."""
+def test_resolve_recipient_phone_returns_none_without_telegram(db_session):
+    """When a doctor has no telegram_chat_id, return None (whatsapp fallback removed)."""
     from backend.app.application.notifications.triggers import _resolve_recipient_phone
 
     doctor = _create_doctor(
@@ -359,7 +359,7 @@ def test_resolve_recipient_phone_falls_back_to_whatsapp(db_session):
     )
 
     result = _resolve_recipient_phone(doctor)
-    assert result == "+18095558888"
+    assert result is None
 
 
 def test_resolve_recipient_phone_returns_none_for_none_doctor():

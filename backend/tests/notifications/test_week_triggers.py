@@ -6,9 +6,10 @@ from backend.app.application.notifications.triggers import NotificationTriggers
 
 
 class FakeDoctor:
-    def __init__(self, id, whatsapp_phone):
+    def __init__(self, id, whatsapp_phone, telegram_chat_id=None):
         self.id = id
         self.whatsapp_phone = whatsapp_phone
+        self.telegram_chat_id = telegram_chat_id
 
 
 class FakeDoctorRepo:
@@ -52,8 +53,8 @@ def test_on_week_approved_queues_notification_per_assignment():
     notif_service.queue.return_value = FakeNotification(id="notif-1")
     confirmation_service = MagicMock()
     doctor_repo = FakeDoctorRepo()
-    doctor_repo.doctors["doc1"] = FakeDoctor("doc1", "+18095551234")
-    doctor_repo.doctors["doc2"] = FakeDoctor("doc2", "+18095554321")
+    doctor_repo.doctors["doc1"] = FakeDoctor("doc1", "+18095551234", "111111111")
+    doctor_repo.doctors["doc2"] = FakeDoctor("doc2", "+18095554321", "222222222")
 
     triggers = NotificationTriggers(
         notification_service=notif_service,
@@ -84,7 +85,7 @@ def test_on_week_approved_queues_notification_per_assignment():
             notification_type="initial_assignment",
             idempotency_key="assign:a1",
             recipient_doctor_id="doc1",
-            recipient_phone="+18095551234",
+            recipient_phone="111111111",
             payload=ANY,
             assignment_id="a1",
             created_by="user1",
@@ -93,7 +94,7 @@ def test_on_week_approved_queues_notification_per_assignment():
             notification_type="initial_assignment",
             idempotency_key="assign:a2",
             recipient_doctor_id="doc2",
-            recipient_phone="+18095554321",
+            recipient_phone="222222222",
             payload=ANY,
             assignment_id="a2",
             created_by="user1",
