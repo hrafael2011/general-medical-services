@@ -65,18 +65,19 @@ class NotificationRepository:
             select(NotificationEventModel)
             .where(
                 (
-                    NotificationEventModel.status == "pending"
-                ) | (
-                    NotificationEventModel.status == "sending",
-                    NotificationEventModel.updated_at <= stuck_cutoff,
+                    (NotificationEventModel.status == "pending")
+                    | (
+                        (NotificationEventModel.status == "sending")
+                        & (NotificationEventModel.updated_at <= stuck_cutoff)
+                    )
                 ),
                 NotificationEventModel.retry_count < MAX_RETRIES,
                 (
                     NotificationEventModel.last_retried_at.is_(None)
                     | (NotificationEventModel.last_retried_at <= cutoff)
                 ),
-                (NotificationEventModel.scheduled_for.is_(None)) |
-                (NotificationEventModel.scheduled_for <= now),
+                (NotificationEventModel.scheduled_for.is_(None))
+                | (NotificationEventModel.scheduled_for <= now),
             )
             .order_by(NotificationEventModel.created_at)
             .limit(limit)
