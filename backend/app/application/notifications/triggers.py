@@ -23,6 +23,21 @@ def _with_whatsapp_confirmation(message: str) -> str:
     return f"{message}\n\nResponda 1 para confirmar su turno."
 
 
+def _resolve_recipient_phone(doctor) -> str | None:
+    """Return the best contact target for a doctor.
+
+    Returns telegram_chat_id when available (Telegram is the primary
+    notification channel), falling back to whatsapp_phone for future
+    WhatsApp integration.
+    """
+    if doctor is None:
+        return None
+    chat_id = getattr(doctor, "telegram_chat_id", None)
+    if chat_id:
+        return chat_id
+    return getattr(doctor, "whatsapp_phone", None)
+
+
 class NotificationTriggers:
     """Queues notifications in response to domain events."""
 
@@ -49,7 +64,7 @@ class NotificationTriggers:
         for assignment in assignments:
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
-                phone = doctor.whatsapp_phone if doctor else None
+                phone = _resolve_recipient_phone(doctor)
                 message = render_initial_assignment(
                     service_date=str(assignment.service_date),
                     service_area=assignment.service_area_id,
@@ -107,7 +122,7 @@ class NotificationTriggers:
         for assignment in assignments:
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
-                phone = doctor.whatsapp_phone if doctor else None
+                phone = _resolve_recipient_phone(doctor)
                 # Resolver display_name del área — el repo puede tener .session (prod) o no (test)
                 db_session = getattr(self.doctor_repo, 'session', None)
                 if db_session:
@@ -230,7 +245,7 @@ class NotificationTriggers:
     ) -> int:
         try:
             doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
-            phone = doctor.whatsapp_phone if doctor else None
+            phone = _resolve_recipient_phone(doctor)
             notification = self.notification_service.queue(
                 notification_type=notification_type,
                 idempotency_key=idempotency_key,
@@ -279,7 +294,7 @@ class NotificationTriggers:
         for participant in participants:
             try:
                 doctor = self.doctor_repo.get_by_id(participant.doctor_id)
-                phone = doctor.whatsapp_phone if doctor else None
+                phone = _resolve_recipient_phone(doctor)
                 message = render_mission_participant(
                     mission_date=mission_date,
                     location=mission.location,
@@ -360,7 +375,7 @@ class NotificationTriggers:
         for participant in removed_participants:
             try:
                 doctor = self.doctor_repo.get_by_id(participant.doctor_id)
-                phone = doctor.whatsapp_phone if doctor else None
+                phone = _resolve_recipient_phone(doctor)
                 message = render_mission_participant_removed(
                     mission_date=mission_date,
                     location=mission.location,
@@ -386,7 +401,7 @@ class NotificationTriggers:
         for participant in added_participants:
             try:
                 doctor = self.doctor_repo.get_by_id(participant.doctor_id)
-                phone = doctor.whatsapp_phone if doctor else None
+                phone = _resolve_recipient_phone(doctor)
                 message = render_mission_participant_added(
                     mission_date=mission_date,
                     location=mission.location,
@@ -445,7 +460,7 @@ class NotificationTriggers:
         for participant in participants:
             try:
                 doctor = self.doctor_repo.get_by_id(participant.doctor_id)
-                phone = doctor.whatsapp_phone if doctor else None
+                phone = _resolve_recipient_phone(doctor)
                 self.notification_service.queue(
                     notification_type="mission_details_updated",
                     idempotency_key=f"mission_details:{mission.id}:{change_marker}:{participant.doctor_id}",
