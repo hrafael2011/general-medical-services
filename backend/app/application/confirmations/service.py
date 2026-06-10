@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
+from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
 
 
@@ -272,6 +273,30 @@ class ConfirmationRequestService:
             status=status,
             response_payload=response_payload,
         )
+
+        # Create notification event for admin visibility when confirmed
+        if status == "confirmed":
+            now = datetime.now(UTC)
+            event = NotificationEventModel(
+                id=str(uuid4()),
+                notification_type=f"{request.confirmation_type}_confirmed",
+                idempotency_key=f"confirmed:{request.id}",
+                recipient_doctor_id=request.doctor_id,
+                recipient_phone=None,
+                payload={
+                    "message": (
+                        f"Dr. confirmó su {'servicio' if request.confirmation_type == 'service' else 'misión'}."
+                    ),
+                    "confirmation_request_id": request.id,
+                },
+                status="skipped",
+                sent_at=now,
+                created_by=request.doctor_id,
+                created_at=now,
+                updated_at=now,
+            )
+            self.repo.session.add(event)
+
         return updated
 
     def _handle_final_response_alerts(

@@ -191,6 +191,11 @@ def _process_confirmation(
 ) -> None:
     """Mark a confirmation request as confirmed via Telegram."""
     from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from backend.app.infrastructure.db.models.notifications import (
+        NotificationEventModel,
+    )
 
     req = session.get(ConfirmationRequestModel, confirmation_id)
     if not req or req.status not in ("pending", "received"):
@@ -200,10 +205,33 @@ def _process_confirmation(
         )
         return
 
+    now = datetime.now(UTC)
     req.status = "confirmed"
-    req.responded_at = datetime.now(UTC)
+    req.responded_at = now
     req.response_channel = "telegram"
     req.response_payload = {"telegram_chat_id": chat_id}
+
+    # Create notification event for admin visibility
+    event = NotificationEventModel(
+        id=str(uuid4()),
+        notification_type=f"{req.confirmation_type}_confirmed",
+        idempotency_key=f"confirmed:{confirmation_id}",
+        recipient_doctor_id=req.doctor_id,
+        recipient_phone=None,
+        payload={
+            "message": (
+                f"Dr. confirmó su {'servicio' if req.confirmation_type == 'service' else 'misión'}."
+            ),
+            "confirmation_request_id": confirmation_id,
+        },
+        status="skipped",
+        sent_at=now,
+        created_by=req.doctor_id,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(event)
+
     session.commit()
     logger.info(
         "Confirmation %s confirmed via Telegram (chat=%s)",
