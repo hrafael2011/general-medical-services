@@ -121,3 +121,23 @@ class AreaGroup(BaseModel):
 
 class DoctorByAreaResponse(BaseModel):
     areas: dict[str, AreaGroup]
+
+
+class DoctorByDepartmentItem(BaseModel):
+    id: str
+    name: str
+    rank_name: str | None = None
+    department_name: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class DepartmentGroup(BaseModel):
+    department_id: str
+    label: str
+    count: int
+    doctors: list[DoctorByDepartmentItem]
+
+
+class DoctorByDepartmentResponse(BaseModel):
+    departments: dict[str, DepartmentGroup]

@@ -429,6 +429,41 @@ class DoctorService:
 
         return {"areas": areas}
 
+    def list_by_department(self) -> dict:
+        active_doctors = self.doctors.list_all(active_only=True)
+
+        # Load all active departments
+        all_departments = self.catalog_repo.list_departments() if self.catalog_repo else []
+        active_departments = [d for d in all_departments if d.active]
+
+        # Load rank names for display
+        ranks = {r.id: r.name for r in self.catalog_repo.list_ranks()} if self.catalog_repo else {}
+
+        # Initialize result: one entry per active department
+        departments: dict[str, dict] = {
+            d.id: {
+                "department_id": d.id,
+                "label": d.name,
+                "count": 0,
+                "doctors": [],
+            }
+            for d in active_departments
+        }
+
+        for doctor in active_doctors:
+            dept_id = doctor.department_id
+            if not dept_id or dept_id not in departments:
+                continue  # skip doctors with no department or an inactive/unknown department
+            departments[dept_id]["doctors"].append({
+                "id": doctor.id,
+                "name": doctor.name,
+                "rank_name": ranks.get(doctor.rank_id),
+                "department_name": departments[dept_id]["label"],
+            })
+            departments[dept_id]["count"] = len(departments[dept_id]["doctors"])
+
+        return {"departments": departments}
+
     def deactivate_service(
         self,
         doctor_id: str,
