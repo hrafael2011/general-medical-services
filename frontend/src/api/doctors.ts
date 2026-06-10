@@ -170,6 +170,9 @@ export interface DoctorByDepartmentItem {
   name: string;
   rank_name: string | null;
   department_name: string | null;
+  service_active: boolean;
+  service_inactive_reason_name: string | null;
+  service_inactive_detail: string | null;
 }
 
 export interface DepartmentGroup {
