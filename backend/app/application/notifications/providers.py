@@ -84,8 +84,8 @@ class TelegramNotificationProvider:
     """Notification provider that sends messages via Telegram Bot API.
 
     The 'phone' parameter in send() is repurposed as the telegram
-    chat_id. When the notification was queued, triggers stored the
-    doctor's telegram_chat_id in recipient_phone.
+    chat_id. Triggers use _resolve_recipient_phone() which prefers
+    telegram_chat_id, falling back to whatsapp_phone.
     """
 
     name = "telegram"
