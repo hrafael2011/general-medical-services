@@ -13,6 +13,7 @@ from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.schemas.doctors import (
     CreateDoctorRequest,
     DeactivateDoctorServiceRequest,
+    DoctorByAreaResponse,
     DoctorByDayResponse,
     DoctorListResponse,
     DoctorRead,
@@ -67,6 +68,14 @@ def list_doctors_by_day(
     service: Annotated[DoctorService, Depends(get_doctor_service)],
 ) -> dict:
     return {"days": service.list_by_day()}
+
+
+@router.get("/by-area", response_model=DoctorByAreaResponse)
+def list_doctors_by_area(
+    _user: Annotated[UserModel, Depends(require_encargado_or_admin)],
+    service: Annotated[DoctorService, Depends(get_doctor_service)],
+) -> dict:
+    return service.list_by_area()
 
 
 @router.get("/{doctor_id}", response_model=DoctorRead)
