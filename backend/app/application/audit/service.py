@@ -1,3 +1,4 @@
+import logging
 import uuid
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -5,6 +6,8 @@ from datetime import UTC, datetime
 from backend.app.application.audit.errors import AuditError  # noqa: F401
 from backend.app.infrastructure.db.models.audit import AuditEventModel
 from backend.app.infrastructure.repositories.audit import AuditRepository
+
+logger = logging.getLogger(__name__)
 
 # Context variable populated by middleware for correlating audit events
 _request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -51,7 +54,7 @@ class AuditService:
         try:
             self.repo.add(event)
         except Exception:
-            pass  # audit must not break business operations
+            logger.error("Audit event persistence failed", exc_info=True)
         return event
 
     # --- Doctor events ---
@@ -181,6 +184,28 @@ class AuditService:
             entity_type="user",
             entity_id=None,
             metadata={"email_hint": email[:3] + "***", "locked": locked},
+        )
+
+    def log_login_succeeded(self, *, user_id: str, email: str) -> AuditEventModel:
+        return self._create(
+            actor_id=user_id,
+            action_type="login_succeeded",
+            entity_type="user",
+            entity_id=user_id,
+            metadata={"email_hint": email[:3] + "***"},
+        )
+
+    def log_permission_changed(
+        self, *, actor_id: str, target_user_id: str,
+        old_permissions: list[str] | None, new_permissions: list[str],
+    ) -> AuditEventModel:
+        return self._create(
+            actor_id=actor_id,
+            action_type="permission_changed",
+            entity_type="user",
+            entity_id=target_user_id,
+            before={"permissions": old_permissions},
+            after={"permissions": new_permissions},
         )
 
     def log_user_updated(self, *, actor_id: str, user, changed_fields: dict) -> AuditEventModel:

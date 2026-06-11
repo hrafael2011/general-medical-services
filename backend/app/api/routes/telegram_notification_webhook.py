@@ -2,9 +2,10 @@
 
 import json
 import logging
+import secrets
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,9 +13,13 @@ from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["telegram-notification"])
+
+# Rate limiter: 20 req/min per telegram_user_id
+_notification_limiter = RateLimiter(max_requests=20, window_seconds=60)
 
 
 @router.post("/telegram-notification")
@@ -23,8 +28,28 @@ async def telegram_notification_webhook(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict:
     """Handle incoming updates for @TurnosMedicosBot."""
+    # ── Auth: validate X-Telegram-Bot-Api-Secret-Token (same pattern as telegram.py) ──
+    expected_secret = settings.telegram_webhook_secret
+    if not expected_secret:
+        logger.error("TELEGRAM_WEBHOOK_SECRET not configured — rejecting notification webhook")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook secret not configured")
+    actual_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+    if not secrets.compare_digest(actual_secret or "", expected_secret):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
     body = await request.json()
     logger.debug("Telegram notification webhook: %s", json.dumps(body, default=str))
+
+    # ── Rate limiting per telegram user ───────────────────────────────────────
+    telegram_user_id = ""
+    callback = body.get("callback_query", {})
+    msg = body.get("message", {})
+    if callback:
+        telegram_user_id = str(callback.get("from", {}).get("id", ""))
+    elif msg:
+        telegram_user_id = str(msg.get("from", {}).get("id", ""))
+    if telegram_user_id and not _notification_limiter.allow(telegram_user_id):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
 
     # ── Callback query (inline button press) ─────────────────────────────
     callback = body.get("callback_query", {})

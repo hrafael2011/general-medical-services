@@ -4,14 +4,20 @@ import json
 import logging
 from datetime import UTC, datetime
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
+
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+# Rate limiter: 10 req/min per IP for test/diagnostic endpoints
+_test_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
 # Temporary: track webhook calls for staging debugging
 _webhook_log: list[dict] = []
@@ -61,17 +67,31 @@ async def receive_whatsapp_message(
 
 @router.post("/test-notify")
 def test_notify(
+    request: Request,
     secret: str = Query(...),
     session: Session = Depends(get_db_session),
 ) -> dict:
-    if secret != "staging-setup-2026":
+    if not settings.webhook_test_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Webhook test secret not configured",
+        )
+    client_ip = request.client.host if request.client else "unknown"
+    if not _test_limiter.allow(f"test:{client_ip}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded",
+        )
+    if secret != settings.webhook_test_secret:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     import uuid as _uuid
-    from datetime import datetime, UTC
-    from backend.app.infrastructure.db.models.notifications import NotificationEventModel
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
     from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
     from backend.app.infrastructure.db.models.doctors import DoctorModel
-    from sqlalchemy import select
+    from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 
     try:
         # Find the test doctor
@@ -132,10 +152,15 @@ def test_notify(
 
 @router.get("/diagnostic")
 def diagnostic(
+    request: Request,
     secret: str = Query(...),
     session: Session = Depends(get_db_session),
 ) -> dict:
-    if secret != "staging-setup-2026":
+    if not settings.webhook_test_secret:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook test secret not configured")
+    if not _test_limiter.allow(f"diag:{request.client.host if request.client else 'unknown'}"):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+    if secret != settings.webhook_test_secret:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     from sqlalchemy import text
     notif_rows = session.execute(
@@ -184,8 +209,8 @@ def _verify_webhook_signature(request: Request, body_bytes: bytes) -> None:
     """
     app_secret = settings.meta_whatsapp_app_secret
     if not app_secret:
-        logger.warning("Webhook signature verification skipped — META_WHATSAPP_APP_SECRET not configured")
-        return
+        logger.error("Webhook signature verification failed — META_WHATSAPP_APP_SECRET not configured")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook secret not configured")
 
     signature = request.headers.get("X-Hub-Signature-256", "")
     expected = f"sha256={hmac.digest(app_secret.encode(), body_bytes, hashlib.sha256).hex()}"
@@ -194,11 +219,13 @@ def _verify_webhook_signature(request: Request, body_bytes: bytes) -> None:
 
 
 def _confirm_by_phone(session: Session, sender_phone: str, message_id: str) -> None:
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
+
     from sqlalchemy import select
-    from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+    from backend.app.application.notifications.phone_utils import normalize_phone, phones_match
     from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
-    from backend.app.application.notifications.phone_utils import phones_match, normalize_phone
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
 
     # Find doctor by normalized phone
     doctors = session.scalars(

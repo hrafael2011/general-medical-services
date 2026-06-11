@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from backend.app.application.telegram.agent import ConversationalAgent
+from backend.app.application.telegram.input_sanitizer import InputSanitizer
 from backend.app.application.telegram.types import AgentResult
 from backend.app.infrastructure.db.models.telegram import (
     TelegramInteractionModel,
@@ -54,6 +55,7 @@ class TelegramOrchestrator:
         self._user_repo = user_repo
         self._agent = agent
         self._bot_client = bot_client
+        self._input_sanitizer = InputSanitizer()
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -156,12 +158,23 @@ class TelegramOrchestrator:
         if confirmation_response is not None:
             return confirmation_response
 
-        # 4. Process through conversational agent
+        # 4. Sanitize user input before reaching the LLM
+        is_safe, sanitized = self._input_sanitizer.sanitize(text)
+        if not is_safe:
+            logger.warning(
+                "Prompt injection blocked",
+                extra={"telegram_user_id": telegram_user_id},
+            )
+            self._bot_client.send_message(chat_id, "⚠️ No puedo procesar esa solicitud.")
+            return "⚠️ No puedo procesar esa solicitud."
+
+        # 5. Process through conversational agent
         result: AgentResult = self._agent.process(
             text=text,
             telegram_user_id=telegram_user_id,
             user_info={"name": user.name, "role": user.role, "id": user.id},
             actor_id=user.id,
+            user=user,
         )
         response_text = result.response_text
 

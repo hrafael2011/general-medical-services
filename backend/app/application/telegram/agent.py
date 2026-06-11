@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 from typing import Any
 
+from backend.app.application.telegram.input_sanitizer import InputSanitizer
 from backend.app.application.telegram.intent_classifier import (
     ClassifiedIntent,
     IntentClassifier,
@@ -157,6 +158,7 @@ class ConversationalAgent:
         self._intent_classifier = intent_classifier
         self._nlu_engine = nlu_engine
         self._tool_registry = tool_registry
+        self._input_sanitizer = InputSanitizer()
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -676,6 +678,7 @@ class ConversationalAgent:
         telegram_user_id: str | None = None,
         user_info: dict | None = None,
         actor_id: str | None = None,
+        user: Any | None = None,  # UserModel for permission checks
     ) -> AgentResult:
         """Process a user message through the LLM-first NLU pipeline.
 
@@ -695,7 +698,7 @@ class ConversationalAgent:
 
         # Phase 2: NLU — use new engine when available, fall back to legacy
         if self._nlu_engine is not None:
-            return self._process_llm_first(text, telegram_user_id, history, start)
+            return self._process_llm_first(text, telegram_user_id, history, start, user=user)
 
         # Legacy path: EntityResolver + IntentClassifier + if-elif chain
         return self._process_legacy(text, telegram_user_id, history, start)
@@ -710,8 +713,18 @@ class ConversationalAgent:
         telegram_user_id: str | None,
         history: list[dict],
         start: float,
+        user: Any | None = None,
     ) -> AgentResult:
         """New pipeline: single LLM call → tool dispatch → NL response."""
+        # Sanitize input before reaching the LLM (defense in depth)
+        is_safe, _ = self._input_sanitizer.sanitize(text)
+        if not is_safe:
+            logger.warning(
+                "Prompt injection blocked in agent",
+                extra={"telegram_user_id": telegram_user_id},
+            )
+            return AgentResult(response_text="⚠️ No puedo procesar esa solicitud.")
+
         # NLU: entity extraction + tool selection + params in one call
         nlu_result = self._nlu_engine.classify(
             text,
@@ -741,7 +754,7 @@ class ConversationalAgent:
             return self._handle_reply(text, nlu_result)
 
         # Tool dispatch
-        tool_result = self._dispatch_tool(nlu_result.tool, nlu_result.params, text)
+        tool_result = self._dispatch_tool(nlu_result.tool, nlu_result.params, text, user=user)
 
         # Generate NL response
         response_text = self._generate_nl_response(text, nlu_result, tool_result, history)
@@ -776,14 +789,24 @@ class ConversationalAgent:
         tool_name: str,
         params: dict[str, Any],
         user_text: str,
+        user: Any | None = None,
     ) -> dict[str, Any] | None:
         """Dispatch to the appropriate deterministic tool and return structured output."""
         try:
-            # Tool Registry (new)
+            # Tool Registry (new) — with permission check
             if self._tool_registry is not None:
                 handler = self._tool_registry.get(tool_name)
                 if handler is not None:
-                    result = handler(**params)
+                    try:
+                        result = self._tool_registry.execute(
+                            tool_name,
+                            params,
+                            user_role=getattr(user, 'role', 'admin'),
+                            user_permissions=getattr(user, 'permissions', []),
+                        )
+                    except PermissionError as exc:
+                        logger.warning("Tool %s blocked: %s", tool_name, exc)
+                        return {"error": str(exc), "blocked": True}
                     if result is not None:
                         return result.__dict__ if hasattr(result, '__dict__') else result
                     return None

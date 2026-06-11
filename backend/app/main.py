@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -12,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from backend.app.api.router import api_router
-from backend.app.application.audit.service import set_current_request_id
+from backend.app.application.audit.service import get_current_request_id, set_current_request_id
 from backend.app.application.scheduler.jobs import (
     check_unconfirmed_escalamiento,
     process_notification_queue,
@@ -20,7 +21,6 @@ from backend.app.application.scheduler.jobs import (
     send_pre_service_reminders,
 )
 from backend.app.core.config import settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,26 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Logs every HTTP request with method, path, status, and duration."""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        response: Response = await call_next(request)
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        logger.info(
+            "request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_ms": duration_ms,
+                "request_id": get_current_request_id(),
+            },
+        )
+        return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
@@ -193,6 +213,7 @@ def create_app() -> FastAPI:
         )
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(RequestLoggingMiddleware)
 
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
 

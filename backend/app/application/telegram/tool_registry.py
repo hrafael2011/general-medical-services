@@ -255,7 +255,18 @@ def build_tools_prompt() -> str:
 
 
 class ToolRegistry:
-    """Registry of tools the LLM can invoke at runtime."""
+    """Registry of tools the LLM can invoke at runtime.
+
+    Enforces per-tool permission checks — *admin* bypasses all checks,
+    *encargado* needs explicit permissions for restricted tools.
+    """
+
+    # Tools that require specific permissions (admin always bypasses).
+    # Empty list = admin-only.
+    TOOL_PERMISSIONS: dict[str, list[str]] = {
+        "sql_query": [],                       # admin-only
+        "mission_candidates": ["manage_missions"],
+    }
 
     def __init__(self) -> None:
         self._tools: dict[str, Callable[..., Any]] = {}
@@ -266,8 +277,31 @@ class ToolRegistry:
     def get(self, name: str) -> Callable[..., Any] | None:
         return self._tools.get(name)
 
-    def execute(self, tool_name: str, params: dict[str, Any]) -> Any:
+    def execute(
+        self,
+        tool_name: str,
+        params: dict[str, Any],
+        user_role: str = "admin",
+        user_permissions: list[str] | None = None,
+    ) -> Any:
         handler = self._tools.get(tool_name)
         if handler is None:
             raise ValueError(f"Herramienta desconocida: {tool_name}")
+
+        # ── Permission check ──────────────────────────────────────────
+        if user_role != "admin":
+            required = self.TOOL_PERMISSIONS.get(tool_name)
+            if required is not None:
+                user_perms = user_permissions or []
+                if len(required) == 0:
+                    # Empty list = admin-only
+                    raise PermissionError(
+                        f"La herramienta '{tool_name}' solo está disponible para administradores."
+                    )
+                if not all(p in user_perms for p in required):
+                    missing = [p for p in required if p not in user_perms]
+                    raise PermissionError(
+                        f"No tienes los permisos necesarios: {', '.join(missing)}"
+                    )
+
         return handler(**params)

@@ -237,6 +237,10 @@ def webhook(
     x_telegram_bot_api_secret_token: Annotated[str | None, Header()] = None,
 ) -> dict:
     """Telegram Bot API webhook. Always returns 200 to avoid Telegram retries."""
+    # Kill switch — disable bot globally via FEATURE_TELEGRAM env var
+    if not settings.feature_telegram:
+        return {"ok": True, "status": "bot_disabled"}
+
     # Validate X-Telegram-Bot-Api-Secret-Token if configured
     secret = settings.telegram_webhook_secret
     if secret is not None:

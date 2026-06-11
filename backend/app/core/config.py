@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     meta_webhook_verify_token: str | None = None
     meta_whatsapp_app_secret: str | None = None
 
+    # ── Webhook test helpers (staging only) ───────────────────────────────
+    webhook_test_secret: str = ""
+
     # ── Service scheduling ─────────────────────────────────────────────
     service_start_hour: int = 7  # DEPRECATED: se usa ServiceAreaModel.start_hour
 

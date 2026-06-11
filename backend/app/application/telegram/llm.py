@@ -2,6 +2,8 @@ import logging
 
 from typing import Protocol
 
+from backend.app.infrastructure.circuit_breaker import CircuitBreaker, CircuitBreakerError
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +57,7 @@ class DeepSeekProvider:
         self.model = settings.deepseek_model
 
         self._client: OpenAI | None = None
+        self._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
 
     def _ensure_client(self) -> "OpenAI":
         if self._client is None:
@@ -76,8 +79,13 @@ class DeepSeekProvider:
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         try:
-            resp = client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
+            resp = self._circuit_breaker.call(
+                client.chat.completions.create, **kwargs
+            )  # type: ignore[arg-type]
             return resp.choices[0].message.content or ""
+        except CircuitBreakerError:
+            logger.warning("DeepSeek circuit breaker OPEN — returning graceful response")
+            return "El servicio de IA no está disponible en este momento. Intentá de nuevo más tarde."
         except openai.APIConnectionError:
             logger.warning("DeepSeek API connection error")
             return "Lo siento, no pude conectarme con el servicio de IA."

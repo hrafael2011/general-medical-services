@@ -10,27 +10,27 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@tanstack/react-query": "latest",
-    "@vitejs/plugin-react": "latest",
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-day-picker": "^10.0.1",
-    "react-dom": "latest",
-    "react-router-dom": "^7.15.0",
-    "typescript": "latest",
-    "vite": "latest"
+    "@tanstack/react-query": "5.100.6",
+    "@vitejs/plugin-react": "6.0.1",
+    "lucide-react": "1.12.0",
+    "react": "19.2.5",
+    "react-day-picker": "10.0.1",
+    "react-dom": "19.2.5",
+    "react-router-dom": "7.15.0",
+    "typescript": "6.0.3",
+    "vite": "8.0.10"
   },
   "devDependencies": {
-    "@eslint/js": "latest",
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@testing-library/user-event": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "eslint": "latest",
-    "jsdom": "latest",
-    "playwright": "^1.60.0",
-    "typescript-eslint": "latest",
-    "vitest": "latest"
+    "@eslint/js": "10.0.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "10.2.1",
+    "jsdom": "29.1.0",
+    "playwright": "1.60.0",
+    "typescript-eslint": "8.59.1",
+    "vitest": "4.1.5"
   }
 }
