@@ -38,6 +38,26 @@ frontend/.vite/
 # Keep example env file
 !.env.example
 
+# Database backups
+backup_*.sql
+*.sql.gz
+
+# Additional virtualenvs
+.venv*/
+venv*/
+
+# Data directories (PDFs, Excels, non-code assets)
+2026/
+resumen_reglas_encargado.pdf
+formato-reportes/
+
+# Claude Code
+skills-lock.json
+.claude/settings.local.json
+
+# Cleanup / temp scripts
+_cleanup_*.py
+
 # Recovery codes
 *_recovery_code*
 
