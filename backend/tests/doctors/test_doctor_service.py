@@ -350,8 +350,8 @@ def test_list_all_active_only_filters_service_active_doctors(db_session) -> None
     )
     service.deactivate_service(d1.id, actor_id="a", reason_id="r1", detail=None)
 
-    all_names = [doctor.name for doctor in repo.list_all(active_only=False)]
-    active_names = [doctor.name for doctor in repo.list_all(active_only=True)]
+    all_names = [doctor.name for doctor in repo.list_all(status="all")]
+    active_names = [doctor.name for doctor in repo.list_all(status="active")]
 
     assert "Service Inactive Doc" in all_names
     assert "Service Active Doc" in all_names

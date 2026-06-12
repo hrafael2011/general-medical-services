@@ -53,8 +53,8 @@ export function DashboardView() {
   });
 
   const { data: doctors } = useQuery({
-    queryKey: ["doctors", false],
-    queryFn: () => doctorsApi.list(false),
+    queryKey: ["doctors", "all"],
+    queryFn: () => doctorsApi.list("all"),
   });
 
   const { data: replacementAlerts } = useQuery({

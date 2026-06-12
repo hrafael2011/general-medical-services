@@ -49,10 +49,10 @@ def _to_read(doctor, repo: DoctorRepository) -> DoctorRead:
 def list_doctors(
     _user: Annotated[UserModel, Depends(require_ready_user)],
     session: Annotated[Session, Depends(get_db_session)],
-    active_only: bool = False,
+    status: str = "all",
 ) -> DoctorListResponse:
     repo = DoctorRepository(session)
-    doctors = repo.list_all(active_only=active_only)
+    doctors = repo.list_all(status=status)
     # Bulk load allowed areas to avoid N+1
     areas_by_doctor = repo.get_allowed_areas_bulk([d.id for d in doctors])
     items = []

@@ -187,7 +187,7 @@ class ReportService:
     def generate_operational_summary(self, year: int, month: int) -> dict:
         """Return a JSON-serialisable operational summary for a period."""
         # Active doctors (service_active=True and active=True)
-        all_doctors = self.doctor_repo.list_all(active_only=True)
+        all_doctors = self.doctor_repo.list_all(status="active")
         active_doctors = sum(1 for d in all_doctors if d.service_active)
 
         # Calendar data

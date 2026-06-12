@@ -18,7 +18,7 @@ export function DoctorDossierReport() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    doctorsApi.list(true).then(res => setDoctors(res.items)).catch(() => {});
+    doctorsApi.list("active").then(res => setDoctors(res.items)).catch(() => {});
   }, []);
 
   useEffect(() => {

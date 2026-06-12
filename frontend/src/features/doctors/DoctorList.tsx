@@ -18,7 +18,7 @@ interface Props {
 
 export function DoctorList({ onAdd, onEdit }: Props) {
   const qc = useQueryClient();
-  const [activeOnly, setActiveOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorRead | null>(null);
   const [reasonId, setReasonId] = useState("");
   const [detail, setDetail] = useState("");
@@ -26,8 +26,8 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["doctors", activeOnly],
-    queryFn: () => doctorsApi.list(activeOnly),
+    queryKey: ["doctors", statusFilter],
+    queryFn: () => doctorsApi.list(statusFilter),
   });
 
   const { data: ranks } = useQuery({
@@ -144,8 +144,20 @@ export function DoctorList({ onAdd, onEdit }: Props) {
         </div>
         <div className="feature-actions">
           <label className="toggle-label">
-            <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} />
-            Solo activos para servicio
+            <input
+              type="checkbox"
+              checked={statusFilter === "active"}
+              onChange={e => setStatusFilter(e.target.checked ? "active" : "all")}
+            />
+            Solo activos
+          </label>
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={statusFilter === "inactive"}
+              onChange={e => setStatusFilter(e.target.checked ? "inactive" : "all")}
+            />
+            Solo inactivos
           </label>
           <button className="btn-primary" onClick={onAdd}>
             <PlusCircle size={16} />

@@ -64,8 +64,8 @@ export interface AvailabilityRead {
 }
 
 export const doctorsApi = {
-  list: (activeOnly = false) =>
-    apiFetch<DoctorListResponse>(`/doctors?active_only=${activeOnly}`),
+  list: (statusFilter: "all" | "active" | "inactive" = "all") =>
+    apiFetch<DoctorListResponse>(`/doctors?status=${statusFilter}`),
   get: (id: string) => apiFetch<DoctorRead>(`/doctors/${id}`),
   create: (payload: CreateDoctorPayload) =>
     apiFetch<DoctorRead>("/doctors", { method: "POST", body: JSON.stringify(payload) }),

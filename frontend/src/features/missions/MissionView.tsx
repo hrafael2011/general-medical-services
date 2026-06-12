@@ -246,7 +246,7 @@ export function MissionView() {
   });
   const doctorsQuery = useQuery({
     queryKey: ["doctors", "mission-name-lookup"],
-    queryFn: () => doctorsApi.list(false),
+    queryFn: () => doctorsApi.list("all"),
     staleTime: 5 * 60 * 1000,
   });
   const deleteMutation = useMutation({

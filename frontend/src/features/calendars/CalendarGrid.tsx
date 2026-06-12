@@ -132,8 +132,8 @@ export function CalendarGrid() {
   });
 
   const { data: doctorsData } = useQuery({
-    queryKey: ["doctors", false],
-    queryFn: () => doctorsApi.list(false),
+    queryKey: ["doctors", "all"],
+    queryFn: () => doctorsApi.list("all"),
     enabled: !!calendarId,
   });
 
@@ -341,6 +341,20 @@ export function CalendarGrid() {
           Calendario creado con reglas — {generateSummary}
         </p>
       )}
+
+      {/* Leyenda de áreas */}
+      <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+        {sortedAreaIds.map((areaId) => {
+          const areaName = areaMap[areaId] ?? areaId;
+          const color = areaColor(areaName);
+          return (
+            <span key={areaId} style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: 12 }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: color, display: "inline-block" }} />
+              {areaName}
+            </span>
+          );
+        })}
+      </div>
 
       <div className="calendar-grid">
         {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (

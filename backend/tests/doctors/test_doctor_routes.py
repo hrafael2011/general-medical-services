@@ -130,7 +130,7 @@ def test_list_doctors_returns_all(client, seed_doctor):
 
 
 def test_list_doctors_active_only(client, seed_doctor):
-    resp = client.get("/api/doctors?active_only=true")
+    resp = client.get("/api/doctors?status=active")
     assert resp.status_code == 200
     assert resp.json()["total"] >= 1
 

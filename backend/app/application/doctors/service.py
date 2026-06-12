@@ -333,7 +333,7 @@ class DoctorService:
         return f"{week_label} {day_label}"
 
     def list_by_day(self) -> dict:
-        active_doctors = self.doctors.list_all(active_only=True)
+        active_doctors = self.doctors.list_all(status="active")
         doctor_ids = [d.id for d in active_doctors]
         avail_by_doctor = self.doctors.load_availability_bulk(doctor_ids)
 
@@ -388,7 +388,7 @@ class DoctorService:
         return {str(i): days[i] for i in range(7)}
 
     def list_by_area(self) -> dict:
-        active_doctors = self.doctors.list_all(active_only=True)
+        active_doctors = self.doctors.list_all(status="active")
         doctor_ids = [d.id for d in active_doctors]
 
         # Bulk-load allowed areas: doctor_id -> [area_id, ...]
@@ -430,7 +430,7 @@ class DoctorService:
         return {"areas": areas}
 
     def list_by_department(self) -> dict:
-        active_doctors = self.doctors.list_all(active_only=False)
+        active_doctors = self.doctors.list_all(status="all")
 
         # Load all active departments
         all_departments = self.catalog_repo.list_departments() if self.catalog_repo else []

@@ -117,11 +117,19 @@ describe("DoctorList", () => {
     expect(screen.getByText("Razón para desactivar servicio")).toBeInTheDocument();
   });
 
-  it("solicita solo activos para servicio al activar el filtro", async () => {
+  it("solicita solo activos al activar el filtro", async () => {
     renderList();
-    fireEvent.click(await screen.findByLabelText("Solo activos para servicio"));
+    fireEvent.click(await screen.findByLabelText("Solo activos"));
 
-    expect(mockListDoctors).toHaveBeenCalledWith(false);
-    expect(mockListDoctors).toHaveBeenCalledWith(true);
+    expect(mockListDoctors).toHaveBeenCalledWith("all");
+    expect(mockListDoctors).toHaveBeenCalledWith("active");
+  });
+
+  it("solicita solo inactivos al activar el filtro", async () => {
+    renderList();
+    fireEvent.click(await screen.findByLabelText("Solo inactivos"));
+
+    expect(mockListDoctors).toHaveBeenCalledWith("all");
+    expect(mockListDoctors).toHaveBeenCalledWith("inactive");
   });
 });

@@ -36,10 +36,14 @@ class DoctorRepository:
         )
         return self.session.scalars(stmt).first()
 
-    def list_all(self, *, active_only: bool = False) -> list[DoctorModel]:
+    def list_all(self, *, status: str = "all") -> list[DoctorModel]:
         stmt = select(DoctorModel).where(*_not_deleted())
-        if active_only:
+        if status == "active":
             stmt = stmt.where(DoctorModel.active.is_(True), DoctorModel.service_active.is_(True))
+        elif status == "inactive":
+            stmt = stmt.where(
+                (DoctorModel.active.is_(False)) | (DoctorModel.service_active.is_(False))
+            )
         return list(self.session.scalars(stmt.order_by(DoctorModel.name)))
 
     def list_service_active(self) -> list[DoctorModel]:
