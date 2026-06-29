@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 10 - Seguridad, Acceso y Usuarios
+# Spec 10 - Security, Access and Users
 
 ## Goal
 

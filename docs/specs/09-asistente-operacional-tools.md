@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 09 - Asistente Operacional y Tools
+# Spec 09 - Operational Assistant and Tools
 
 ## Goal
 

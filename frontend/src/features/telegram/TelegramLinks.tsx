@@ -307,7 +307,7 @@ export function TelegramLinks() {
         </summary>
         <form className="auth-form" onSubmit={handleSubmit} style={{ marginTop: "12px" }}>
           <label>
-            Telegram User ID
+            ID Telegram
             <input
               type="text"
               value={telegramUserId}
@@ -316,7 +316,7 @@ export function TelegramLinks() {
             />
           </label>
           <label>
-            Telegram Username{" "}
+            Usuario Telegram{" "}
             <span style={{ fontWeight: 400, color: "#6b7280" }}>(opcional)</span>
             <input
               type="text"
@@ -326,7 +326,7 @@ export function TelegramLinks() {
             />
           </label>
           <label>
-            User ID
+            ID Usuario
             <input
               type="text"
               value={userId}
@@ -361,7 +361,7 @@ export function TelegramLinks() {
             <thead>
               <tr>
                 <th>Telegram User ID</th>
-                <th>Username</th>
+                <th>Usuario</th>
                 <th>User ID</th>
                 <th>Vinculado el</th>
                 <th>Activo</th>

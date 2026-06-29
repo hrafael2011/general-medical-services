@@ -6,7 +6,7 @@ created: 2026-05-12
 updated: 2026-05-12
 ---
 
-# Spec — Rediseño de Reportes y Eliminación de Import
+# Spec — Report Redesign and Import Removal
 
 ## Goal
 

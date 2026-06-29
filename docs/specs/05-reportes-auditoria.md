@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 05 - Reportes y Auditoria
+# Spec 05 - Reports and Audit
 
 ## Goal
 

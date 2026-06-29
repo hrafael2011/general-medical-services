@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 01 - Medicos y Disponibilidad
+# Spec 01 - Doctors and Availability
 
 ## Goal
 

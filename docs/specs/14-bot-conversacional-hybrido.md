@@ -6,7 +6,7 @@ created: 2026-05-06
 updated: 2026-05-06
 ---
 
-# Spec 14 — Plan Maestro: Bot Híbrido + Auditoría Técnica
+# Spec 14 — Master Plan: Hybrid Bot + Technical Audit
 
 ## Objetivo
 

@@ -190,7 +190,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                 <th>Nombre</th>
                 <th>Rango</th>
                 <th>Departamento</th>
-                <th>Status servicio</th>
+                <th>Estado servicio</th>
                 <th>Áreas</th>
                 <th>Misiones</th>
               </tr>

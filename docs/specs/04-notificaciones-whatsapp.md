@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 04 - Notificaciones WhatsApp (Twilio)
+# Spec 04 - WhatsApp Notifications (Twilio)
 
 ## Goal
 

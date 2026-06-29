@@ -1,5 +1,5 @@
 const configuredBase = import.meta.env.VITE_API_URL;
-const BASE = (configuredBase || `${window.location.protocol}//${window.location.hostname}:8999`).replace(/\/api\/?$/, "");
+const BASE = (configuredBase || `${window.location.protocol}//${window.location.hostname}:8000`).replace(/\/api\/?$/, "");
 const TOKEN_STORAGE_KEY = "auth_token";
 
 let token: string | null = localStorage.getItem(TOKEN_STORAGE_KEY);

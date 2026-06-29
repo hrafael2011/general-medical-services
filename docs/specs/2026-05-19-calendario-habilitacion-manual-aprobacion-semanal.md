@@ -1,4 +1,4 @@
-# Calendario: Habilitación Manual y Aprobación Semanal
+# Calendar: Manual Enablement and Weekly Approval
 
 Fecha: 2026-05-19
 

@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 00 - Proceso Manual Actual
+# Spec 00 - Current Manual Process
 
 ## Goal
 

@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 08 - Despliegue y Operacion Railway/Vercel
+# Spec 08 - Railway/Vercel Deployment and Operation
 
 ## Goal
 

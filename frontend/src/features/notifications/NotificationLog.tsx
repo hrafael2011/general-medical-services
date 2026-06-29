@@ -179,7 +179,7 @@ export function NotificationLog() {
               <tr>
                 <th>Tipo</th>
                 <th>Destinatario</th>
-                <th>Provider</th>
+                <th>Proveedor</th>
                 <th>Estado</th>
                 <th>Reintentos</th>
                 <th>Error</th>

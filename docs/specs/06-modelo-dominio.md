@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-04-30
 ---
 
-# Spec 06 - Modelo de Dominio
+# Spec 06 - Domain Model
 
 ## Goal
 

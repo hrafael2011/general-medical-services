@@ -286,7 +286,7 @@ export function UsersView() {
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
-              <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Activo</th><th></th></tr>
+              <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Activo</th><th></th></tr>
             </thead>
             <tbody>
               {users.map(u => (

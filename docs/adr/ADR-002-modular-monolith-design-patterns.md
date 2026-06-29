@@ -1,8 +1,9 @@
 # ADR-002: Modular Monolith and Design Patterns
 
-## Status
-
-Accepted
+- **Estado:** Aceptado
+- **Fecha:** 2026-02-01
+- **Última revisión:** 2026-06-26
+- **Decidido por:** [Tu nombre]
 
 ## Context
 

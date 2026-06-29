@@ -6,7 +6,7 @@ created: 2026-04-30
 updated: 2026-05-05
 ---
 
-# Spec 02 - Calendario y Fairness
+# Spec 02 - Calendar and Fairness
 
 ## Goal
 
