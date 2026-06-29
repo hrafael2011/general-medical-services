@@ -3,14 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, CalendarDays, Stethoscope, Target,
   BarChart2, Bell, MessageCircle, CheckCircle,
-  BookOpen, ClipboardList, ShieldCheck, LogOut, UserPlus, Trash2,
+  BookOpen, ClipboardList, LogOut, UserPlus, Trash2,
 } from "lucide-react";
 import { actionAlertsApi } from "../api/actionAlerts";
 import { fetchFeatureFlags } from "../api/featureFlags";
 import { useAuth } from "../context/AuthContext";
 
 const SHARED_ITEMS = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Panel" },
   { to: "/calendars", icon: CalendarDays,     label: "Calendarios" },
   { to: "/doctors",   icon: Stethoscope,      label: "Médicos" },
   { to: "/missions",  icon: Target,            label: "Misiones" },
@@ -18,7 +18,7 @@ const SHARED_ITEMS = [
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   admin: { label: "Administrador", color: "#3b82f6" },
-  superadmin: { label: "Super Admin", color: "#8b5cf6" },
+  superadmin: { label: "Superadmin", color: "#8b5cf6" },
   encargado: { label: "Encargado", color: "#10b981" },
 };
 
@@ -66,8 +66,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <ShieldCheck size={20} className="sidebar-logo-icon" />
-        <span className="sidebar-title">Sistema de Turnos</span>
+        <img src="/logo-sidebar.png" alt="Sistema de Turnos Médicos" className="sidebar-logo-img" />
       </div>
 
       <nav className="sidebar-nav">
