@@ -297,6 +297,10 @@ class AccountService:
         if user.role not in (UserRole.ENCARGADO.value, UserRole.ADMIN.value):
             raise PermissionDeniedError
 
+        # Only superadmins can update admin users
+        if user.role == UserRole.ADMIN.value and not actor.is_superadmin:
+            raise PermissionDeniedError("Only superadmins can update admin users.")
+
         changed: dict[str, object] = {}
         if name is not None:
             user.name = name.strip()
