@@ -55,8 +55,8 @@ class Settings(BaseSettings):
     service_start_hour: int = 7  # DEPRECATED: se usa ServiceAreaModel.start_hour
 
     # Feature flags for partial deployment
-    feature_notifications: bool = False
-    feature_telegram: bool = False
+    feature_notifications: bool = True
+    feature_telegram: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
