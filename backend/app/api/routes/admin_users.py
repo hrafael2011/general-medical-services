@@ -43,10 +43,20 @@ def list_users(
 ) -> list[UserRead]:
     """List system users, optionally filtered by role."""
     repo = UserRepository(session)
-    if role:
-        users = repo.list_by_role(role)
-    else:
-        users = repo.list_by_role("encargado")  # sensible default for admin panel
+
+    # Only superadmins can list admin users
+    if role == "admin" and not admin.is_superadmin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only superadmins can list admin users.",
+        )
+
+    users = repo.list_by_role(role or "encargado")  # sensible default for admin panel
+
+    # When no specific role filter, exclude admins for non-superadmins
+    if not role and not admin.is_superadmin:
+        users = [u for u in users if u.role != "admin"]
+
     return [UserRead.model_validate(u) for u in users]
 
 
