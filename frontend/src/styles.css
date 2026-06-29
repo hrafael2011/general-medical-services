@@ -807,13 +807,17 @@ select {
   border-bottom: 1px solid #1e293b;
 }
 
-.sidebar-logo-icon { color: #38bdf8; }
-
-.sidebar-title {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  line-height: 1.2;
+/* ── Logo images ───────────────────────────────────────── */
+.auth-logo {
+  width: 280px;
+  height: auto;
+  display: block;
+}
+.sidebar-logo-img {
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+  display: block;
 }
 
 .sidebar-nav {
