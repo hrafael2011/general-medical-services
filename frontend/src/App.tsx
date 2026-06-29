@@ -152,14 +152,10 @@ function LoginPage() {
 
   return (
     <main className="app-shell">
-      <section className="auth-panel" aria-labelledby="app-title">
+      <section className="auth-panel" aria-label="Inicio de sesión">
         <header className="auth-header">
           <img src="/logo-login.png" alt="Sistema de Turnos Médicos" className="auth-logo" />
-          <div>
-            <p className="eyebrow">Panel operativo</p>
-            <h1 id="app-title">Sistema de turnos médicos</h1>
-            <p className="summary">{message}</p>
-          </div>
+          <p className="summary">{message}</p>
         </header>
 
         {step === "login" && (
