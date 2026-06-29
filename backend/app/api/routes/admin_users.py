@@ -185,6 +185,15 @@ def delete_user(
     service: Annotated[AccountService, Depends(get_account_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
+    # Only superadmins can delete admin users
+    repo = UserRepository(session)
+    target = repo.get_by_id(user_id)
+    if target and target.role == "admin" and not admin.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "permission_denied", "message": "Solo superadmins pueden eliminar usuarios administradores."},
+        )
+
     try:
         service.soft_delete_user(actor=admin, user_id=user_id)
     except UserNotFoundError as exc:
