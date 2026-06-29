@@ -50,11 +50,6 @@ const PERMISSION_GROUPS = [
   },
 ];
 
-async function listAdminPanelUsers(): Promise<UserRead[]> {
-  const usersByRole = await Promise.all(ROLES.map((role) => adminApi.listUsers(role)));
-  return usersByRole.flat().sort((a, b) => a.name.localeCompare(b.name));
-}
-
 export function UsersView() {
   const { addToast } = useToast();
   const queryClient = useQueryClient();
@@ -73,7 +68,15 @@ export function UsersView() {
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["admin-users"],
-    queryFn: listAdminPanelUsers,
+    queryFn: async (): Promise<UserRead[]> => {
+      const roles = currentUser?.is_superadmin
+        ? ["encargado", "admin"]
+        : ["encargado"];
+      const usersByRole = await Promise.all(
+        roles.map((role) => adminApi.listUsers(role))
+      );
+      return usersByRole.flat().sort((a, b) => a.name.localeCompare(b.name));
+    },
   });
 
   const createMutation = useMutation({
