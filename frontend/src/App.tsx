@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { FormEvent, useState, useEffect } from "react";
-import { Eye, EyeOff, KeyRound, LogIn, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LogIn } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { changePassword } from "./api/auth";
 import { ApiError } from "./api/client";
@@ -154,7 +154,7 @@ function LoginPage() {
     <main className="app-shell">
       <section className="auth-panel" aria-labelledby="app-title">
         <header className="auth-header">
-          <div className="status-icon"><ShieldCheck size={28} /></div>
+          <img src="/logo-login.png" alt="Sistema de Turnos Médicos" className="auth-logo" />
           <div>
             <p className="eyebrow">Panel operativo</p>
             <h1 id="app-title">Sistema de turnos médicos</h1>
