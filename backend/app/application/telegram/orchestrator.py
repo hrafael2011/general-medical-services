@@ -459,6 +459,21 @@ class TelegramOrchestrator:
             self._bot_client.send_message(chat_id, msg)
             return msg
 
+        # Check for a previously-deactivated link to avoid unique constraint violation
+        existing_inactive = self._telegram_repo.get_any_link_by_telegram_id(telegram_user_id)
+        if existing_inactive is not None:
+            # Reactivate the existing link instead of inserting a new one
+            self._telegram_repo.mark_token_used(token_record.id)
+            existing_inactive.user_id = token_record.user_id
+            existing_inactive.active = True
+            existing_inactive.linked_by = token_record.created_by
+            existing_inactive.linked_at = datetime.now(UTC)
+            existing_inactive.last_used_at = datetime.now(UTC)
+            existing_inactive.telegram_username = telegram_username
+            msg = "¡Vinculación exitosa! Ya puedes usar el asistente de turnos médicos."
+            self._bot_client.send_message(chat_id, msg)
+            return msg
+
         now = datetime.now(UTC)
         link = TelegramUserLinkModel(
             id=str(uuid4()),
