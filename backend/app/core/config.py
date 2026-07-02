@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     feature_notifications: bool = True
     feature_telegram: bool = True
 
+    # ── Telegram Router Query Engine (spec 15) ──────────────────────────
+    feature_telegram_router: bool = False          # master switch
+    feature_telegram_router_chitchat: bool = False   # enable chitchat handler
+    feature_telegram_router_operational: bool = False  # enable operational query routing
+    feature_telegram_router_reports: bool = False   # enable report contract handler
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

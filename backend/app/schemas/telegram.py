@@ -90,3 +90,23 @@ class TelegramChat(BaseModel):
 
 TelegramWebhookUpdate.model_rebuild()
 TelegramMessage.model_rebuild()
+
+
+from typing import Any, Literal
+
+
+class TelegramRouteDecisionSchema(BaseModel):
+    """Observable route decision for API/interaction audit."""
+    route: Literal[
+        "chitchat",
+        "operational_query",
+        "report_request",
+        "clarification",
+        "unsupported",
+    ]
+    confidence: float
+    reason: str
+    normalized_text: str
+    entities: dict[str, Any] = {}
+    requested_format: Literal["text", "pdf", "excel"] | None = None
+    requires_llm: bool = False
