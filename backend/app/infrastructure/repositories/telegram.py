@@ -72,6 +72,13 @@ class TelegramRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def get_any_link_by_telegram_id(self, telegram_user_id: str) -> TelegramUserLinkModel | None:
+        """Return any link (active or inactive) by telegram_user_id."""
+        stmt = select(TelegramUserLinkModel).where(
+            TelegramUserLinkModel.telegram_user_id == telegram_user_id,
+        )
+        return self.session.scalars(stmt).first()
+
     def list_links(self) -> list[TelegramUserLinkModel]:
         stmt = select(TelegramUserLinkModel).order_by(TelegramUserLinkModel.linked_at.desc())
         return list(self.session.scalars(stmt))
