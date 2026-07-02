@@ -130,6 +130,11 @@ def validate_sql(sql: str) -> bool:
 
     if not cleaned.startswith("SELECT"):
         return False
+
+    # Reject multiple statements (e.g. "SELECT … ; SELECT …")
+    if re.search(r";\s*\S", cleaned):
+        return False
+
     for kw in _FORBIDDEN_KEYWORDS:
         if re.search(rf"\b{kw}\b", cleaned):
             return False
