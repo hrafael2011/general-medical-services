@@ -108,7 +108,7 @@ class TelegramOrchestrator:
             handler = ChitchatHandler()
             result = handler.handle(text)
             if result is not None:
-                self._bot_client.send_message(chat_id, result["response_text"])
+                # _log_and_send handles sending the message, no need for direct send
                 self._log_and_send(
                     telegram_user_id=telegram_user_id,
                     chat_id=chat_id,
