@@ -383,7 +383,7 @@ export function TelegramLinks() {
                   <td>
                     <button
                       className="btn-ghost"
-                      onClick={() => deleteMutation.mutate(item.id)}
+                      onClick={() => deleteMutation.mutate(item.telegram_user_id)}
                       disabled={deleteMutation.isPending}
                       title="Eliminar vinculo"
                     >
