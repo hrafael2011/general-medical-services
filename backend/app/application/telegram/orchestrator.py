@@ -187,12 +187,209 @@ class TelegramOrchestrator:
         if decision.route == "report_request":
             if not settings.feature_telegram_router_reports:
                 return None  # fall through to legacy agent
-            # TODO Phase 5: integrate ReportContractValidator + ReportService here
-            return None  # For now, fall through to legacy agent
+            return self._try_report_handler(
+                text=text,
+                decision=decision,
+                telegram_user_id=telegram_user_id,
+                chat_id=chat_id,
+                user=user,
+            )
 
-        # Route: operational_query, clarification
-        # -> fall through to the existing ConversationalAgent
+        # Route: operational_query -> try dedicated handler if flag is on
+        if decision.route in ("operational_query", "clarification"):
+            if not settings.feature_telegram_router_operational:
+                return None  # fall through to legacy agent
+            result = self._try_operational_handler(
+                text=text,
+                decision=decision,
+                telegram_user_id=telegram_user_id,
+                chat_id=chat_id,
+                user=user,
+            )
+            if result is not None:
+                return result
+            return None  # fall through to legacy agent
+
         return None
+
+    def _try_operational_handler(self, text, decision, telegram_user_id, chat_id, user):
+        """Try to resolve via OperationalQueryHandler."""
+        from backend.app.application.telegram.operational_query_handler import (
+            OperationalQueryHandler,
+        )
+
+        handler = OperationalQueryHandler(
+            semantic_layer=self._agent._semantic_layer_resolver if hasattr(self._agent, '_semantic_layer_resolver') else None,
+            doctor_service=self._agent._doctor_query_service if hasattr(self._agent, '_doctor_query_service') else None,
+            calendar_service=self._agent._calendar_query_service if hasattr(self._agent, '_calendar_query_service') else None,
+            intent_router=self._agent._router if hasattr(self._agent, '_router') else None,
+            sql_executor=self._agent._query_executor if hasattr(self._agent, '_query_executor') else None,
+            llm_provider=self._agent._llm if hasattr(self._agent, '_llm') else None,
+        )
+
+        # Simple domain/action detection for the handler
+        import re as _re
+        text_lower = text.lower()
+        domain = "medicos"
+        if _re.search(r"\b(calendario|calendario|servicio|turno)\b", text_lower):
+            domain = "calendario"
+        elif _re.search(r"\b(mision|misiones|misión)\b", text_lower):
+            domain = "misiones"
+        action = "count" if _re.search(r"\b(cuantos|cuántos|total|numero)\b", text_lower) else "list"
+
+        op_result = handler.resolve(
+            user_text=text,
+            domain=domain,
+            action=action,
+            entities={"user_text": text},
+            telegram_user_id=telegram_user_id,
+        )
+
+        if op_result is None:
+            logger.info("Operational handler returned None, falling through to legacy")
+            return None
+
+        if not op_result.ok:
+            return None
+
+        # Send response
+        response_text = op_result.response_text
+        self._bot_client.send_message(chat_id, response_text)
+
+        # Log interaction using existing _log_and_send
+        from datetime import UTC, datetime
+        self._log_and_send(
+            telegram_user_id=telegram_user_id,
+            chat_id=chat_id,
+            text=text,
+            response_text=response_text,
+            matched_user_id=user.id,
+            user_role=user.role,
+            intent_id=f"operational_{op_result.match_type}",
+            entities={"match_type": op_result.match_type},
+            confidence=0.8,
+            tool_name=op_result.match_type,
+            tool_request={"text": text},
+            tool_response={},
+            status="completed",
+            fallback_reason=op_result.fallback_reason,
+        )
+
+        import time as _time
+        logger.info(
+            "Telegram interaction completed",
+            extra={
+                "telegram_event": "route_completed",
+                "telegram_user_id": telegram_user_id,
+                "route": "operational_query",
+                "match_type": op_result.match_type,
+                "used_sql": op_result.used_sql,
+                "used_llm": op_result.used_llm,
+                "used_sql_agent": op_result.match_type == "sql_fallback",
+                "fallback_reason": op_result.fallback_reason,
+                "has_document": False,
+                "latency_ms": 0,
+            },
+        )
+        return response_text
+
+    def _try_report_handler(self, text, decision, telegram_user_id, chat_id, user):
+        """Handle a report request via ReportContractValidator."""
+        from backend.app.application.telegram.report_contracts import (
+            TelegramReportRequest,
+            ReportContractValidator,
+        )
+        import re as _re
+
+        # Extract month/year from text
+        month_map = {
+            "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+            "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+            "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+        }
+        text_lower = text.lower()
+        month = None
+        year = None
+        for name, num in month_map.items():
+            if name in text_lower:
+                month = num
+                break
+        year_match = _re.search(r"\b(20\d{2})\b", text)
+        if year_match:
+            year = int(year_match.group(1))
+
+        requested_format = decision.requested_format or "pdf"
+
+        # Detect report type from text
+        report_type = None
+        if "calendario" in text_lower or "calendario" in text_lower:
+            report_type = "calendar"
+        elif "medico" in text_lower or "médico" in text_lower or "doctor" in text_lower:
+            report_type = "doctor_list"
+        elif "carga" in text_lower or "workload" in text_lower:
+            report_type = "workload"
+        elif "cobertura" in text_lower or "coverage" in text_lower:
+            report_type = "coverage"
+        elif "mision" in text_lower or "ranking" in text_lower:
+            report_type = "mission_ranking"
+
+        if report_type is None:
+            self._bot_client.send_message(
+                chat_id,
+                "No reconocí el tipo de reporte. Los disponibles son: calendario, "
+                "listado de médicos, carga de trabajo, cobertura y ranking de misiones."
+            )
+            return "No reconocí el tipo de reporte."
+
+        contract = TelegramReportRequest(
+            report_type=report_type,
+            output_format=requested_format,
+            month=month,
+            year=year,
+        )
+        validator = ReportContractValidator()
+        validation = validator.validate(contract)
+
+        if not validation["ok"]:
+            self._bot_client.send_message(chat_id, validation["needs"])
+            return validation["needs"]
+
+        # Report is valid - confirm to user
+        label_map = {
+            "calendar": "calendario",
+            "doctor_list": "listado de médicos",
+            "workload": "carga de trabajo",
+            "coverage": "cobertura",
+            "mission_ranking": "ranking de misiones",
+        }
+        label = label_map.get(report_type, report_type)
+        format_label = "PDF" if requested_format == "pdf" else "Excel"
+        period = f"{month or ''}/{year or ''}" if month or year else ""
+
+        msg = f"Generando {label} en {format_label}"
+        if period:
+            msg += f" para {period}"
+        msg += ". En unos momentos lo recibirás."
+
+        # TODO: Wire actual ReportService here for document generation
+        self._bot_client.send_message(chat_id, msg)
+
+        import time as _time
+        logger.info(
+            "Telegram interaction completed",
+            extra={
+                "telegram_event": "route_completed",
+                "route": "report_request",
+                "report_type": report_type,
+                "output_format": requested_format,
+                "match_type": "report_contract",
+                "used_sql": False,
+                "used_llm": False,
+                "has_document": False,
+                "latency_ms": 0,
+            },
+        )
+        return msg
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -349,12 +546,30 @@ class TelegramOrchestrator:
             status="completed",
             fallback_reason=None,
         )
+        # Determine observability fields from agent result
+        used_sql = result.tool_name in ("sql_query", "intent_router") if result.tool_name else False
+        used_sql_agent = result.tool_name == "sql_query" if result.tool_name else False
+        match_type = "conversational_agent"
+        if result.agent_action == "direct":
+            match_type = "direct_reply"
+        elif result.tool_name in ("list_doctors", "count_doctors", "doctors_by_sex",
+                                    "doctors_by_rank", "doctors_by_department"):
+            match_type = "doctor_service"
+        elif result.tool_name in ("calendar_assignments", "calendar_assigned_count",
+                                    "calendar_status"):
+            match_type = "calendar_service"
+        elif result.tool_name in ("mission_list", "mission_status"):
+            match_type = "mission_service"
+
         logger.info(
             "Telegram interaction completed",
             extra={
                 "telegram_event": "interaction_completed",
                 "agent_action": result.agent_action,
                 "tool_name": result.tool_name,
+                "match_type": match_type,
+                "used_sql": used_sql,
+                "used_sql_agent": used_sql_agent,
                 "has_document": result.document_bytes is not None,
                 "latency_ms": round((time.perf_counter() - start) * 1000),
                 "user_role": user.role,

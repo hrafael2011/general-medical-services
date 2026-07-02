@@ -67,9 +67,9 @@ class SQLValidator:
         """Run all validation rules and return the first failure, or ok=True."""
         checks = [
             self._check_length,
+            self._check_no_dml,
             self._check_single_select,
             self._check_no_dangerous_patterns,
-            self._check_no_dml,
             self._check_no_forbidden_functions,
             self._check_tables_exist,
             self._check_no_excluded_tables,

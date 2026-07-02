@@ -178,3 +178,64 @@ class ReportContractValidator:
         return mapping.get(
             (request.report_type, request.output_format), ""
         )
+
+    def generate_report(
+        self,
+        request: TelegramReportRequest,
+        report_service: Any,
+    ) -> dict[str, Any]:
+        """Generate a report from a validated contract.
+
+        Args:
+            request: Validated TelegramReportRequest
+            report_service: An instance of ReportService
+
+        Returns:
+            {"ok": True, "document_bytes": bytes, "filename": str, "content_type": str}
+            or {"ok": False, "error": str}
+        """
+        method_name = self.get_report_service_method(request)
+        if not method_name:
+            return {"ok": False, "error": "Método de reporte no encontrado."}
+
+        method = getattr(report_service, method_name, None)
+        if method is None:
+            return {"ok": False, "error": f"Método {method_name} no disponible."}
+
+        try:
+            import inspect
+            sig = inspect.signature(method)
+            params = {}
+            for p_name in sig.parameters:
+                if p_name == "month":
+                    params[p_name] = request.month
+                elif p_name == "year":
+                    params[p_name] = request.year
+                elif p_name == "date_from":
+                    params[p_name] = request.date_from
+                elif p_name == "date_to":
+                    params[p_name] = request.date_to
+                elif p_name == "calendar_id":
+                    params[p_name] = None  # Would need lookup
+                elif p_name == "doctor_id":
+                    params[p_name] = None
+
+            result = method(**params) if params else method()
+
+            if isinstance(result, bytes):
+                ext = "pdf" if request.output_format == "pdf" else "xlsx"
+                filename = f"{request.report_type}_{request.month or ''}_{request.year or ''}.{ext}"
+                content_type = (
+                    "application/pdf" if ext == "pdf"
+                    else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                return {
+                    "ok": True,
+                    "document_bytes": result,
+                    "filename": filename,
+                    "content_type": content_type,
+                }
+            return {"ok": True, "data": result}
+        except Exception as exc:
+            logger.exception("Report generation failed")
+            return {"ok": False, "error": str(exc)}
