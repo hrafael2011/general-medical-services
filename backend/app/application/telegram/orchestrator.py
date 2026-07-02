@@ -13,6 +13,11 @@ from backend.app.infrastructure.db.models.telegram import (
     TelegramInteractionModel,
     TelegramUserLinkModel,
 )
+from backend.app.application.telegram.message_router import (
+    TelegramMessageRouter,
+)
+from backend.app.application.telegram.chitchat import ChitchatHandler
+from backend.app.core.config import settings
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 from backend.app.infrastructure.repositories.users import UserRepository
 
@@ -56,6 +61,138 @@ class TelegramOrchestrator:
         self._agent = agent
         self._bot_client = bot_client
         self._input_sanitizer = InputSanitizer()
+
+    # ------------------------------------------------------------------
+    # Routed message pipeline (Phase 3 — feature-flag gated)
+    # ------------------------------------------------------------------
+
+    def _route_message(
+        self,
+        text: str,
+        telegram_user_id: str,
+        chat_id: int,
+        user,
+    ) -> str | None:
+        """Route message through the new routed path. Returns response or None.
+
+        Returns None when the message should fall through to the legacy agent path.
+        Returns a response string when the route was handled directly.
+
+        Per-route feature flags gate each handler independently:
+          - FEATURE_TELEGRAM_ROUTER_CHITCHAT -> chitchat handler
+          - FEATURE_TELEGRAM_ROUTER_REPORTS -> report contract handler
+        When a route's flag is off, the method returns None (fall through to legacy).
+        """
+        router = TelegramMessageRouter(llm_provider=None)
+        decision = router.classify(text)
+
+        import time as _time
+        _start = _time.perf_counter()
+
+        logger.info(
+            "Telegram route decision",
+            extra={
+                "telegram_event": "route_decision",
+                "telegram_user_id": telegram_user_id,
+                "route": decision.route,
+                "confidence": decision.confidence,
+                "reason": decision.reason,
+                "requires_llm": decision.requires_llm,
+            },
+        )
+
+        # Route: chitchat -> direct deterministic response (gated by per-route flag)
+        if decision.route == "chitchat":
+            if not settings.feature_telegram_router_chitchat:
+                return None  # fall through to legacy agent
+            handler = ChitchatHandler()
+            result = handler.handle(text)
+            if result is not None:
+                self._bot_client.send_message(chat_id, result["response_text"])
+                self._log_and_send(
+                    telegram_user_id=telegram_user_id,
+                    chat_id=chat_id,
+                    text=text,
+                    response_text=result["response_text"],
+                    matched_user_id=user.id,
+                    user_role=user.role,
+                    intent_id=f"chitchat_{result['category']}",
+                    entities=None,
+                    confidence=result["confidence"],
+                    tool_name=None,
+                    tool_request=None,
+                    tool_response=None,
+                    status="completed",
+                    fallback_reason=None,
+                )
+                logger.info(
+                    "Telegram interaction completed",
+                    extra={
+                        "telegram_event": "route_completed",
+                        "telegram_user_id": telegram_user_id,
+                        "route": "chitchat",
+                        "confidence": result["confidence"],
+                        "used_llm": False,
+                        "used_sql": False,
+                        "used_sql_agent": False,
+                        "match_type": "chitchat_pattern",
+                        "fallback_reason": None,
+                        "has_document": False,
+                        "latency_ms": round((_time.perf_counter() - _start) * 1000),
+                    },
+                )
+                return result["response_text"]
+
+        # Route: unsupported -> controlled rejection (always on when master flag is on)
+        if decision.route == "unsupported":
+            rejection_msg = (
+                "No puedo responder eso porque está fuera del alcance del sistema."
+            )
+            self._bot_client.send_message(chat_id, rejection_msg)
+            self._log_and_send(
+                telegram_user_id=telegram_user_id,
+                chat_id=chat_id,
+                text=text,
+                response_text=rejection_msg,
+                matched_user_id=user.id,
+                user_role=user.role,
+                intent_id="unsupported",
+                entities=None,
+                confidence=decision.confidence,
+                tool_name=None,
+                tool_request=None,
+                tool_response=None,
+                status="completed",
+                fallback_reason=decision.reason,
+            )
+            logger.info(
+                "Telegram interaction completed",
+                extra={
+                    "telegram_event": "route_completed",
+                    "telegram_user_id": telegram_user_id,
+                    "route": "unsupported",
+                    "confidence": decision.confidence,
+                    "used_llm": False,
+                    "used_sql": False,
+                    "used_sql_agent": False,
+                    "match_type": "deterministic_block",
+                    "fallback_reason": decision.reason,
+                    "has_document": False,
+                    "latency_ms": round((_time.perf_counter() - _start) * 1000),
+                },
+            )
+            return rejection_msg
+
+        # Route: report_request -> gated by per-route flag
+        if decision.route == "report_request":
+            if not settings.feature_telegram_router_reports:
+                return None  # fall through to legacy agent
+            # TODO Phase 5: integrate ReportContractValidator + ReportService here
+            return None  # For now, fall through to legacy agent
+
+        # Route: operational_query, clarification
+        # -> fall through to the existing ConversationalAgent
+        return None
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -168,7 +305,19 @@ class TelegramOrchestrator:
             self._bot_client.send_message(chat_id, "⚠️ No puedo procesar esa solicitud.")
             return "⚠️ No puedo procesar esa solicitud."
 
-        # 5. Process through conversational agent
+        # 5. Route through new router if feature flag is enabled
+        if settings.feature_telegram_router:
+            routed_response = self._route_message(
+                text=text,
+                telegram_user_id=telegram_user_id,
+                chat_id=chat_id,
+                user=user,
+            )
+            if routed_response is not None:
+                return routed_response
+            # If _route_message returns None, fall through to legacy agent
+
+        # 6. Process through conversational agent (legacy path)
         result: AgentResult = self._agent.process(
             text=text,
             telegram_user_id=telegram_user_id,
@@ -178,12 +327,12 @@ class TelegramOrchestrator:
         )
         response_text = result.response_text
 
-        # 5. Send document if present (Phase 3+)
+        # 7. Send document if present
         if result.document_bytes and result.document_filename:
             self._bot_client.send_document(chat_id, result.document_bytes, result.document_filename)
             response_text = f"{response_text}\n\n📎 {result.document_filename}"
 
-        # 6. Log interaction
+        # 8. Log interaction
         self._log_and_send(
             telegram_user_id=telegram_user_id,
             chat_id=chat_id,
