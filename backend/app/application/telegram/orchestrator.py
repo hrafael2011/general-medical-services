@@ -190,9 +190,103 @@ class TelegramOrchestrator:
             # TODO Phase 5: integrate ReportContractValidator + ReportService here
             return None  # For now, fall through to legacy agent
 
-        # Route: operational_query, clarification
-        # -> fall through to the existing ConversationalAgent
+        # Route: operational_query -> try dedicated handler if flag is on
+        if decision.route in ("operational_query", "clarification"):
+            if not settings.feature_telegram_router_operational:
+                return None  # fall through to legacy agent
+            result = self._try_operational_handler(
+                text=text,
+                decision=decision,
+                telegram_user_id=telegram_user_id,
+                chat_id=chat_id,
+                user=user,
+            )
+            if result is not None:
+                return result
+            return None  # fall through to legacy agent
+
         return None
+
+    def _try_operational_handler(self, text, decision, telegram_user_id, chat_id, user):
+        """Try to resolve via OperationalQueryHandler."""
+        from backend.app.application.telegram.operational_query_handler import (
+            OperationalQueryHandler,
+        )
+
+        handler = OperationalQueryHandler(
+            semantic_layer=self._agent._semantic_layer_resolver if hasattr(self._agent, '_semantic_layer_resolver') else None,
+            doctor_service=self._agent._doctor_query_service if hasattr(self._agent, '_doctor_query_service') else None,
+            calendar_service=self._agent._calendar_query_service if hasattr(self._agent, '_calendar_query_service') else None,
+            intent_router=self._agent._router if hasattr(self._agent, '_router') else None,
+            sql_executor=self._agent._query_executor if hasattr(self._agent, '_query_executor') else None,
+            llm_provider=self._agent._llm if hasattr(self._agent, '_llm') else None,
+        )
+
+        # Simple domain/action detection for the handler
+        import re as _re
+        text_lower = text.lower()
+        domain = "medicos"
+        if _re.search(r"\b(calendario|calendario|servicio|turno)\b", text_lower):
+            domain = "calendario"
+        elif _re.search(r"\b(mision|misiones|misión)\b", text_lower):
+            domain = "misiones"
+        action = "count" if _re.search(r"\b(cuantos|cuántos|total|numero)\b", text_lower) else "list"
+
+        op_result = handler.resolve(
+            user_text=text,
+            domain=domain,
+            action=action,
+            entities={"user_text": text},
+            telegram_user_id=telegram_user_id,
+        )
+
+        if op_result is None:
+            logger.info("Operational handler returned None, falling through to legacy")
+            return None
+
+        if not op_result.ok:
+            return None
+
+        # Send response
+        response_text = op_result.response_text
+        self._bot_client.send_message(chat_id, response_text)
+
+        # Log interaction using existing _log_and_send
+        from datetime import UTC, datetime
+        self._log_and_send(
+            telegram_user_id=telegram_user_id,
+            chat_id=chat_id,
+            text=text,
+            response_text=response_text,
+            matched_user_id=user.id,
+            user_role=user.role,
+            intent_id=f"operational_{op_result.match_type}",
+            entities={"match_type": op_result.match_type},
+            confidence=0.8,
+            tool_name=op_result.match_type,
+            tool_request={"text": text},
+            tool_response={},
+            status="completed",
+            fallback_reason=op_result.fallback_reason,
+        )
+
+        import time as _time
+        logger.info(
+            "Telegram interaction completed",
+            extra={
+                "telegram_event": "route_completed",
+                "telegram_user_id": telegram_user_id,
+                "route": "operational_query",
+                "match_type": op_result.match_type,
+                "used_sql": op_result.used_sql,
+                "used_llm": op_result.used_llm,
+                "used_sql_agent": op_result.match_type == "sql_fallback",
+                "fallback_reason": op_result.fallback_reason,
+                "has_document": False,
+                "latency_ms": 0,
+            },
+        )
+        return response_text
 
     # ------------------------------------------------------------------
     # Public entry point
