@@ -546,12 +546,30 @@ class TelegramOrchestrator:
             status="completed",
             fallback_reason=None,
         )
+        # Determine observability fields from agent result
+        used_sql = result.tool_name in ("sql_query", "intent_router") if result.tool_name else False
+        used_sql_agent = result.tool_name == "sql_query" if result.tool_name else False
+        match_type = "conversational_agent"
+        if result.agent_action == "direct":
+            match_type = "direct_reply"
+        elif result.tool_name in ("list_doctors", "count_doctors", "doctors_by_sex",
+                                    "doctors_by_rank", "doctors_by_department"):
+            match_type = "doctor_service"
+        elif result.tool_name in ("calendar_assignments", "calendar_assigned_count",
+                                    "calendar_status"):
+            match_type = "calendar_service"
+        elif result.tool_name in ("mission_list", "mission_status"):
+            match_type = "mission_service"
+
         logger.info(
             "Telegram interaction completed",
             extra={
                 "telegram_event": "interaction_completed",
                 "agent_action": result.agent_action,
                 "tool_name": result.tool_name,
+                "match_type": match_type,
+                "used_sql": used_sql,
+                "used_sql_agent": used_sql_agent,
                 "has_document": result.document_bytes is not None,
                 "latency_ms": round((time.perf_counter() - start) * 1000),
                 "user_role": user.role,
