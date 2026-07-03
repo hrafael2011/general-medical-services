@@ -107,6 +107,12 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     from backend.app.application.telegram.query_executor import QueryExecutor
     from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
     from backend.app.application.telegram.tool_registry import ToolRegistry
+    from backend.app.application.reports.report_service import ReportService
+    from backend.app.infrastructure.repositories.calendars import CalendarRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    from backend.app.infrastructure.repositories.missions import MissionRepository
+    from backend.app.infrastructure.repositories.notifications import NotificationRepository
     from backend.app.infrastructure.repositories.telegram import TelegramRepository
     from backend.app.infrastructure.repositories.users import UserRepository
 
@@ -204,11 +210,27 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
         tool_registry=tool_registry,
     )
 
+    # Create ReportService for report generation
+    calendar_repo = CalendarRepository(session)
+    notification_repo = NotificationRepository(session)
+    doctor_repo = DoctorRepository(session)
+    mission_repo = MissionRepository(session)
+    catalog_repo = CatalogRepository(session)
+    report_service = ReportService(
+        calendar_repo=calendar_repo,
+        notification_repo=notification_repo,
+        doctor_repo=doctor_repo,
+        mission_repo=mission_repo,
+        catalog_repo=catalog_repo,
+    )
+
     return TelegramOrchestrator(
         telegram_repo=TelegramRepository(session),
         user_repo=UserRepository(session),
         agent=agent,
         bot_client=bot,
+        report_service=report_service,
+        nlu_engine=nlu_engine,
     )
 
 
