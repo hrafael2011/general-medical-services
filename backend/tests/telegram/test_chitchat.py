@@ -24,6 +24,7 @@ class TestChitchatPatterns:
             ("que puedes hacer", "help"),
             ("ayuda", "help"),
             ("que sabes hacer", "help"),
+            ("como puedes ayudarme", "help"),
         ],
     )
     def test_matches_chitchat(self, text, expected_category):
