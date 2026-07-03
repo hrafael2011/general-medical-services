@@ -40,6 +40,8 @@ Tu trabajo es entender qué quiere el usuario y decidir qué herramienta usar.
 
 {tools_section}
 
+{system_context}
+
 CATALOGO DE VALORES DEL SISTEMA (usa SOLO estos valores exactos para filtros):
 Rangos militares (orden jerarquico): Asimilado Militar, Raso, Cabo, Sargento, Sargento mayor, Segundo Teniente, Primer Teniente, Capitan, Mayor, Teniente Coronel, Coronel
 Areas de servicio: Emergencia, Pista, Disponible
@@ -97,12 +99,14 @@ class NLUEngine:
         user_text: str,
         *,
         conversation_history: list[dict[str, str]] | None = None,
+        system_context: str = "",
     ) -> NLUResult:
         """Classify user message into a tool invocation.
 
         Args:
             user_text: Raw user message (no pre-processing).
             conversation_history: Prior exchanges as [{"role": "...", "content": "..."}].
+            system_context: Domain knowledge string from build_system_context().
 
         Returns:
             NLUResult with tool name, params, confidence.
@@ -111,6 +115,7 @@ class NLUEngine:
         system_prompt = NLU_SYSTEM_PROMPT.format(
             tools_section=self._tools_prompt,
             conversation_context=context,
+            system_context=system_context,
         )
 
         messages: list[dict] = [
