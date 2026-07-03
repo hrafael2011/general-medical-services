@@ -37,8 +37,8 @@ CHITCHAT_PATTERNS: list[tuple[str, re.Pattern]] = [
     )),
     # Help / capability explanation
     ("help", re.compile(
-        r"\b(qu[eé]\s*(puedes|sabes)\s*(hacer|ayudarme)|ayuda|help|"
-        r"como\s*(funcionas|te\s*uso|puedes\s*ayudarme)|"
+        r"\b(qu[eé]\s*(puedes{1,2}|sabes)\s*(hacer|ayudarme)|ayuda|help|"
+        r"como\s*(funcionas|te\s*uso|puedes{1,2}\s*ayudarme)|"
         r"qu[eé]\s*herramientas|capacidades|qu[eé]\s*consultas)\b",
         re.IGNORECASE,
     )),
