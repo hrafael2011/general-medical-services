@@ -40,6 +40,11 @@ Tu trabajo es entender qué quiere el usuario y decidir qué herramienta usar.
 
 {tools_section}
 
+CATALOGO DE VALORES DEL SISTEMA (usa SOLO estos valores exactos para filtros):
+Rangos militares (orden jerarquico): Asimilado Militar, Raso, Cabo, Sargento, Sargento mayor, Segundo Teniente, Primer Teniente, Capitan, Mayor, Teniente Coronel, Coronel
+Areas de servicio: Emergencia, Pista, Disponible
+Sexo (valores en BD): M (masculino/hombre), F (femenino/mujer)
+
 CONTEXTO DE CONVERSACIÓN:
 {conversation_context}
 
@@ -49,14 +54,24 @@ Responde ÚNICAMENTE con este JSON:
 REGLAS:
 - tool: elige de la lista de arriba. Usa SIEMPRE un nombre exacto.
 - params: parámetros que necesita la herramienta. Extrae del texto del usuario.
-  * sexo: usa "F" para femenino/mujer/doctora, "M" para masculino/hombre/doctor.
-  * fechas: convierte a YYYY-MM-DD. "primer lunes de junio 2026" → calcula la fecha real (2026-06-01).
-  * "este mes" → mes y año actual. "el mes pasado" → mes anterior.
+  * sexo: usa "F" para femenino/mujer/doctora, "M" para masculino/hombre/doctor. NO uses "female"/"male".
+  * rango: usa el nombre EXACTO del catalogo de rangos de arriba. NO inventes ni modifiques.
+  * area: usa el nombre EXACTO del catalogo de areas. NO inventes.
+  * departamento: extrae tal cual lo dice el usuario.
+  * fechas: convierte a YYYY-MM-DD.
   * Nombres de doctores: extrae apellidos o nombres como aparecen.
-  * Nombres de departamentos/áreas: usa el nombre exacto.
+  * Nombres de departamentos/areas: usa el nombre exacto.
 - confidence: 0.0-1.0 según qué tan seguro estás.
 - needs_clarification: true si la pregunta es ambigua y necesitas preguntar algo.
 - clarification_question: solo si needs_clarification=true, pregunta corta al usuario.
+
+REGLAS ESTRICTAS DE FILTROS:
+- SOLO usa valores que estén en los CATALOGOS de arriba.
+- Si el usuario menciona un rango, area, o sexo que NO coincide exactamente con el catalogo → NO pongas ese filtro en params.
+- "cuantos" + filtro = usa la herramienta count correspondiente (ej: doctors_by_rank, doctors_by_sex).
+- "listame", "muestrame", "dame" + filtro = usa la herramienta list correspondiente.
+- Si preguntan por un rango y no esta en la lista → no forces el filtro, deja que pase como consulta general.
+- NUNCA inventes valores de rangos, areas o departamentos que no esten en el catalogo.
 
 IMPORTANTE:
 - Si es un saludo ("hola", "buenos días") → tool="reply", params={{"response_type":"greeting"}}.
