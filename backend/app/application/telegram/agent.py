@@ -726,9 +726,17 @@ class ConversationalAgent:
             return AgentResult(response_text="⚠️ No puedo procesar esa solicitud.")
 
         # NLU: entity extraction + tool selection + params in one call
+        system_context = ""
+        if self._session is not None:
+            try:
+                from backend.app.application.telegram.system_context import build_system_context
+                system_context = build_system_context(self._session)
+            except Exception as exc:
+                logger.warning("Failed to build system context: %s", exc)
         nlu_result = self._nlu_engine.classify(
             text,
             conversation_history=history,
+            system_context=system_context,
         )
         logger.info(
             "NLU classified",

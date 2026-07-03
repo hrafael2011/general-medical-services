@@ -61,11 +61,19 @@ class SQLAgentOrchestrator:
         few_shot = ""
         if self._prompt_builder is not None:
             few_shot = self._prompt_builder.build_few_shot(context, k=3)
+        system_context = ""
+        try:
+            from backend.app.application.telegram.system_context import build_system_context
+            system_context = build_system_context(self._session)
+        except Exception as exc:
+            logger.warning("Failed to build system context: %s", exc)
+
         sql, reasoning = self._generator.generate(
             user_text=context,
             reduced_schema=reduced_schema,
             entity_hints=entity_hints,
             few_shot_examples=few_shot,
+            system_context=system_context,
         )
         if not sql:
             return {"ok": False, "error": "No se pudo generar una consulta SQL."}

@@ -125,4 +125,6 @@ LLM prompts may be authored in English for maintainability, but they must explic
 | 11 | [11-implementation-architecture-patterns.md](11-implementation-architecture-patterns.md) | 1.1.0 | accepted | 2026-04-30 |
 | 12 | [12-testing-implementation-methodology.md](12-testing-implementation-methodology.md) | 1.0.0 | accepted | 2026-04-30 |
 | 13 | [13-implementation-phases.md](13-implementation-phases.md) | 1.0.0 | accepted | 2026-04-30 |
+| 14 | [14-bot-conversacional-hybrido.md](14-bot-conversacional-hybrido.md) | 1.0.0 | draft | 2026-05-06 |
+| 15 | [15-telegram-router-query-engine.md](15-telegram-router-query-engine.md) | 1.0.0 | draft | 2026-07-02 |
 | — | [appendix-intents-v1.md](appendix-intents-v1.md) | 1.0.0 | accepted | 2026-04-30 |
