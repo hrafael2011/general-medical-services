@@ -55,11 +55,15 @@ class TelegramOrchestrator:
         user_repo: UserRepository,
         agent: ConversationalAgent,
         bot_client,  # TelegramBotClient or FakeBotClient
+        report_service=None,
+        nlu_engine=None,
     ) -> None:
         self._telegram_repo = telegram_repo
         self._user_repo = user_repo
         self._agent = agent
         self._bot_client = bot_client
+        self._report_service = report_service
+        self._nlu_engine = nlu_engine
         self._input_sanitizer = InputSanitizer()
 
     # ------------------------------------------------------------------
@@ -213,7 +217,10 @@ class TelegramOrchestrator:
         return None
 
     def _try_operational_handler(self, text, decision, telegram_user_id, chat_id, user):
-        """Try to resolve via OperationalQueryHandler."""
+        """Try to resolve via OperationalQueryHandler with NLUEngine for entity extraction."""
+        import time as _htime
+        _hstart = _htime.perf_counter()
+
         from backend.app.application.telegram.operational_query_handler import (
             OperationalQueryHandler,
         )
@@ -227,21 +234,46 @@ class TelegramOrchestrator:
             llm_provider=self._agent._llm if hasattr(self._agent, '_llm') else None,
         )
 
-        # Simple domain/action detection for the handler
-        import re as _re
-        text_lower = text.lower()
+        # Use NLUEngine for proper domain/entity extraction when available
         domain = "medicos"
-        if _re.search(r"\b(calendario|calendario|servicio|turno)\b", text_lower):
-            domain = "calendario"
-        elif _re.search(r"\b(mision|misiones|misión)\b", text_lower):
-            domain = "misiones"
-        action = "count" if _re.search(r"\b(cuantos|cuántos|total|numero)\b", text_lower) else "list"
+        action = "query"
+        entities: dict[str, Any] = {"user_text": text}
+
+        if self._nlu_engine:
+            try:
+                nlu_result = self._nlu_engine.classify(text)
+                if nlu_result:
+                    # Map tool name to domain
+                    tool = nlu_result.tool
+                    if tool in ("list_doctors", "count_doctors", "doctors_by_sex",
+                                "doctors_by_rank", "doctors_by_department"):
+                        domain = "medicos"
+                        action = "count" if "count" in tool else "list"
+                    elif tool in ("calendar_assignments", "calendar_status"):
+                        domain = "calendario"
+                    elif tool in ("mission_list", "mission_status"):
+                        domain = "misiones"
+                    entities.update(nlu_result.params)
+                    if nlu_result.needs_clarification:
+                        logger.info("NLU requested clarification: %s", nlu_result.clarification_question)
+            except Exception as exc:
+                logger.warning("NLUEngine classify failed, using keyword fallback", extra={"error": str(exc)})
+
+        if not self._nlu_engine:
+            # Fallback keyword-based detection
+            import re as _re
+            text_lower = text.lower()
+            if _re.search(r"\b(calendario|calendario|servicio|turno)\b", text_lower):
+                domain = "calendario"
+            elif _re.search(r"\b(mision|misiones|misión)\b", text_lower):
+                domain = "misiones"
+            action = "count" if _re.search(r"\b(cuantos|cuántos|total|numero)\b", text_lower) else "list"
 
         op_result = handler.resolve(
             user_text=text,
             domain=domain,
             action=action,
-            entities={"user_text": text},
+            entities=entities,
             telegram_user_id=telegram_user_id,
         )
 
@@ -256,7 +288,7 @@ class TelegramOrchestrator:
         response_text = op_result.response_text
         self._bot_client.send_message(chat_id, response_text)
 
-        # Log interaction using existing _log_and_send
+        # Log interaction
         from datetime import UTC, datetime
         self._log_and_send(
             telegram_user_id=telegram_user_id,
@@ -266,7 +298,7 @@ class TelegramOrchestrator:
             matched_user_id=user.id,
             user_role=user.role,
             intent_id=f"operational_{op_result.match_type}",
-            entities={"match_type": op_result.match_type},
+            entities={"match_type": op_result.match_type, "domain": domain, "action": action},
             confidence=0.8,
             tool_name=op_result.match_type,
             tool_request={"text": text},
@@ -275,7 +307,7 @@ class TelegramOrchestrator:
             fallback_reason=op_result.fallback_reason,
         )
 
-        import time as _time
+        _latency = round((_htime.perf_counter() - _hstart) * 1000)
         logger.info(
             "Telegram interaction completed",
             extra={
@@ -288,13 +320,16 @@ class TelegramOrchestrator:
                 "used_sql_agent": op_result.match_type == "sql_fallback",
                 "fallback_reason": op_result.fallback_reason,
                 "has_document": False,
-                "latency_ms": 0,
+                "latency_ms": _latency,
             },
         )
         return response_text
 
     def _try_report_handler(self, text, decision, telegram_user_id, chat_id, user):
-        """Handle a report request via ReportContractValidator."""
+        """Handle a report request via ReportContractValidator + ReportService."""
+        import time as _rhtime
+        _rhstart = _rhtime.perf_counter()
+
         from backend.app.application.telegram.report_contracts import (
             TelegramReportRequest,
             ReportContractValidator,
@@ -354,7 +389,7 @@ class TelegramOrchestrator:
             self._bot_client.send_message(chat_id, validation["needs"])
             return validation["needs"]
 
-        # Report is valid - confirm to user
+        # Report is valid — generate via ReportService if available
         label_map = {
             "calendar": "calendario",
             "doctor_list": "listado de médicos",
@@ -366,27 +401,51 @@ class TelegramOrchestrator:
         format_label = "PDF" if requested_format == "pdf" else "Excel"
         period = f"{month or ''}/{year or ''}" if month or year else ""
 
-        msg = f"Generando {label} en {format_label}"
-        if period:
-            msg += f" para {period}"
-        msg += ". En unos momentos lo recibirás."
+        has_document = False
+        if self._report_service:
+            try:
+                gen_result = validator.generate_report(contract, self._report_service)
+                if gen_result.get("ok") and gen_result.get("document_bytes"):
+                    doc_bytes = gen_result["document_bytes"]
+                    filename = gen_result.get("filename", f"{report_type}.{requested_format}")
+                    self._bot_client.send_document(chat_id, doc_bytes, filename)
+                    msg = f"{label.capitalize()} en {format_label}"
+                    if period:
+                        msg += f" para {period}"
+                    msg += " generado y enviado."
+                    has_document = True
+                elif gen_result.get("ok"):
+                    msg = f"Datos de {label} generados correctamente."
+                else:
+                    msg = f"No se pudo generar el {label}: {gen_result.get('error', 'error desconocido')}"
+                    self._bot_client.send_message(chat_id, msg)
+                    return msg
+            except Exception as exc:
+                logger.exception("Report generation failed")
+                msg = f"No se pudo generar el {label} en este momento. Intenta más tarde."
+                self._bot_client.send_message(chat_id, msg)
+                return msg
+        else:
+            msg = f"Generando {label} en {format_label}"
+            if period:
+                msg += f" para {period}"
+            msg += ". En unos momentos lo recibirás."
+            self._bot_client.send_message(chat_id, msg)
 
-        # TODO: Wire actual ReportService here for document generation
-        self._bot_client.send_message(chat_id, msg)
-
-        import time as _time
+        _latency = round((_rhtime.perf_counter() - _rhstart) * 1000)
         logger.info(
             "Telegram interaction completed",
             extra={
                 "telegram_event": "route_completed",
+                "telegram_user_id": telegram_user_id,
                 "route": "report_request",
                 "report_type": report_type,
                 "output_format": requested_format,
                 "match_type": "report_contract",
                 "used_sql": False,
                 "used_llm": False,
-                "has_document": False,
-                "latency_ms": 0,
+                "has_document": has_document,
+                "latency_ms": _latency,
             },
         )
         return msg
