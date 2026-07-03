@@ -284,9 +284,8 @@ class TelegramOrchestrator:
         if not op_result.ok:
             return None
 
-        # Send response
+        # Send response — _log_and_send handles sending the message
         response_text = op_result.response_text
-        self._bot_client.send_message(chat_id, response_text)
 
         # Log interaction
         from datetime import UTC, datetime
