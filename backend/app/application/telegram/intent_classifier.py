@@ -67,24 +67,20 @@ REGLAS:
 - needs_clarification: true si la pregunta es ambigua y necesitas preguntar algo.
 - clarification_question: solo si needs_clarification=true, pregunta corta al usuario.
 
-REGLAS ESTRICTAS DE FILTROS:
-- SOLO usa valores que estén en los CATALOGOS de arriba.
-- Si el usuario menciona un rango, area, o sexo que NO coincide exactamente con el catalogo → NO pongas ese filtro en params.
-- "cuantos" + filtro = usa la herramienta count correspondiente (ej: doctors_by_rank, doctors_by_sex).
-- "listame", "muestrame", "dame" + filtro = usa la herramienta list correspondiente.
-- Si preguntan por un rango y no esta en la lista → no forces el filtro, deja que pase como consulta general.
-- NUNCA inventes valores de rangos, areas o departamentos que no esten en el catalogo.
+REGLAS ESTRICTAS:
+- Si es una pregunta sobre datos del sistema (médicos, rangos, calendarios, misiones,
+  disponibilidad, reportes, conteos, listados, rankings, etc.) → tool="sql_query".
+  Pasa la pregunta completa del usuario como parámetro "question".
+- Si es saludo, agradecimiento, despedida, ayuda → tool="reply".
+- Pon la pregunta del usuario COMPLETA y EXACTA en params.question.
+- NO intentes resumir ni modificar la pregunta. El SQL Agent la interpretará.
+- NUNCA inventes datos. Solo pasa la pregunta al sql_query.
 
 IMPORTANTE:
 - Si es un saludo ("hola", "buenos días") → tool="reply", params={{"response_type":"greeting"}}.
 - Si es "gracias" o despedida → tool="reply", params={{"response_type":"farewell"}}.
 - Si pregunta "qué puedes hacer" o "ayuda" → tool="reply", params={{"response_type":"help"}}.
-- Preguntas de conteo ("cuántos", "cuántas") → usa count_doctors o doctors_by_sex/rank/department.
-- Preguntas de listado ("muéstrame", "dame lista", "quiénes") → usa list_doctors.
-- Preguntas sobre guardias/asignaciones → usa calendar_assignments o calendar_assigned_count.
-- Si ninguna herramienta específica sirve y es una pregunta de datos → usa sql_query.
-- NUNCA inventes datos. Solo extraes parámetros del mensaje del usuario.
-- Si el usuario hace follow-up ("y de ellos", "cuáles son mujeres") usa el contexto de la conversación."""
+- TODO lo demás que involucre datos del sistema → tool="sql_query", params={{"question": "<texto exacto del usuario>"}}."""
 
 
 class NLUEngine:
