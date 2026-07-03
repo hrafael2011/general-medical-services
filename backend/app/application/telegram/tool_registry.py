@@ -237,21 +237,27 @@ ALL_TOOLS = DOCTOR_TOOLS + CALENDAR_TOOLS + MISSION_TOOLS + GENERAL_TOOLS
 
 
 def build_tools_prompt() -> str:
-    """Generate the tools section for the NLU system prompt."""
-    lines = ["## Herramientas Disponibles\n"]
-    for tool in ALL_TOOLS:
-        lines.append(f"### {tool['name']}")
-        lines.append(f"Descripción: {tool['description']}")
-        params = tool.get("parameters", {})
-        required = params.get("required", [])
-        props = params.get("properties", {})
-        if props:
-            lines.append("Parámetros:")
-            for pname, pinfo in props.items():
-                req = " (requerido)" if pname in required else ""
-                lines.append(f"  - {pname}: {pinfo.get('description', pinfo.get('type', ''))}{req}")
-        lines.append("")
-    return "\n".join(lines)
+    """Generate the tools section for the NLU system prompt — only sql_query + reply.
+
+    Domain-specific tools removed. The sql_query tool delegates to the SQL Agent
+    which has full schema context, system_context, and multi-turn correction.
+    """
+    return """HERRAMIENTAS DISPONIBLES:
+
+1. sql_query
+   Descripción: Responde cualquier consulta sobre datos del sistema: médicos,
+   rangos, departamentos, calendarios, asignaciones, misiones, disponibilidad,
+   reportes, rankings, notificaciones, confirmaciones, etc.
+   Úsala para TODO lo que requiera consultar información del sistema.
+   Parámetros:
+   - question (requerido): la pregunta exacta del usuario en español
+
+2. reply
+   Descripción: Responde saludos, agradecimientos, despedidas y preguntas sobre
+   qué puede hacer el asistente. NO consulta datos del sistema.
+   Parámetros:
+   - response_type (requerido): "greeting" | "thanks" | "farewell" | "help"
+"""
 
 
 class ToolRegistry:
