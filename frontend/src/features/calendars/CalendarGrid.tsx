@@ -159,7 +159,10 @@ export function CalendarGrid() {
   for (const r of ranksData ?? []) rankMap[r.id] = r;
 
   const sortedAreaIds = [...(serviceAreasData ?? []) as ServiceAreaRead[]]
-    .sort((a, b) => a.display_name.localeCompare(b.display_name))
+    .sort((a, b) => {
+      const order = ["Emergencia", "Pista", "Disponible"];
+      return order.indexOf(a.display_name) - order.indexOf(b.display_name);
+    })
     .map((a) => a.id);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });

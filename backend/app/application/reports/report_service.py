@@ -622,7 +622,22 @@ class ReportService:
             day_assignments.setdefault(a.service_date, []).append({
                 "rank_name": doctors.get(a.doctor_id, a.doctor_id),
                 "location": areas.get(a.service_area_id, a.service_area_id),
+                "_area_id": a.service_area_id,
             })
+
+        # Sort assignments within each day by area order
+        _AREA_ORDER = {"emergencia": 0, "pista": 1, "disponible": 2}
+        for date_key in day_assignments:
+            day_assignments[date_key].sort(
+                key=lambda ass: next(
+                    (_AREA_ORDER.get(area.code, 99)
+                     for area in area_list if area.id == ass["_area_id"]),
+                    99,
+                )
+            )
+        for day_ass_list in day_assignments.values():
+            for ass in day_ass_list:
+                ass.pop("_area_id", None)
 
         # Build schedule_data — if week_id is given, walk the full Mon-Sun date range
         # to include cross-boundary days from adjacent months
@@ -691,7 +706,7 @@ class ReportService:
             }
 
         area_list = self.calendar_repo.list_service_areas()
-        areas = sorted(area_list, key=lambda a: a.code)
+        areas = sorted(area_list, key=lambda a: ["emergencia", "pista", "disponible"].index(a.code))
 
         # Build cell grid: keyed by full date to avoid collisions from
         # cross-boundary days (e.g., Apr 28 and May 28 in the same calendar
