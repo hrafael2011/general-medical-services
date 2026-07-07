@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 
 
 @dataclass
@@ -11,12 +12,16 @@ class RuleResult:
     score_delta: float = 0.0          # penalización (negativo) o bonificación (positivo)
     warnings: list[str] = field(default_factory=list)
     is_blocking: bool = False         # True = hard block, doctor no elegible
-    extra: dict = field(default_factory=dict)  # datos adicionales
+    extra: dict[str, Any] = field(default_factory=dict)  # datos adicionales
 
 
 @dataclass
 class RuleContext:
-    """Contexto completo para evaluar todas las reglas en un doctor+slot."""
+    """Contexto completo para evaluar todas las reglas en un doctor+slot.
+
+    Note: monthly_count is a convenience field and MUST equal
+    len(monthly_assignments) for the caller's doctor_id.
+    """
     doctor_id: str
     slot_date: date
     service_area_id: str
@@ -37,7 +42,13 @@ class RuleContext:
 
 
 class Rule(ABC):
-    """Base class for all fairness/eligibility rules."""
+    """Base class for all fairness/eligibility rules.
+
+    ``is_hard`` (class attribute) indicates the rule TYPE: hard rules block
+    ineligibility, soft rules contribute score deltas. ``is_blocking`` on
+    the returned ``RuleResult`` indicates the EVALUATION OUTCOME for this
+    specific call.
+    """
 
     def __init__(self, name: str, is_hard: bool, weight: float = 1.0):
         self.name = name
