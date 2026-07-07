@@ -40,6 +40,13 @@ Tu trabajo es entender qué quiere el usuario y decidir qué herramienta usar.
 
 {tools_section}
 
+{system_context}
+
+CATALOGO DE VALORES DEL SISTEMA (usa SOLO estos valores exactos para filtros):
+Rangos militares (orden jerarquico): Asimilado Militar, Raso, Cabo, Sargento, Sargento mayor, Segundo Teniente, Primer Teniente, Capitan, Mayor, Teniente Coronel, Coronel
+Areas de servicio: Emergencia, Pista, Disponible
+Sexo (valores en BD): M (masculino/hombre), F (femenino/mujer)
+
 CONTEXTO DE CONVERSACIÓN:
 {conversation_context}
 
@@ -49,25 +56,31 @@ Responde ÚNICAMENTE con este JSON:
 REGLAS:
 - tool: elige de la lista de arriba. Usa SIEMPRE un nombre exacto.
 - params: parámetros que necesita la herramienta. Extrae del texto del usuario.
-  * sexo: usa "F" para femenino/mujer/doctora, "M" para masculino/hombre/doctor.
-  * fechas: convierte a YYYY-MM-DD. "primer lunes de junio 2026" → calcula la fecha real (2026-06-01).
-  * "este mes" → mes y año actual. "el mes pasado" → mes anterior.
+  * sexo: usa "F" para femenino/mujer/doctora, "M" para masculino/hombre/doctor. NO uses "female"/"male".
+  * rango: usa el nombre EXACTO del catalogo de rangos de arriba. NO inventes ni modifiques.
+  * area: usa el nombre EXACTO del catalogo de areas. NO inventes.
+  * departamento: extrae tal cual lo dice el usuario.
+  * fechas: convierte a YYYY-MM-DD.
   * Nombres de doctores: extrae apellidos o nombres como aparecen.
-  * Nombres de departamentos/áreas: usa el nombre exacto.
+  * Nombres de departamentos/areas: usa el nombre exacto.
 - confidence: 0.0-1.0 según qué tan seguro estás.
 - needs_clarification: true si la pregunta es ambigua y necesitas preguntar algo.
 - clarification_question: solo si needs_clarification=true, pregunta corta al usuario.
+
+REGLAS ESTRICTAS:
+- Si es una pregunta sobre datos del sistema (médicos, rangos, calendarios, misiones,
+  disponibilidad, reportes, conteos, listados, rankings, etc.) → tool="sql_query".
+  Pasa la pregunta completa del usuario como parámetro "question".
+- Si es saludo, agradecimiento, despedida, ayuda → tool="reply".
+- Pon la pregunta del usuario COMPLETA y EXACTA en params.question.
+- NO intentes resumir ni modificar la pregunta. El SQL Agent la interpretará.
+- NUNCA inventes datos. Solo pasa la pregunta al sql_query.
 
 IMPORTANTE:
 - Si es un saludo ("hola", "buenos días") → tool="reply", params={{"response_type":"greeting"}}.
 - Si es "gracias" o despedida → tool="reply", params={{"response_type":"farewell"}}.
 - Si pregunta "qué puedes hacer" o "ayuda" → tool="reply", params={{"response_type":"help"}}.
-- Preguntas de conteo ("cuántos", "cuántas") → usa count_doctors o doctors_by_sex/rank/department.
-- Preguntas de listado ("muéstrame", "dame lista", "quiénes") → usa list_doctors.
-- Preguntas sobre guardias/asignaciones → usa calendar_assignments o calendar_assigned_count.
-- Si ninguna herramienta específica sirve y es una pregunta de datos → usa sql_query.
-- NUNCA inventes datos. Solo extraes parámetros del mensaje del usuario.
-- Si el usuario hace follow-up ("y de ellos", "cuáles son mujeres") usa el contexto de la conversación."""
+- TODO lo demás que involucre datos del sistema → tool="sql_query", params={{"question": "<texto exacto del usuario>"}}."""
 
 
 class NLUEngine:
@@ -82,12 +95,14 @@ class NLUEngine:
         user_text: str,
         *,
         conversation_history: list[dict[str, str]] | None = None,
+        system_context: str = "",
     ) -> NLUResult:
         """Classify user message into a tool invocation.
 
         Args:
             user_text: Raw user message (no pre-processing).
             conversation_history: Prior exchanges as [{"role": "...", "content": "..."}].
+            system_context: Domain knowledge string from build_system_context().
 
         Returns:
             NLUResult with tool name, params, confidence.
@@ -96,6 +111,7 @@ class NLUEngine:
         system_prompt = NLU_SYSTEM_PROMPT.format(
             tools_section=self._tools_prompt,
             conversation_context=context,
+            system_context=system_context,
         )
 
         messages: list[dict] = [

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from backend.app.domain.availability_rules import matches_recurring_monthly_rule
+from backend.app.domain.calendars.cp_model import OrToolsEngine
 from backend.app.domain.calendars.scoring import compute_candidate_score
 from backend.app.domain.calendars.types import (
     CandidateScore,
@@ -67,132 +68,12 @@ class CalendarEngine:
     # ------------------------------------------------------------------
 
     def generate(self, ctx: GenerationContext) -> GenerationSummary:
-        """Generate all slot assignments for the month described in *ctx*.
+        """Generate calendar using CP-SAT optimizer.
 
-        Returns a :class:`GenerationSummary` with every slot result (assigned
-        or gap).  version_id and calendar_id are left as empty strings because
-        those identifiers are assigned by the service layer, not the engine.
+        Delegates to OrToolsEngine for global optimal solution.
         """
-
-        # 1. Build all slots: one per (day, area) combination across ALL weeks
-        #    that belong to this month (including cross-boundary days).
-        from backend.app.domain.calendars.weeks import compute_weeks
-
-        weeks = compute_weeks(ctx.year, ctx.month)
-        date_set: set[date] = set()
-        for w in weeks:
-            _, _, sy, sm, sd, ey, em, ed = w
-            d = date(sy, sm, sd)
-            end = date(ey, em, ed)
-            while d <= end:
-                date_set.add(d)
-                d += timedelta(days=1)
-
-        all_slots: list[SlotRequest] = [
-            SlotRequest(
-                date=d,
-                service_area_id=area,
-                area_weight=ctx.area_weights.get(area, 1.0),
-            )
-            for d in sorted(date_set)
-            for area in ctx.required_areas
-        ]
-
-        # 2. Sort slots by constraint level (most constrained first).
-        #    We count eligible doctors using an empty current-assignments list
-        #    so that the sort order is deterministic and independent of
-        #    insertion order.
-        def _eligible_count(slot: SlotRequest) -> int:
-            return len(self.get_eligible_doctors(slot, ctx, []))
-
-        sorted_slots = sorted(all_slots, key=_eligible_count)
-
-        # 3. Fill slots in sorted order, accumulating assignments as we go.
-        current_assignments: list[dict] = list(ctx.existing_assignments)
-        slot_results: list[SlotResult] = []
-
-        for slot in sorted_slots:
-            eligible = self.get_eligible_doctors(slot, ctx, current_assignments)
-
-            if not eligible:
-                slot_results.append(
-                    SlotResult(
-                        slot=slot,
-                        assigned_doctor_id=None,
-                        score=None,
-                        rationale={"gap": True, "reason": "no_eligible_candidates"},
-                    )
-                )
-                continue
-
-            # Score each eligible doctor; combine monthly + historical data.
-            monthly_assignments = [
-                a for a in current_assignments
-                if _belongs_to_calendar_month(a["service_date"], ctx.year, ctx.month)
-            ]
-
-            scores: list[CandidateScore] = [
-                compute_candidate_score(
-                    doctor_id=doctor.id,
-                    slot=slot,
-                    monthly_assignments=monthly_assignments,
-                    historical_assignments=ctx.historical_assignments,
-                    mission_assignments=ctx.mission_assignments,
-                    monthly_service_target=ctx.monthly_service_targets.get(doctor.id, 3)
-                    if ctx.monthly_service_targets else 3,
-                )
-                for doctor in eligible
-            ]
-
-            # Pick the highest score; break ties alphabetically by doctor_id.
-            scores.sort(key=lambda s: (-s.score, s.doctor_id))
-            best = scores[0]
-
-            rationale = {
-                "source": "generated",
-                "score": best.score,
-                "monthly_load": best.monthly_load,
-                "historical_load": best.historical_load,
-                "days_since_last": best.days_since_last,
-                "days_since_strong": best.days_since_strong,
-                "monthly_count": best.monthly_count,
-                "warnings": best.warnings,
-            }
-
-            slot_results.append(
-                SlotResult(
-                    slot=slot,
-                    assigned_doctor_id=best.doctor_id,
-                    score=best,
-                    rationale=rationale,
-                )
-            )
-
-            # Record the new assignment so subsequent slots see it.
-            current_assignments.append(
-                {
-                    "doctor_id": best.doctor_id,
-                    "service_date": slot.date,
-                    "service_area_id": slot.service_area_id,
-                }
-            )
-
-        # 4. Build summary
-        assigned_count = sum(
-            1 for r in slot_results if r.assigned_doctor_id is not None
-        )
-        gap_count = len(slot_results) - assigned_count
-
-        return GenerationSummary(
-            version_id="",
-            calendar_id="",
-            month=ctx.month,
-            year=ctx.year,
-            total_slots=len(slot_results),
-            assigned_count=assigned_count,
-            gap_count=gap_count,
-            slot_results=slot_results,
-        )
+        engine = OrToolsEngine()
+        return engine.solve(ctx)
 
     # ------------------------------------------------------------------
     # Hard-filter: eligible doctors for a slot

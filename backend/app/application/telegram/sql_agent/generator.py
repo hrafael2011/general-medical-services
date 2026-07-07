@@ -9,6 +9,7 @@ from backend.app.application.telegram.sql_agent.security import extract_sql_from
 
 _COT_SYSTEM_PROMPT = (
     "Eres un experto en PostgreSQL. Generas consultas SELECT seguras y eficientes.\n"
+    "{system_context}"
     "PIENSA paso a paso antes de escribir SQL:\n"
     "1. ¿Qué tablas necesito?\n"
     "2. ¿Qué JOINs requiero?\n"
@@ -31,6 +32,7 @@ class QueryGenerator:
         reduced_schema: str,
         entity_hints: str = "",
         few_shot_examples: str = "",
+        system_context: str = "",
     ) -> tuple[str, str]:
         """Return (sql, reasoning) where reasoning is the LLM's thought process.
 
@@ -48,8 +50,14 @@ class QueryGenerator:
                 f"\n\nEJEMPLOS DE CONSULTAS SIMILARES:\n{few_shot_examples}\n"
             )
 
+        system_context_section = ""
+        if system_context:
+            system_context_section = f"\n\nCONTEXTO DEL SISTEMA:\n{system_context}\n"
+
+        system_content = _COT_SYSTEM_PROMPT.format(system_context=system_context_section)
+
         messages = [
-            {"role": "system", "content": _COT_SYSTEM_PROMPT},
+            {"role": "system", "content": system_content},
             {
                 "role": "user",
                 "content": (

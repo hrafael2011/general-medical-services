@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,7 +14,12 @@ class UserModel(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     role: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    permissions: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    permissions: Mapped[list[str]] = mapped_column(
+        JSONB().with_variant(JSON, "sqlite"),
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
     is_superadmin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
