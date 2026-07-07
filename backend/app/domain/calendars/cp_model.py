@@ -7,7 +7,6 @@ from datetime import date, timedelta
 
 from ortools.sat.python import cp_model
 
-from backend.app.domain.calendars.engine import GenerationContext
 from backend.app.domain.calendars.types import GenerationSummary, SlotRequest, SlotResult
 from backend.app.domain.calendars.weeks import compute_weeks
 
@@ -17,7 +16,10 @@ GAP_PENALTY = 10000
 class OrToolsEngine:
     """Calendar generation engine using CP-SAT for global optimization."""
 
-    def solve(self, ctx: GenerationContext) -> GenerationSummary:
+    def solve(self, ctx) -> GenerationSummary:
+        # Import lazily to avoid circular dependency (engine imports cp_model)
+        from backend.app.domain.calendars.engine import GenerationContext  # noqa: F401
+        # ctx is expected to be GenerationContext
         # 1. Build date set for the calendar month
         weeks = compute_weeks(ctx.year, ctx.month)
         date_set: set[date] = set()
@@ -164,6 +166,7 @@ class OrToolsEngine:
                         rationale={
                             "source": "cp_sat",
                             "status": solver.StatusName(status),
+                            **({"gap": True, "reason": "no_eligible_candidates"} if assigned_doctor is None else {}),
                         },
                     )
                 )
@@ -179,7 +182,7 @@ class OrToolsEngine:
             slot_results=slot_results,
         )
 
-    def _is_eligible(self, doctor, slot: SlotRequest, ctx: GenerationContext) -> bool:
+    def _is_eligible(self, doctor, slot: SlotRequest, ctx) -> bool:
         """Check hard eligibility (mirrors CalendarEngine.get_eligible_doctors).
 
         Does NOT import CalendarEngine to avoid circular dependency.
