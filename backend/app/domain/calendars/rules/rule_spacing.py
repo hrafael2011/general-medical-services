@@ -30,11 +30,11 @@ class SpacingRule(Rule):
             if a["service_area_id"] in ctx.strong_area_ids
         ]
 
-        days_since_last = 0
+        days_since_last = 999
         if all_dates:
             days_since_last = max(0, (ctx.slot_date - max(all_dates)).days)
 
-        days_since_strong = 0
+        days_since_strong = 999
         if strong_dates:
             days_since_strong = max(0, (ctx.slot_date - max(strong_dates)).days)
 

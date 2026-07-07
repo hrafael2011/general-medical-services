@@ -10,7 +10,9 @@ def test_no_recent_service_no_warnings():
     ctx = _ctx(monthly=[], historical=[])
     result = rule.evaluate(ctx)
     assert result.warnings == []
-    assert result.score_delta == 0.0
+    # Sin historial → days_since_last=999, days_since_strong=999
+    # bonus = min(999,30)*0.5 + min(999,30)*0.3 = 15.0 + 9.0 = 24.0
+    assert result.score_delta == 24.0
 
 
 def test_strong_service_5_days_ago_warning_on_strong_slot():
