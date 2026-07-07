@@ -21,13 +21,15 @@ class SpacingRule(Rule):
         warnings: list[str] = []
         extra: dict = {}
 
-        # Calculate days since last services
+        # Calculate days since last services (only this doctor's assignments)
         all_dates = [
             a["service_date"] for a in ctx.monthly_assignments + ctx.historical_assignments
+            if a["doctor_id"] == ctx.doctor_id
         ]
         strong_dates = [
             a["service_date"] for a in ctx.monthly_assignments + ctx.historical_assignments
             if a["service_area_id"] in ctx.strong_area_ids
+            and a["doctor_id"] == ctx.doctor_id
         ]
 
         days_since_last = 999
@@ -50,8 +52,8 @@ class SpacingRule(Rule):
                 if days_since_strong < MIN_SPACING_DISPONIBLE_AFTER_STRONG:
                     warnings.append(f"spacing < 7 días desde turno fuerte")
 
-        # Mission spacing
-        mission_dates = [m["mission_date"] for m in ctx.mission_assignments]
+        # Mission spacing (only this doctor's missions)
+        mission_dates = [m["mission_date"] for m in ctx.mission_assignments if m["doctor_id"] == ctx.doctor_id]
         if mission_dates:
             days_since_mission = max(0, (ctx.slot_date - max(mission_dates)).days)
             if ctx.service_area_id in ctx.strong_area_ids and days_since_mission < MIN_SPACING_AFTER_MISSION_STRONG:
