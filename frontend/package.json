@@ -10,7 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@tanstack/react-query": "5.100.6",
+    "@tanstack/react-query": "5.101.0",
     "@vitejs/plugin-react": "6.0.1",
     "lucide-react": "1.12.0",
     "react": "19.2.5",
