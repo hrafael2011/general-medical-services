@@ -9,12 +9,14 @@ from backend.app.domain.calendars.rules.rule_spacing import SpacingRule
 from backend.app.domain.calendars.rules.rule_load_balancing import LoadBalancingRule
 from backend.app.domain.calendars.rules.rule_area_rotation import AreaRotationRule
 from backend.app.domain.calendars.rules.rule_mission_priority import MissionPriorityRule
+from backend.app.domain.calendars.rules.rule_pattern import PatternRule
+from backend.app.domain.calendars.rules.rule_availability_priority import AvailabilityPriorityRule
 
 __all__ = [
     "Rule", "RuleContext", "RuleResult",
     "ActiveStatusRule", "AreaAllowedRule", "HardBlockRule", "AvailabilityRule",
     "MonthlyLimitRule", "SpacingRule", "LoadBalancingRule", "AreaRotationRule",
-    "MissionPriorityRule",
+    "MissionPriorityRule", "PatternRule", "AvailabilityPriorityRule",
 ]
 
 
@@ -37,5 +39,7 @@ def build_pipeline(hard_rules_only: bool = False) -> list[Rule]:
             LoadBalancingRule(),
             AreaRotationRule(),
             MissionPriorityRule(),
+            PatternRule(),
+            AvailabilityPriorityRule(),
         ]
     return rules

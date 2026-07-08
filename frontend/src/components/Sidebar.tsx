@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, CalendarDays, Stethoscope, Target,
   BarChart2, Bell, MessageCircle, CheckCircle,
-  BookOpen, ClipboardList, LogOut, UserPlus, Trash2,
+  BookOpen, ClipboardList, LogOut, Scale, UserPlus, Trash2,
 } from "lucide-react";
 import { actionAlertsApi } from "../api/actionAlerts";
 import { fetchFeatureFlags } from "../api/featureFlags";
@@ -123,6 +123,17 @@ export function Sidebar() {
               >
                 <ClipboardList size={16} />
                 Auditoría
+              </NavLink>
+            )}
+            {hasPermission("view_audit") && (
+              <NavLink
+                to="/equilibrio-cargas"
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+                }
+              >
+                <Scale size={16} />
+                Equilibrio
               </NavLink>
             )}
             {hasPermission("manage_catalogs") && (

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Download, FileDown, Loader2, Trash2, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2, Wand2 } from "lucide-react";
 import { calendarsApi, CalendarAssignmentRead, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
@@ -329,7 +329,7 @@ export function CalendarGrid() {
         }}>
           {calendarStatusLabel}
         </span>
-        {isDraft && !hasApprovedWeeks && slots.length === 0 && (
+        {isDraft && !hasApprovedWeeks && (
           <>
             <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
               <Wand2 size={15} /> {generateMutation.isPending ? "Generando…" : "Generar calendario con reglas"}
@@ -429,7 +429,13 @@ export function CalendarGrid() {
                     >
                       <span className={`calendar-area-dot ${doctor ? "" : "calendar-area-dot--empty"}`} style={{ backgroundColor: color }} />
                       {doctor ? (
-                        <span>{rank ? rankDisplayName(rank.name) + " " : ""}{doctor.name}</span>
+                        <span>{rank ? rankDisplayName(rank.name) + " " : ""}{doctor.name}
+                          {areaAss.slot?.has_warning && (
+                            <span title={areaAss.slot.warning_message || "Altera el orden de servicios"}>
+                              <AlertTriangle size={12} className="slot-pattern-warning" aria-label="Altera el orden de servicios" />
+                            </span>
+                          )}
+                        </span>
                       ) : isEditableSlot ? (
                         <span className="calendar-assign-label">+ Asignar médico</span>
                       ) : (

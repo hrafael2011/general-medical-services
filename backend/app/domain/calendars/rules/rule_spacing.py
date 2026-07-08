@@ -21,6 +21,17 @@ class SpacingRule(Rule):
         warnings: list[str] = []
         extra: dict = {}
 
+        # Does this doctor have a pattern (T2-T4) WITH active weekly tracking?
+        # If so, the weekly pattern itself ensures spacing between strong
+        # services — skip the 14-day spacing check to avoid double penalty.
+        # We only skip when weekly_assignments is non-empty, meaning the caller
+        # explicitly provided pattern context. Otherwise the spacing check
+        # still applies (e.g. in isolated rule tests).
+        has_active_pattern = (
+            ctx.monthly_service_target >= 2
+            and bool(ctx.weekly_assignments)
+        )
+
         # Calculate days since last services (only this doctor's assignments)
         all_dates = [
             a["service_date"] for a in ctx.monthly_assignments + ctx.historical_assignments
@@ -44,7 +55,9 @@ class SpacingRule(Rule):
         extra["days_since_strong"] = days_since_strong
 
         # Spacing warnings (only if there are prior strong services to measure from)
-        if strong_dates:
+        # Skip 14-day strong-spacing check when doctor has a weekly pattern,
+        # because the pattern itself alternates strong services across weeks.
+        if strong_dates and not has_active_pattern:
             if ctx.service_area_id in ctx.strong_area_ids:
                 if days_since_strong < MIN_SPACING_STRONG:
                     warnings.append(f"spacing < 14 días desde último turno fuerte")

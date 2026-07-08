@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,6 +26,8 @@ from backend.app.schemas.calendars import (
     DoctorAssignmentCountRead,
     EligibleDoctorRead,
     EligibleDoctorsResponse,
+    EquilibrioItem,
+    EquilibrioResponse,
     EvaluationRequest,
     EvaluationResponse,
     HardBlockItem,
@@ -305,20 +307,158 @@ def get_calendar_grid(
     assignments = repo.list_assignments(version.id)
     gaps = repo.list_gaps(version.id)
 
-    slots: list[DaySlot] = [
-        DaySlot(
+    # Build area metadata for pattern evaluation
+    areas = repo.list_service_areas()
+    area_weights = {a.id: float(a.load_weight) for a in areas}
+    strong_codes = {"emergencia", "pista"}
+    strong_area_ids = {a.id for a in areas if a.code in strong_codes}
+
+    # Pre-compute week mapping for pattern checks
+    from backend.app.domain.calendars.weeks import compute_weeks
+
+    weeks = compute_weeks(calendar.year, calendar.month)
+    date_to_week: dict[date, int] = {}
+    for w in weeks:
+        week_num, _, sy, sm, sd, ey, em, ed = w
+        d = date(sy, sm, sd)
+        end = date(ey, em, ed)
+        while d <= end:
+            date_to_week[d] = week_num
+            d += timedelta(days=1)
+
+    # Map doctors for fast lookup
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+
+    doctor_repo = DoctorRepository(session)
+    all_doctors = doctor_repo.list_service_active()
+    doctor_map = {d.id: d for d in all_doctors}
+    allowed_areas_map: dict[str, list[str]] = {}
+    for d in all_doctors:
+        allowed_areas_map[d.id] = doctor_repo.get_allowed_areas(d.id)
+
+    assignment_dicts = [
+        {"doctor_id": a.doctor_id, "service_date": a.service_date, "service_area_id": a.service_area_id}
+        for a in assignments
+    ]
+
+    slots: list[DaySlot] = []
+    for a in assignments:
+        has_warn = _check_slot_pattern_warning(
+            a, doctor_map, allowed_areas_map, area_weights, strong_area_ids,
+            assignment_dicts, date_to_week,
+        )
+        slots.append(DaySlot(
             service_date=a.service_date,
             service_area_id=a.service_area_id,
             assignment=CalendarAssignmentRead.model_validate(a),
-        )
-        for a in assignments
-    ]
+            has_warning=has_warn,
+            warning_message="Altera el orden de servicios" if has_warn else None,
+        ))
 
     return CalendarGridResponse(
         calendar=CalendarRead.model_validate(calendar),
         version=CalendarVersionRead.model_validate(version),
         slots=slots,
         gaps=[UnresolvedGapRead.model_validate(g).model_dump() for g in gaps],
+    )
+
+
+@router.get("/{calendar_id}/equilibrio", response_model=EquilibrioResponse)
+def get_equilibrio(
+    calendar_id: str,
+    _user: Annotated[UserModel, Depends(require_ready_user)],
+    service: Annotated[CalendarService, Depends(get_calendar_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> EquilibrioResponse:
+    """Return per-doctor pattern violation summary for a calendar month."""
+    try:
+        calendar = service.get_calendar(calendar_id)
+    except CalendarServiceError as exc:
+        raise _http_exc(exc) from exc
+
+    repo = CalendarRepository(session)
+    version = repo.get_latest_version(calendar_id)
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "version_not_found",
+                "message": f"No versions found for calendar {calendar_id}.",
+            },
+        )
+
+    assignments = repo.list_assignments(version.id)
+
+    # Build area metadata
+    areas = repo.list_service_areas()
+    area_weights = {a.id: float(a.load_weight) for a in areas}
+    strong_codes = {"emergencia", "pista"}
+    strong_area_ids = {a.id for a in areas if a.code in strong_codes}
+
+    # Load doctor data
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+    doctor_repo = DoctorRepository(session)
+    all_doctors = doctor_repo.list_service_active()
+    doctor_map = {d.id: d for d in all_doctors}
+    allowed_areas_map: dict[str, list[str]] = {}
+    for d in all_doctors:
+        allowed_areas_map[d.id] = doctor_repo.get_allowed_areas(d.id)
+
+    # Week mapping
+    from backend.app.domain.calendars.weeks import compute_weeks
+
+    weeks = compute_weeks(calendar.year, calendar.month)
+    date_to_week: dict[date, int] = {}
+    for w in weeks:
+        week_num, _, sy, sm, sd, ey, em, ed = w
+        d = date(sy, sm, sd)
+        end = date(ey, em, ed)
+        while d <= end:
+            date_to_week[d] = week_num
+            d += timedelta(days=1)
+
+    assignment_dicts = [
+        {"doctor_id": a.doctor_id, "service_date": a.service_date, "service_area_id": a.service_area_id}
+        for a in assignments
+    ]
+
+    # Count assignments and pattern warnings per doctor
+    from collections import defaultdict
+
+    doctor_assign_count: dict[str, int] = defaultdict(int)
+    doctor_alterations: dict[str, int] = defaultdict(int)
+    doctor_monthly_target: dict[str, int] = {}
+
+    for a in assignments:
+        doctor_assign_count[a.doctor_id] += 1
+
+        # Check pattern violation for each slot
+        if _check_slot_pattern_warning(
+            a, doctor_map, allowed_areas_map, area_weights, strong_area_ids,
+            assignment_dicts, date_to_week,
+        ):
+            doctor_alterations[a.doctor_id] += 1
+
+    items: list[EquilibrioItem] = []
+    for d_id, count in doctor_assign_count.items():
+        doctor = doctor_map.get(d_id)
+        nombre = doctor.name if doctor else d_id
+        target = getattr(doctor, "monthly_service_target", 3) if doctor else 3
+        items.append(EquilibrioItem(
+            doctor_id=d_id,
+            nombre_medico=nombre,
+            servicios_asignados=count,
+            servicios_esperados=target,
+            alteraciones_al_orden=doctor_alterations.get(d_id, 0),
+        ))
+
+    # Sort by most alterations first
+    items.sort(key=lambda i: i.alteraciones_al_orden, reverse=True)
+
+    return EquilibrioResponse(
+        mes=calendar.month,
+        ano=calendar.year,
+        items=items,
     )
 
 
@@ -429,12 +569,13 @@ def get_eligible_doctors(
     return EligibleDoctorsResponse(
         doctors=[
             EligibleDoctorRead(
-                id=d.id,
-                full_name=d.name,
-                specialty=getattr(d, "specialty", None),
-                rank_name=getattr(d, "rank_name", None),
+                id=item["doctor"].id,
+                full_name=item["doctor"].name,
+                specialty=getattr(item["doctor"], "specialty", None),
+                rank_name=getattr(item["doctor"], "rank_name", None),
+                altera_orden=item["altera_orden"],
             )
-            for d in doctors
+            for item in doctors
         ]
     )
 
@@ -734,3 +875,62 @@ def replace_assignment(
         raise _http_exc(exc) from exc
     session.commit()
     return CalendarAssignmentRead.model_validate(assignment)
+
+
+# ---------------------------------------------------------------------------
+# Helper — pattern warning check for grid slots
+# ---------------------------------------------------------------------------
+
+
+def _check_slot_pattern_warning(
+    assignment,
+    doctor_map: dict[str, object],
+    allowed_areas_map: dict[str, list[str]],
+    area_weights: dict[str, float],
+    strong_area_ids: set[str],
+    assignment_dicts: list[dict],
+    date_to_week: dict[date, int],
+) -> bool:
+    """Return True if assigning this doctor to this slot alters their pattern."""
+    doctor = doctor_map.get(assignment.doctor_id)
+    if not doctor:
+        return False
+    target = getattr(doctor, "monthly_service_target", 3)
+    if target < 2:
+        return False
+
+    from backend.app.domain.calendars.rules.interface import RuleContext
+    from backend.app.domain.calendars.rules.rule_pattern import PatternRule
+
+    weekly: dict[int, list[dict]] = {}
+    for a in assignment_dicts:
+        if a["doctor_id"] == doctor.id:
+            aw = date_to_week.get(a["service_date"], 1)
+            weekly.setdefault(aw, []).append(
+                {"service_area_id": a["service_area_id"]}
+            )
+
+    slot_week_number = date_to_week.get(assignment.service_date, 1)
+    ctx = RuleContext(
+        doctor_id=doctor.id,
+        slot_date=assignment.service_date,
+        service_area_id=assignment.service_area_id,
+        area_weight=area_weights.get(assignment.service_area_id, 1.0),
+        monthly_assignments=assignment_dicts,
+        historical_assignments=[],
+        mission_assignments=[],
+        monthly_count=sum(1 for a in assignment_dicts if a["doctor_id"] == doctor.id),
+        monthly_service_target=target,
+        monthly_service_max=getattr(doctor, "monthly_service_max", 3),
+        allowed_area_ids=allowed_areas_map.get(doctor.id, []),
+        strong_area_ids=strong_area_ids,
+        area_weights=area_weights,
+        is_active=True,
+        is_service_active=True,
+        hard_block_active=False,
+        has_availability=True,
+        slot_week_number=slot_week_number,
+        weekly_assignments=weekly,
+    )
+    result = PatternRule().evaluate(ctx)
+    return result.score_delta < 0

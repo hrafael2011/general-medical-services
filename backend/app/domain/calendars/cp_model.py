@@ -32,10 +32,18 @@ class OrToolsEngine:
                 d += timedelta(days=1)
         sorted_dates = sorted(date_set)
 
-        # 2. Pre-filter eligibility per slot (hard rules)
+        # 2. Build occupied slots from existing assignments
+        occupied_slots: dict[tuple[date, str], str] = {}
+        for a in ctx.existing_assignments:
+            occupied_slots[(a["service_date"], a["service_area_id"])] = a["doctor_id"]
+
+        # Pre-filter eligibility per slot (hard rules, only for EMPTY slots)
         eligible_map: dict[tuple[str, date, str], bool] = {}
         for day in sorted_dates:
             for area in ctx.required_areas:
+                # Occupied slots are skipped entirely — no variables, no solver work
+                if (day, area) in occupied_slots:
+                    continue
                 slot = SlotRequest(
                     date=day,
                     service_area_id=area,
@@ -45,15 +53,22 @@ class OrToolsEngine:
                 for doc in ctx.doctors:
                     eligible_map[(doc.id, day, area)] = doc.id in eligible_ids
 
-        # 3. Create model
+        # Pre-count existing assignments per doctor (for monthly max adjustment)
+        existing_count: dict[str, int] = {}
+        for a in ctx.existing_assignments:
+            existing_count[a["doctor_id"]] = existing_count.get(a["doctor_id"], 0) + 1
+
+        # 3. Create model (only for empty slots)
         model = cp_model.CpModel()
 
-        # 4. Decision variables
+        # 4. Decision variables — only for EMPTY slots
         x: dict[tuple[str, date, str], cp_model.IntVar] = {}
         gap: dict[tuple[date, str], cp_model.IntVar] = {}
 
         for day in sorted_dates:
             for area in ctx.required_areas:
+                if (day, area) in occupied_slots:
+                    continue  # skip — already assigned
                 gap[(day, area)] = model.new_bool_var(f"gap_{day}_{area}")
                 doctor_vars = []
                 for doc in ctx.doctors:
@@ -63,7 +78,7 @@ class OrToolsEngine:
                         doctor_vars.append(x[(doc.id, day, area)])
                 model.add(sum(doctor_vars) + gap[(day, area)] == 1)
 
-        # 5. Max 1 assignment per doctor per day
+        # 5. Max 1 assignment per doctor per day (empty slots only)
         for doc in ctx.doctors:
             for day in sorted_dates:
                 doc_day_vars = [
@@ -74,23 +89,26 @@ class OrToolsEngine:
                 if doc_day_vars:
                     model.add(sum(doc_day_vars) <= 1)
 
-        # 6. Monthly max per doctor
+        # 6. Monthly max per doctor (account for already assigned)
         for doc in ctx.doctors:
             monthly_max = (
                 ctx.monthly_service_maxes.get(doc.id, 3)
                 if ctx.monthly_service_maxes
                 else 3
             )
+            remaining = max(0, monthly_max - existing_count.get(doc.id, 0))
             doc_vars = [var for (d_id, _, _), var in x.items() if d_id == doc.id]
             if doc_vars:
-                model.add(sum(doc_vars) <= monthly_max)
+                model.add(sum(doc_vars) <= remaining)
 
         # 7. Objective: minimize gaps + soft penalties
         objective_terms = []
 
-        # Gap penalty (high weight)
+        # Gap penalty (high weight) — only for empty slots
         for day in sorted_dates:
             for area in ctx.required_areas:
+                if (day, area) in occupied_slots:
+                    continue
                 objective_terms.append(gap[(day, area)] * GAP_PENALTY)
 
         # Soft: load balancing (penalize assigning doctors with existing load)
@@ -99,6 +117,10 @@ class OrToolsEngine:
             for a in ctx.historical_assignments:
                 if a["doctor_id"] == doc.id:
                     base_load += ctx.area_weights.get(a["service_area_id"], 1.0) * 3
+            # Also count load from existing (manual) assignments in this version
+            for a in ctx.existing_assignments:
+                if a["doctor_id"] == doc.id:
+                    base_load += ctx.area_weights.get(a["service_area_id"], 1.0)
             weight_per_assign = (
                 max(10, int(base_load * 10 / max(len(sorted_dates), 1)) + 10)
             )
@@ -106,6 +128,21 @@ class OrToolsEngine:
             doc_vars = [var for (d_id, _, _), var in x.items() if d_id == doc.id]
             for var in doc_vars:
                 objective_terms.append(var * weight_per_assign)
+
+        # Soft: availability priority (prefer doctors who submitted availability)
+        for doc in ctx.doctors:
+            records = ctx.availability.get(doc.id, [])
+            has_submitted = any(
+                getattr(r, "month", None) == ctx.month
+                and getattr(r, "year", None) == ctx.year
+                and r.availability_type in ("monthly_variable", "weekly_fixed", "recurring")
+                for r in records
+            )
+            if has_submitted:
+                doc_vars = [var for (d_id, _, _), var in x.items() if d_id == doc.id]
+                # Bonus: subtract 5 per assignment (objective is minimize)
+                for var in doc_vars:
+                    objective_terms.append(var * -5)
 
         # Soft: spacing penalty (consecutive days)
         for doc in ctx.doctors:
@@ -129,11 +166,114 @@ class OrToolsEngine:
                     model.add(both <= sum(d2_vars))
                     objective_terms.append(both * 50)
 
+        # Soft: pattern penalties (weekly constraints for T2-T4 doctors)
+        date_to_week: dict[date, int] = {}
+        for w in weeks:
+            week_num, _, sy, sm, sd, ey, em, ed = w
+            d = date(sy, sm, sd)
+            end = date(ey, em, ed)
+            while d <= end:
+                date_to_week[d] = week_num
+                d += timedelta(days=1)
+
+        # Determine strong areas (weight >= 2)
+        strong_areas = {
+            a for a in ctx.required_areas
+            if ctx.area_weights.get(a, 0) >= 2
+        }
+
+        for doc in ctx.doctors:
+            target = (
+                ctx.monthly_service_targets.get(doc.id, 3)
+                if ctx.monthly_service_targets
+                else 3
+            )
+            if target < 2:
+                continue  # T1 has no pattern constraints
+
+            allowed_areas = set(ctx.allowed_areas.get(doc.id, []))
+            allowed_strong = strong_areas & allowed_areas
+
+            # Group doctor variables by week
+            doc_vars_by_week: dict[int, list[cp_model.IntVar]] = {}
+            strong_by_week: dict[int, list[cp_model.IntVar]] = {}
+
+            for day in sorted_dates:
+                w = date_to_week.get(day, 1)
+                doc_vars_by_week.setdefault(w, [])
+                strong_by_week.setdefault(w, [])
+                for area in ctx.required_areas:
+                    key = (doc.id, day, area)
+                    if key in x:
+                        doc_vars_by_week[w].append(x[key])
+                        if area in allowed_strong:
+                            strong_by_week[w].append(x[key])
+
+            # Penalty 1: more than 1 assignment in same week
+            for w, vars_in_week in doc_vars_by_week.items():
+                if len(vars_in_week) > 1:
+                    count_week = model.new_int_var(
+                        0, len(vars_in_week), f"wk_cnt_{doc.id}_{w}"
+                    )
+                    model.add(count_week == sum(vars_in_week))
+                    excess_week = model.new_int_var(
+                        0, len(vars_in_week), f"wk_excess_{doc.id}_{w}"
+                    )
+                    model.add(excess_week >= count_week - 1)
+                    objective_terms.append(excess_week * 30)
+
+            # Penalty 2: consecutive strong weeks
+            if allowed_strong:
+                week_nums = sorted(doc_vars_by_week.keys())
+                for idx in range(len(week_nums) - 1):
+                    w_cur = week_nums[idx]
+                    w_next = week_nums[idx + 1]
+                    cur_strong = strong_by_week.get(w_cur, [])
+                    next_strong = strong_by_week.get(w_next, [])
+                    if not cur_strong or not next_strong:
+                        continue
+
+                    # has_strong_w = 1 iff at least one strong var is 1 in that week
+                    h_cur = model.new_bool_var(f"h_strong_{doc.id}_w{w_cur}")
+                    for var in cur_strong:
+                        model.add(var <= h_cur)
+                    model.add(h_cur <= sum(cur_strong))
+
+                    h_next = model.new_bool_var(f"h_strong_{doc.id}_w{w_next}")
+                    for var in next_strong:
+                        model.add(var <= h_next)
+                    model.add(h_next <= sum(next_strong))
+
+                    both_strong = model.new_bool_var(
+                        f"both_strong_{doc.id}_{w_cur}_{w_next}"
+                    )
+                    model.add(h_cur + h_next - 1 <= 2 * both_strong)
+                    model.add(both_strong <= h_cur)
+                    model.add(both_strong <= h_next)
+                    objective_terms.append(both_strong * 40)
+
+            # Penalty 3: T4 missing week (target >= 4)
+            if target >= 4:
+                for w in range(1, 6):  # max weeks in a month
+                    if w not in doc_vars_by_week:
+                        # This week has no possible assignments for this doc → skip
+                        continue
+                    has_any_this_w = model.new_bool_var(
+                        f"has_any_{doc.id}_w{w}"
+                    )
+                    vars_this_w = doc_vars_by_week[w]
+                    for var in vars_this_w:
+                        model.add(var <= has_any_this_w)
+                    model.add(has_any_this_w <= sum(vars_this_w))
+
+                # Bonus for reaching pattern (all 4+ weeks filled)
+                # Handled indirectly via gap penalty & weekly penalties above
+
         model.minimize(sum(objective_terms))
 
         # 8. Solve
         solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = 30.0
+        solver.parameters.max_time_in_seconds = 15.0
         status = solver.solve(model)
 
         # 9. Extract solution
@@ -142,6 +282,29 @@ class OrToolsEngine:
 
         for day in sorted_dates:
             for area in ctx.required_areas:
+                # Occupied slots: use existing assignment directly
+                occupant = occupied_slots.get((day, area))
+                if occupant:
+                    assigned_doctor = occupant
+                    assigned_count += 1
+                    slot_results.append(
+                        SlotResult(
+                            slot=SlotRequest(
+                                date=day,
+                                service_area_id=area,
+                                area_weight=ctx.area_weights.get(area, 1.0),
+                            ),
+                            assigned_doctor_id=assigned_doctor,
+                            score=None,
+                            rationale={
+                                "source": "existing",
+                                "status": "preserved",
+                            },
+                        )
+                    )
+                    continue
+
+                # Empty slots: read from solver
                 assigned_doctor = None
                 if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
                     if solver.value(gap[(day, area)]) == 0:

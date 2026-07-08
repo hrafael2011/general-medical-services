@@ -14,6 +14,7 @@ from backend.app.infrastructure.repositories.missions import MissionRepository
 from backend.app.domain.calendars.engine import CalendarEngine, GenerationContext
 from backend.app.domain.calendars.scoring import evaluate_soft_warnings
 from backend.app.domain.calendars.types import SlotRequest
+from backend.app.domain.calendars.weeks import compute_weeks
 from backend.app.domain.availability_rules import (
     belongs_to_operational_month,
     matches_recurring_monthly_rule,
@@ -547,7 +548,72 @@ class AssignmentService:
 
         # 11. Delegate to the domain engine.
         engine = CalendarEngine()
-        return engine.get_eligible_doctors(slot, ctx, existing_dicts)
+        eligible = engine.get_eligible_doctors(slot, ctx, existing_dicts)
+
+        # 12. Evaluate pattern for each eligible doctor.
+        weeks = compute_weeks(calendar.year, calendar.month)
+        date_to_week: dict[date, int] = {}
+        for w in weeks:
+            week_num, _, sy, sm, sd, ey, em, ed = w
+            d = date(sy, sm, sd)
+            end = date(ey, em, ed)
+            while d <= end:
+                date_to_week[d] = week_num
+                d += timedelta(days=1)
+
+        slot_week_number = date_to_week.get(target_date, 1)
+        strong_area_ids = {
+            a for a, w in area_weights.items() if w >= 2
+        }
+
+        result: list[dict] = []
+        for doctor in eligible:
+            altera_orden: bool | None = None
+            target = getattr(doctor, "monthly_service_target", 3)
+            if target >= 2:
+                # Build weekly assignments for this doctor
+                weekly: dict[int, list[dict]] = {}
+                for a in existing_dicts:
+                    if a["doctor_id"] == doctor.id:
+                        aw = date_to_week.get(a["service_date"], 1)
+                        weekly.setdefault(aw, []).append(
+                            {"service_area_id": a["service_area_id"]}
+                        )
+
+                # Run PatternRule
+                from backend.app.domain.calendars.rules.interface import RuleContext
+                from backend.app.domain.calendars.rules.rule_pattern import PatternRule
+
+                pattern_ctx = RuleContext(
+                    doctor_id=doctor.id,
+                    slot_date=target_date,
+                    service_area_id=service_area_id,
+                    area_weight=area_weights.get(service_area_id, 1.0),
+                    monthly_assignments=existing_dicts,
+                    historical_assignments=historical_dicts,
+                    mission_assignments=mission_dicts,
+                    monthly_count=sum(1 for a in existing_dicts if a["doctor_id"] == doctor.id),
+                    monthly_service_target=target,
+                    monthly_service_max=getattr(doctor, "monthly_service_max", 3),
+                    allowed_area_ids=allowed_areas.get(doctor.id, []),
+                    strong_area_ids=strong_area_ids,
+                    area_weights=area_weights,
+                    is_active=doctor.active,
+                    is_service_active=doctor.service_active,
+                    hard_block_active=False,  # already filtered out
+                    has_availability=True,    # already filtered out
+                    slot_week_number=slot_week_number,
+                    weekly_assignments=weekly,
+                )
+                rule_result = PatternRule().evaluate(pattern_ctx)
+                altera_orden = rule_result.score_delta < 0
+
+            result.append({
+                "doctor": doctor,
+                "altera_orden": altera_orden,
+            })
+
+        return result
 
     def evaluate_slot(
         self,

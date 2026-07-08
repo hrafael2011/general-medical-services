@@ -53,6 +53,9 @@ class GenerationContext:
     monthly_service_targets: dict[str, int] | None = None
     # Monthly service max per doctor: {doctor_id: int}. Default 3.
     monthly_service_maxes: dict[str, int] | None = None
+    # Pattern violations tracker (fairness): {doctor_id: count}. Reset per month.
+    # Used by PatternRule to prefer doctors with fewer prior violations.
+    pattern_violations: dict[str, int] | None = None
 
 
 # ---------------------------------------------------------------------------

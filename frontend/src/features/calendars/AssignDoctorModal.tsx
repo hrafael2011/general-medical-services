@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search } from "lucide-react";
+import { Search, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { EligibleDoctorRead, WarningItem, calendarsApi } from "../../api/calendars";
 import { ApiError } from "../../api/client";
 
@@ -65,6 +65,12 @@ export function AssignDoctorModal({
     if (!d.full_name.toLowerCase().includes(query.toLowerCase())) return false;
     if (d.id === currentDoctorId) return false;
     return true;
+  }).sort((a, b) => {
+    // Docs that respect pattern first, then alters, then no pattern
+    const pa = a.altera_orden === false ? 0 : a.altera_orden === true ? 1 : 2;
+    const pb = b.altera_orden === false ? 0 : b.altera_orden === true ? 1 : 2;
+    if (pa !== pb) return pa - pb;
+    return a.full_name.localeCompare(b.full_name);
   });
 
   const handleSelectDoctor = async (doctorId: string) => {
@@ -152,7 +158,19 @@ export function AssignDoctorModal({
                     }}
                   >
                     <span style={{ fontWeight: selectedId === doc.id ? 700 : 400, color: "#1e293b" }}>{doc.full_name}</span>
-                    <span style={{ fontSize: "0.78rem", color: "#166534" }}>&#10003; activo</span>
+                    {doc.altera_orden === false && (
+                      <span className="order-indicator order-respeta">
+                        <CheckCircle2 size={14} /> Respeta el orden
+                      </span>
+                    )}
+                    {doc.altera_orden === true && (
+                      <span className="order-indicator order-altera">
+                        <AlertTriangle size={14} /> Altera el orden
+                      </span>
+                    )}
+                    {doc.altera_orden === null && (
+                      <span className="order-indicator order-sin-patron">Sin orden fijo</span>
+                    )}
                   </button>
                 ))}
               </div>

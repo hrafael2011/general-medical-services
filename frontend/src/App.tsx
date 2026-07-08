@@ -17,6 +17,7 @@ import { ReportsView } from "./features/reports/ReportsView";
 import { NotificationLog } from "./features/notifications/NotificationLog";
 import { TelegramLinks } from "./features/telegram/TelegramLinks";
 import { AuditLog } from "./features/audit/AuditLog";
+import { EquilibrioCargas } from "./features/equilibrio/EquilibrioCargas";
 import { UsersView } from "./features/users/UsersView";
 import { CatalogsPage } from "./features/catalogs/CatalogsPage";
 import { TrashPage } from "./features/trash/TrashPage";
@@ -45,6 +46,7 @@ export function App() {
           <Route path="/telegram" element={<TelegramLinks />} />
           <Route path="/reports" element={<ReportsView />} />
           <Route path="/audit" element={<AuditLog />} />
+          <Route path="/equilibrio-cargas" element={<EquilibrioCargas />} />
           <Route path="/users" element={<UsersView />} />
           <Route path="/catalogs" element={<CatalogsPage />} />
           <Route path="/trash" element={<TrashPage />} />

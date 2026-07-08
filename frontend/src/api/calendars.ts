@@ -91,6 +91,7 @@ export interface EligibleDoctorRead {
   full_name: string;
   specialty: string | null;
   rank_name: string | null;
+  altera_orden: boolean | null;
 }
 
 export interface EligibleDoctorsResponse {
@@ -118,6 +119,20 @@ export interface EvaluationResponse {
   warnings: WarningItem[];
 }
 
+export interface EquilibrioItem {
+  doctor_id: string;
+  nombre_medico: string;
+  servicios_asignados: number;
+  servicios_esperados: number;
+  alteraciones_al_orden: number;
+}
+
+export interface EquilibrioResponse {
+  mes: number;
+  ano: number;
+  items: EquilibrioItem[];
+}
+
 export const calendarsApi = {
   list: () => apiFetch<CalendarRead[]>("/calendars"),
 
@@ -133,6 +148,9 @@ export const calendarsApi = {
 
   getGrid: (calendarId: string) =>
     apiFetch<CalendarGridResponse>(`/calendars/${calendarId}/grid`),
+
+  getEquilibrio: (calendarId: string) =>
+    apiFetch<EquilibrioResponse>(`/calendars/${calendarId}/equilibrio`),
 
   approve: (calendarId: string, reason?: string) =>
     apiFetch<CalendarVersionRead>(`/calendars/${calendarId}/approve`, {

@@ -41,6 +41,10 @@ def compute_candidate_score(
     monthly_service_target: int = 3,
     area_weights: dict[str, float] | None = None,
     strong_area_ids: set[str] | None = None,
+    slot_week_number: int = 1,
+    weekly_assignments: dict[int, list[dict]] | None = None,
+    pattern_violations_count: int = 0,
+    submitted_availability: bool = False,
 ) -> CandidateScore:
     """Compute a scheduling score for one doctor on one slot.
 
@@ -80,6 +84,10 @@ def compute_candidate_score(
         is_service_active=True,
         hard_block_active=False,
         has_availability=True,
+        slot_week_number=slot_week_number,
+        weekly_assignments=weekly_assignments or {},
+        pattern_violations_count=pattern_violations_count,
+        submitted_availability=submitted_availability,
     )
 
     pipeline = RulePipeline(build_pipeline(hard_rules_only=False))

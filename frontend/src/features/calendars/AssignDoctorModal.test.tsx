@@ -16,9 +16,9 @@ vi.mock("../../api/calendars", () => ({
 }));
 
 const ELIGIBLE_DOCTORS: EligibleDoctorRead[] = [
-  { id: "d1", full_name: "Dr. García Martínez", specialty: "General", rank_name: "Capitán" },
-  { id: "d2", full_name: "Dr. López Ruiz", specialty: "Cirugía", rank_name: "Mayor" },
-  { id: "d3", full_name: "Dra. Torres", specialty: "Pediatría", rank_name: "Teniente" },
+  { id: "d1", full_name: "Dr. García Martínez", specialty: "General", rank_name: "Capitán", altera_orden: false },
+  { id: "d2", full_name: "Dr. López Ruiz", specialty: "Cirugía", rank_name: "Mayor", altera_orden: true },
+  { id: "d3", full_name: "Dra. Torres", specialty: "Pediatría", rank_name: "Teniente", altera_orden: null },
 ];
 
 const BASE_PROPS = {

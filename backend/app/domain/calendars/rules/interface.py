@@ -19,6 +19,10 @@ class RuleResult:
 class RuleContext:
     """Contexto completo para evaluar todas las reglas en un doctor+slot.
 
+    The pattern-related fields (slot_week_number, weekly_assignments,
+    pattern_violations_count) are optional and only used by PatternRule.
+    If not provided, PatternRule assumes no pattern applies.
+
     Note: monthly_count is a convenience field and MUST equal
     len(monthly_assignments) for the caller's doctor_id.
     """
@@ -39,6 +43,16 @@ class RuleContext:
     is_service_active: bool
     hard_block_active: bool
     has_availability: bool
+
+    # Pattern rule fields (optional — default to no pattern)
+    slot_week_number: int = 1
+    weekly_assignments: dict[int, list[dict]] = field(default_factory=dict)
+    pattern_violations_count: int = 0
+
+    # Availability priority: True if the doctor submitted availability records
+    # for this month. Used by AvailabilityPriorityRule to prefer doctors who
+    # proactively submit their dates.
+    submitted_availability: bool = False
 
 
 class Rule(ABC):

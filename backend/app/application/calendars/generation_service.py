@@ -184,9 +184,12 @@ class GenerationService:
         engine = CalendarEngine()
         summary_raw = engine.generate(ctx)
 
-        # Clear existing assignments and gaps for this version before persisting new ones
+        # Build a set of slots that already have assignments (manual or prior generated)
+        already_assigned: set[tuple[date, str]] = set()
         for a in existing:
-            self.calendar_repo.delete_assignment(a.id)
+            already_assigned.add((a.service_date, mapper.code(a.service_area_id)))
+
+        # Clear existing gaps for this version — they will be re-evaluated
         for g in self.calendar_repo.list_gaps(version.id):
             self.calendar_repo.session.delete(g)
         self.calendar_repo.session.flush()
@@ -195,9 +198,13 @@ class GenerationService:
         calendar.generation_mode = generation_mode
         calendar.updated_at = now
 
-        # Persist results — convert service_area_id from codes back to UUIDs
+        # Persist NEW results only — skip slots that already have assignments
         for result in summary_raw.slot_results:
             area_uuid = mapper.uuid(result.slot.service_area_id)
+            slot_key = (result.slot.date, result.slot.service_area_id)
+            if slot_key in already_assigned:
+                continue  # keep existing assignment untouched
+
             if result.assigned_doctor_id is not None:
                 assignment = CalendarAssignmentModel(
                     id=str(uuid4()),

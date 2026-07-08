@@ -1788,3 +1788,45 @@ select {
   color: #94a3b8;
   font-weight: 400;
 }
+
+/* ---- Orden de servicios indicators ---- */
+
+.order-indicator {
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.order-respeta {
+  color: #166534;
+}
+
+.order-altera {
+  color: #9a3412;
+}
+
+.order-sin-patron {
+  color: #94a3b8;
+}
+
+/* Slot pattern warning badge in calendar grid */
+
+.slot-pattern-warning {
+  color: #d97706;
+  opacity: 0.75;
+  cursor: help;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+/* ---- Equilibrio table ---- */
+
+.row-alterado {
+  background: #fff7ed;
+}
+
+.row-ok td:last-child {
+  color: #166534;
+}

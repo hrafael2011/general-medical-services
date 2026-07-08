@@ -82,6 +82,7 @@ class EligibleDoctorRead(BaseModel):
     full_name: str
     specialty: str | None = None
     rank_name: str | None = None
+    altera_orden: bool | None = None  # None = sin patrón, False = respeta, True = altera
 
     model_config = {"from_attributes": True}
 
@@ -173,3 +174,20 @@ class WeekRead(BaseModel):
 
 class ApproveWeekRequest(BaseModel):
     notes: str | None = None
+
+
+# --- Equilibrio / Pattern tracking ---
+
+
+class EquilibrioItem(BaseModel):
+    doctor_id: str
+    nombre_medico: str
+    servicios_asignados: int
+    servicios_esperados: int
+    alteraciones_al_orden: int
+
+
+class EquilibrioResponse(BaseModel):
+    mes: int
+    ano: int
+    items: list[EquilibrioItem]
