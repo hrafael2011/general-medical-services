@@ -350,7 +350,7 @@ function DoctorProfileModal({
   onReactivate,
 }: DoctorProfileModalProps) {
   const selectedReason = reasons.find(reason => reason.id === selectedReasonId);
-  const availabilityLabels = normalizeAvailability(availability);
+  const availabilityLabels = normalizeAvailability(availability, doctor.availability_mode);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -475,18 +475,26 @@ function normalizeText(value: string) {
     .trim();
 }
 
-function normalizeAvailability(availability: AvailabilityRead[]) {
-  const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+function normalizeAvailability(availability: AvailabilityRead[], availabilityMode?: string) {
+  const dayNames = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+  const weekOrder = ["Primer", "Segundo", "Tercer", "Cuarto"];
+
+  // Monthly mode: avisa sus días cada mes
+  if (availabilityMode === "monthly") {
+    return ["Mensual: avisa sus días cada mes"];
+  }
+
   return availability.map(item => {
     if (item.availability_type === "weekly_fixed" && item.days_of_week?.length) {
-      return `Semanal: ${item.days_of_week.map(day => dayNames[day] ?? String(day)).join(", ")}`;
+      const shortDays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+      return `Semanal: ${item.days_of_week.map(day => shortDays[day] ?? String(day)).join(", ")}`;
     }
     if (item.availability_type === "monthly_variable" && item.available_dates?.length) {
       return `Mensual: días ${item.available_dates.join(", ")}`;
     }
     if (item.availability_type === "recurring" && item.weekday !== null) {
-      const weekLabel = item.week_number === -1 ? "última" : `${(item.week_number ?? 0) + 1}ª`;
-      return `Fijo: ${weekLabel} semana, ${dayNames[item.weekday] ?? item.weekday}`;
+      const prefix = item.week_number === -1 ? "Último" : (weekOrder[item.week_number ?? 0] ?? `${(item.week_number ?? 0) + 1}º`);
+      return `${prefix} ${dayNames[item.weekday] ?? "día"} de cada mes`;
     }
     return "Disponibilidad registrada";
   });
