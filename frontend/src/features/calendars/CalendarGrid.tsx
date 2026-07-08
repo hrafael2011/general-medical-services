@@ -115,7 +115,8 @@ function rankDisplayName(rankName: string): string {
 
 function matchesHighlight(name: string, term: string): boolean {
   if (!term || term.length < 2) return false;
-  return name.toLowerCase().includes(term.toLowerCase());
+  const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return normalize(name).includes(normalize(term));
 }
 
 export function CalendarGrid() {
