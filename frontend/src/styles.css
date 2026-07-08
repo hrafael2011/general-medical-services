@@ -1313,6 +1313,13 @@ select {
   background: #eff6ff !important;
 }
 
+.calendar-cell--highlight {
+  outline: 2px solid #3b82f6;
+  outline-offset: -1px;
+  background: #eff6ff !important;
+  border-radius: 4px;
+}
+
 .calendar-assign-label {
   color: #94a3b8;
   font-size: 0.68rem;

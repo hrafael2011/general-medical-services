@@ -113,6 +113,11 @@ function rankDisplayName(rankName: string): string {
   return rankName.toUpperCase();
 }
 
+function matchesHighlight(name: string, term: string): boolean {
+  if (!term || term.length < 2) return false;
+  return name.toLowerCase().includes(term.toLowerCase());
+}
+
 export function CalendarGrid() {
   const { calendarId } = useParams<{ calendarId: string }>();
   const navigate = useNavigate();
@@ -124,6 +129,7 @@ export function CalendarGrid() {
   const [generateSummary, setGenerateSummary] = useState<string | null>(null);
   const [assignmentWarning, setAssignmentWarning] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [highlightTerm, setHighlightTerm] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["calendar-grid", calendarId],
@@ -345,6 +351,20 @@ export function CalendarGrid() {
         </p>
       )}
 
+      {/* Buscador de médicos */}
+      <div style={{ marginBottom: "0.5rem" }}>
+        <input
+          type="text"
+          value={highlightTerm}
+          onChange={(e) => setHighlightTerm(e.target.value)}
+          placeholder="Buscar médico en la grilla..."
+          style={{
+            padding: "6px 10px", fontSize: 13, border: "1px solid #cbd5e1",
+            borderRadius: 6, width: 260, outline: "none",
+          }}
+        />
+      </div>
+
       {/* Leyenda de áreas */}
       <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
         {sortedAreaIds.map((areaId) => {
@@ -374,6 +394,7 @@ export function CalendarGrid() {
                   const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
                   const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
                   const isEditableSlot = isDraft;
+                  const hl = doctor && matchesHighlight(doctor.name, highlightTerm);
                   const handleAreaClick = () => {
                     if (!isEditableSlot) return;
                     if (areaAss.slot?.assignment) {
@@ -385,7 +406,7 @@ export function CalendarGrid() {
                   };
                   return (
                     <div key={areaAss.areaId}
-                      className={`calendar-area-row${isEditableSlot ? " calendar-area-row--clickable" : ""}${!doctor && isEditableSlot ? " calendar-area-row--empty" : ""}`}
+                      className={`calendar-area-row${isEditableSlot ? " calendar-area-row--clickable" : ""}${!doctor && isEditableSlot ? " calendar-area-row--empty" : ""}${hl ? " calendar-cell--highlight" : ""}`}
                       role="button" tabIndex={0}
                       onClick={handleAreaClick}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleAreaClick(); } }}
@@ -414,6 +435,7 @@ export function CalendarGrid() {
                 const color = areaColor(areaAss.areaName);
                 const doctor = areaAss.slot?.assignment ? doctorMap[areaAss.slot.assignment.doctor_id] : null;
                 const rank = doctor?.rank_id ? rankMap[doctor.rank_id] : null;
+                const hl = doctor && matchesHighlight(doctor.name, highlightTerm);
                 const week = findWeekForDate(cd.dateStr, calendarWeeks);
                 const isEditableSlot = isDraft && week?.status !== "approved";
                 const handleAreaClick = () => {
@@ -433,7 +455,7 @@ export function CalendarGrid() {
                   }
                 };
                 return (
-                  <div key={areaAss.areaId} className={`calendar-area-row${isEditableSlot ? " calendar-area-row--clickable" : ""}${!doctor && isEditableSlot ? " calendar-area-row--empty" : ""}`}
+                  <div key={areaAss.areaId} className={`calendar-area-row${isEditableSlot ? " calendar-area-row--clickable" : ""}${!doctor && isEditableSlot ? " calendar-area-row--empty" : ""}${hl ? " calendar-cell--highlight" : ""}`}
                     role="button" tabIndex={0}
                     onClick={handleAreaClick}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleAreaClick(); } }}

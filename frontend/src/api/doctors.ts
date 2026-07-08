@@ -64,8 +64,14 @@ export interface AvailabilityRead {
 }
 
 export const doctorsApi = {
-  list: (statusFilter: "all" | "active" | "inactive" = "all") =>
-    apiFetch<DoctorListResponse>(`/doctors?status=${statusFilter}`),
+  list: (
+    statusFilter: "all" | "active" | "inactive" = "all",
+    availabilityMode?: string,
+  ) => {
+    let url = `/doctors?status=${statusFilter}`;
+    if (availabilityMode) url += `&availability_mode=${availabilityMode}`;
+    return apiFetch<DoctorListResponse>(url);
+  },
   get: (id: string) => apiFetch<DoctorRead>(`/doctors/${id}`),
   create: (payload: CreateDoctorPayload) =>
     apiFetch<DoctorRead>("/doctors", { method: "POST", body: JSON.stringify(payload) }),

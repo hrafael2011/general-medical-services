@@ -19,6 +19,7 @@ interface Props {
 export function DoctorList({ onAdd, onEdit }: Props) {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [monthlyFilter, setMonthlyFilter] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorRead | null>(null);
   const [reasonId, setReasonId] = useState("");
   const [detail, setDetail] = useState("");
@@ -26,8 +27,8 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["doctors", statusFilter],
-    queryFn: () => doctorsApi.list(statusFilter),
+    queryKey: ["doctors", statusFilter, monthlyFilter],
+    queryFn: () => doctorsApi.list(statusFilter, monthlyFilter ? "monthly" : undefined),
   });
 
   const { data: ranks } = useQuery({
@@ -158,6 +159,14 @@ export function DoctorList({ onAdd, onEdit }: Props) {
               onChange={e => setStatusFilter(e.target.checked ? "inactive" : "all")}
             />
             Solo inactivos
+          </label>
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={monthlyFilter}
+              onChange={e => setMonthlyFilter(e.target.checked)}
+            />
+            Solo disponibilidad mensual
           </label>
           <button className="btn-primary" onClick={onAdd}>
             <PlusCircle size={16} />
