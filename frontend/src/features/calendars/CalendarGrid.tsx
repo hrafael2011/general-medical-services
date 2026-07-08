@@ -363,6 +363,21 @@ export function CalendarGrid() {
             borderRadius: 6, width: 260, outline: "none",
           }}
         />
+        {highlightTerm.length >= 2 && (
+          (() => {
+            const hasMatch = Object.values(doctorMap).some(d =>
+              matchesHighlight(d.name, highlightTerm)
+            );
+            if (!hasMatch) {
+              return (
+                <span style={{ marginLeft: 12, fontSize: 12, color: "#94a3b8" }}>
+                  No se encontraron médicos con ese nombre
+                </span>
+              );
+            }
+            return null;
+          })()
+        )}
       </div>
 
       {/* Leyenda de áreas */}
