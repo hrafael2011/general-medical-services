@@ -36,7 +36,7 @@ class DoctorRepository:
         )
         return self.session.scalars(stmt).first()
 
-    def list_all(self, *, status: str = "all") -> list[DoctorModel]:
+    def list_all(self, *, status: str = "all", availability_mode: str | None = None) -> list[DoctorModel]:
         stmt = select(DoctorModel).where(*_not_deleted())
         if status == "active":
             stmt = stmt.where(DoctorModel.active.is_(True), DoctorModel.service_active.is_(True))
@@ -44,6 +44,8 @@ class DoctorRepository:
             stmt = stmt.where(
                 (DoctorModel.active.is_(False)) | (DoctorModel.service_active.is_(False))
             )
+        if availability_mode is not None:
+            stmt = stmt.where(DoctorModel.availability_mode == availability_mode)
         return list(self.session.scalars(stmt.order_by(DoctorModel.name)))
 
     def list_service_active(self) -> list[DoctorModel]:
