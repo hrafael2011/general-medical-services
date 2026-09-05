@@ -471,7 +471,7 @@ def test_assign_doctor_warns_when_warn_only_monthly_max_is_reached(db_session) -
             actor_id="actor-001",
             version_id=version.id,
             doctor_id=doctor.id,
-            date=datetime.date(2026, 5, 16),
+            date=datetime.date(2026, 5, 22),
             service_area_id=_AREA_ID,
         )
 
@@ -481,7 +481,7 @@ def test_assign_doctor_warns_when_warn_only_monthly_max_is_reached(db_session) -
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor.id,
-        date=datetime.date(2026, 5, 16),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
         force_warnings=["monthly_max_exceeded"],
     )
@@ -563,7 +563,7 @@ def test_evaluate_slot_reports_warn_only_monthly_max(db_session) -> None:
     result = service.evaluate_slot(
         version_id=version.id,
         doctor_id=doctor.id,
-        target_date=datetime.date(2026, 5, 2),
+        target_date=datetime.date(2026, 5, 4),
         service_area_id=_AREA_ID,
     )
 
@@ -639,7 +639,7 @@ def test_assign_doctor_requires_spacing_warning_confirmation_when_called_directl
             actor_id="actor-001",
             version_id=version.id,
             doctor_id=doctor.id,
-            date=datetime.date(2026, 5, 20),
+            date=datetime.date(2026, 5, 22),
             service_area_id=_AREA_ID,
         )
 
@@ -650,7 +650,7 @@ def test_assign_doctor_requires_spacing_warning_confirmation_when_called_directl
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor.id,
-        date=datetime.date(2026, 5, 20),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
         force_warnings=[_SPACING_WARNING],
     )
@@ -702,7 +702,7 @@ def test_replace_assignment_requires_spacing_warning_confirmation_when_called_di
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor_a.id,
-        date=datetime.date(2026, 5, 20),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
     )
 
@@ -851,13 +851,13 @@ def test_evaluate_slot_reports_multiple_warnings(db_session) -> None:
         date=datetime.date(2026, 5, 15),
         service_area_id=_AREA_ID,
     )
-    # Second assignment also triggers spacing warning (May 15→16 is <14 days)
+    # Second assignment also triggers spacing warning (May 15→22 is <14 days)
     # AND reaches monthly max — force both
     service.assign_doctor(
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor.id,
-        date=datetime.date(2026, 5, 16),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
         force_warnings=["monthly_max_exceeded", _SPACING_WARNING],
     )

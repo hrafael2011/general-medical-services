@@ -179,6 +179,7 @@ class GenerationService:
             area_weights=AREA_WEIGHTS,
             monthly_service_targets={d.id: d.monthly_service_target for d in doctors},
             monthly_service_maxes={d.id: d.monthly_service_max for d in doctors},
+            area_rotation_modes={d.id: d.area_rotation_mode for d in doctors},
         )
 
         engine = CalendarEngine()
@@ -369,6 +370,7 @@ class GenerationService:
             area_weights=AREA_WEIGHTS,
             monthly_service_targets={d.id: d.monthly_service_target for d in doctors},
             monthly_service_maxes={d.id: d.monthly_service_max for d in doctors},
+            area_rotation_modes={d.id: d.area_rotation_mode for d in doctors},
         )
 
         engine = CalendarEngine()

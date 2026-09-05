@@ -45,6 +45,9 @@ def compute_candidate_score(
     weekly_assignments: dict[int, list[dict]] | None = None,
     pattern_violations_count: int = 0,
     submitted_availability: bool = False,
+    area_rotation_mode: str = "auto",
+    day_priorities: dict[int, str] | None = None,
+    primary_weekday: int | None = None,
 ) -> CandidateScore:
     """Compute a scheduling score for one doctor on one slot.
 
@@ -88,6 +91,9 @@ def compute_candidate_score(
         weekly_assignments=weekly_assignments or {},
         pattern_violations_count=pattern_violations_count,
         submitted_availability=submitted_availability,
+        area_rotation_mode=area_rotation_mode,
+        day_priorities=day_priorities or {},
+        primary_weekday=primary_weekday,
     )
 
     pipeline = RulePipeline(build_pipeline(hard_rules_only=False))

@@ -20,11 +20,14 @@ def test_at_target_gives_zero_bonus():
     assert result.score_delta == 0.0
 
 
-def test_at_max_blocks():
+def test_at_max_soft_penalty():
     rule = MonthlyLimitRule()
     ctx = _ctx(monthly_count=3, target=3, max_val=3)
     result = rule.evaluate(ctx)
-    assert result.is_blocking is True
+    assert result.is_blocking is False
+    # At max → strong soft penalty
+    assert result.score_delta == -500.0
+    assert result.extra.get("warning") is True
 
 
 def test_below_max_not_blocking():

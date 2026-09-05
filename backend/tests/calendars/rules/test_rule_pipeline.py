@@ -49,7 +49,7 @@ def test_pipeline_hard_rules_only_filter():
     """build_pipeline(hard_rules_only=True) should only return hard rules."""
     rules = build_pipeline(hard_rules_only=True)
     assert all(r.is_hard for r in rules)
-    assert len(rules) == 5  # active, area_allowed, hard_block, availability, monthly_limit
+    assert len(rules) == 4  # active, area_allowed, hard_block, availability
 
 
 def test_pipeline_returns_pipeline_result_type():

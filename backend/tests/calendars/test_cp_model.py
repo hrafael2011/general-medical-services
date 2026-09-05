@@ -38,6 +38,30 @@ def test_ortools_engine_single_doctor():
     assert summary.gap_count == _TOTAL_SLOTS - _DAYS
 
 
+def test_ortools_engine_single_doctor_coverage_first():
+    """With low max and 1 doctor, coverage-first fills all days despite max."""
+    doc = _make_doctor("doc-1")
+    ctx = GenerationContext(
+        year=_YEAR, month=_MONTH,
+        doctors=[doc],
+        allowed_areas={"doc-1": _REQUIRED_AREAS},
+        availability={},
+        restrictions={},
+        existing_assignments=[],
+        historical_assignments=[],
+        mission_assignments=[],
+        required_areas=_REQUIRED_AREAS,
+        area_weights=AREA_WEIGHTS,
+        monthly_service_maxes={"doc-1": 3},
+        monthly_service_targets={"doc-1": 3},
+    )
+    engine = OrToolsEngine()
+    summary = engine.solve(ctx)
+    # Coverage-first: 1 per day (max 28) even though monthly_max=3
+    assert summary.assigned_count == _DAYS
+    assert summary.gap_count == _TOTAL_SLOTS - _DAYS
+
+
 def test_ortools_engine_hard_block():
     """Hard block prevents assignment (0 assigned, all gaps)."""
     doc = _make_doctor("doc-1")
@@ -66,7 +90,7 @@ def test_ortools_engine_hard_block():
 
 
 def test_ortools_engine_monthly_max():
-    """Monthly max limits total assignments per doctor."""
+    """Monthly max is soft — coverage-first fills all days, max exceeded."""
     doc = _make_doctor("doc-1")
     ctx = GenerationContext(
         year=_YEAR, month=_MONTH,
@@ -84,8 +108,9 @@ def test_ortools_engine_monthly_max():
     )
     engine = OrToolsEngine()
     summary = engine.solve(ctx)
-    assert summary.assigned_count == 3
-    assert summary.gap_count == _TOTAL_SLOTS - 3
+    # Coverage-first: 28 assigned (1/day) even though max=3, no gaps from assignment
+    assert summary.assigned_count == _DAYS
+    assert summary.gap_count == _TOTAL_SLOTS - _DAYS
     for r in summary.slot_results:
         if r.assigned_doctor_id is not None:
             assert r.assigned_doctor_id == "doc-1"
