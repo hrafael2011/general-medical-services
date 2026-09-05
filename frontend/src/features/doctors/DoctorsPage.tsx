@@ -4,10 +4,11 @@ import { DoctorForm } from "./DoctorForm";
 import { DoctorsByDay } from "./DoctorsByDay";
 import { DoctorsByArea } from "./DoctorsByArea";
 import { DoctorsByDepartment } from "./DoctorsByDepartment";
+import { DoctorsCoverage } from "./DoctorsCoverage";
 import { DoctorRead } from "../../api/doctors";
 import { useAuth } from "../../context/AuthContext";
 
-type Tab = "list" | "by-day" | "by-area" | "by-department";
+type Tab = "list" | "by-day" | "by-area" | "coverage" | "by-department";
 
 export function DoctorsPage() {
   const [editingDoctor, setEditingDoctor] = useState<DoctorRead | undefined>();
@@ -51,6 +52,15 @@ export function DoctorsPage() {
           )}
           {isEncargadoPlus && (
             <button
+              className={tab === "coverage" ? "btn-primary" : "btn-ghost"}
+              style={{ padding: "8px 16px", borderRadius: "6px 6px 0 0", border: "none", fontSize: 13 }}
+              onClick={() => setTab("coverage")}
+            >
+              Cobertura
+            </button>
+          )}
+          {isEncargadoPlus && (
+            <button
               className={tab === "by-department" ? "btn-primary" : "btn-ghost"}
               style={{ padding: "8px 16px", borderRadius: "6px 6px 0 0", border: "none", fontSize: 13 }}
               onClick={() => setTab("by-department")}
@@ -77,6 +87,8 @@ export function DoctorsPage() {
           <DoctorsByDay />
         ) : tab === "by-area" ? (
           <DoctorsByArea />
+        ) : tab === "coverage" ? (
+          <DoctorsCoverage />
         ) : (
           <DoctorsByDepartment />
         )}

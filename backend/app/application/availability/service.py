@@ -96,11 +96,8 @@ class AvailabilityService:
         if doctor is None:
             raise AvailabilityError("doctor_not_found", f"Médico {doctor_id} no encontrado.")
         if doctor.availability_mode != "monthly":
-            raise AvailabilityError(
-                "mode_mismatch",
-                "El modo de disponibilidad del médico es 'fixed'. "
-                "Cambia el availability_mode a 'monthly' antes de configurar disponibilidad mensual.",
-            )
+            doctor.availability_mode = "monthly"
+            self.doctors.update(doctor)
         if not 1 <= month <= 12:
             raise AvailabilityError("invalid_month", "El mes debe estar entre 1 y 12.")
         if not available_dates or not all(1 <= d <= 31 for d in available_dates):

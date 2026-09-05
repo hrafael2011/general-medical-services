@@ -321,6 +321,8 @@ export function CalendarGrid() {
           </h2>
           <span style={{ fontSize: 12, color: "#64748b" }}>
             {GENERATION_MODE_LABELS[calendar.generation_mode] ?? "Manual"}
+            {" · "}
+            {new Set(slots.filter(s => s.assignment).map(s => s.assignment!.doctor_id)).size} médicos asignados
           </span>
         </div>
         <span style={{

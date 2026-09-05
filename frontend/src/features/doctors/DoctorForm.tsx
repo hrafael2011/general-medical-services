@@ -41,6 +41,7 @@ export function DoctorForm({ doctor, onClose }: Props) {
   );
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
+  const [pickerMonth, setPickerMonth] = useState<Date>(new Date());
   const [selectedWeekday, setSelectedWeekday] = useState<number>(4);
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<number>(-1);
 
@@ -86,7 +87,11 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
     const weekly = availabilityData.find(a => a.availability_type === "weekly_fixed");
     const recurring = availabilityData.find(a => a.availability_type === "recurring");
-    const monthly = availabilityData.find(a => a.availability_type === "monthly_variable");
+    // Find the LATEST monthly_variable record (by year/month)
+    const monthlyRecords = availabilityData
+      .filter(a => a.availability_type === "monthly_variable")
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.month ?? 0) - (a.month ?? 0));
+    const monthly = monthlyRecords[0];
 
     if (weekly && doctor?.availability_mode !== "monthly") {
       setAvMode("weekly");
@@ -102,6 +107,8 @@ export function DoctorForm({ doctor, onClose }: Props) {
       setSelectedDates(
         (monthly.available_dates ?? []).map(d => new Date(year, month - 1, d))
       );
+      // Set defaultMonth so the DayPicker shows the configured month
+      setPickerMonth(new Date(year, month - 1, 1));
     }
   }, [availabilityData, doctor?.availability_mode]);
 
@@ -341,10 +348,12 @@ export function DoctorForm({ doctor, onClose }: Props) {
                 <div className="av-calendar">
                   <DayPicker
                     mode="multiple"
+                    month={pickerMonth}
+                    onMonthChange={setPickerMonth}
                     selected={selectedDates}
                     onSelect={handleDayPickerSelect}
                     startMonth={new Date()}
-                    defaultMonth={new Date()}
+                    defaultMonth={pickerMonth}
                     showOutsideDays={false}
                   />
                 </div>

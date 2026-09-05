@@ -57,6 +57,10 @@ class DoctorModel(Base):
     availability_mode: Mapped[str] = mapped_column(
         String(20), nullable=False, default="monthly"
     )
+    pool_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    area_rotation_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="auto")
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
