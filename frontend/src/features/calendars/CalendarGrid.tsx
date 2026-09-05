@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2 } from "lucide-react";
 import { calendarsApi, CalendarAssignmentRead, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
@@ -127,7 +127,8 @@ export function CalendarGrid() {
 
   const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
-  const [generateSummary, setGenerateSummary] = useState<string | null>(null);
+  // NOTA: la generación automática está deshabilitada (FEATURE_MANUAL_ONLY en backend).
+  // Para reactivarla: restaurar generateMutation + botón "Generar calendario con reglas" (historial git).
   const [assignmentWarning, setAssignmentWarning] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [highlightTerm, setHighlightTerm] = useState("");
@@ -183,18 +184,6 @@ export function CalendarGrid() {
     },
     onError: (err) =>
       addToast("error", err instanceof ApiError ? err.message : "Error al eliminar calendario."),
-  });
-
-  const generateMutation = useMutation({
-    mutationFn: () => calendarsApi.generate(calendarId!),
-    onSuccess: (result) => {
-      invalidate();
-      qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
-      qc.invalidateQueries({ queryKey: ["calendars"] });
-      setGenerateSummary(`Asignados: ${result.assigned_count} / Huecos: ${result.gap_count} / Pendiente de aprobación`);
-      addToast("success", result.review_required ? "Calendario generado y pendiente de revisión." : "Calendario generado.");
-    },
-    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al generar."),
   });
 
   const assignMutation = useMutation({
@@ -331,13 +320,6 @@ export function CalendarGrid() {
         }}>
           {calendarStatusLabel}
         </span>
-        {isDraft && !hasApprovedWeeks && (
-          <>
-            <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
-              <Wand2 size={15} /> {generateMutation.isPending ? "Generando…" : "Generar calendario con reglas"}
-            </button>
-          </>
-        )}
         <button
           className="btn-ghost btn-danger"
           onClick={() => setShowDeleteDialog(true)}
@@ -347,12 +329,6 @@ export function CalendarGrid() {
           <Trash2 size={15} />
         </button>
       </div>
-
-      {generateSummary && (
-        <p style={{ color: "#065f46", fontSize: 13, marginBottom: 8 }}>
-          Calendario creado con reglas — {generateSummary}
-        </p>
-      )}
 
       {/* Buscador de médicos */}
       <div style={{ marginBottom: "0.5rem" }}>

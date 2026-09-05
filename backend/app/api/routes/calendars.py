@@ -65,6 +65,7 @@ _ERROR_STATUS: dict[str, int] = {
     "week_empty": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "week_locked": status.HTTP_409_CONFLICT,
     "calendar_not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "manual_only": status.HTTP_403_FORBIDDEN,
 }
 
 
@@ -627,6 +628,11 @@ def generate_calendar(
     service: Annotated[GenerationService, Depends(get_generation_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> GenerationResponse:
+    if settings.feature_manual_only:
+        raise _http_exc(CalendarServiceError(
+            "manual_only",
+            "La generación automática está deshabilitada en modo manual.",
+        ))
     try:
         summary = service.generate(
             actor_id=current_user.id,
@@ -672,6 +678,11 @@ def fill_gaps(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict:
     """Fill only unresolved gaps without touching existing assignments."""
+    if settings.feature_manual_only:
+        raise _http_exc(CalendarServiceError(
+            "manual_only",
+            "La generación automática está deshabilitada en modo manual.",
+        ))
     try:
         result = service.fill_gaps(
             actor_id=current_user.id,

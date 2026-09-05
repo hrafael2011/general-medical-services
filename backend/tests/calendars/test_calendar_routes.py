@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.app.core.config import settings
 from backend.app.api.dependencies import get_current_user
 from backend.app.api.routes.calendars import (
     get_assignment_service,
@@ -284,12 +285,14 @@ def test_unlock_calendar_success(client, mock_calendar_service):
 # ---------------------------------------------------------------------------
 
 
-def test_generate_calendar_success(client, mock_generation_service, engine):
+def test_generate_calendar_success(client, mock_generation_service, engine, monkeypatch):
     from datetime import date as _date
     from dataclasses import dataclass
     from unittest.mock import PropertyMock
 
     from backend.app.application.calendars.generation_service import GenerationSummary
+
+    monkeypatch.setattr(settings, "feature_manual_only", False)
 
     # Mock calendar_repo on the service so route can read calendar status
     mock_repo = MagicMock()
@@ -336,6 +339,32 @@ def test_generate_calendar_success(client, mock_generation_service, engine):
     assert data["total_slots"] == 10
     assert data["assigned_count"] == 8
     assert data["gap_count"] == 2
+
+
+def test_generate_returns_403_when_manual_only(client, mock_generation_service):
+    """FEATURE_MANUAL_ONLY (default true) bloquea la generación automática."""
+    resp = client.post("/api/calendars/cal-gen/generate")
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "manual_only"
+    mock_generation_service.generate.assert_not_called()
+
+
+def test_fill_gaps_returns_403_when_manual_only(client, mock_generation_service):
+    """FEATURE_MANUAL_ONLY (default true) bloquea fill-gaps."""
+    resp = client.post("/api/calendars/cal-gen/fill-gaps")
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "manual_only"
+    mock_generation_service.fill_gaps.assert_not_called()
+
+
+def test_generate_allowed_when_flag_disabled(client, mock_generation_service, monkeypatch):
+    """Con FEATURE_MANUAL_ONLY=false el endpoint llega al service (guard desactivado)."""
+    monkeypatch.setattr(settings, "feature_manual_only", False)
+    mock_generation_service.generate.return_value = None  # guard pasó; el resto fallaría en mapping
+    resp = client.post("/api/calendars/cal-gen/generate")
+    # El service mock devuelve None → la ruta falla en mapping, pero NO con 403 manual_only
+    assert resp.status_code != 403
+    mock_generation_service.generate.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

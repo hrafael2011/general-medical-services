@@ -100,7 +100,7 @@ describe("CalendarGrid", () => {
     expect(await screen.findByText(/mayo 2026.*versión 1/i)).toBeInTheDocument();
   });
 
-  it("muestra botón Generar calendario con reglas en modo draft", async () => {
+  it("no muestra botón Generar calendario con reglas (modo manual, FEATURE_MANUAL_ONLY)", async () => {
     vi.mocked(calendarsApi.listWeeks).mockResolvedValueOnce(allDraftWeeks);
     vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
       calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
@@ -109,32 +109,8 @@ describe("CalendarGrid", () => {
       gaps: [],
     });
     renderGrid();
-    expect(await screen.findByRole("button", { name: /generar calendario con reglas/i })).toBeInTheDocument();
-  });
-
-  it("refresca semanas después de generar con reglas", async () => {
-    const { calendarsApi } = await import("../../api/calendars");
-    const userEvent = await import("@testing-library/user-event");
-    vi.mocked(calendarsApi.listWeeks).mockResolvedValueOnce(allDraftWeeks);
-    vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
-      calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
-      version: { id: "v1", calendar_id: "c1", version_number: 1, status: "draft", created_by: null, reason: null, created_at: "" },
-      slots: [],
-      gaps: [],
-    });
-    renderGrid();
-
     await screen.findByText("Semanas");
-    expect(calendarsApi.listWeeks).toHaveBeenCalledTimes(1);
-
-    await userEvent.default.click(
-      screen.getByRole("button", { name: /generar calendario con reglas/i }),
-    );
-
-    await waitFor(() => {
-      expect(calendarsApi.generate).toHaveBeenCalledWith("c1");
-      expect(calendarsApi.listWeeks).toHaveBeenCalledTimes(2);
-    });
+    expect(screen.queryByRole("button", { name: /generar calendario con reglas/i })).not.toBeInTheDocument();
   });
 
   it("oculta generación con reglas si existe una semana aprobada", async () => {

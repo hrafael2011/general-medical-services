@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     feature_notifications: bool = True
     feature_telegram: bool = True
 
+    # ── Manual-only mode ────────────────────────────────────────────────
+    # True = la generación automática está deshabilitada (botón oculto en el
+    # frontend y endpoints /generate y /fill-gaps bloqueados con 403).
+    # Reactivar: FEATURE_MANUAL_ONLY=false en .env.
+    feature_manual_only: bool = True
+
     # ── Telegram Router Query Engine (spec 15) ──────────────────────────
     feature_telegram_router: bool = False          # master switch
     feature_telegram_router_chitchat: bool = False   # enable chitchat handler
