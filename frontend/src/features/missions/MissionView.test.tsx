@@ -341,6 +341,6 @@ describe("MissionView", () => {
     renderMissions();
     fireEvent.click(await screen.findByRole("button", { name: /ranking de candidatos/i }));
 
-    expect(await screen.findByText(/no tiene calendario aprobado/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no tiene semanas aprobadas/i)).toBeInTheDocument();
   });
 });

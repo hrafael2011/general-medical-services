@@ -32,7 +32,8 @@ function renderSidebar() {
 describe("Sidebar", () => {
   it("muestra el título del sistema", () => {
     renderSidebar();
-    expect(screen.getByText(/sistema de turnos/i)).toBeInTheDocument();
+    // El título visual es el logo del sidebar (imagen con alt accesible)
+    expect(screen.getByRole("img", { name: /sistema de turnos médicos/i })).toBeInTheDocument();
   });
 
   it("muestra los tres grupos de navegación", async () => {

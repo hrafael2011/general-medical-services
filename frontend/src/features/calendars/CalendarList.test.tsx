@@ -40,8 +40,9 @@ describe("CalendarList", () => {
     await userEvent.default.click(screen.getByRole("button", { name: /nuevo calendario/i }));
     await userEvent.default.click(screen.getByRole("button", { name: /habilitar calendario/i }));
 
+    const now = new Date();
     await waitFor(() => {
-      expect(calendarsApi.create).toHaveBeenCalledWith(2026, 5, "manual");
+      expect(calendarsApi.create).toHaveBeenCalledWith(now.getFullYear(), now.getMonth() + 1, "manual");
     });
   });
 });

@@ -51,12 +51,13 @@ function renderApp(initialPath = "/login") {
 describe("App", () => {
   it("muestra la pantalla de login en /login", () => {
     renderApp("/login");
-    expect(screen.getByRole("heading", { name: /sistema de turnos/i })).toBeInTheDocument();
+    // El título visual es el logo (imagen con alt accesible), no un heading
+    expect(screen.getByRole("img", { name: /sistema de turnos médicos/i })).toBeInTheDocument();
   });
 
   it("redirige a /login en rutas desconocidas sin sesión", () => {
     renderApp("/unknown");
-    expect(screen.getByRole("heading", { name: /sistema de turnos/i })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /sistema de turnos médicos/i })).toBeInTheDocument();
   });
 
   it("muestra la confirmación médica pública sin sesión", async () => {

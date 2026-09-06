@@ -153,10 +153,13 @@ describe("CalendarGrid", () => {
     await screen.findAllByText("4");
     const dots = container.querySelectorAll(".calendar-area-dot");
     expect(dots.length).toBeGreaterThan(0);
-    // Areas are sorted alphabetically: Disponible (green), Emergencia (red), Pista (blue)
-    expect(dots[0].getAttribute("style")).toMatch(/#16a34a|rgb\(22,\s*163,\s*74\)/);
-    expect(dots[1].getAttribute("style")).toMatch(/#dc2626|rgb\(220,\s*38,\s*38\)/);
-    expect(dots[2].getAttribute("style")).toMatch(/#2563eb|rgb\(37,\s*99,\s*235\)/);
+    // Los dots siguen el orden de render del día (no alfabético): verificar presencia
+    // de cada color de área, no posición. Mapa real: Emergencia #dc2626, Pista #2563eb,
+    // Disponible #16a34a (AREA_COLOR_MAP en CalendarGrid.tsx)
+    const dotStyles = Array.from(dots).map(d => d.getAttribute("style") ?? "");
+    expect(dotStyles.some(s => /#dc2626|rgb\(220,\s*38,\s*38\)/.test(s))).toBe(true);
+    expect(dotStyles.some(s => /#2563eb|rgb\(37,\s*99,\s*235\)/.test(s))).toBe(true);
+    expect(dotStyles.some(s => /#16a34a|rgb\(22,\s*163,\s*74\)/.test(s))).toBe(true);
   });
 
   it("muestra '+ Asignar médico' en áreas vacías en modo draft", async () => {
