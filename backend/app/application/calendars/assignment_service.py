@@ -928,12 +928,8 @@ class AssignmentService:
             soft_warnings=soft_warnings_raw,
         )
 
-        # 4b. Mandatory justification when forcing warnings.
-        if force_warnings and not override_justification:
-            raise CalendarServiceError(
-                "justification_required",
-                "Se requiere una justificación para asignar con advertencias confirmadas.",
-            )
+        # 4b. Justification is optional when forcing warnings (audit keeps
+        # overridden_warnings regardless). Decisión de producto: opcional.
 
         # 5. Persist assignment.
         stored_justification = override_justification if override_justification else None
@@ -1144,12 +1140,7 @@ class AssignmentService:
             exclude_assignment_id=assignment.id,
         )
 
-        # Mandatory justification when forcing warnings.
-        if force_warnings and not override_justification:
-            raise CalendarServiceError(
-                "justification_required",
-                "Se requiere una justificación para asignar con advertencias confirmadas.",
-            )
+        # Justificación opcional al forzar warnings (audit con overridden_warnings).
 
         old_doctor_id = assignment.doctor_id
         should_notify = self._is_unlocked_approved_version(version)

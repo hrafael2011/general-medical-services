@@ -135,20 +135,14 @@ describe("AssignDoctorModal", () => {
     // Button disabled until all warnings are checked
     expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeDisabled();
 
-    // Check the warning checkbox — button enables; justification se valida al hacer clic
+    // Check the warning checkbox — button enables (justificación opcional)
     await user.click(screen.getByText(/Excede carga semanal/i));
     const confirmBtn = screen.getByRole("button", { name: /asignar con advertencias/i });
     expect(confirmBtn).toBeEnabled();
 
-    // Click sin justificación: error visible y NO confirma
+    // Confirmar sin justificación → onConfirm con justificación vacía
     await user.click(confirmBtn);
-    expect(onConfirm).not.toHaveBeenCalled();
-    expect(screen.getByText(/justificación es obligatoria/i)).toBeInTheDocument();
-
-    // Escribir justificación y confirmar
-    await user.type(screen.getByPlaceholderText(/necesidad operativa/i), "Necesidad operativa.");
-    await user.click(screen.getByRole("button", { name: /asignar con advertencias/i }));
-    expect(onConfirm).toHaveBeenCalledWith("d1", ["weekly_overload"], "Necesidad operativa.");
+    expect(onConfirm).toHaveBeenCalledWith("d1", ["weekly_overload"], "");
   });
 
   it("muestra médicos no disponibles con razón y botón Evaluar de todas formas", async () => {

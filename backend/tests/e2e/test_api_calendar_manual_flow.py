@@ -108,14 +108,19 @@ def test_manual_flow_forced_warning_requires_justification(client, seed_ids):
         f"/api/calendars/{calendar_id}/versions/{version_id}/assignments"
     )
 
-    # ── 5. Forzar warnings SIN justificación → 422 justification_required ──
+    # ── 5. Forzar warnings SIN justificación → 201 (justificación opcional) ──
     resp = client.post(
         assignment_url,
         json={**assignment_payload, "force_warnings": warning_codes},
         headers=headers,
     )
-    assert resp.status_code == 422, resp.text
-    assert resp.json()["detail"]["code"] == "justification_required"
+    assert resp.status_code == 201, resp.text
+    # Liberar el slot para el paso 6 (que prueba la persistencia de la justificación)
+    resp = client.delete(
+        f"{assignment_url}/{resp.json()['id']}",
+        headers=headers,
+    )
+    assert resp.status_code in (200, 204), resp.text
 
     # ── 6. Con justificación → 201 y la asignación persiste la justificación ──
     justification = "Cobertura de emergencia: disponibilidad pendiente (E2E)."

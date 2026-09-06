@@ -1021,8 +1021,8 @@ def test_evaluate_slot_returns_already_assigned_today_as_warning(db_session) -> 
     assert any(w["code"] == "already_assigned_today" for w in result["warnings"])
 
 
-def test_assign_without_justification_when_forcing_warnings_raises(db_session) -> None:
-    """Forzar warnings sin override_justification → justification_required."""
+def test_assign_without_justification_when_forcing_warnings_succeeds(db_session) -> None:
+    """Forzar warnings sin justificación ahora es válido (decisión de producto)."""
     _calendar, version = _create_calendar_and_version(db_session)
     doctor = _create_doctor(db_session)
     doctor.monthly_service_max = 1
@@ -1037,17 +1037,17 @@ def test_assign_without_justification_when_forcing_warnings_raises(db_session) -
         service_area_id=_AREA_ID,
     )
 
-    with pytest.raises(CalendarServiceError) as exc_info:
-        service.assign_doctor(
-            actor_id="actor-001",
-            version_id=version.id,
-            doctor_id=doctor.id,
-            date=datetime.date(2026, 5, 22),
-            service_area_id=_AREA_ID,
-            force_warnings=["monthly_max_exceeded"],
-        )
+    assigned = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 22),
+        service_area_id=_AREA_ID,
+        force_warnings=["monthly_max_exceeded"],
+    )
 
-    assert exc_info.value.code == "justification_required"
+    assert assigned is not None
+    assert assigned.doctor_id == doctor.id
 
 
 def test_assign_with_force_and_justification_persists_audit_event(db_session) -> None:
