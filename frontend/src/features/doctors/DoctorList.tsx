@@ -26,7 +26,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   const [detail, setDetail] = useState("");
   const [actionError, setActionError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [avModalDoctor, setAvModalDoctor] = useState<{ id: string; name: string; dates: Date[] } | null>(null);
+  const [avModalDoctor, setAvModalDoctor] = useState<{ id: string; name: string } | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["doctors", statusFilter, monthlyFilter],
@@ -256,7 +256,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                       <button
                         className="btn-ghost"
                         style={{ fontSize: "0.8rem", padding: "2px 8px", whiteSpace: "nowrap" }}
-                        onClick={(e) => { e.stopPropagation(); setAvModalDoctor({ id: doc.id, name: doc.name, dates: [] }); }}
+                        onClick={(e) => { e.stopPropagation(); setAvModalDoctor({ id: doc.id, name: doc.name }); }}
                       >
                         <CalendarDays size={14} /> Asignar días
                       </button>
@@ -308,7 +308,6 @@ export function DoctorList({ onAdd, onEdit }: Props) {
         <QuickAvailabilityModal
           doctorId={avModalDoctor.id}
           doctorName={avModalDoctor.name}
-          initialDates={avModalDoctor.dates}
           onClose={() => setAvModalDoctor(null)}
           onSaved={() => {
             setAvModalDoctor(null);
