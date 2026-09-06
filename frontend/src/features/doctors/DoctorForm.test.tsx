@@ -56,10 +56,12 @@ describe("DoctorForm availability", () => {
     expect(screen.getByText("Dom")).toBeInTheDocument();
   });
 
-  it("shows monthly grid when monthly toggle selected", () => {
+  it("monthly mode habilita el modo sin calendario (días se dan desde el listado)", () => {
     renderForm();
     fireEvent.click(screen.getByText(/Avisa sus días/));
-    expect(screen.getByText("15")).toBeInTheDocument();
+    // Sin calendario: solo la nota que remite al botón de la columna Disponibilidad
+    expect(screen.getByText(/Asignar días/)).toBeInTheDocument();
+    expect(screen.queryByText("15")).not.toBeInTheDocument();
   });
 
   it("shows recurring selectors when recurring toggle selected", () => {
