@@ -1076,12 +1076,19 @@ def handle_generate_report(params: dict[str, Any], deps: dict[str, Any]) -> dict
         if not validation.get("ok", True):
             return _err(validation.get("error", "Parámetros de reporte inválidos."))
         try:
-            document = validator.generate_report(contract, deps["report_service"])
+            gen_result = validator.generate_report(contract, deps["report_service"])
         except Exception as exc:
             return _err(f"No se pudo generar el reporte: {exc}")
+        if not gen_result.get("ok"):
+            # El contrato de generate_report devuelve {ok: False, error} en vez
+            # de lanzar: nunca filtrar ese dict como documento.
+            return _err(gen_result.get("error") or "No se pudo generar el reporte.")
+        document = gen_result.get("document_bytes")
+        if not isinstance(document, bytes | bytearray):
+            return _err("El servicio de reportes no devolvió un documento PDF.")
         return _ok(
             document=document,
-            filename=f"calendario-{year}-{month:02d}.pdf",
+            filename=gen_result.get("filename") or f"calendario-{year}-{month:02d}.pdf",
             message="Calendario mensual en PDF.",
         )
 
