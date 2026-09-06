@@ -5,21 +5,16 @@ Now delegates to RulePipeline internally while preserving the exact
 same output as the original implementation.
 """
 
+from backend.app.domain.calendars.objective_weights import (
+    AREA_WEIGHTS,
+    MISSION_WEIGHT,
+    STRONG_AREAS,
+)
 from backend.app.domain.calendars.types import CandidateScore, SlotRequest
 
 # ---------------------------------------------------------------------------
-# Weights / spacing constants (kept for external consumers)
+# Spacing constants (pesos de área en objective_weights.py — SSOT único)
 # ---------------------------------------------------------------------------
-
-AREA_WEIGHTS: dict[str, float] = {
-    "emergencia": 3.0,
-    "pista": 2.0,
-    "disponible": 1.0,
-}
-
-MISSION_WEIGHT = 0.5
-
-STRONG_AREAS = {"emergencia", "pista"}
 
 MIN_SPACING_STRONG = 14
 MIN_SPACING_DISPONIBLE_AFTER_STRONG = 7

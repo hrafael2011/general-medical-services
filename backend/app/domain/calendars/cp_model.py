@@ -105,6 +105,11 @@ class OrToolsEngine:
                     model.add(sum(doc_day_vars) <= 1)
 
         # 5b. Day-priority constraints
+        # NOTA (2026-09-06): GenerationContext aún no expone day_priorities y
+        # ningún flujo escribe day_priority ≠ "available" en doctor_availability;
+        # este bloque queda inerte por datos, no por diseño. La feature está a
+        # medio construir (columna + DayOfWeekConsistencyRule + este bloque) y se
+        # activará cuando el encargado pueda marcar días prioritarios.
         day_priorities = getattr(ctx, "day_priorities", None) or {}
         primary_displaced: list[cp_model.IntVar] = []
         for doc in ctx.doctors:

@@ -3,11 +3,10 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2 } from "lucide-react";
-import { calendarsApi, CalendarAssignmentRead, DaySlot, WeekRead } from "../../api/calendars";
+import { calendarsApi, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
-import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
 import { useToast } from "../../components/Toast";
 import { ApiError } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -23,7 +22,6 @@ const GENERATION_MODE_LABELS = {
 } as const;
 
 interface AssignTarget { date: string; areaId: string; areaName: string; currentAssignmentId?: string; currentDoctorId?: string; }
-interface RemoveTarget { assignment: CalendarAssignmentRead; areaName: string; }
 
 interface CalendarDay {
   day: number;
@@ -126,7 +124,6 @@ export function CalendarGrid() {
   const { addToast } = useToast();
 
   const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
   // NOTA: la generación automática está deshabilitada (FEATURE_MANUAL_ONLY en backend).
   // Para reactivarla: restaurar generateMutation + botón "Generar calendario con reglas" (historial git).
   const [assignmentWarning, setAssignmentWarning] = useState<string | null>(null);
@@ -214,12 +211,6 @@ export function CalendarGrid() {
         err instanceof ApiError ? err.message : "Error al asignar doctor."
       );
     },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: () => calendarsApi.removeAssignment(calendarId!, data!.version.id, removeTarget!.assignment.id),
-    onSuccess: () => { invalidate(); setRemoveTarget(null); addToast("success", "Asignación quitada."); },
-    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al quitar."),
   });
 
   const quickRemoveMutation = useMutation({
@@ -596,18 +587,6 @@ export function CalendarGrid() {
           isLoading={assignMutation.isPending}
           submitError={assignmentWarning}
           onRemove={assignTarget.currentAssignmentId ? () => quickRemoveMutation.mutate(assignTarget.currentAssignmentId!) : undefined}
-        />
-      )}
-
-      {removeTarget && (
-        <RemoveAssignmentPopover
-          doctorName={doctorMap[removeTarget.assignment.doctor_id]?.name ?? removeTarget.assignment.doctor_id}
-          date={removeTarget.assignment.service_date}
-          areaName={removeTarget.areaName}
-          source={removeTarget.assignment.assignment_source}
-          onConfirm={() => removeMutation.mutate()}
-          onClose={() => setRemoveTarget(null)}
-          isLoading={removeMutation.isPending}
         />
       )}
 

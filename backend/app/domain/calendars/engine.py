@@ -11,7 +11,6 @@ from datetime import date, timedelta
 
 from backend.app.domain.availability_rules import matches_recurring_monthly_rule
 from backend.app.domain.calendars.cp_model import OrToolsEngine
-from backend.app.domain.calendars.scoring import compute_candidate_score
 from backend.app.domain.calendars.types import (
     CandidateScore,
     GenerationSummary,

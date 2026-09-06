@@ -1,9 +1,9 @@
 ---
 spec: 08
-version: 1.1.0
+version: 1.2.0
 status: accepted
 created: 2026-04-30
-updated: 2026-04-30
+updated: 2026-09-05
 ---
 
 # Spec 08 - Railway/Vercel Deployment and Operation
@@ -286,5 +286,6 @@ Rules:
 
 | Version | Fecha | Issue | Trigger | Resumen |
 |---------|-------|-------|---------|---------|
+| 1.2.0 | 2026-09-05 | — | Modo manual | La sección "Calendar Draft Generation" describe el diseño cron futuro; desde 2026-09-05 NO existe cron de generación: el sistema crea calendarios vacíos en modo manual (`FEATURE_MANUAL_ONLY=true`, endpoints `generate`/`fill-gaps` → 403) y el encargado llena por semanas. Flags del bot Telegram router activos por defecto (rollback por `FEATURE_TELEGRAM_ROUTER=false`). |
 | 1.1.0 | 2026-04-30 | — | Bug | WARN-002 (QA): frontend tenía URL de API hardcodeada al puerto 8000 en source code; el servidor de desarrollo corre en 8002. Se agrega regla: VITE_API_URL debe configurarse por entorno y no hardcodearse. |
 | 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define despliegue Railway/Vercel, estrategia MVP sin Celery/Redis, modelo de tareas programadas y criterios para escalar infraestructura. |

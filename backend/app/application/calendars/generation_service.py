@@ -36,14 +36,6 @@ class _AreaMapper:
     def code(self, uuid: str) -> str:
         return self._uuid_to_code.get(uuid, uuid)
 
-    @property
-    def required_uuids(self) -> list[str]:
-        return [self._code_to_uuid[c] for c in REQUIRED_AREA_CODES]
-
-    @property
-    def weighted_uuids(self) -> dict[str, float]:
-        return {self._code_to_uuid[c]: w for c, w in AREA_WEIGHTS.items()}
-
     def missing_required_codes(self) -> list[str]:
         return [code for code in REQUIRED_AREA_CODES if code not in self._code_to_uuid]
 
@@ -282,6 +274,12 @@ class GenerationService:
         """Fill only unresolved gaps without touching existing assignments.
 
         Returns a dict with ``filled`` (int) and ``remaining`` (int).
+
+        DEPRECADO (2026-09-05): la generación automática está deshabilitada por
+        defecto (FEATURE_MANUAL_ONLY=true → el endpoint responde 403). El método
+        se conserva solo para la reactivación prometida por el flag
+        (FEATURE_MANUAL_ONLY=false). No invertir más esfuerzo en este segundo
+        motor greedy: si la generación no se reactiva, eliminarlo junto con su ruta.
         """
         calendar = self.calendar_repo.get_calendar_by_id(calendar_id)
         if calendar is None:

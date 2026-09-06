@@ -16,18 +16,19 @@ Originally designed for a military hospital, the system automates physician assi
 ## ✨ Features
 
 ### 🏗️ Smart Scheduling
-- ✅ Automatic calendar generation with composite fairness algorithm
+- ✅ Manual-first mode (`FEATURE_MANUAL_ONLY=true` by default): automatic generation is disabled — only confirmable warnings (with mandatory justification) plus 3 critical hard blocks
+- ✅ Optional automatic generation (OR-Tools CP-SAT composite fairness) — re-enable with `FEATURE_MANUAL_ONLY=false`
 - ✅ Multidimensional scoring: monthly load, historical load, spacing, penalties, goal bonuses
 - ✅ Week-by-week approval flow per calendar cycle
 - ✅ Assisted manual assignment with candidate ranking
 - ✅ Spacing rules (14-day minimum between heavy services)
 
 ### 🤖 Telegram Conversational Bot
-- ✅ Hybrid architecture: LLM-first (DeepSeek) with 14 tools, deterministic fallback
+- ✅ MCP-style 22-tool catalog (function calling): the model picks a tool, the backend executes against application services — read-only, encargado/admin only
 - ✅ Natural language queries: *"who is on duty tomorrow in emergency?"*
-- ✅ Semantic Layer with 15 predefined metrics — zero hallucination on operational data
-- ✅ Multi-turn SQL Agent with self-correction (up to 3 iterations)
-- ✅ Shift confirmation system via inline commands
+- ✅ Deterministic rejections: asks for specificity when unclear, "that is done in the web panel" for write requests
+- ✅ Multi-turn SQL Agent kept only as internal fallback (never exposed to the model)
+- ✅ Shift confirmation system via inline commands (doctors)
 
 ### 📢 Multi-Channel Notifications
 - ✅ WhatsApp (Meta Cloud API) for notifications and confirmations

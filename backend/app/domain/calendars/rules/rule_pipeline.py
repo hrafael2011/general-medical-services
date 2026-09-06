@@ -66,7 +66,8 @@ class RulePipeline:
                     all_warnings=all_warnings,
                 )
 
-            total_score += rule_result.score_delta
+            # El peso de la regla modula su contribución al score (Rule.weight).
+            total_score += rule.weight * rule_result.score_delta
 
         return PipelineResult(
             total_score=total_score,

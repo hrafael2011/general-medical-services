@@ -3,11 +3,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from backend.app.infrastructure.db.models.notifications import (
-    JobExecutionModel,
-    NotificationEventModel,
-    ScheduledJobModel,
-)
+from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 
 MAX_RETRIES = 3
 BACKOFF_SECONDS = 60
@@ -115,27 +111,3 @@ class NotificationRepository:
             stmt = stmt.where(NotificationEventModel.notification_type == notification_type)
         stmt = stmt.limit(limit)
         return list(self.session.scalars(stmt))
-
-
-class JobRepository:
-    def __init__(self, session: Session) -> None:
-        self.session = session
-
-    def add_job(self, job: ScheduledJobModel) -> ScheduledJobModel:
-        self.session.add(job)
-        self.session.flush()
-        return job
-
-    def get_job_by_id(self, job_id: str) -> ScheduledJobModel | None:
-        return self.session.get(ScheduledJobModel, job_id)
-
-    def list_jobs(self, status: str | None = None) -> list[ScheduledJobModel]:
-        stmt = select(ScheduledJobModel).order_by(ScheduledJobModel.created_at.desc())
-        if status:
-            stmt = stmt.where(ScheduledJobModel.status == status)
-        return list(self.session.scalars(stmt))
-
-    def add_execution(self, execution: JobExecutionModel) -> JobExecutionModel:
-        self.session.add(execution)
-        self.session.flush()
-        return execution
