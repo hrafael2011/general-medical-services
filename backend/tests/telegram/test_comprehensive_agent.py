@@ -807,7 +807,7 @@ class TestAgentPipeline:
         assert result.agent_action == "ambiguous"
         assert "sex" in result.response_text.lower()
 
-    def test_agent_validation_error_handled(self, seeded_db) -> None:
+    def test_unknown_tool_returns_controlled_response(self, seeded_db) -> None:
         """Tool desconocida del NLU → respuesta controlada, nunca excepción."""
         llm = ScriptedAgentLLM(
             nlu_json='{"tool": "tool_inexistente", "params": {}, "confidence": 0.5}',
@@ -820,7 +820,8 @@ class TestAgentPipeline:
         assert "Hubo un error" in result.response_text
 
     def test_agent_non_json_response_triggers_clarification(self, seeded_db) -> None:
-        """LLM devuelve texto no-JSON → fallback conservador (clarify)."""
+        """LLM devuelve texto no-JSON → fallback conservador (reply/unknown
+        + needs_clarification del NLU)."""
         llm = FakeLLMProvider(responses={
             "charlamos": "Claro, hablemos de lo que necesites.",
         })

@@ -65,7 +65,9 @@ def _make_agent(llm, query_executor) -> ConversationalAgent:
     """Agente LLM-first sin handlers cableados: la tool cae al fallback SQL."""
     return ConversationalAgent(
         llm=llm,
-        router=IntentRouter(),  # registry vacío: ningún query_type registrado
+        # IntentRouter() registra los DEFAULT_QUERY_TYPES; list_doctors no está
+        # entre ellos → el dispatch cae al fallback interno del SQL Agent.
+        router=IntentRouter(),
         query_executor=query_executor,
         nlu_engine=NLUEngine(llm),
     )

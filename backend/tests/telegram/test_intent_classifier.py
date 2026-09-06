@@ -10,7 +10,8 @@ catálogo en sí):
 - La respuesta JSON del LLM se parsea a nombre de tool real + params.
 - needs_clarification activa la aclaración.
 - Petición incoherente → reply/clarify; petición de escritura → reply/out_of_scope.
-- JSON inválido / vacío / no-JSON → fallback conservador (clarify, confianza 0).
+- JSON inválido / vacío / no-JSON → fallback conservador (`reply` con
+  response_type "unknown" y needs_clarification, confianza 0).
 """
 
 import json
@@ -137,7 +138,7 @@ class TestNLUEngine:
         assert result.params["type"] == "monthly"
 
     def test_handles_malformed_json_gracefully(self):
-        """JSON inválido → fallback conservador (clarify, confianza 0)."""
+        """JSON inválido → fallback conservador (reply/unknown, confianza 0)."""
         llm = FakeLLMProvider(responses={"cualquier cosa": "esto no es json"})
         engine = NLUEngine(llm)
         result = engine.classify("cualquier cosa")
