@@ -236,11 +236,15 @@ Turnos medicos system/
 | Type | Framework | Command |
 |------|-----------|---------|
 | Backend unit | pytest | `./scripts/test.sh unit` |
-| Backend integration | pytest (PostgreSQL) | `./scripts/test.sh all` |
-| Specific phase | pytest | `./scripts/test.sh phase 0` |
 | Frontend | vitest | `cd frontend && npm test` |
+| API E2E (PostgreSQL real descartable) | pytest `-m e2e` | `./scripts/test.sh e2e` |
+| UI E2E (Playwright, backend real) | @playwright/test | `cd frontend && npm run test:e2e` |
 
-**Coverage:** ~100+ backend tests, 20 frontend tests. Integration tests require PostgreSQL and are marked with `@pytest.mark.integration`.
+**Marcadores pytest:** `db` = requiere PostgreSQL real (skip limpio si no hay servidor); `e2e` = API end-to-end contra la app real; `integration` = PostgreSQL + DeepSeek API (excluido por defecto). El unit-run no depende de PostgreSQL.
+
+**Infraestructura E2E:** el servicio `postgres-test` (puerto 5434, descartable) se crea/destruye con `./scripts/test-db.sh {up|down|reset}`; el seed compartido es `backend/scripts/seed_e2e.py` (admin `admin@turnos.com` + catálogos + médicos). Playwright usa `webServer` (backend en :8011 + frontend en :5199) y `globalSetup` que migra y siembra la base de prueba.
+
+**Deuda conocida (2026-09-06):** 9 tests legacy de telegram pendientes de migrar al contrato del bot LLM-first (`test_mission_ranking_query`, `test_webhook_secret_validation`, `test_real_transcript_regression`, `test_stress`, `test_real_user_simulation`), más los tests `integration` que requieren DeepSeek real. El job de CI para `db`/`e2e`/UI-E2E está pendiente de añadir a `.github/workflows/ci.yml`.
 
 ---
 
