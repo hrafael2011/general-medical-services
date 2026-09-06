@@ -12,6 +12,10 @@ const mockListDoctors = vi.fn().mockResolvedValue({
   total: 3,
 });
 
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ addToast: vi.fn() }),
+}));
+
 vi.mock("../../api/doctors", () => ({
   doctorsApi: {
     list: (...args: unknown[]) => mockListDoctors(...args),
@@ -31,9 +35,19 @@ vi.mock("../../api/doctors", () => ({
     deactivateService: vi.fn(),
   },
   availabilityApi: {
-    list: vi.fn().mockResolvedValue([
-      { id: "a1", doctor_id: "d1", availability_type: "weekly_fixed", days_of_week: [0, 2], available_dates: null, weekday: null, week_number: null, year: null, month: null },
-    ]),
+    list: vi.fn().mockImplementation((doctorId: string) => {
+      if (doctorId === "d4") {
+        const now = new Date();
+        return Promise.resolve([{
+          id: "a4", doctor_id: "d4", availability_type: "monthly_variable", days_of_week: null,
+          available_dates: [3, 7, 15], weekday: null, week_number: null,
+          year: now.getFullYear(), month: now.getMonth() + 1,
+        }]);
+      }
+      return Promise.resolve([
+        { id: "a1", doctor_id: "d1", availability_type: "weekly_fixed", days_of_week: [0, 2], available_dates: null, weekday: null, week_number: null, year: null, month: null },
+      ]);
+    }),
   },
 }));
 
@@ -132,5 +146,33 @@ describe("DoctorList", () => {
 
     expect(mockListDoctors).toHaveBeenCalledWith("all", undefined);
     expect(mockListDoctors).toHaveBeenCalledWith("inactive", undefined);
+  });
+
+  it("el perfil de un médico mensual muestra los días guardados del mes", async () => {
+    mockListDoctors.mockResolvedValue({
+      items: [
+        { id: "d4", name: "Dr. Mensual", sex: "male", service_active: true, active: true, participa_misiones: true, monthly_service_target: 3, monthly_service_max: 3, monthly_service_limit_mode: "warn_only", availability_mode: "monthly", rank_id: null, department_id: null, phone: null, notes: null, service_inactive_reason_id: null, service_inactive_detail: null, whatsapp_phone: null, allowed_area_ids: ["area-1"] },
+      ],
+      total: 1,
+    });
+
+    renderList();
+    fireEvent.click(await screen.findByText("Dr. Mensual"));
+
+    expect(await screen.findByText(/Mensual \(.*\): días 3, 7, 15/)).toBeInTheDocument();
+  });
+
+  it("Asignar días reabre con los días ya guardados del mes actual", async () => {
+    mockListDoctors.mockResolvedValue({
+      items: [
+        { id: "d4", name: "Dr. Mensual", sex: "male", service_active: true, active: true, participa_misiones: true, monthly_service_target: 3, monthly_service_max: 3, monthly_service_limit_mode: "warn_only", availability_mode: "monthly", rank_id: null, department_id: null, phone: null, notes: null, service_inactive_reason_id: null, service_inactive_detail: null, whatsapp_phone: null, allowed_area_ids: ["area-1"] },
+      ],
+      total: 1,
+    });
+
+    renderList();
+    fireEvent.click(await screen.findByRole("button", { name: "Asignar días" }));
+
+    expect(await screen.findByText(/Días seleccionados:\s*3, 7, 15/)).toBeInTheDocument();
   });
 });

@@ -310,7 +310,11 @@ export function DoctorList({ onAdd, onEdit }: Props) {
           doctorName={avModalDoctor.name}
           initialDates={avModalDoctor.dates}
           onClose={() => setAvModalDoctor(null)}
-          onSaved={() => { setAvModalDoctor(null); qc.invalidateQueries({ queryKey: ["doctors"] }); }}
+          onSaved={() => {
+            setAvModalDoctor(null);
+            qc.invalidateQueries({ queryKey: ["doctors"] });
+            qc.invalidateQueries({ queryKey: ["doctor-availability"] });
+          }}
         />
       )}
 
@@ -505,7 +509,18 @@ function normalizeAvailability(availability: AvailabilityRead[], availabilityMod
 
   // Monthly mode: avisa sus días cada mes
   if (availabilityMode === "monthly") {
-    return ["Mensual: avisa sus días cada mes"];
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const monthly = availability
+      .filter(item => item.availability_type === "monthly_variable" && (item.available_dates?.length ?? 0) > 0)
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.month ?? 0) - (a.month ?? 0));
+    if (monthly.length === 0) return ["Mensual: avisa sus días cada mes"];
+    return monthly.map(item => {
+      const month = item.month ?? 0;
+      const period = item.year && month >= 1 && month <= 12
+        ? `${monthNames[month - 1]} ${item.year}`
+        : "";
+      return `Mensual${period ? ` (${period})` : ""}: días ${(item.available_dates ?? []).join(", ")}`;
+    });
   }
 
   return availability.map(item => {

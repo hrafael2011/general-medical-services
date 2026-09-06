@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { DayPicker } from "react-day-picker";
+import { useQuery } from "@tanstack/react-query";
 import { es } from "date-fns/locale";
 import "react-day-picker/style.css";
 import { availabilityApi } from "../../api/doctors";
@@ -29,6 +30,23 @@ export function QuickAvailabilityModal({
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1; // JS months are 0-indexed
+
+  // Preselecciona los días ya guardados del mes mostrado: al reabrir el modal
+  // se ven los días previos (antes abría siempre vacío y parecía que no se guardaban).
+  const { data: availability } = useQuery({
+    queryKey: ["doctor-availability", doctorId],
+    queryFn: () => availabilityApi.list(doctorId),
+  });
+
+  useEffect(() => {
+    if (!availability?.length) return;
+    const saved = availability.find(
+      (a) => a.availability_type === "monthly_variable" && a.year === year && a.month === month,
+    );
+    if (saved?.available_dates?.length) {
+      setSelectedDates(saved.available_dates.map((day) => new Date(year, month - 1, day)));
+    }
+  }, [availability, year, month]);
 
   const dayNumbers = selectedDates
     .map((d) => d.getDate())
