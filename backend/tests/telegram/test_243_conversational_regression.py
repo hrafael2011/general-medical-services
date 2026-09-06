@@ -31,6 +31,8 @@ from backend.app.core.config import settings
 from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 
+pytestmark = pytest.mark.db
+
 # ---------------------------------------------------------------------------
 # Fixtures (module-scoped — one agent + one DB session for all tests)
 # ---------------------------------------------------------------------------
