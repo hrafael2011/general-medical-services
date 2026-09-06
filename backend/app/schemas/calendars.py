@@ -87,8 +87,17 @@ class EligibleDoctorRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UnavailableDoctorRead(BaseModel):
+    doctor_id: str
+    full_name: str
+    code: str
+    description: str
+    is_hard: bool
+
+
 class EligibleDoctorsResponse(BaseModel):
     doctors: list[EligibleDoctorRead]
+    unavailable: list[UnavailableDoctorRead] = []
 
 
 # --- Slot Evaluation ---

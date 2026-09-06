@@ -32,6 +32,7 @@ from backend.app.schemas.calendars import (
     EvaluationResponse,
     HardBlockItem,
     ReplaceAssignmentRequest,
+    UnavailableDoctorRead,
     UnresolvedGapRead,
     WarningItem,
     WeekRead,
@@ -66,6 +67,7 @@ _ERROR_STATUS: dict[str, int] = {
     "week_locked": status.HTTP_409_CONFLICT,
     "calendar_not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "manual_only": status.HTTP_403_FORBIDDEN,
+    "justification_required": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 
@@ -560,7 +562,7 @@ def get_eligible_doctors(
             },
         )
     try:
-        doctors = service.get_eligible_doctors_for_slot(
+        result = service.get_eligible_doctors_for_slot(
             version_id=version.id,
             target_date=date,
             service_area_id=area_id,
@@ -576,8 +578,11 @@ def get_eligible_doctors(
                 rank_name=getattr(item["doctor"], "rank_name", None),
                 altera_orden=item["altera_orden"],
             )
-            for item in doctors
-        ]
+            for item in result["eligible"]
+        ],
+        unavailable=[
+            UnavailableDoctorRead(**item) for item in result["unavailable"]
+        ],
     )
 
 

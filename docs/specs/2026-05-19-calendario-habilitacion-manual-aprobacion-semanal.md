@@ -37,6 +37,15 @@ La generación con reglas:
 - refresca grilla, semanas y listado;
 - queda bloqueada si existe alguna semana aprobada, para evitar sobrescribir trabajo cerrado.
 
+## Modo Manual por Defecto (2026-09-05)
+
+El sistema opera en modo manual por defecto: `FEATURE_MANUAL_ONLY=true`.
+
+- Los endpoints `POST /calendars/{id}/generate` y `POST /calendars/{id}/fill-gaps` responden `403` con código `manual_only`.
+- El botón "Generar calendario con reglas" no aparece en la UI.
+- Reactivación (solo si el encargado lo decide): `FEATURE_MANUAL_ONLY=false` en `.env`; el botón y los endpoints vuelven a estar disponibles.
+- La asignación manual es el flujo principal: los médicos no elegibles se muestran con su razón y los bloqueos blandos son advertencias confirmables con justificación obligatoria (ver spec 02, "Hard Blocks vs Warnings").
+
 ## Conteos Semanales
 
 El endpoint de semanas debe devolver:

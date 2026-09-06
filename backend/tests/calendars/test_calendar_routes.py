@@ -368,6 +368,65 @@ def test_generate_allowed_when_flag_disabled(client, mock_generation_service, mo
 
 
 # ---------------------------------------------------------------------------
+# GET /api/calendars/{calendar_id}/eligible-doctors
+# ---------------------------------------------------------------------------
+
+
+def test_eligible_doctors_endpoint_includes_unavailable_with_reasons(
+    client, mock_assignment_service, engine
+):
+    """La respuesta incluye médicos ocultos con razón (spec 02)."""
+    from types import SimpleNamespace
+
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+    sess = SessionLocal()
+    cal = _make_calendar(id="cal-elig")
+    ver = _make_version(calendar_id="cal-elig", id=str(uuid4()))
+    sess.add(cal)
+    sess.add(ver)
+    sess.commit()
+    sess.close()
+
+    mock_assignment_service.get_eligible_doctors_for_slot.return_value = {
+        "eligible": [
+            {
+                "doctor": SimpleNamespace(
+                    id="doc-ok", name="Dr. Ok", specialty=None, rank_name=None
+                ),
+                "altera_orden": None,
+            }
+        ],
+        "unavailable": [
+            {
+                "doctor_id": "doc-oculto",
+                "full_name": "Dr. Oculto",
+                "code": "no_availability",
+                "description": "No tiene disponibilidad para esta fecha.",
+                "is_hard": False,
+            },
+            {
+                "doctor_id": "doc-inactivo",
+                "full_name": "Dr. Inactivo",
+                "code": "doctor_inactive",
+                "description": "El médico no está activo o no tiene servicio activo.",
+                "is_hard": True,
+            },
+        ],
+    }
+
+    resp = client.get(
+        "/api/calendars/cal-elig/eligible-doctors?date=2026-05-15&area_id=area-1"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["doctors"][0]["id"] == "doc-ok"
+    assert data["unavailable"][0]["code"] == "no_availability"
+    assert data["unavailable"][0]["is_hard"] is False
+    assert data["unavailable"][1]["code"] == "doctor_inactive"
+    assert data["unavailable"][1]["is_hard"] is True
+
+
+# ---------------------------------------------------------------------------
 # POST .../versions/{version_id}/assignments
 # ---------------------------------------------------------------------------
 

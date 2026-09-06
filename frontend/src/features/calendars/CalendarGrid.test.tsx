@@ -1,5 +1,6 @@
 // frontend/src/features/calendars/CalendarGrid.test.tsx
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -43,6 +44,11 @@ vi.mock("../../api/calendars", () => ({
     unlock: vi.fn(),
     assignDoctor: vi.fn(),
     removeAssignment: vi.fn(),
+    eligibleDoctors: vi.fn().mockResolvedValue({
+      doctors: [{ id: "d2", full_name: "Dr. PÉREZ", specialty: null, rank_name: null, altera_orden: null }],
+      unavailable: [],
+    }),
+    evaluate: vi.fn().mockResolvedValue({ hard_blocks: [], warnings: [] }),
   },
 }));
 
@@ -199,6 +205,22 @@ describe("CalendarGrid", () => {
     expect(dashes.length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /generar calendario con reglas/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /editar calendario/i })).not.toBeInTheDocument();
+  });
+
+  it("muestra banner de error cuando falla la asignación", async () => {
+    vi.mocked(calendarsApi.assignDoctor).mockRejectedValue(new Error("Doctor no disponible"));
+    const user = userEvent.setup();
+    renderGrid();
+    await screen.findByText("Semanas");
+    const assignLabels = await screen.findAllByText("+ Asignar médico");
+    await user.click(assignLabels[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Dr. PÉREZ")).toBeInTheDocument();
+    });
+    await user.click(screen.getByText("Dr. PÉREZ"));
+    await waitFor(() => {
+      expect(screen.getAllByText(/No se pudo asignar/).length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   it("muestra estado parcial cuando solo algunas semanas están aprobadas", async () => {

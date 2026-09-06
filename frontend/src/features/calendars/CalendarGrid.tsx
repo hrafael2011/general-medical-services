@@ -187,17 +187,19 @@ export function CalendarGrid() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: ({ doctorId, forceWarnings }: { doctorId: string; forceWarnings: string[] }) => {
+    mutationFn: ({ doctorId, forceWarnings, justification }: { doctorId: string; forceWarnings: string[]; justification: string }) => {
       if (!assignTarget) throw new Error("Missing data");
       if (assignTarget.currentAssignmentId) {
         return calendarsApi.replaceAssignment(
-          calendarId!, data!.version.id, assignTarget.currentAssignmentId, doctorId, null, forceWarnings.length > 0 ? forceWarnings : null
+          calendarId!, data!.version.id, assignTarget.currentAssignmentId, doctorId,
+          justification || null, forceWarnings.length > 0 ? forceWarnings : null
         );
       }
       return calendarsApi.assignDoctor(calendarId!, data!.version.id, {
         service_date: assignTarget.date,
         service_area_id: assignTarget.areaId,
         doctor_id: doctorId,
+        override_justification: justification || null,
         force_warnings: forceWarnings.length > 0 ? forceWarnings : null,
       });
     },
@@ -329,6 +331,13 @@ export function CalendarGrid() {
           <Trash2 size={15} />
         </button>
       </div>
+
+      {/* Banner de error de asignación (bug de error silencioso corregido) */}
+      {assignmentWarning && (
+        <div style={{ marginBottom: "0.75rem", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, fontSize: 13, color: "#991b1b" }}>
+          <strong>No se pudo asignar: </strong>{assignmentWarning}
+        </div>
+      )}
 
       {/* Buscador de médicos */}
       <div style={{ marginBottom: "0.5rem" }}>
@@ -582,9 +591,10 @@ export function CalendarGrid() {
           areaName={assignTarget.areaName}
           currentDoctorId={assignTarget.currentDoctorId}
           currentAssignmentId={assignTarget.currentAssignmentId}
-          onConfirm={(doctorId, forceWarnings) => assignMutation.mutate({ doctorId, forceWarnings })}
+          onConfirm={(doctorId, forceWarnings, justification) => assignMutation.mutate({ doctorId, forceWarnings, justification })}
           onClose={() => { setAssignTarget(null); setAssignmentWarning(null); }}
           isLoading={assignMutation.isPending}
+          submitError={assignmentWarning}
           onRemove={assignTarget.currentAssignmentId ? () => quickRemoveMutation.mutate(assignTarget.currentAssignmentId!) : undefined}
         />
       )}

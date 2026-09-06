@@ -12,6 +12,7 @@ vi.mock("../../api/calendars", () => ({
   },
   // Re-export types so the import works
   EligibleDoctorRead: {},
+  UnavailableDoctorRead: {},
   WarningItem: {},
 }));
 
@@ -35,7 +36,7 @@ const BASE_PROPS = {
 describe("AssignDoctorModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: ELIGIBLE_DOCTORS });
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: ELIGIBLE_DOCTORS, unavailable: [] });
   });
 
   it("muestra la fecha y área en el título", async () => {
@@ -62,7 +63,7 @@ describe("AssignDoctorModal", () => {
   });
 
   it("muestra mensaje cuando no hay doctores disponibles", async () => {
-    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: [] });
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: [], unavailable: [] });
     render(<AssignDoctorModal {...BASE_PROPS} />);
     await waitFor(() => {
       expect(screen.getByText(/no hay doctores disponibles/i)).toBeInTheDocument();
@@ -91,7 +92,7 @@ describe("AssignDoctorModal", () => {
     });
     await user.click(screen.getByText("Dr. García Martínez"));
     await waitFor(() => {
-      expect(onConfirm).toHaveBeenCalledWith("d1", []);
+      expect(onConfirm).toHaveBeenCalledWith("d1", [], "");
     });
   });
 
@@ -134,13 +135,59 @@ describe("AssignDoctorModal", () => {
     // Button should be disabled until all warnings are checked
     expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeDisabled();
 
-    // Check the warning checkbox
+    // Check the warning checkbox — still disabled: justification required
     await user.click(screen.getByText(/Excede carga semanal/i));
+    expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeDisabled();
+
+    // Type mandatory justification
+    await user.type(screen.getByPlaceholderText(/necesidad operativa/i), "Necesidad operativa.");
     expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeEnabled();
 
     // Click confirm
     await user.click(screen.getByRole("button", { name: /asignar con advertencias/i }));
-    expect(onConfirm).toHaveBeenCalledWith("d1", ["weekly_overload"]);
+    expect(onConfirm).toHaveBeenCalledWith("d1", ["weekly_overload"], "Necesidad operativa.");
+  });
+
+  it("muestra médicos no disponibles con razón y botón Evaluar de todas formas", async () => {
+    const user = userEvent.setup();
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({
+      doctors: [],
+      unavailable: [
+        { doctor_id: "d9", full_name: "Dr. Oculto", code: "no_availability", description: "No tiene disponibilidad para esta fecha.", is_hard: false },
+      ],
+    });
+    vi.mocked(calendarsApi.evaluate).mockResolvedValue({
+      hard_blocks: [],
+      warnings: [{ code: "no_availability", description: "No tiene disponibilidad para esta fecha." }],
+    });
+
+    render(<AssignDoctorModal {...BASE_PROPS} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Dr\. Oculto/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/No tiene disponibilidad para esta fecha/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /evaluar de todas formas/i }));
+    await waitFor(() => {
+      expect(calendarsApi.evaluate).toHaveBeenCalledWith("cal-1", {
+        doctor_id: "d9", service_date: "2026-05-03", service_area_id: "area-1",
+      });
+    });
+  });
+
+  it("muestra médicos con bloqueo duro sin botón de evaluar", async () => {
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({
+      doctors: [],
+      unavailable: [
+        { doctor_id: "d8", full_name: "Dr. Inactivo", code: "doctor_inactive", description: "El médico no está activo o no tiene servicio activo.", is_hard: true },
+      ],
+    });
+
+    render(<AssignDoctorModal {...BASE_PROPS} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Dr\. Inactivo/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/no está activo/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /evaluar de todas formas/i })).not.toBeInTheDocument();
   });
 
   it("llama onClose al hacer clic en Cancelar", async () => {

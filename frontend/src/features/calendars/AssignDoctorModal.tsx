@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Search, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { EligibleDoctorRead, WarningItem, calendarsApi } from "../../api/calendars";
+import { Search, AlertTriangle, CheckCircle2, Lock } from "lucide-react";
+import { EligibleDoctorRead, UnavailableDoctorRead, WarningItem, calendarsApi } from "../../api/calendars";
 import { ApiError } from "../../api/client";
 
 const MONTHS = ["enero","febrero","marzo","abril","mayo","junio",
@@ -14,26 +14,29 @@ interface Props {
   areaName: string;
   currentDoctorId?: string;
   currentAssignmentId?: string;
-  onConfirm: (doctorId: string, forceWarnings: string[]) => void;
+  onConfirm: (doctorId: string, forceWarnings: string[], justification: string) => void;
   onClose: () => void;
   isLoading: boolean;
   onRemove?: () => void;
+  submitError?: string | null;
 }
 
 type Step = "select" | "evaluating" | "review-warnings";
 
 export function AssignDoctorModal({
   calendarId, versionId, date, areaId, areaName,
-  currentDoctorId, onConfirm, onClose, isLoading, onRemove,
+  currentDoctorId, onConfirm, onClose, isLoading, onRemove, submitError,
 }: Props) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(currentDoctorId ?? null);
   const [step, setStep] = useState<Step>("select");
   const [eligibleDoctors, setEligibleDoctors] = useState<EligibleDoctorRead[]>([]);
+  const [unavailableDoctors, setUnavailableDoctors] = useState<UnavailableDoctorRead[]>([]);
   const [loadingEligible, setLoadingEligible] = useState(true);
   const [eligibleError, setEligibleError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
   const [acceptedWarnings, setAcceptedWarnings] = useState<Set<string>>(new Set());
+  const [justification, setJustification] = useState("");
   const [evaluateError, setEvaluateError] = useState<string | null>(null);
 
   const [year, month, day] = date.split("-").map(Number);
@@ -46,7 +49,10 @@ export function AssignDoctorModal({
       setEligibleError(null);
       try {
         const res = await calendarsApi.eligibleDoctors(calendarId, date, areaId);
-        if (!cancelled) setEligibleDoctors(res.doctors);
+        if (!cancelled) {
+          setEligibleDoctors(res.doctors);
+          setUnavailableDoctors(res.unavailable ?? []);
+        }
       } catch (err) {
         if (!cancelled) {
           setEligibleError(
@@ -91,9 +97,10 @@ export function AssignDoctorModal({
       if (result.warnings.length > 0) {
         setWarnings(result.warnings);
         setAcceptedWarnings(new Set());
+        setJustification("");
         setStep("review-warnings");
       } else {
-        onConfirm(doctorId, []);
+        onConfirm(doctorId, [], "");
       }
     } catch (err) {
       setEvaluateError(
@@ -113,6 +120,8 @@ export function AssignDoctorModal({
   };
 
   const allWarningsAccepted = warnings.every(w => acceptedWarnings.has(w.code));
+  const softUnavailable = unavailableDoctors.filter(u => !u.is_hard && u.doctor_id !== currentDoctorId);
+  const hardUnavailable = unavailableDoctors.filter(u => u.is_hard && u.doctor_id !== currentDoctorId);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -139,41 +148,77 @@ export function AssignDoctorModal({
             {eligibleError && <p style={{ padding: "12px 16px", color: "#b91c1c" }}>{eligibleError}</p>}
 
             {!loadingEligible && !eligibleError && (
-              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 6 }}>
-                {filtered.length === 0 && (
-                  <p style={{ padding: "12px 16px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                    {query ? "Sin resultados." : "No hay doctores disponibles para este slot."}
-                  </p>
+              <>
+                <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 6 }}>
+                  {filtered.length === 0 && (
+                    <p style={{ padding: "12px 16px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                      {query ? "Sin resultados." : "No hay doctores disponibles para este slot."}
+                    </p>
+                  )}
+                  {filtered.map(doc => (
+                    <button
+                      key={doc.id}
+                      onClick={() => handleSelectDoctor(doc.id)}
+                      style={{
+                        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 16px",
+                        background: selectedId === doc.id ? "#bfdbfe" : "transparent",
+                        border: 0, borderBottom: "1px solid #f1f5f9", cursor: "pointer",
+                        textAlign: "left", fontSize: "0.9rem",
+                      }}
+                    >
+                      <span style={{ fontWeight: selectedId === doc.id ? 700 : 400, color: "#1e293b" }}>{doc.full_name}</span>
+                      {doc.altera_orden === false && (
+                        <span className="order-indicator order-respeta">
+                          <CheckCircle2 size={14} /> Respeta el orden
+                        </span>
+                      )}
+                      {doc.altera_orden === true && (
+                        <span className="order-indicator order-altera">
+                          <AlertTriangle size={14} /> Altera el orden
+                        </span>
+                      )}
+                      {doc.altera_orden === null && (
+                        <span className="order-indicator order-sin-patron">Sin orden fijo</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {(softUnavailable.length > 0 || hardUnavailable.length > 0) && (
+                  <div style={{ marginTop: 12, padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 6, background: "#f8fafc" }}>
+                    <strong style={{ display: "block", fontSize: 13, color: "#475569", marginBottom: 8 }}>
+                      No disponibles
+                    </strong>
+                    {softUnavailable.map(u => (
+                      <div
+                        key={u.doctor_id}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}
+                      >
+                        <span style={{ color: "#64748b" }}>
+                          {u.full_name} — <span style={{ color: "#b45309" }}>{u.description}</span>
+                        </span>
+                        <button
+                          className="btn-ghost"
+                          style={{ fontSize: 12, padding: "2px 8px", whiteSpace: "nowrap" }}
+                          onClick={() => handleSelectDoctor(u.doctor_id)}
+                        >
+                          Evaluar de todas formas
+                        </button>
+                      </div>
+                    ))}
+                    {hardUnavailable.map(u => (
+                      <div
+                        key={u.doctor_id}
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}
+                      >
+                        <Lock size={12} style={{ color: "#b91c1c", flexShrink: 0 }} />
+                        <span style={{ color: "#991b1b" }}>{u.full_name} — {u.description}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
-                {filtered.map(doc => (
-                  <button
-                    key={doc.id}
-                    onClick={() => handleSelectDoctor(doc.id)}
-                    style={{
-                      width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "10px 16px",
-                      background: selectedId === doc.id ? "#bfdbfe" : "transparent",
-                      border: 0, borderBottom: "1px solid #f1f5f9", cursor: "pointer",
-                      textAlign: "left", fontSize: "0.9rem",
-                    }}
-                  >
-                    <span style={{ fontWeight: selectedId === doc.id ? 700 : 400, color: "#1e293b" }}>{doc.full_name}</span>
-                    {doc.altera_orden === false && (
-                      <span className="order-indicator order-respeta">
-                        <CheckCircle2 size={14} /> Respeta el orden
-                      </span>
-                    )}
-                    {doc.altera_orden === true && (
-                      <span className="order-indicator order-altera">
-                        <AlertTriangle size={14} /> Altera el orden
-                      </span>
-                    )}
-                    {doc.altera_orden === null && (
-                      <span className="order-indicator order-sin-patron">Sin orden fijo</span>
-                    )}
-                  </button>
-                ))}
-              </div>
+              </>
             )}
 
             {evaluateError && (
@@ -230,14 +275,35 @@ export function AssignDoctorModal({
               ))}
             </div>
 
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: "block", fontSize: 13, color: "#475569", marginBottom: 4 }}>
+                Justificación (obligatoria)
+              </label>
+              <textarea
+                value={justification}
+                onChange={e => setJustification(e.target.value)}
+                placeholder="Ej. Necesidad operativa: es el único disponible para cubrir el servicio."
+                rows={3}
+                maxLength={500}
+                style={{ width: "100%", fontSize: 13 }}
+              />
+            </div>
+
+            {submitError && (
+              <div style={{ marginTop: 12, padding: "10px 12px", border: "1px solid #fecaca", borderRadius: 6, background: "#fef2f2" }}>
+                <strong style={{ display: "block", fontSize: 13, color: "#991b1b", marginBottom: 4 }}>No se pudo asignar</strong>
+                <p style={{ margin: 0, fontSize: 13, color: "#991b1b" }}>{submitError}</p>
+              </div>
+            )}
+
             <div className="form-footer" style={{ marginTop: 16 }}>
-              <button className="btn-secondary" onClick={() => { setStep("select"); setWarnings([]); }}>
+              <button className="btn-secondary" onClick={() => { setStep("select"); setWarnings([]); setJustification(""); }}>
                 Volver
               </button>
               <button
                 className="btn-primary"
-                onClick={() => onConfirm(selectedId!, Array.from(acceptedWarnings))}
-                disabled={!allWarningsAccepted || isLoading}
+                onClick={() => onConfirm(selectedId!, Array.from(acceptedWarnings), justification.trim())}
+                disabled={!allWarningsAccepted || !justification.trim() || isLoading}
               >
                 {isLoading ? "Asignando…" : "Asignar con advertencias"}
               </button>
