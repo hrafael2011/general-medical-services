@@ -767,12 +767,21 @@ class ConversationalAgent:
         # Generate NL response
         response_text = self._generate_nl_response(text, nlu_result, tool_result, history)
 
+        # generate_report puede devolver un documento (bytes) para adjuntar.
+        document_bytes = None
+        document_filename = None
+        if isinstance(tool_result, dict):
+            document_bytes = tool_result.get("document")
+            document_filename = tool_result.get("filename")
+
         agent_result = AgentResult(
             response_text=response_text,
             agent_action="query",
             tool_name=nlu_result.tool,
             tool_entities={"tool": nlu_result.tool, "params": nlu_result.params},
             tool_result=tool_result,
+            document_bytes=document_bytes,
+            document_filename=document_filename,
         )
 
         self._remember_result(
@@ -917,7 +926,7 @@ class ConversationalAgent:
             return "No se encontraron resultados." if not tool_result else str(tool_result)
 
     def _handle_reply(self, text: str, nlu_result: NLUResult) -> AgentResult:
-        """Handle conversational replies (greetings, help, etc.)."""
+        """Handle conversational replies (greetings, help, clarify, out_of_scope)."""
         response_type = nlu_result.params.get("response_type", "unknown")
         if response_type == "greeting":
             return AgentResult(
@@ -928,14 +937,16 @@ class ConversationalAgent:
             return AgentResult(
                 response_text=(
                     "Puedes consultarme sobre:\n"
-                    "• Doctores disponibles y sus horarios\n"
-                    "• Calendarios de guardias\n"
-                    "• Misiones médicas\n"
-                    "• Carga de servicio por doctor\n\n"
+                    "• Doctores, disponibilidad y restricciones\n"
+                    "• Guardias y calendario del mes\n"
+                    "• Quién puede cubrir un día y área, y por qué\n"
+                    "• Misiones y candidatos\n"
+                    "• Carga de servicio y confirmaciones\n\n"
                     "Ejemplos:\n"
                     "• \"¿Cuántos doctores hay en cirugía?\"\n"
                     "• \"¿Quiénes están de guardia el lunes?\"\n"
-                    "• \"Muéstrame las doctoras disponibles\""
+                    "• \"¿Quién puede cubrir el viernes en Emergencia?\"\n"
+                    "• \"Envíame el reporte de mayo\""
                 ),
                 agent_action="reply",
             )
@@ -943,6 +954,22 @@ class ConversationalAgent:
             return AgentResult(
                 response_text="¡Hasta luego! Estoy aquí cuando me necesites.",
                 agent_action="reply",
+            )
+        if response_type == "clarify":
+            return AgentResult(
+                response_text=(
+                    "No entiendo tu petición, ¿puedes ser más específico? "
+                    "Por ejemplo: «¿quién está de guardia el lunes en Emergencia?»."
+                ),
+                agent_action="ambiguous",
+            )
+        if response_type == "out_of_scope":
+            return AgentResult(
+                response_text=(
+                    "No tengo esa información o esa acción se realiza en el panel web. "
+                    "Puedo consultar doctores, disponibilidad, guardias, misiones y reportes."
+                ),
+                agent_action="unsupported",
             )
         return AgentResult(
             response_text="¿En qué más puedo ayudarte con los turnos médicos?",

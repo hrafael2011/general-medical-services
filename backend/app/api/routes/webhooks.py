@@ -71,6 +71,11 @@ def test_notify(
     secret: str = Query(...),
     session: Session = Depends(get_db_session),
 ) -> dict:
+    if settings.app_env == "production":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
     if not settings.webhook_test_secret:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -156,6 +161,11 @@ def diagnostic(
     secret: str = Query(...),
     session: Session = Depends(get_db_session),
 ) -> dict:
+    if settings.app_env == "production":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
     if not settings.webhook_test_secret:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook test secret not configured")
     if not _test_limiter.allow(f"diag:{request.client.host if request.client else 'unknown'}"):

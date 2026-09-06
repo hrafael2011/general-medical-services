@@ -1,9 +1,9 @@
 ---
 spec: 15
-version: 1.0.0
-status: draft
+version: 1.1.0
+status: accepted
 created: 2026-07-02
-updated: 2026-07-02
+updated: 2026-09-05
 ---
 
 # Spec 15 - Telegram Routed Query Engine
@@ -854,4 +854,5 @@ Adoption criteria:
 
 | Version | Date | Issue | Trigger | Resumen |
 |---------|------|-------|---------|---------|
+| 1.1.0 | 2026-09-05 | — | Catálogo MCP | Activación por defecto del path enrutado (`feature_telegram_router* = true`, rollback por .env). Catálogo consolidado de 22 tools estilo MCP (`tool_registry.py`) con una pregunta canónica por tool y schemas con enums; `sql_query` eliminada del prompt del LLM (el SQL Agent queda como fallback interno, nunca elegible). Handlers nuevos en `tool_handlers.py` que delegan a services de `application/` y repos de solo lectura (incluye `slot_recommendation`/`slot_explanation` sobre `AssignmentService` de la Fase 2 con razones). `tools.py` (ToolGateway, sin importadores) eliminado. Bot de consultas restringido a roles `admin`/`encargado` (gate en `orchestrator.py`); los médicos conservan solo el flujo de notificaciones + confirmaciones. Endpoints debug `/webhooks/test-notify` y `/webhooks/diagnostic` devuelven 404 en producción. |
 | 1.0.0 | 2026-07-02 | — | Inicial | Define la especificacion SDD para migrar el bot Telegram a un motor enrutado sin introducir LlamaIndex como dependencia central inicial. |
