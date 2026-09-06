@@ -138,12 +138,12 @@ def test_approve_version_generates_mission_ranking(db_session) -> None:
     # create_calendar emits an initial (empty) ranking for the new version
     assert len(ranking_service.calls) == 1
     initial_call = ranking_service.calls[0]
-    initial_version_id = initial_call["calendar_version_id"]
+    initial_version = CalendarRepository(db_session).get_latest_version(calendar.id)
     assert initial_call == {
         "actor_id": "actor-001",
         "year": 2026,
         "month": 5,
-        "calendar_version_id": initial_version_id,
+        "calendar_version_id": initial_version.id,
     }
 
     version = service.approve_version(

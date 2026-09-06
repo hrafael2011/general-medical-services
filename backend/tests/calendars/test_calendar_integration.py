@@ -304,6 +304,12 @@ def test_generation_is_deterministic(db_session) -> None:
         allowed_area_ids=[_AREA_EMERGENCIA, _AREA_PISTA, _AREA_DISPONIBLE],
     )
 
+    # Doctors in `monthly` availability mode must have submitted monthly
+    # availability for the generation month, otherwise they are ineligible
+    # and the determinism comparison would be vacuous (0 == 0).
+    _create_monthly_availability(db_session, doctor_a)
+    _create_monthly_availability(db_session, doctor_b)
+
     gen_service = _make_generation_service(db_session)
 
     summary1 = gen_service.generate(actor_id="actor-001", calendar_id=cal1.id)
@@ -314,6 +320,7 @@ def test_generation_is_deterministic(db_session) -> None:
     count_a2 = sum(1 for r in summary2.slot_results if r.assigned_doctor_id == doctor_a.id)
     count_b2 = sum(1 for r in summary2.slot_results if r.assigned_doctor_id == doctor_b.id)
 
+    assert count_a1 + count_b1 > 0, "Generation should produce assignments"
     assert count_a1 == count_a2, (
         f"Non-deterministic: doctor A got {count_a1} on cal1 vs {count_a2} on cal2"
     )
@@ -341,10 +348,14 @@ def test_manual_assignment_fills_generated_gap(db_session) -> None:
         db_session, name="Dr. Solo",
         allowed_area_ids=[_AREA_EMERGENCIA],
     )
+    # Dr. Solo must submit monthly availability to participate in generation,
+    # otherwise gap_count > 0 would be trivial (no eligible candidates at all).
+    _create_monthly_availability(db_session, doctor1)
 
     gen_service = _make_generation_service(db_session)
     summary = gen_service.generate(actor_id="actor-001", calendar_id=calendar.id)
 
+    assert summary.assigned_count > 0, "Dr. Solo should cover his allowed area"
     assert summary.gap_count > 0, "Expected gaps with single doctor covering only one area"
 
     cal_repo = CalendarRepository(db_session)
