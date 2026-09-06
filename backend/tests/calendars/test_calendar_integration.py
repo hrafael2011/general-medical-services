@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from backend.app.application.calendars.assignment_service import AssignmentService
 from backend.app.application.calendars.generation_service import GenerationService
+from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
     CalendarVersionModel,
@@ -153,13 +154,38 @@ def _create_doctor(
     db_session.add(doctor)
     db_session.flush()
 
-    for area_id in (allowed_area_ids or []):
-        db_session.add(
-            DoctorAllowedAreaModel(doctor_id=doctor.id, service_area_id=area_id)
-        )
+    for area_id in allowed_area_ids or []:
+        db_session.add(DoctorAllowedAreaModel(doctor_id=doctor.id, service_area_id=area_id))
     db_session.flush()
 
     return doctor
+
+
+def _create_monthly_availability(db_session, doctor: DoctorModel) -> None:
+    """Submit monthly_variable availability for the calendar month.
+
+    Doctors in `monthly` availability mode are ineligible for generation
+    until they submit availability for the target month/year.
+    """
+    import calendar as _calendar
+
+    days_in_month = _calendar.monthrange(_YEAR, _MONTH)[1]
+    db_session.add(
+        DoctorAvailabilityModel(
+            id=str(uuid4()),
+            doctor_id=doctor.id,
+            availability_type="monthly_variable",
+            available_dates=list(range(1, days_in_month + 1)),
+            year=_YEAR,
+            month=_MONTH,
+            day_priority="available",
+            source="manual",
+            review_status="approved",
+            created_at=datetime.datetime.now(datetime.UTC),
+            updated_at=datetime.datetime.now(datetime.UTC),
+        )
+    )
+    db_session.flush()
 
 
 def _make_generation_service(db_session) -> GenerationService:
@@ -196,13 +222,20 @@ def test_full_lifecycle_generate_and_manual_adjust(db_session) -> None:
     _create_week(db_session, calendar, version, status="draft")
 
     doctor_a = _create_doctor(
-        db_session, name="Dr. A",
+        db_session,
+        name="Dr. A",
         allowed_area_ids=[_AREA_EMERGENCIA, _AREA_PISTA, _AREA_DISPONIBLE],
     )
     doctor_b = _create_doctor(
-        db_session, name="Dr. B",
+        db_session,
+        name="Dr. B",
         allowed_area_ids=[_AREA_EMERGENCIA, _AREA_PISTA, _AREA_DISPONIBLE],
     )
+
+    # Doctors in `monthly` availability mode must have submitted monthly
+    # availability for the generation month, otherwise they are ineligible.
+    _create_monthly_availability(db_session, doctor_a)
+    _create_monthly_availability(db_session, doctor_b)
 
     gen_service = _make_generation_service(db_session)
     summary = gen_service.generate(actor_id="actor-001", calendar_id=calendar.id)
