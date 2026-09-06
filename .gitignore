@@ -73,3 +73,7 @@ docs/superpowers/
 
 # Excel sources (datos de importación)
 excel_sources/
+
+# Playwright E2E (frontend)
+frontend/test-results/
+frontend/playwright-report/
