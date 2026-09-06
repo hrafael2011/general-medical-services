@@ -13,6 +13,7 @@ from backend.app.infrastructure.db.models.catalogs import (
 )
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.user import UserModel
+from backend.app.infrastructure.repositories.calendars import CalendarRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -24,6 +25,7 @@ def trash_service(db_session: Session) -> TrashService:
         DoctorRepository(db_session),
         UserRepository(db_session),
         CatalogRepository(db_session),
+        CalendarRepository(db_session),
     )
 
 
@@ -150,7 +152,7 @@ class TestListDeleted:
 
     def test_list_deleted_invalid_type(self, trash_service):
         with pytest.raises(TrashServiceError, match="Tipo de entidad"):
-            trash_service.list_deleted("calendars")
+            trash_service.list_deleted("appointments")
 
 
 class TestRestore:
@@ -268,6 +270,7 @@ class TestHardDelete:
             DoctorRepository(db_session),
             UserRepository(db_session),
             CatalogRepository(db_session),
+            CalendarRepository(db_session),
             audit=audit_repo,
         )
 
@@ -301,6 +304,7 @@ class TestHardDelete:
             DoctorRepository(db_session),
             UserRepository(db_session),
             CatalogRepository(db_session),
+            CalendarRepository(db_session),
             audit=audit_repo,
         )
 
@@ -333,6 +337,7 @@ class TestHardDelete:
             DoctorRepository(db_session),
             UserRepository(db_session),
             CatalogRepository(db_session),
+            CalendarRepository(db_session),
             audit=audit_repo,
         )
 
