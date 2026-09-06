@@ -49,7 +49,7 @@ def test_build_weekly_schedule_with_week_id():
 
     calendar_repo.list_assignments.return_value = [a1, a2]
     calendar_repo.list_service_areas.return_value = [
-        MagicMock(id="area1", code="EMERG", display_name="EMERGENCIA"),
+        MagicMock(id="area1", code="emergencia", display_name="Emergencia"),
     ]
     doctor_repo.list_all.return_value = [
         MagicMock(id="doc1", name="LOPEZ, JUAN"),
@@ -105,7 +105,7 @@ def test_build_weekly_schedule_labels_cross_month_dates():
 
     calendar_repo.list_assignments.return_value = [april_assignment, may_assignment]
     calendar_repo.list_service_areas.return_value = [
-        MagicMock(id="area1", code="EMERG", display_name="EMERGENCIA"),
+        MagicMock(id="area1", code="emergencia", display_name="Emergencia"),
     ]
     doctor_repo.list_all.return_value = [MagicMock(id="doc1", name="LOPEZ, JUAN")]
 
@@ -143,8 +143,8 @@ def test_build_full_calendar_returns_grid_data():
 
     calendar_repo.list_assignments.return_value = [a1]
     calendar_repo.list_service_areas.return_value = [
-        MagicMock(id="area1", code="EMERG", display_name="EMERGENCIA"),
-        MagicMock(id="area2", code="PISTA", display_name="PISTA"),
+        MagicMock(id="area1", code="emergencia", display_name="Emergencia"),
+        MagicMock(id="area2", code="pista", display_name="Pista"),
     ]
     doctor_repo.list_all.return_value = [
         MagicMock(id="doc1", name="LOPEZ, JUAN"),
