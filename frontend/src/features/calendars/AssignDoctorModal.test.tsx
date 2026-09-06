@@ -132,18 +132,21 @@ describe("AssignDoctorModal", () => {
       expect(screen.getByText(/Advertencias de reglas/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Excede carga semanal/i)).toBeInTheDocument();
-    // Button should be disabled until all warnings are checked
+    // Button disabled until all warnings are checked
     expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeDisabled();
 
-    // Check the warning checkbox — still disabled: justification required
+    // Check the warning checkbox — button enables; justification se valida al hacer clic
     await user.click(screen.getByText(/Excede carga semanal/i));
-    expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeDisabled();
+    const confirmBtn = screen.getByRole("button", { name: /asignar con advertencias/i });
+    expect(confirmBtn).toBeEnabled();
 
-    // Type mandatory justification
+    // Click sin justificación: error visible y NO confirma
+    await user.click(confirmBtn);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByText(/justificación es obligatoria/i)).toBeInTheDocument();
+
+    // Escribir justificación y confirmar
     await user.type(screen.getByPlaceholderText(/necesidad operativa/i), "Necesidad operativa.");
-    expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeEnabled();
-
-    // Click confirm
     await user.click(screen.getByRole("button", { name: /asignar con advertencias/i }));
     expect(onConfirm).toHaveBeenCalledWith("d1", ["weekly_overload"], "Necesidad operativa.");
   });

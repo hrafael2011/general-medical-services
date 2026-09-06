@@ -24,7 +24,7 @@ interface Props {
 type Step = "select" | "evaluating" | "review-warnings";
 
 export function AssignDoctorModal({
-  calendarId, versionId, date, areaId, areaName,
+  calendarId, date, areaId, areaName,
   currentDoctorId, onConfirm, onClose, isLoading, onRemove, submitError,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -37,6 +37,7 @@ export function AssignDoctorModal({
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
   const [acceptedWarnings, setAcceptedWarnings] = useState<Set<string>>(new Set());
   const [justification, setJustification] = useState("");
+  const [justificationError, setJustificationError] = useState<string | null>(null);
   const [evaluateError, setEvaluateError] = useState<string | null>(null);
 
   const [year, month, day] = date.split("-").map(Number);
@@ -98,6 +99,7 @@ export function AssignDoctorModal({
         setWarnings(result.warnings);
         setAcceptedWarnings(new Set());
         setJustification("");
+        setJustificationError(null);
         setStep("review-warnings");
       } else {
         onConfirm(doctorId, [], "");
@@ -120,6 +122,17 @@ export function AssignDoctorModal({
   };
 
   const allWarningsAccepted = warnings.every(w => acceptedWarnings.has(w.code));
+
+  const handleConfirmWithWarnings = () => {
+    const text = justification.trim();
+    if (!text) {
+      setJustificationError(
+        "La justificación es obligatoria para asignar con advertencias. Escríbela arriba para habilitar la asignación."
+      );
+      return;
+    }
+    onConfirm(selectedId!, Array.from(acceptedWarnings), text);
+  };
   const softUnavailable = unavailableDoctors.filter(u => !u.is_hard && u.doctor_id !== currentDoctorId);
   const hardUnavailable = unavailableDoctors.filter(u => u.is_hard && u.doctor_id !== currentDoctorId);
 
@@ -281,12 +294,18 @@ export function AssignDoctorModal({
               </label>
               <textarea
                 value={justification}
-                onChange={e => setJustification(e.target.value)}
+                onChange={e => {
+                  setJustification(e.target.value);
+                  if (justificationError) setJustificationError(null);
+                }}
                 placeholder="Ej. Necesidad operativa: es el único disponible para cubrir el servicio."
                 rows={3}
                 maxLength={500}
-                style={{ width: "100%", fontSize: 13 }}
+                style={{ width: "100%", fontSize: 13, borderColor: justificationError ? "#b91c1c" : undefined }}
               />
+              {justificationError && (
+                <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#b91c1c" }}>{justificationError}</p>
+              )}
             </div>
 
             {submitError && (
@@ -302,8 +321,8 @@ export function AssignDoctorModal({
               </button>
               <button
                 className="btn-primary"
-                onClick={() => onConfirm(selectedId!, Array.from(acceptedWarnings), justification.trim())}
-                disabled={!allWarningsAccepted || !justification.trim() || isLoading}
+                onClick={handleConfirmWithWarnings}
+                disabled={!allWarningsAccepted || isLoading}
               >
                 {isLoading ? "Asignando…" : "Asignar con advertencias"}
               </button>
