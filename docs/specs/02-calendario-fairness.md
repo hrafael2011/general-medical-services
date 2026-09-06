@@ -1,9 +1,9 @@
 ---
 spec: 02
-version: 1.1.0
+version: 1.2.0
 status: accepted
 created: 2026-04-30
-updated: 2026-05-05
+updated: 2026-09-05
 ---
 
 # Spec 02 - Calendar and Fairness
@@ -104,6 +104,7 @@ Monthly limits:
 - The monthly target and maximum must be configurable per doctor by the encargado.
 - Doctor-specific monthly values override system defaults.
 - Doctor-specific monthly limits, such as "1 service per month", are warn-only by default and may be exceeded by the encargado with justification and audit.
+- Desde 2026-09-05, `monthly_service_limit_mode = hard_limit` **no bloquea** la asignación manual: el máximo mensual se trata siempre como advertencia confirmable con justificación obligatoria (ver sección "Hard Blocks vs Warnings").
 - The generator should try to approach each doctor's configured target without exceeding maximums when feasible.
 
 ## Assignment Ordering
@@ -205,6 +206,31 @@ Recommended non-disableable baseline:
   - Skip selected allowed rules with justification
 - Every manual change is auditable.
 
+## Hard Blocks vs Warnings (taxonomía 2026-09-05)
+
+La asignación manual usa una única taxonomía de códigos, compartida entre `evaluate_slot` y la lista de candidatos del modal.
+
+**Hard blocks (nunca se pueden saltar):**
+
+- `doctor_inactive` — el médico no está activo o no tiene servicio activo.
+- `has_hard_block` — restricción activa con severidad `hard_block`.
+- `area_not_allowed` — el médico no tiene permiso para esa área.
+
+Guardas estructurales de workflow (también bloqueantes, no confirmables): `version_is_approved`, `week_locked`, `slot_occupied`.
+
+**Warnings (confirmables con justificación obligatoria):**
+
+- `no_availability` — no reportó disponibilidad para esa fecha.
+- `already_assigned_today` — ya tiene un turno en esa fecha.
+- `monthly_max_exceeded` — alcanzó el máximo mensual (sin importar `monthly_service_limit_mode`).
+- Warnings blandos de scoring (espaciado, rotación, carga, etc.).
+
+**Reglas de confirmación:**
+
+1. Forzar una asignación con warnings exige `override_justification` no vacío; si falta → error `justification_required`.
+2. La justificación y los warnings forzados quedan almacenados en el assignment (`override_justification` + `rationale`) y en el evento de auditoría.
+3. El modal de asignación lista a los médicos no elegibles con su razón (`unavailable`, con `is_hard`); los no-duros pueden evaluarse de todas formas y entran al flujo normal de confirmación de warnings.
+
 ## Generation Strategy
 
 - Initial: greedy + hard checks + soft scoring
@@ -247,5 +273,6 @@ Rationale: the initial implementation hardcoded area codes (`"emergencia"`, `"pi
 
 | Version | Fecha | Issue | Trigger | Resumen |
 |---------|-------|-------|---------|---------|
+| 1.2.0 | 2026-09-05 | — | Modo manual | Nueva taxonomía "Hard Blocks vs Warnings": solo `doctor_inactive`, `has_hard_block` y `area_not_allowed` bloquean; `no_availability`, `already_assigned_today` y `monthly_max_exceeded` (sin importar `monthly_service_limit_mode`) son advertencias confirmables con justificación obligatoria (`justification_required`). El modal lista médicos no elegibles con su razón. |
 | 1.1.0 | 2026-04-30 | — | Bug | BUG-001 (QA): el engine usaba códigos de área como IDs causando FK violation en `unresolved_gaps` y falla silenciosa en la elegibilidad. Se agrega sección "Service Area Identity in Generation" que exige UUIDs. |
 | 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define cobertura diaria requerida, estados del calendario, reglas de fairness, pesos por área, espaciado, misiones y criterios de aceptación. |

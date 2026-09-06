@@ -274,6 +274,24 @@ class DoctorService:
                         "due to availability_mode change (%s → %s)",
                         removed, doctor_id, old_availability_mode, availability_mode,
                     )
+                # Clean up orphan availability records from the previous mode
+                avail_repo = AvailabilityRepository(self.doctors.session)
+                if availability_mode == "monthly":
+                    orphan_types = ["weekly_fixed", "recurring"]
+                elif availability_mode == "fixed":
+                    orphan_types = ["monthly_variable"]
+                else:
+                    orphan_types = []
+                if orphan_types:
+                    removed_avail = avail_repo.delete_by_types_for_doctor(doctor_id, orphan_types)
+                    if removed_avail > 0:
+                        import logging
+                        _logger = logging.getLogger(__name__)
+                        _logger.info(
+                            "Cleaned up %d orphan availability records for doctor %s "
+                            "due to availability_mode change (%s → %s)",
+                            removed_avail, doctor_id, old_availability_mode, availability_mode,
+                        )
 
         if service_active is not None:
             doctor.service_active = service_active

@@ -5,21 +5,16 @@ Now delegates to RulePipeline internally while preserving the exact
 same output as the original implementation.
 """
 
+from backend.app.domain.calendars.objective_weights import (
+    AREA_WEIGHTS,
+    MISSION_WEIGHT,
+    STRONG_AREAS,
+)
 from backend.app.domain.calendars.types import CandidateScore, SlotRequest
 
 # ---------------------------------------------------------------------------
-# Weights / spacing constants (kept for external consumers)
+# Spacing constants (pesos de área en objective_weights.py — SSOT único)
 # ---------------------------------------------------------------------------
-
-AREA_WEIGHTS: dict[str, float] = {
-    "emergencia": 3.0,
-    "pista": 2.0,
-    "disponible": 1.0,
-}
-
-MISSION_WEIGHT = 0.5
-
-STRONG_AREAS = {"emergencia", "pista"}
 
 MIN_SPACING_STRONG = 14
 MIN_SPACING_DISPONIBLE_AFTER_STRONG = 7
@@ -45,6 +40,9 @@ def compute_candidate_score(
     weekly_assignments: dict[int, list[dict]] | None = None,
     pattern_violations_count: int = 0,
     submitted_availability: bool = False,
+    area_rotation_mode: str = "auto",
+    day_priorities: dict[int, str] | None = None,
+    primary_weekday: int | None = None,
 ) -> CandidateScore:
     """Compute a scheduling score for one doctor on one slot.
 
@@ -88,6 +86,9 @@ def compute_candidate_score(
         weekly_assignments=weekly_assignments or {},
         pattern_violations_count=pattern_violations_count,
         submitted_availability=submitted_availability,
+        area_rotation_mode=area_rotation_mode,
+        day_priorities=day_priorities or {},
+        primary_weekday=primary_weekday,
     )
 
     pipeline = RulePipeline(build_pipeline(hard_rules_only=False))

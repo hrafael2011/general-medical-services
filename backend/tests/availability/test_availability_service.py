@@ -128,20 +128,25 @@ def test_set_monthly_availability_creates_record_for_monthly_mode_doctor(db_sess
     assert record.available_dates == [5, 10, 15, 29]
 
 
-def test_set_monthly_availability_fails_for_fixed_mode_doctor(db_session) -> None:
+def test_set_monthly_availability_auto_switches_fixed_to_monthly(db_session) -> None:
     doctor = create_doctor(db_session, availability_mode="fixed")
     service = make_availability_service(db_session)
 
-    with pytest.raises(AvailabilityError) as exc_info:
-        service.set_monthly_availability(
-            doctor.id,
-            year=2026,
-            month=4,
-            available_dates=[5, 10],
-            actor_id="actor-1",
-        )
+    record = service.set_monthly_availability(
+        doctor.id,
+        year=2026,
+        month=4,
+        available_dates=[5, 10],
+        actor_id="actor-1",
+    )
 
-    assert exc_info.value.code == "mode_mismatch"
+    assert record is not None
+    assert record.availability_type == "monthly_variable"
+    assert record.available_dates == [5, 10]
+
+    # Doctor mode should have been auto-switched
+    db_session.refresh(doctor)
+    assert doctor.availability_mode == "monthly"
 
 
 def test_set_monthly_availability_replaces_existing_record(db_session) -> None:

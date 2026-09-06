@@ -54,6 +54,19 @@ class RuleContext:
     # proactively submit their dates.
     submitted_availability: bool = False
 
+    # Area rotation mode: "fixed" (no penalty), "auto" (-3.0), "rotate" (-6.0)
+    # Determines how strongly AreaRotationRule penalises assigning the same area
+    # as the doctor's last assignment.
+    area_rotation_mode: str = "auto"
+
+    # Day priorities: {day_of_week: "mandatory"|"primary"|"preferred"|"available"}
+    # Used by DayOfWeekConsistencyRule to enforce weekday consistency.
+    day_priorities: dict[int, str] = field(default_factory=dict)
+
+    # Primary weekday (the doctor's most frequent day). Used by
+    # DayOfWeekConsistencyRule to penalise dispersion.
+    primary_weekday: int | None = None
+
 
 class Rule(ABC):
     """Base class for all fairness/eligibility rules.

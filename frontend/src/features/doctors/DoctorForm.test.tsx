@@ -88,7 +88,7 @@ describe("DoctorForm availability", () => {
     fireEvent.change(screen.getByLabelText("Apellido"), {
       target: { value: "García" },
     });
-    fireEvent.change(screen.getByLabelText(/WhatsApp/), {
+    fireEvent.change(screen.getByLabelText(/Teléfono/i), {
       target: { value: "8095551234" },
     });
     await screen.findByText("Recursos Humanos");

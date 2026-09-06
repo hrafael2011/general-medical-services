@@ -2,12 +2,11 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2, Wand2 } from "lucide-react";
-import { calendarsApi, CalendarAssignmentRead, DaySlot, WeekRead } from "../../api/calendars";
+import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2 } from "lucide-react";
+import { calendarsApi, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
-import { RemoveAssignmentPopover } from "./RemoveAssignmentPopover";
 import { useToast } from "../../components/Toast";
 import { ApiError } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -23,7 +22,6 @@ const GENERATION_MODE_LABELS = {
 } as const;
 
 interface AssignTarget { date: string; areaId: string; areaName: string; currentAssignmentId?: string; currentDoctorId?: string; }
-interface RemoveTarget { assignment: CalendarAssignmentRead; areaName: string; }
 
 interface CalendarDay {
   day: number;
@@ -126,8 +124,8 @@ export function CalendarGrid() {
   const { addToast } = useToast();
 
   const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
-  const [generateSummary, setGenerateSummary] = useState<string | null>(null);
+  // NOTA: la generación automática está deshabilitada (FEATURE_MANUAL_ONLY en backend).
+  // Para reactivarla: restaurar generateMutation + botón "Generar calendario con reglas" (historial git).
   const [assignmentWarning, setAssignmentWarning] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [highlightTerm, setHighlightTerm] = useState("");
@@ -185,30 +183,20 @@ export function CalendarGrid() {
       addToast("error", err instanceof ApiError ? err.message : "Error al eliminar calendario."),
   });
 
-  const generateMutation = useMutation({
-    mutationFn: () => calendarsApi.generate(calendarId!),
-    onSuccess: (result) => {
-      invalidate();
-      qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
-      qc.invalidateQueries({ queryKey: ["calendars"] });
-      setGenerateSummary(`Asignados: ${result.assigned_count} / Huecos: ${result.gap_count} / Pendiente de aprobación`);
-      addToast("success", result.review_required ? "Calendario generado y pendiente de revisión." : "Calendario generado.");
-    },
-    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al generar."),
-  });
-
   const assignMutation = useMutation({
-    mutationFn: ({ doctorId, forceWarnings }: { doctorId: string; forceWarnings: string[] }) => {
+    mutationFn: ({ doctorId, forceWarnings, justification }: { doctorId: string; forceWarnings: string[]; justification: string }) => {
       if (!assignTarget) throw new Error("Missing data");
       if (assignTarget.currentAssignmentId) {
         return calendarsApi.replaceAssignment(
-          calendarId!, data!.version.id, assignTarget.currentAssignmentId, doctorId, null, forceWarnings.length > 0 ? forceWarnings : null
+          calendarId!, data!.version.id, assignTarget.currentAssignmentId, doctorId,
+          justification || null, forceWarnings.length > 0 ? forceWarnings : null
         );
       }
       return calendarsApi.assignDoctor(calendarId!, data!.version.id, {
         service_date: assignTarget.date,
         service_area_id: assignTarget.areaId,
         doctor_id: doctorId,
+        override_justification: justification || null,
         force_warnings: forceWarnings.length > 0 ? forceWarnings : null,
       });
     },
@@ -223,12 +211,6 @@ export function CalendarGrid() {
         err instanceof ApiError ? err.message : "Error al asignar doctor."
       );
     },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: () => calendarsApi.removeAssignment(calendarId!, data!.version.id, removeTarget!.assignment.id),
-    onSuccess: () => { invalidate(); setRemoveTarget(null); addToast("success", "Asignación quitada."); },
-    onError: (err) => addToast("error", err instanceof ApiError ? err.message : "Error al quitar."),
   });
 
   const quickRemoveMutation = useMutation({
@@ -321,6 +303,8 @@ export function CalendarGrid() {
           </h2>
           <span style={{ fontSize: 12, color: "#64748b" }}>
             {GENERATION_MODE_LABELS[calendar.generation_mode] ?? "Manual"}
+            {" · "}
+            {new Set(slots.filter(s => s.assignment).map(s => s.assignment!.doctor_id)).size} médicos asignados
           </span>
         </div>
         <span style={{
@@ -329,13 +313,6 @@ export function CalendarGrid() {
         }}>
           {calendarStatusLabel}
         </span>
-        {isDraft && !hasApprovedWeeks && (
-          <>
-            <button className="btn-ghost" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
-              <Wand2 size={15} /> {generateMutation.isPending ? "Generando…" : "Generar calendario con reglas"}
-            </button>
-          </>
-        )}
         <button
           className="btn-ghost btn-danger"
           onClick={() => setShowDeleteDialog(true)}
@@ -346,10 +323,11 @@ export function CalendarGrid() {
         </button>
       </div>
 
-      {generateSummary && (
-        <p style={{ color: "#065f46", fontSize: 13, marginBottom: 8 }}>
-          Calendario creado con reglas — {generateSummary}
-        </p>
+      {/* Banner de error de asignación (bug de error silencioso corregido) */}
+      {assignmentWarning && (
+        <div style={{ marginBottom: "0.75rem", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, fontSize: 13, color: "#991b1b" }}>
+          <strong>No se pudo asignar: </strong>{assignmentWarning}
+        </div>
       )}
 
       {/* Buscador de médicos */}
@@ -604,22 +582,11 @@ export function CalendarGrid() {
           areaName={assignTarget.areaName}
           currentDoctorId={assignTarget.currentDoctorId}
           currentAssignmentId={assignTarget.currentAssignmentId}
-          onConfirm={(doctorId, forceWarnings) => assignMutation.mutate({ doctorId, forceWarnings })}
+          onConfirm={(doctorId, forceWarnings, justification) => assignMutation.mutate({ doctorId, forceWarnings, justification })}
           onClose={() => { setAssignTarget(null); setAssignmentWarning(null); }}
           isLoading={assignMutation.isPending}
+          submitError={assignmentWarning}
           onRemove={assignTarget.currentAssignmentId ? () => quickRemoveMutation.mutate(assignTarget.currentAssignmentId!) : undefined}
-        />
-      )}
-
-      {removeTarget && (
-        <RemoveAssignmentPopover
-          doctorName={doctorMap[removeTarget.assignment.doctor_id]?.name ?? removeTarget.assignment.doctor_id}
-          date={removeTarget.assignment.service_date}
-          areaName={removeTarget.areaName}
-          source={removeTarget.assignment.assignment_source}
-          onConfirm={() => removeMutation.mutate()}
-          onClose={() => setRemoveTarget(null)}
-          isLoading={removeMutation.isPending}
         />
       )}
 

@@ -16,18 +16,19 @@ Originally designed for a military hospital, the system automates physician assi
 ## ✨ Features
 
 ### 🏗️ Smart Scheduling
-- ✅ Automatic calendar generation with composite fairness algorithm
+- ✅ Manual-first mode (`FEATURE_MANUAL_ONLY=true` by default): automatic generation is disabled — only confirmable warnings (with mandatory justification) plus 3 critical hard blocks
+- ✅ Optional automatic generation (OR-Tools CP-SAT composite fairness) — re-enable with `FEATURE_MANUAL_ONLY=false`
 - ✅ Multidimensional scoring: monthly load, historical load, spacing, penalties, goal bonuses
 - ✅ Week-by-week approval flow per calendar cycle
 - ✅ Assisted manual assignment with candidate ranking
 - ✅ Spacing rules (14-day minimum between heavy services)
 
 ### 🤖 Telegram Conversational Bot
-- ✅ Hybrid architecture: LLM-first (DeepSeek) with 14 tools, deterministic fallback
+- ✅ MCP-style 22-tool catalog (function calling): the model picks a tool, the backend executes against application services — read-only, encargado/admin only
 - ✅ Natural language queries: *"who is on duty tomorrow in emergency?"*
-- ✅ Semantic Layer with 15 predefined metrics — zero hallucination on operational data
-- ✅ Multi-turn SQL Agent with self-correction (up to 3 iterations)
-- ✅ Shift confirmation system via inline commands
+- ✅ Deterministic rejections: asks for specificity when unclear, "that is done in the web panel" for write requests
+- ✅ Multi-turn SQL Agent kept only as internal fallback (never exposed to the model)
+- ✅ Shift confirmation system via inline commands (doctors)
 
 ### 📢 Multi-Channel Notifications
 - ✅ WhatsApp (Meta Cloud API) for notifications and confirmations
@@ -235,11 +236,15 @@ Turnos medicos system/
 | Type | Framework | Command |
 |------|-----------|---------|
 | Backend unit | pytest | `./scripts/test.sh unit` |
-| Backend integration | pytest (PostgreSQL) | `./scripts/test.sh all` |
-| Specific phase | pytest | `./scripts/test.sh phase 0` |
 | Frontend | vitest | `cd frontend && npm test` |
+| API E2E (PostgreSQL real descartable) | pytest `-m e2e` | `./scripts/test.sh e2e` |
+| UI E2E (Playwright, backend real) | @playwright/test | `cd frontend && npm run test:e2e` |
 
-**Coverage:** ~100+ backend tests, 20 frontend tests. Integration tests require PostgreSQL and are marked with `@pytest.mark.integration`.
+**Marcadores pytest:** `db` = requiere PostgreSQL real (skip limpio si no hay servidor); `e2e` = API end-to-end contra la app real; `integration` = PostgreSQL + DeepSeek API (excluido por defecto). El unit-run no depende de PostgreSQL.
+
+**Infraestructura E2E:** el servicio `postgres-test` (puerto 5434, descartable) se crea/destruye con `./scripts/test-db.sh {up|down|reset}`; el seed compartido es `backend/scripts/seed_e2e.py` (admin `admin@turnos.com` + catálogos + médicos). Playwright usa `webServer` (backend en :8011 + frontend en :5199) y `globalSetup` que migra y siembra la base de prueba.
+
+**Deuda conocida (2026-09-06):** 9 tests legacy de telegram pendientes de migrar al contrato del bot LLM-first (`test_mission_ranking_query`, `test_webhook_secret_validation`, `test_real_transcript_regression`, `test_stress`, `test_real_user_simulation`), más los tests `integration` que requieren DeepSeek real. El job de CI para `db`/`e2e`/UI-E2E está pendiente de añadir a `.github/workflows/ci.yml`.
 
 ---
 

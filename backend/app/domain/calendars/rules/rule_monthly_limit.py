@@ -2,19 +2,19 @@ from backend.app.domain.calendars.rules.interface import Rule, RuleContext, Rule
 
 
 class MonthlyLimitRule(Rule):
-    """Hard block (when at max) + target bonus (soft)."""
+    """Soft rule: strong penalty when at max (coverage-first, but warns)."""
 
     def __init__(self):
-        super().__init__(name="monthly_limit", is_hard=True, weight=2.0)
+        super().__init__(name="monthly_limit", is_hard=False, weight=2.0)
 
     def evaluate(self, ctx: RuleContext) -> RuleResult:
-        # Hard check: monthly max reached
+        # Strong soft penalty: monthly max reached
         if ctx.monthly_count >= ctx.monthly_service_max:
             return RuleResult(
                 rule_name=self.name,
-                score_delta=-999.0,
-                is_blocking=True,
-                extra={"reason": "monthly_max_exceeded"},
+                score_delta=-500.0,
+                is_blocking=False,
+                extra={"reason": "monthly_max_exceeded", "warning": True},
             )
 
         # Soft bonus: reward doctors below their target

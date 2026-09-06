@@ -5,7 +5,8 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["dist"],
+    // Los specs de Playwright tienen su propio runner/transpilador.
+    ignores: ["dist", "e2e/**", "playwright.config.ts"],
   },
 );
 

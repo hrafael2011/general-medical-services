@@ -7,10 +7,18 @@ from datetime import date, timedelta
 
 from ortools.sat.python import cp_model
 
+from backend.app.domain.calendars.objective_weights import (
+    GAP_PENALTY,
+    MAX_EXCESS_PENALTY,
+    MIN_ASSIGN_PENALTY,
+    CONSECUTIVE_DAY_PENALTY,
+    PRIMARY_DISPLACEMENT_PENALTY,
+    PATTERN_PENALTY_SAME_WEEK,
+    PATTERN_PENALTY_CONSECUTIVE_STRONG,
+    PATTERN_PENALTY_TIER_MISMATCH,
+)
 from backend.app.domain.calendars.types import GenerationSummary, SlotRequest, SlotResult
 from backend.app.domain.calendars.weeks import compute_weeks
-
-GAP_PENALTY = 10000
 
 
 class OrToolsEngine:
@@ -78,7 +86,11 @@ class OrToolsEngine:
                         doctor_vars.append(x[(doc.id, day, area)])
                 model.add(sum(doctor_vars) + gap[(day, area)] == 1)
 
-        # 5. Max 1 assignment per doctor per day (empty slots only)
+        # 5. Max 1 assignment per doctor per day (including occupied slots)
+        occupied_dates_by_doctor: dict[str, set[date]] = {}
+        for (d, a), doc_id in occupied_slots.items():
+            occupied_dates_by_doctor.setdefault(doc_id, set()).add(d)
+
         for doc in ctx.doctors:
             for day in sorted_dates:
                 doc_day_vars = [
@@ -86,10 +98,45 @@ class OrToolsEngine:
                     for area in ctx.required_areas
                     if (doc.id, day, area) in x
                 ]
-                if doc_day_vars:
+                if day in occupied_dates_by_doctor.get(doc.id, set()):
+                    if doc_day_vars:
+                        model.add(sum(doc_day_vars) == 0)
+                elif doc_day_vars:
                     model.add(sum(doc_day_vars) <= 1)
 
-        # 6. Monthly max per doctor (account for already assigned)
+        # 5b. Day-priority constraints
+        # NOTA (2026-09-06): GenerationContext aún no expone day_priorities y
+        # ningún flujo escribe day_priority ≠ "available" en doctor_availability;
+        # este bloque queda inerte por datos, no por diseño. La feature está a
+        # medio construir (columna + DayOfWeekConsistencyRule + este bloque) y se
+        # activará cuando el encargado pueda marcar días prioritarios.
+        day_priorities = getattr(ctx, "day_priorities", None) or {}
+        primary_displaced: list[cp_model.IntVar] = []
+        for doc in ctx.doctors:
+            priorities = day_priorities.get(doc.id, {})
+            if not priorities:
+                continue
+            for day in sorted_dates:
+                dow = day.weekday()
+                priority = priorities.get(dow, "available")
+                if priority not in ("mandatory", "primary"):
+                    continue
+                day_vars = [
+                    x[(doc.id, day, area)]
+                    for area in ctx.required_areas
+                    if (doc.id, day, area) in x
+                ]
+                if not day_vars:
+                    continue
+                if priority == "mandatory":
+                    model.add(sum(day_vars) >= 1)
+                elif priority == "primary":
+                    displaced = model.new_bool_var(f"disp_{doc.id}_{day}")
+                    model.add(sum(day_vars) >= 1 - displaced)
+                    primary_displaced.append(displaced)
+
+        # 6. Monthly max per doctor — HARD for hard_limit, SOFT for warn_only
+        excess: dict[str, cp_model.IntVar] = {}
         for doc in ctx.doctors:
             monthly_max = (
                 ctx.monthly_service_maxes.get(doc.id, 3)
@@ -98,8 +145,37 @@ class OrToolsEngine:
             )
             remaining = max(0, monthly_max - existing_count.get(doc.id, 0))
             doc_vars = [var for (d_id, _, _), var in x.items() if d_id == doc.id]
-            if doc_vars:
+            if not doc_vars:
+                continue
+            limit_mode = getattr(doc, "monthly_service_limit_mode", "warn_only")
+            if limit_mode == "hard_limit":
                 model.add(sum(doc_vars) <= remaining)
+            else:
+                max_possible = len(doc_vars)
+                excess[doc.id] = model.new_int_var(
+                    0, max(0, max_possible - remaining), f"excess_{doc.id}"
+                )
+                model.add(excess[doc.id] >= sum(doc_vars) - remaining)
+
+        # 6b. Min-1 assignment per doctor — SOFT with fairness_mode
+        zero_pen: dict[str, cp_model.IntVar] = {}
+        fairness_mode = getattr(ctx, "fairness_mode", "hybrid")
+        zero_pen_weight = {
+            "strict": MIN_ASSIGN_PENALTY,
+            "hybrid": MIN_ASSIGN_PENALTY // 2,
+            "lenient": MIN_ASSIGN_PENALTY // 10,
+        }.get(fairness_mode, MIN_ASSIGN_PENALTY // 2)
+        excess_weight = {
+            "strict": MAX_EXCESS_PENALTY,
+            "hybrid": MAX_EXCESS_PENALTY,
+            "lenient": MAX_EXCESS_PENALTY // 2,
+        }.get(fairness_mode, MAX_EXCESS_PENALTY)
+
+        for doc in ctx.doctors:
+            doc_vars = [var for (d_id, _, _), var in x.items() if d_id == doc.id]
+            if doc_vars:
+                zero_pen[doc.id] = model.new_bool_var(f"zero_{doc.id}")
+                model.add(zero_pen[doc.id] >= 1 - sum(doc_vars))
 
         # 7. Objective: minimize gaps + soft penalties
         objective_terms = []
@@ -110,6 +186,18 @@ class OrToolsEngine:
                 if (day, area) in occupied_slots:
                     continue
                 objective_terms.append(gap[(day, area)] * GAP_PENALTY)
+
+        # Max excess penalty (soft)
+        for doc_id, var in excess.items():
+            objective_terms.append(var * excess_weight)
+
+        # Min-1 assignment penalty (soft)
+        for var in zero_pen.values():
+            objective_terms.append(var * zero_pen_weight)
+
+        # Primary-day displacement penalty
+        for var in primary_displaced:
+            objective_terms.append(var * PRIMARY_DISPLACEMENT_PENALTY)
 
         # Soft: load balancing (penalize assigning doctors with existing load)
         for doc in ctx.doctors:
@@ -164,7 +252,7 @@ class OrToolsEngine:
                     model.add(sum(d1_vars) + sum(d2_vars) - 1 <= 2 * both)
                     model.add(both <= sum(d1_vars))
                     model.add(both <= sum(d2_vars))
-                    objective_terms.append(both * 50)
+                    objective_terms.append(both * CONSECUTIVE_DAY_PENALTY)
 
         # Soft: pattern penalties (weekly constraints for T2-T4 doctors)
         date_to_week: dict[date, int] = {}
@@ -220,7 +308,7 @@ class OrToolsEngine:
                         0, len(vars_in_week), f"wk_excess_{doc.id}_{w}"
                     )
                     model.add(excess_week >= count_week - 1)
-                    objective_terms.append(excess_week * 30)
+                    objective_terms.append(excess_week * PATTERN_PENALTY_SAME_WEEK)
 
             # Penalty 2: consecutive strong weeks
             if allowed_strong:
@@ -250,7 +338,7 @@ class OrToolsEngine:
                     model.add(h_cur + h_next - 1 <= 2 * both_strong)
                     model.add(both_strong <= h_cur)
                     model.add(both_strong <= h_next)
-                    objective_terms.append(both_strong * 40)
+                    objective_terms.append(both_strong * PATTERN_PENALTY_CONSECUTIVE_STRONG)
 
             # Penalty 3: T4 missing week (target >= 4)
             if target >= 4:
@@ -369,9 +457,43 @@ class OrToolsEngine:
                         ends = ends.date()
                     if slot.date <= ends:
                         return False
+        # Monthly-mode doctors must have submitted availability for the current month
+        if getattr(doctor, "availability_mode", "") == "monthly":
+            month_records = ctx.availability.get(doctor.id, [])
+            has_submitted = any(
+                getattr(r, "availability_type", "") == "monthly_variable"
+                and getattr(r, "month", None) == ctx.month
+                and getattr(r, "year", None) == ctx.year
+                for r in month_records
+            )
+            if not has_submitted:
+                return False
         records = ctx.availability.get(doctor.id, [])
         if not records:
             return True
+
+        # If the doctor has monthly_variable records for this specific month,
+        # ONLY evaluate monthly_variable, ignoring weekly_fixed/recurring.
+        # This prevents old/weekly_fixed records from overriding the doctor's
+        # explicit monthly availability choices.
+        monthly_records = [
+            r
+            for r in records
+            if r.availability_type == "monthly_variable"
+            and getattr(r, "month", None) == slot.date.month
+            and getattr(r, "year", None) == slot.date.year
+        ]
+        if monthly_records:
+            for record in monthly_records:
+                ad = (
+                    getattr(record, "available_days", None)
+                    or getattr(record, "available_dates", None)
+                    or []
+                )
+                if slot.date.day in ad:
+                    return True
+            return False
+
         for record in records:
             atype = record.availability_type
             if atype == "monthly_variable":

@@ -195,15 +195,28 @@ def _create_ranking(session, *, version_id: str) -> None:
     session.flush()
 
 
-def test_get_ranking_requires_approved_calendar(client, session) -> None:
+def test_get_ranking_with_draft_calendar_returns_ranking(client, session) -> None:
+    """Rankings are visible for any calendar status (draft, partial, approved)."""
     draft_version = _create_calendar_version(session, approved=False)
     _create_ranking(session, version_id=draft_version.id)
     session.commit()
 
     response = client.get(f"/api/missions/rankings/{_YEAR}/{_MONTH}")
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "approved_calendar_required"
+    assert response.status_code == 200
+    data = response.json()
+    assert data["calendar_version_id"] == draft_version.id
+    assert data["entries"][0]["doctor_name"] == "Dr. Ruta"
+
+
+def test_get_ranking_without_ranking_returns_404(client, session) -> None:
+    _create_calendar_version(session, approved=False)
+    session.commit()
+
+    response = client.get(f"/api/missions/rankings/{_YEAR}/{_MONTH}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "ranking_not_found"
 
 
 def test_get_ranking_uses_approved_calendar_version(client, session) -> None:

@@ -58,11 +58,19 @@ class Settings(BaseSettings):
     feature_notifications: bool = True
     feature_telegram: bool = True
 
+    # ── Manual-only mode ────────────────────────────────────────────────
+    # True = la generación automática está deshabilitada (botón oculto en el
+    # frontend y endpoints /generate y /fill-gaps bloqueados con 403).
+    # Reactivar: FEATURE_MANUAL_ONLY=false en .env.
+    feature_manual_only: bool = True
+
     # ── Telegram Router Query Engine (spec 15) ──────────────────────────
-    feature_telegram_router: bool = False          # master switch
-    feature_telegram_router_chitchat: bool = False   # enable chitchat handler
-    feature_telegram_router_operational: bool = False  # enable operational query routing
-    feature_telegram_router_reports: bool = False   # enable report contract handler
+    # Activos por defecto desde 2026-09-05 (catálogo MCP de 22 tools).
+    # Rollback: FEATURE_TELEGRAM_ROUTER=false en .env restaura el agente legacy.
+    feature_telegram_router: bool = True           # master switch
+    feature_telegram_router_chitchat: bool = True  # enable chitchat handler
+    feature_telegram_router_operational: bool = True  # enable operational query routing
+    feature_telegram_router_reports: bool = True   # enable report contract handler
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

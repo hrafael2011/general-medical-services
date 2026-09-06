@@ -57,6 +57,7 @@ class TestTrashCounts:
             "ranks",
             "departments",
             "deactivation_reasons",
+            "calendars",
         }
         assert all(isinstance(v, int) for v in data.values())
 

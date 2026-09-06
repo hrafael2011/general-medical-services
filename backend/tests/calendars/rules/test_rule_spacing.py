@@ -11,8 +11,8 @@ def test_no_recent_service_no_warnings():
     result = rule.evaluate(ctx)
     assert result.warnings == []
     # Sin historial → days_since_last=999, days_since_strong=999
-    # bonus = min(999,30)*0.5 + min(999,30)*0.3 = 15.0 + 9.0 = 24.0
-    assert result.score_delta == 24.0
+    # bonus = min(999,30)*0.2 + min(999,30)*0.5 = 6.0 + 15.0 = 21.0
+    assert result.score_delta == 21.0
 
 
 def test_strong_service_5_days_ago_warning_on_strong_slot():
@@ -24,8 +24,8 @@ def test_strong_service_5_days_ago_warning_on_strong_slot():
     )
     result = rule.evaluate(ctx)
     assert any("14" in w for w in result.warnings)
-    # rest_bonus=5*0.5=2.5 + strong_bonus=5*0.3=1.5 - warning_penalty=5.0 = -1.0
-    assert result.score_delta == -1.0
+    # rest_bonus=5*0.2=1.0 + strong_bonus=5*0.5=2.5 - warning_penalty=5.0 = -1.5
+    assert result.score_delta == -1.5
 
 
 def test_strong_service_3_days_ago_warning_on_disponible():
@@ -37,8 +37,8 @@ def test_strong_service_3_days_ago_warning_on_disponible():
     )
     result = rule.evaluate(ctx)
     assert any("7" in w for w in result.warnings)
-    # rest_bonus=3*0.5=1.5 + strong_bonus=3*0.3=0.9 - warning_penalty=5.0 = -2.6
-    assert result.score_delta == -2.6
+    # rest_bonus=3*0.2=0.6 + strong_bonus=3*0.5=1.5 - warning_penalty=5.0 = -2.9
+    assert result.score_delta == -2.9
 
 
 def test_mission_3_days_ago_warning_on_strong():
@@ -59,9 +59,9 @@ def test_days_since_strong_bonus():
         monthly=[{"doctor_id": "doc-1", "service_date": last, "service_area_id": "pista"}],
     )
     result = rule.evaluate(ctx)
-    # days_since_strong=20 -> 20*0.3 = 6.0; days_since_last=20 -> 20*0.5 = 10.0
-    # No warnings since 20 >= 7 -> total bonus = 16.0
-    assert result.score_delta == 16.0
+    # days_since_strong=20 -> 20*0.5 = 10.0; days_since_last=20 -> 20*0.2 = 4.0
+    # No warnings since 20 >= 7 -> total bonus = 14.0
+    assert result.score_delta == 14.0
 
 
 def _ctx(service_area_id="disponible", monthly=None, historical=None, missions=None):

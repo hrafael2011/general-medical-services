@@ -5,6 +5,7 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 """
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.notifications.providers import FakeProvider
@@ -18,6 +19,7 @@ from backend.app.application.notifications.templates import (
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 from backend.app.infrastructure.repositories.notifications import (
+    BACKOFF_SECONDS,
     MAX_RETRIES,
     NotificationRepository,
 )
@@ -60,6 +62,21 @@ def _queue_one(
         payload={"message": message},
         created_by="actor-test",
     )
+
+
+def _expire_backoff(db_session, event_id: str) -> None:
+    """Backdate last_retried_at so the retry backoff window is over.
+
+    list_pending() only returns events whose last_retried_at is older
+    than their exponential backoff (BACKOFF_SECONDS * 2**retry_count);
+    this simulates that time passing without real sleeps or a frozen
+    clock.
+    """
+    event = NotificationRepository(db_session).get_by_id(event_id)
+    assert event is not None
+    backoff = BACKOFF_SECONDS * (2**event.retry_count)
+    event.last_retried_at = datetime.now(UTC) - timedelta(seconds=backoff + 1)
+    db_session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +167,8 @@ def test_process_skips_no_phone(db_session) -> None:
 def test_process_retries_on_failure(db_session) -> None:
     """
     A provider that raises bumps retry_count each call.
-    After MAX_RETRIES total calls the status becomes 'failed'.
+    After MAX_RETRIES total calls (each after the backoff window)
+    the status becomes 'failed'.
     """
 
     class FailingProvider:
@@ -174,9 +192,10 @@ def test_process_retries_on_failure(db_session) -> None:
     assert refreshed.retry_count == 1
     assert refreshed.status == "pending"
 
-    # Call process_pending until MAX_RETRIES is exhausted
-    # We already called once; need (MAX_RETRIES - 1) more calls
+    # process_pending() only retries after BACKOFF_SECONDS have passed,
+    # so simulate the window elapsing between calls.
     for _ in range(MAX_RETRIES - 1):
+        _expire_backoff(db_session, event.id)
         service.process_pending()
 
     final = repo.get_by_id(event.id)
@@ -197,9 +216,13 @@ def test_process_failure_creates_action_alert(db_session) -> None:
         provider=FailingProvider(),
         action_alerts=ActionAlertService(ActionAlertRepository(db_session)),
     )
-    _queue_one(service, recipient_phone="+18095550000")
+    event = _queue_one(service, recipient_phone="+18095550000")
 
-    for _ in range(MAX_RETRIES):
+    service.process_pending()
+
+    # Each retry only happens after the backoff window has elapsed.
+    for _ in range(MAX_RETRIES - 1):
+        _expire_backoff(db_session, event.id)
         service.process_pending()
 
     alerts = ActionAlertRepository(db_session).list_all(
@@ -208,6 +231,39 @@ def test_process_failure_creates_action_alert(db_session) -> None:
     )
     assert len(alerts) == 1
     assert alerts[0].alert_type == "notification_delivery_failed"
+
+
+def test_process_respects_backoff_window(db_session) -> None:
+    """A failed event is not retried until BACKOFF_SECONDS have passed."""
+
+    class FailingProvider:
+        name = "failing"
+
+        def send(self, phone: str, message: str) -> str:
+            raise Exception("network error")
+
+    service = NotificationService(
+        repo=NotificationRepository(db_session),
+        provider=FailingProvider(),
+    )
+    event = _queue_one(service, recipient_phone="+18095550000")
+    repo = NotificationRepository(db_session)
+
+    service.process_pending()
+
+    # Within the backoff window the event is not picked up again.
+    service.process_pending()
+    refreshed = repo.get_by_id(event.id)
+    assert refreshed is not None
+    assert refreshed.retry_count == 1
+    assert refreshed.status == "pending"
+
+    # Once the window has elapsed it is retried.
+    _expire_backoff(db_session, event.id)
+    service.process_pending()
+    refreshed = repo.get_by_id(event.id)
+    assert refreshed is not None
+    assert refreshed.retry_count == 2
 
 
 def test_notification_read_redacts_confirmation_commands(db_session) -> None:

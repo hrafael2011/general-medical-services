@@ -77,7 +77,7 @@ describe("DoctorList", () => {
 
   it("usa columnas ejecutivas en el listado", async () => {
     renderList();
-    expect(await screen.findByText("Status servicio")).toBeInTheDocument();
+    expect(await screen.findByText("Estado servicio")).toBeInTheDocument();
     expect(screen.getAllByText("Activo").length).toBeGreaterThan(0);
     expect(screen.getByText("Departamento")).toBeInTheDocument();
     expect(screen.queryByText("Sexo")).not.toBeInTheDocument();
@@ -121,15 +121,16 @@ describe("DoctorList", () => {
     renderList();
     fireEvent.click(await screen.findByLabelText("Solo activos"));
 
-    expect(mockListDoctors).toHaveBeenCalledWith("all");
-    expect(mockListDoctors).toHaveBeenCalledWith("active");
+    // list(statusFilter, monthlyFilter) — monthlyFilter undefined cuando está apagado
+    expect(mockListDoctors).toHaveBeenCalledWith("all", undefined);
+    expect(mockListDoctors).toHaveBeenCalledWith("active", undefined);
   });
 
   it("solicita solo inactivos al activar el filtro", async () => {
     renderList();
     fireEvent.click(await screen.findByLabelText("Solo inactivos"));
 
-    expect(mockListDoctors).toHaveBeenCalledWith("all");
-    expect(mockListDoctors).toHaveBeenCalledWith("inactive");
+    expect(mockListDoctors).toHaveBeenCalledWith("all", undefined);
+    expect(mockListDoctors).toHaveBeenCalledWith("inactive", undefined);
   });
 });

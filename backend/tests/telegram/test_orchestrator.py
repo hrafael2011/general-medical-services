@@ -6,6 +6,7 @@ Uses the in-memory SQLite db_session fixture from conftest.py.
 
 import uuid
 from datetime import UTC, date, datetime
+from typing import Any
 
 from sqlalchemy import select
 
@@ -41,12 +42,14 @@ class StubAgent:
         telegram_user_id: str | None = None,
         user_info: dict | None = None,
         actor_id: str | None = None,
+        user: Any | None = None,
     ) -> AgentResult:
         self.calls.append({
             "text": text,
             "telegram_user_id": telegram_user_id,
             "user_info": user_info,
             "actor_id": actor_id,
+            "user": user,
         })
         return self._result
 

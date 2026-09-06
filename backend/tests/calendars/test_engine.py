@@ -172,8 +172,8 @@ def test_generate_respects_hard_block() -> None:
 
 
 def test_generate_respects_monthly_max() -> None:
-    """With monthly_max=3, a doctor should be assigned at most 3 times in the month,
-    even when available every day.  All remaining slots become gaps."""
+    """Coverage-first: with 1 doctor, monthly_max is soft. Fills all 28 days (1/day)
+    exceeding max=3.  Gaps remain for the other 2 areas."""
     doctor = _make_doctor("doc-1")
 
     ctx = _base_context(
@@ -189,10 +189,9 @@ def test_generate_respects_monthly_max() -> None:
     summary = engine.generate(ctx)
 
     assert summary.total_slots == _TOTAL_SLOTS
-    assert summary.assigned_count == 3
-    assert summary.gap_count == _TOTAL_SLOTS - 3
+    assert summary.assigned_count == _DAYS_IN_MONTH  # 1/day covers all days
+    assert summary.gap_count == _TOTAL_SLOTS - _DAYS_IN_MONTH
 
-    # All assigned slots must belong to doc-1
     for r in summary.slot_results:
         if r.assigned_doctor_id is not None:
             assert r.assigned_doctor_id == "doc-1"
@@ -204,8 +203,7 @@ def test_generate_respects_monthly_max() -> None:
 
 
 def test_generate_respects_monthly_max_multi_doctor() -> None:
-    """With 3 doctors each capped at monthly_max=3, total assigned = 9.
-    The engine distributes assignments across doctors respecting limits."""
+    """Coverage-first: 3 doctors each max=3. Fills all 84 slots (28 each)."""
     doctors = [_make_doctor(f"doc-{i}") for i in range(1, 4)]
 
     allowed_areas = {d.id: ["emergencia", "pista", "disponible"] for d in doctors}
@@ -225,13 +223,13 @@ def test_generate_respects_monthly_max_multi_doctor() -> None:
     summary = engine.generate(ctx)
 
     assert summary.total_slots == _TOTAL_SLOTS
-    assert summary.assigned_count == 9  # 3 doctors × 3 max
-    assert summary.gap_count == _TOTAL_SLOTS - 9
+    assert summary.gap_count == 0  # 3 docs × 28 days = 84, fills all
+    assert summary.assigned_count == _TOTAL_SLOTS
 
-    # Verify each doctor has exactly 3 assignments
+    # Each doctor fills 28 slots (1/day across areas), max exceeded but coverage first
     counts: dict[str, int] = {}
     for r in summary.slot_results:
         if r.assigned_doctor_id is not None:
             counts[r.assigned_doctor_id] = counts.get(r.assigned_doctor_id, 0) + 1
     for d in doctors:
-        assert counts.get(d.id, 0) == 3, f"{d.id} has {counts.get(d.id, 0)} assignments, expected 3"
+        assert counts.get(d.id, 0) == _DAYS_IN_MONTH, f"{d.id}: {counts.get(d.id, 0)}, expected {_DAYS_IN_MONTH}"

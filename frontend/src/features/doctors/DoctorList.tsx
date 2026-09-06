@@ -1,4 +1,5 @@
-import { Ban, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Trash2, Users, X, XCircle } from "lucide-react";
+import { Ban, CalendarDays, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Trash2, Users, X, XCircle } from "lucide-react";
+import { QuickAvailabilityModal } from "./QuickAvailabilityModal";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -25,6 +26,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   const [detail, setDetail] = useState("");
   const [actionError, setActionError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [avModalDoctor, setAvModalDoctor] = useState<{ id: string; name: string; dates: Date[] } | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["doctors", statusFilter, monthlyFilter],
@@ -201,6 +203,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                 <th>Departamento</th>
                 <th>Estado servicio</th>
                 <th>Áreas</th>
+                <th>Disponibilidad</th>
                 <th>Misiones</th>
               </tr>
             </thead>
@@ -248,6 +251,17 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                         </div>
                       )}
                   </td>
+                  <td>
+                    {doc.availability_mode === "monthly" && doc.service_active ? (
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: "0.8rem", padding: "2px 8px", whiteSpace: "nowrap" }}
+                        onClick={(e) => { e.stopPropagation(); setAvModalDoctor({ id: doc.id, name: doc.name, dates: [] }); }}
+                      >
+                        <CalendarDays size={14} /> Asignar días
+                      </button>
+                    ) : "—"}
+                  </td>
                   <td>{doc.service_active && doc.participa_misiones ? "Sí" : "No"}</td>
                 </tr>
               ))}
@@ -287,6 +301,16 @@ export function DoctorList({ onAdd, onEdit }: Props) {
           onDetailChange={setDetail}
           onDeactivate={submitDeactivation}
           onReactivate={() => reactivate.mutate(selectedDoctor.id)}
+        />
+      )}
+
+      {avModalDoctor && (
+        <QuickAvailabilityModal
+          doctorId={avModalDoctor.id}
+          doctorName={avModalDoctor.name}
+          initialDates={avModalDoctor.dates}
+          onClose={() => setAvModalDoctor(null)}
+          onSaved={() => { setAvModalDoctor(null); qc.invalidateQueries({ queryKey: ["doctors"] }); }}
         />
       )}
 

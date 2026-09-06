@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.app.core.config import settings
 from backend.app.api.dependencies import get_current_user
 from backend.app.api.routes.calendars import (
     get_assignment_service,
@@ -284,12 +285,14 @@ def test_unlock_calendar_success(client, mock_calendar_service):
 # ---------------------------------------------------------------------------
 
 
-def test_generate_calendar_success(client, mock_generation_service, engine):
+def test_generate_calendar_success(client, mock_generation_service, engine, monkeypatch):
     from datetime import date as _date
     from dataclasses import dataclass
     from unittest.mock import PropertyMock
 
     from backend.app.application.calendars.generation_service import GenerationSummary
+
+    monkeypatch.setattr(settings, "feature_manual_only", False)
 
     # Mock calendar_repo on the service so route can read calendar status
     mock_repo = MagicMock()
@@ -336,6 +339,91 @@ def test_generate_calendar_success(client, mock_generation_service, engine):
     assert data["total_slots"] == 10
     assert data["assigned_count"] == 8
     assert data["gap_count"] == 2
+
+
+def test_generate_returns_403_when_manual_only(client, mock_generation_service):
+    """FEATURE_MANUAL_ONLY (default true) bloquea la generación automática."""
+    resp = client.post("/api/calendars/cal-gen/generate")
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "manual_only"
+    mock_generation_service.generate.assert_not_called()
+
+
+def test_fill_gaps_returns_403_when_manual_only(client, mock_generation_service):
+    """FEATURE_MANUAL_ONLY (default true) bloquea fill-gaps."""
+    resp = client.post("/api/calendars/cal-gen/fill-gaps")
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "manual_only"
+    mock_generation_service.fill_gaps.assert_not_called()
+
+
+def test_generate_allowed_when_flag_disabled(client, mock_generation_service, monkeypatch):
+    """Con FEATURE_MANUAL_ONLY=false el endpoint llega al service (guard desactivado)."""
+    monkeypatch.setattr(settings, "feature_manual_only", False)
+    mock_generation_service.generate.return_value = None  # guard pasó; el resto fallaría en mapping
+    resp = client.post("/api/calendars/cal-gen/generate")
+    # El service mock devuelve None → la ruta falla en mapping, pero NO con 403 manual_only
+    assert resp.status_code != 403
+    mock_generation_service.generate.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/calendars/{calendar_id}/eligible-doctors
+# ---------------------------------------------------------------------------
+
+
+def test_eligible_doctors_endpoint_includes_unavailable_with_reasons(
+    client, mock_assignment_service, engine
+):
+    """La respuesta incluye médicos ocultos con razón (spec 02)."""
+    from types import SimpleNamespace
+
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+    sess = SessionLocal()
+    cal = _make_calendar(id="cal-elig")
+    ver = _make_version(calendar_id="cal-elig", id=str(uuid4()))
+    sess.add(cal)
+    sess.add(ver)
+    sess.commit()
+    sess.close()
+
+    mock_assignment_service.get_eligible_doctors_for_slot.return_value = {
+        "eligible": [
+            {
+                "doctor": SimpleNamespace(
+                    id="doc-ok", name="Dr. Ok", specialty=None, rank_name=None
+                ),
+                "altera_orden": None,
+            }
+        ],
+        "unavailable": [
+            {
+                "doctor_id": "doc-oculto",
+                "full_name": "Dr. Oculto",
+                "code": "no_availability",
+                "description": "No tiene disponibilidad para esta fecha.",
+                "is_hard": False,
+            },
+            {
+                "doctor_id": "doc-inactivo",
+                "full_name": "Dr. Inactivo",
+                "code": "doctor_inactive",
+                "description": "El médico no está activo o no tiene servicio activo.",
+                "is_hard": True,
+            },
+        ],
+    }
+
+    resp = client.get(
+        "/api/calendars/cal-elig/eligible-doctors?date=2026-05-15&area_id=area-1"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["doctors"][0]["id"] == "doc-ok"
+    assert data["unavailable"][0]["code"] == "no_availability"
+    assert data["unavailable"][0]["is_hard"] is False
+    assert data["unavailable"][1]["code"] == "doctor_inactive"
+    assert data["unavailable"][1]["is_hard"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -394,27 +482,12 @@ def test_replace_assignment_success(client, mock_assignment_service):
 
 
 # ---------------------------------------------------------------------------
-# POST /api/calendars/{calendar_id}/restore
+# POST /api/calendars/{calendar_id}/restore (endpoint removed — hard delete)
 # ---------------------------------------------------------------------------
 
 
-def test_restore_calendar_success(client, mock_calendar_service):
+def test_restore_endpoint_removed(client, mock_calendar_service):
+    """El borrado de calendarios es permanente: el endpoint de restore ya no existe."""
     resp = client.post("/api/calendars/cal-1/restore")
-    assert resp.status_code == 204
-    mock_calendar_service.restore_calendar.assert_called_once()
-
-
-def test_restore_calendar_not_found(client, mock_calendar_service):
-    mock_calendar_service.restore_calendar.side_effect = CalendarServiceError(
-        "calendar_not_found", "Calendar not found"
-    )
-    resp = client.post("/api/calendars/unknown/restore")
     assert resp.status_code == 404
-
-
-def test_restore_calendar_not_deleted(client, mock_calendar_service):
-    mock_calendar_service.restore_calendar.side_effect = CalendarServiceError(
-        "calendar_not_deleted", "Calendar is not deleted"
-    )
-    resp = client.post("/api/calendars/cal-1/restore")
-    assert resp.status_code == 422
+    mock_calendar_service.restore_calendar.assert_not_called()

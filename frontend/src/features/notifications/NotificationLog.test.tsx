@@ -43,7 +43,7 @@ describe("NotificationLog", () => {
     expect(heading).toBeInTheDocument();
   });
 
-  it("muestra el botón de procesar cola", async () => {
+  it("muestra el botón de filtrar la cola", async () => {
     const { notificationsApi } = await import("../../api/notifications");
     vi.mocked(notificationsApi.list).mockResolvedValueOnce({
       items: [],
@@ -53,7 +53,7 @@ describe("NotificationLog", () => {
     renderNotifications();
 
     const button = await screen.findByRole("button", {
-      name: /procesar cola/i,
+      name: /filtrar/i,
     });
     expect(button).toBeInTheDocument();
   });

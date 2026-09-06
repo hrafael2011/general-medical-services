@@ -94,8 +94,17 @@ export interface EligibleDoctorRead {
   altera_orden: boolean | null;
 }
 
+export interface UnavailableDoctorRead {
+  doctor_id: string;
+  full_name: string;
+  code: string;
+  description: string;
+  is_hard: boolean;
+}
+
 export interface EligibleDoctorsResponse {
   doctors: EligibleDoctorRead[];
+  unavailable: UnavailableDoctorRead[];
 }
 
 export interface HardBlockItem {

@@ -4,22 +4,25 @@ All tests use FastAPI TestClient with in-memory SQLite — no real Meta
 webhook calls or WhatsApp messages are sent.
 """
 
+import hashlib
+import hmac
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
 from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
-from backend.app.core.config import settings
 
 
 @pytest.fixture(scope="function")
@@ -52,15 +55,48 @@ def db_session():
     engine.dispose()
 
 
+# Meta signs every webhook request with HMAC-SHA256 using the app secret.
+# The route now rejects unsigned requests, so tests must configure the
+# secret and sign their payloads.
+TEST_APP_SECRET = "test-app-secret"
+
+
 @pytest.fixture
 def client(db_session):
-    """TestClient with DB dependency overridden."""
+    """TestClient with DB dependency overridden and a configured
+    Meta app secret (signature verification is part of the route)."""
     app = create_app()
     app.dependency_overrides[get_db_session] = lambda: db_session
-    return TestClient(app)
+    original = settings.meta_whatsapp_app_secret
+    settings.meta_whatsapp_app_secret = TEST_APP_SECRET
+    try:
+        yield TestClient(app)
+    finally:
+        settings.meta_whatsapp_app_secret = original
+
+
+def _post_signed(client: TestClient, payload: dict):
+    """POST the payload with a valid X-Hub-Signature-256 header.
+
+    The body is encoded exactly as httpx would for ``json=`` so the
+    signature matches the bytes the server receives.
+    """
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode(
+        "utf-8"
+    )
+    signature = hmac.new(TEST_APP_SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return client.post(
+        "/api/webhooks/whatsapp",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": f"sha256={signature}",
+        },
+    )
 
 
 # ── GET verification ────────────────────────────────────────────────────────
+
 
 class TestWebhookVerification:
     """Test GET /api/webhooks/whatsapp (Meta webhook verification)."""
@@ -125,55 +161,71 @@ class TestWebhookVerification:
 
 # ── POST message reception ──────────────────────────────────────────────────
 
-def _make_whatsapp_payload(sender_phone: str, text_body: str | None = "1",
-                           msg_id: str = "wamid.test123") -> dict:
+
+def _make_whatsapp_payload(
+    sender_phone: str, text_body: str | None = "1", msg_id: str = "wamid.test123"
+) -> dict:
     """Build a minimal Meta Cloud API webhook payload."""
     messages = []
     if text_body is not None:
-        messages.append({
-            "from": sender_phone,
-            "id": msg_id,
-            "timestamp": "1717000000",
-            "text": {"body": text_body},
-            "type": "text",
-        })
+        messages.append(
+            {
+                "from": sender_phone,
+                "id": msg_id,
+                "timestamp": "1717000000",
+                "text": {"body": text_body},
+                "type": "text",
+            }
+        )
     return {
         "object": "whatsapp_business_account",
-        "entry": [{
-            "id": "123456789",
-            "changes": [{
-                "value": {
-                    "messaging_product": "whatsapp",
-                    "metadata": {
-                        "display_phone_number": "15550987654",
-                        "phone_number_id": "987654321",
-                    },
-                    "contacts": [{
-                        "profile": {"name": "Test Doctor"},
-                        "wa_id": sender_phone,
-                    }],
-                    "messages": messages,
-                },
-                "field": "messages",
-            }],
-        }],
+        "entry": [
+            {
+                "id": "123456789",
+                "changes": [
+                    {
+                        "value": {
+                            "messaging_product": "whatsapp",
+                            "metadata": {
+                                "display_phone_number": "15550987654",
+                                "phone_number_id": "987654321",
+                            },
+                            "contacts": [
+                                {
+                                    "profile": {"name": "Test Doctor"},
+                                    "wa_id": sender_phone,
+                                }
+                            ],
+                            "messages": messages,
+                        },
+                        "field": "messages",
+                    }
+                ],
+            }
+        ],
     }
 
 
 class TestWebhookReceive:
     """Test POST /api/webhooks/whatsapp (incoming message)."""
 
+    def test_unsigned_request_returns_403(self, client):
+        """POST without a valid X-Hub-Signature-256 is rejected."""
+        payload = {"object": "whatsapp_business_account", "entry": []}
+        response = client.post("/api/webhooks/whatsapp", json=payload)
+        assert response.status_code == 403
+
     def test_empty_entry_returns_200(self, client):
         """POST with an empty entry returns 200 OK."""
         payload = {"object": "whatsapp_business_account", "entry": []}
-        response = client.post("/api/webhooks/whatsapp", json=payload)
+        response = _post_signed(client, payload)
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
     def test_no_messages_returns_200(self, client):
         """POST with a valid structure but no messages returns 200."""
         payload = _make_whatsapp_payload("18091234567", text_body=None)
-        response = client.post("/api/webhooks/whatsapp", json=payload)
+        response = _post_signed(client, payload)
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
@@ -181,7 +233,7 @@ class TestWebhookReceive:
         """POST with unexpected JSON structure returns 200 (webhooks
         should never return errors to Meta — they retry on non-200)."""
         payload = {"unexpected": "structure"}
-        response = client.post("/api/webhooks/whatsapp", json=payload)
+        response = _post_signed(client, payload)
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
@@ -239,7 +291,7 @@ class TestWebhookReceive:
         db_session.commit()
 
         payload = _make_whatsapp_payload("18091234567", text_body="1")
-        response = client.post("/api/webhooks/whatsapp", json=payload)
+        response = _post_signed(client, payload)
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -304,7 +356,7 @@ class TestWebhookReceive:
         db_session.commit()
 
         payload = _make_whatsapp_payload("18099998888", text_body="Hola doctor")
-        response = client.post("/api/webhooks/whatsapp", json=payload)
+        response = _post_signed(client, payload)
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -315,7 +367,7 @@ class TestWebhookReceive:
     def test_reply_from_unknown_phone_returns_200(self, client):
         """POST with '1' from an unknown phone number returns 200."""
         payload = _make_whatsapp_payload("18090000000", text_body="1")
-        response = client.post("/api/webhooks/whatsapp", json=payload)
+        response = _post_signed(client, payload)
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
@@ -372,7 +424,7 @@ class TestWebhookReceive:
         db_session.commit()
 
         payload = _make_whatsapp_payload("18095556666", text_body=" 1 ")
-        response = client.post("/api/webhooks/whatsapp", json=payload)
+        response = _post_signed(client, payload)
 
         assert response.status_code == 200
         db_session.refresh(req)

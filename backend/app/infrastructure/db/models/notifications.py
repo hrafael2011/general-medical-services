@@ -5,6 +5,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.infrastructure.db.base import Base
 
+# NOTA (2026-09-06): ScheduledJobModel y JobExecutionModel fueron eliminados —
+# el scheduler real es AsyncIOScheduler en memoria (main.py) y las tablas
+# scheduled_jobs/job_executions quedaron huérfanas en la migración original.
+
 
 class NotificationEventModel(Base):
     __tablename__ = "notification_events"
@@ -37,39 +41,3 @@ class NotificationEventModel(Base):
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class ScheduledJobModel(Base):
-    __tablename__ = "scheduled_jobs"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    job_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
-    scheduled_for: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
-    )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    lock_token: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class JobExecutionModel(Base):
-    __tablename__ = "job_executions"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    scheduled_job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("scheduled_jobs.id"), nullable=False, index=True
-    )
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    items_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)

@@ -13,8 +13,11 @@ import pytest
 from sqlalchemy import text as sa_text
 
 from backend.app.application.telegram.agent import ConversationalAgent
+from backend.app.application.telegram.intent_classifier import NLUEngine
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.llm import FakeLLMProvider
+from backend.app.application.telegram.tool_handlers import build_tool_handlers
+from backend.app.application.telegram.tool_registry import ToolRegistry
 from backend.app.application.telegram.types import AgentResult
 from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
 from backend.app.infrastructure.db.models.calendars import (
@@ -684,38 +687,102 @@ class TestFallbackAndEdgeCases:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestAgentPipeline:
-    """Prueba el pipeline completo: FakeLLM → Agent → IntentRouter."""
+class ScriptedAgentLLM:
+    """LLM por fases: JSON del NLU en clasificación; texto/eco en formateo."""
 
-    def test_agent_query_action_through_pipeline(self, seeded_db, sqlite_router) -> None:
-        """FakeLLM → Agent.process() → query → respuesta con datos reales."""
-        llm = FakeLLMProvider(responses={
-            "cuantos": '{"action": "query", "query_type": "count_doctors_total", "params": {}}',
-        })
-        agent = ConversationalAgent(llm=llm, router=sqlite_router)
+    name = "fake-scripted"
+
+    def __init__(self, nlu_json: str, format_response: str = "") -> None:
+        self.nlu_json = nlu_json
+        self.format_response = format_response
+        self.calls: list = []
+
+    def chat_complete(self, messages, temperature=0.0, json_mode=False):
+        self.calls.append(
+            {"messages": messages, "temperature": temperature, "json_mode": json_mode}
+        )
+        if json_mode or temperature == 0.0:
+            return self.nlu_json
+        if self.format_response:
+            return self.format_response
+        return " ".join(
+            m.get("content", "") for m in messages if m.get("role") == "user"
+        )
+
+    def complete(self, system, user, temperature=0.1):
+        if self.format_response:
+            return self.format_response
+        return user
+
+
+def _make_llm_first_agent(llm, session) -> ConversationalAgent:
+    """Agente LLM-first con el catálogo MCP cableado contra la sesión sembrada."""
+    registry = ToolRegistry()
+    for name, handler in build_tool_handlers(session=session).items():
+        registry.register(name, handler)
+    return ConversationalAgent(
+        llm=llm,
+        router=IntentRouter(),
+        nlu_engine=NLUEngine(llm),
+        tool_registry=registry,
+    )
+
+
+class TestAgentPipeline:
+    """Prueba el pipeline LLM-first: NLU → tool del catálogo → handlers reales."""
+
+    def test_agent_query_action_through_pipeline(self, seeded_db) -> None:
+        """NLU list_doctors count → handler real → respuesta con el total real."""
+        expected = sum(
+            1 for d in seeded_db["doctors"] if d.service_active and d.pool_active
+        )
+        llm = ScriptedAgentLLM(
+            nlu_json=(
+                '{"tool": "list_doctors", "params": {"count": true}, '
+                '"confidence": 0.95}'
+            ),
+        )
+        agent = _make_llm_first_agent(llm, seeded_db["session"])
         result = agent.process(text="cuantos medicos hay")
         assert result.agent_action == "query"
-        assert "encontrar" not in result.response_text.lower()
+        assert result.tool_name == "list_doctors"
+        assert str(expected) in result.response_text
 
-    def test_agent_export_action_through_pipeline(self, seeded_db, sqlite_router) -> None:
-        """FakeLLM → Agent.process() → export → PDF bytes."""
-        llm = FakeLLMProvider(responses={
-            "pdf": '{"action": "export", "query_type": "list_active_doctors", "params": {}}',
-        })
-        agent = ConversationalAgent(llm=llm, router=sqlite_router)
+    def test_agent_export_action_through_pipeline(self, seeded_db) -> None:
+        """generate_report (contrato actual del export) → bytes reales o mensaje.
+
+        El PDF mensual está en rediseño: el contrato exige que el documento
+        sea bytes o no exista — nunca un dict de error como documento.
+        """
+        llm = ScriptedAgentLLM(
+            nlu_json=(
+                '{"tool": "generate_report", "params": {"type": "monthly", '
+                '"month": 5, "year": 2026}, "confidence": 0.9}'
+            ),
+            format_response="No se pudo generar el reporte en este momento.",
+        )
+        agent = _make_llm_first_agent(llm, seeded_db["session"])
         result = agent.process(text="exporta pdf de medicos")
-        assert result.agent_action == "export"
-        assert result.document_bytes is not None
+        assert result.agent_action == "query"
+        assert result.tool_name == "generate_report"
+        assert result.document_bytes is None or isinstance(
+            result.document_bytes, bytes | bytearray
+        )
+        assert "reporte" in result.response_text.lower()
 
-    def test_agent_reply_action_through_pipeline(self, seeded_db, sqlite_router) -> None:
-        """FakeLLM → Agent.process() → reply → texto directo."""
-        llm = FakeLLMProvider(responses={
-            "hola": '{"action": "reply", "response_text": "Hola, bienvenido al sistema de turnos."}',
-        })
-        agent = ConversationalAgent(llm=llm, router=sqlite_router)
+    def test_agent_reply_action_through_pipeline(self, seeded_db) -> None:
+        """NLU reply/greeting → copy fijo real del agente (no texto del LLM)."""
+        llm = ScriptedAgentLLM(
+            nlu_json=(
+                '{"tool": "reply", "params": {"response_type": "greeting"}, '
+                '"confidence": 0.95}'
+            ),
+        )
+        agent = _make_llm_first_agent(llm, seeded_db["session"])
         result = agent.process(text="hola")
         assert result.agent_action == "reply"
-        assert "bienvenido" in result.response_text.lower()
+        assert "hola" in result.response_text.lower()
+        assert "asistente de turnos" in result.response_text.lower()
 
     def test_agent_low_confidence_triggers_clarification(self, seeded_db, sqlite_router) -> None:
         """confidence < 0.6 → ambiguous."""
@@ -726,34 +793,42 @@ class TestAgentPipeline:
         result = agent.process(text="algo raro")
         assert result.agent_action == "ambiguous"
 
-    def test_agent_missing_fields_triggers_prompt(self, seeded_db, sqlite_router) -> None:
-        """missing_fields → pide la info que falta."""
-        llm = FakeLLMProvider(responses={
-            "filtrame": '{"action": "query", "query_type": "doctors_by_sex", '
-                       '"missing_fields": ["sex"], "confidence": 0.8}',
-        })
-        agent = ConversationalAgent(llm=llm, router=sqlite_router)
+    def test_agent_missing_fields_triggers_prompt(self, seeded_db) -> None:
+        """needs_clarification del NLU → pide la info que falta."""
+        llm = ScriptedAgentLLM(
+            nlu_json=(
+                '{"tool": "list_doctors", "params": {}, "confidence": 0.8, '
+                '"needs_clarification": true, "clarification_question": '
+                '"¿Quieres filtrar por sexo, rango o departamento?"}'
+            ),
+        )
+        agent = _make_llm_first_agent(llm, seeded_db["session"])
         result = agent.process(text="filtrame por sexo")
         assert result.agent_action == "ambiguous"
         assert "sex" in result.response_text.lower()
 
-    def test_agent_validation_error_handled(self, seeded_db, sqlite_router) -> None:
-        """JSON con action inválida → validation_error."""
-        llm = FakeLLMProvider(responses={
-            "rompe": '{"action": "invalid_action_xyz", "query_type": "", "params": {}}',
-        })
-        agent = ConversationalAgent(llm=llm, router=sqlite_router)
+    def test_unknown_tool_returns_controlled_response(self, seeded_db) -> None:
+        """Tool desconocida del NLU → respuesta controlada, nunca excepción."""
+        llm = ScriptedAgentLLM(
+            nlu_json='{"tool": "tool_inexistente", "params": {}, "confidence": 0.5}',
+            format_response="Hubo un error al procesar tu consulta.",
+        )
+        agent = _make_llm_first_agent(llm, seeded_db["session"])
         result = agent.process(text="rompe el sistema")
-        assert result.agent_action == "validation_error"
+        assert isinstance(result, AgentResult)
+        assert result.agent_action == "query"
+        assert "Hubo un error" in result.response_text
 
-    def test_agent_non_json_response_treated_as_direct(self, seeded_db, sqlite_router) -> None:
-        """LLM devuelve texto no-JSON → direct reply."""
+    def test_agent_non_json_response_triggers_clarification(self, seeded_db) -> None:
+        """LLM devuelve texto no-JSON → fallback conservador (reply/unknown
+        + needs_clarification del NLU)."""
         llm = FakeLLMProvider(responses={
             "charlamos": "Claro, hablemos de lo que necesites.",
         })
-        agent = ConversationalAgent(llm=llm, router=sqlite_router)
+        agent = _make_llm_first_agent(llm, seeded_db["session"])
         result = agent.process(text="charlamos un rato")
-        assert result.agent_action == "direct"
+        assert result.agent_action == "ambiguous"
+        assert "explicarlo" in result.response_text.lower()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

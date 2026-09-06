@@ -13,6 +13,10 @@ def validator() -> SQLValidator:
 
 
 class TestBasicValidation:
+    """Desde Fase 4 (commit ecedda5) `_check_no_dml` corre antes que
+    `_check_single_select` (defensa en profundidad): las sentencias DML se
+    reportan como `dml_detected`, no como `not_select`."""
+
     def test_allows_simple_select(self, validator: SQLValidator) -> None:
         result = validator.validate("SELECT * FROM doctors LIMIT 10")
         assert result.ok is True
@@ -20,22 +24,22 @@ class TestBasicValidation:
     def test_blocks_insert(self, validator: SQLValidator) -> None:
         result = validator.validate("INSERT INTO doctors (name) VALUES ('x')")
         assert result.ok is False
-        assert result.rule == "not_select"
+        assert result.rule == "dml_detected"
 
     def test_blocks_update(self, validator: SQLValidator) -> None:
         result = validator.validate("UPDATE doctors SET name='x'")
         assert result.ok is False
-        assert result.rule == "not_select"
+        assert result.rule == "dml_detected"
 
     def test_blocks_delete(self, validator: SQLValidator) -> None:
         result = validator.validate("DELETE FROM doctors")
         assert result.ok is False
-        assert result.rule == "not_select"
+        assert result.rule == "dml_detected"
 
     def test_blocks_drop(self, validator: SQLValidator) -> None:
         result = validator.validate("DROP TABLE doctors")
         assert result.ok is False
-        assert result.rule == "not_select"
+        assert result.rule == "dml_detected"
 
 
 class TestForbiddenFunctions:
@@ -57,12 +61,12 @@ class TestDangerousPatterns:
         assert result.rule == "multiple_statements"
 
     def test_blocks_line_comments(self, validator: SQLValidator) -> None:
-        result = validator.validate("SELECT 1 -- drop table")
+        result = validator.validate("SELECT 1 -- comentario")
         assert result.ok is False
         assert result.rule == "line_comment"
 
     def test_blocks_block_comments(self, validator: SQLValidator) -> None:
-        result = validator.validate("SELECT /* drop */ 1")
+        result = validator.validate("SELECT /* comentario */ 1")
         assert result.ok is False
         assert result.rule == "block_comment"
 
@@ -72,9 +76,11 @@ class TestDangerousPatterns:
         assert result.rule == "union_injection"
 
     def test_blocks_stacked_queries(self, validator: SQLValidator) -> None:
+        # Un comentario o query apilada que contiene una palabra clave DML se
+        # reporta como `dml_detected` (Fase 4: `_check_no_dml` corre primero).
         result = validator.validate("SELECT 1; DROP TABLE doctors")
         assert result.ok is False
-        assert result.rule == "multiple_statements"
+        assert result.rule == "dml_detected"
 
 
 class TestSchemaValidation:
@@ -130,7 +136,8 @@ class TestComplexQueries:
 
     def test_allows_subquery_with_limit(self, validator: SQLValidator) -> None:
         result = validator.validate(
-            "SELECT * FROM doctors WHERE id IN (SELECT doctor_id FROM calendar_assignments) LIMIT 10"
+            "SELECT * FROM doctors WHERE id IN "
+            "(SELECT doctor_id FROM calendar_assignments) LIMIT 10"
         )
         assert result.ok is True
 
