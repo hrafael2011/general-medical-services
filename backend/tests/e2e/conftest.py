@@ -67,6 +67,19 @@ def _e2e_postgres_reachable() -> bool:
     return True
 
 
+def pytest_collection_modifyitems(config, items) -> None:
+    """Salta en colección los tests `e2e` cuando postgres-test (5434) no
+    responde — antes de que los fixtures session-scoped (drop/create) intenten
+    conectar y produzcan ERROR. Mismo patrón que el hook del conftest global,
+    pero contra la base de test (no la de desarrollo)."""
+    e2e_items = [item for item in items if item.get_closest_marker("e2e")]
+    if not e2e_items or _e2e_postgres_reachable():
+        return
+    skip_marker = pytest.mark.skip(reason="postgres-test (5434) no disponible (marcador e2e)")
+    for item in e2e_items:
+        item.add_marker(skip_marker)
+
+
 @pytest.fixture(autouse=True)
 def _skip_db_tests_without_postgres(request) -> None:
     """Override del fixture homónimo del conftest global: los tests de este
