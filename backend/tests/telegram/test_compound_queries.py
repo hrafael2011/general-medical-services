@@ -88,7 +88,7 @@ def test_pre_process_detects_rank_and_sex(resolver_with_ranks):
     result = resolver_with_ranks.pre_process("cuantos pasantes femeninos tenemos")
     hints = result["hints"]
     assert "rank='pasante'" in hints
-    assert "sex='female'" in hints
+    assert "sex='F'" in hints
 
 
 @pytest.mark.parametrize(
@@ -114,27 +114,27 @@ def test_pre_process_detects_real_compound_examples(resolver_with_ranks, message
 def test_pre_process_detects_mujeres(resolver_with_ranks):
     """'cuantas mujeres' → sex detected."""
     result = resolver_with_ranks.pre_process("cuantas mujeres hay en total")
-    assert "sex='female'" in result["hints"]
+    assert "sex='F'" in result["hints"]
 
 
 def test_pre_process_detects_hombres(resolver_with_ranks):
     """'cuantos hombres' → sex detected."""
     result = resolver_with_ranks.pre_process("dame la lista de hombres")
-    assert "sex='male'" in result["hints"]
+    assert "sex='M'" in result["hints"]
 
 
 def test_pre_process_detects_masculinos(resolver_with_ranks):
     """'cuantos masculinos' → sex detected."""
     result = resolver_with_ranks.pre_process("cuantos masculinos tenemos")
-    assert "sex='male'" in result["hints"]
+    assert "sex='M'" in result["hints"]
 
 
 @pytest.mark.parametrize("word", ["masuclino", "massulino", "masuculinos", "masuclinos"])
 def test_pre_process_detects_common_masculino_typos(resolver_with_ranks, word):
-    """Common misspellings of masculino still map to doctors.sex='male'."""
+    """Common misspellings of masculino still map to doctors.sex='M'."""
     result = resolver_with_ranks.pre_process(f"exporta cabos {word}")
     assert "rank='cabo'" in result["hints"]
-    assert "sex='male'" in result["hints"]
+    assert "sex='M'" in result["hints"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -202,7 +202,7 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
             id="doc-male-1",
             name="Dr. Pasante Uno",
             normalized_name="dr. pasante uno",
-            sex="male",
+            sex="M",
             active=True,
             service_active=True,
             availability_mode="monthly",
@@ -219,7 +219,7 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
             id="doc-female-1",
             name="Dra. Pasante Dos",
             normalized_name="dra. pasante dos",
-            sex="female",
+            sex="F",
             active=True,
             service_active=True,
             availability_mode="monthly",
@@ -259,14 +259,14 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
     assert "Femenino" in result.response_text
     assert result.tool_entities["requested_filters"] == {
         "rank": "pasante",
-        "sex": ["male", "female"],
+        "sex": ["M", "F"],
     }
     assert result.tool_entities["applied_filters"] == result.tool_entities["requested_filters"]
     assert set(result.tool_result["validated_filters"]) == {"rank", "sex"}
     assert llm.calls == []
     state = session_store.get("tg-context")
     assert state is not None
-    assert state.last_filters == {"rank": "pasante", "sex": ["male", "female"]}
+    assert state.last_filters == {"rank": "pasante", "sex": ["M", "F"]}
     assert state.last_tool_name == "doctor_query_service"
     assert state.last_agent_action == "query"
 
@@ -278,7 +278,7 @@ def test_compound_doctor_query_uses_deterministic_service(db_session):
     assert "Dra. Pasante Dos" not in list_result.response_text
     assert list_result.tool_entities["applied_filters"] == {
         "rank": "pasante",
-        "sex": ["male"],
+        "sex": ["M"],
     }
     assert llm.calls == []
 
@@ -317,7 +317,7 @@ def test_compound_doctor_query_emits_observability_log(db_session, caplog):
         id="doc-male-obs",
         name="Dr. Cabo Obs",
         normalized_name="dr. cabo obs",
-        sex="male",
+        sex="M",
         active=True,
         service_active=True,
         availability_mode="monthly",
@@ -353,43 +353,60 @@ def test_compound_doctor_query_emits_observability_log(db_session, caplog):
     assert "agent_route_completed" in events
 
 
-def test_single_filter_still_uses_llm(db_session):
-    """'cuantos pasantes' (single filter) → normal LLM intent routing."""
+def test_single_filter_resolved_by_deterministic_service(db_session):
+    """Filtro único («cuantos pasantes») → DoctorQueryService, sin LLM ni SQL.
+
+    Contraste con el test anterior: las consultas compuestas (>=2 dims) caen al
+    fallback SQL del QueryExecutor; el filtro único lo resuelve el service
+    determinista sin llamar al LLM (el LLM solo decide la tool en el pipeline
+    LLM-first).
+    """
     now = datetime.now(UTC)
-    ranks = [
-        _rank_model(
-            "11111111-1111-1111-1111-111111111111",
-            "Pasante",
-            "pasante",
-            "PST",
-            now,
-        ),
-    ]
-    for r in ranks:
-        db_session.add(r)
+    rank = _rank_model(
+        "11111111-1111-1111-1111-111111111111",
+        "Pasante",
+        "pasante",
+        "PST",
+        now,
+    )
+    db_session.add(rank)
+    db_session.add(
+        DoctorModel(
+            id="doc-pasante-single-filter",
+            name="Dr. Pasante Simple",
+            normalized_name="dr. pasante simple",
+            sex="M",
+            active=True,
+            service_active=True,
+            availability_mode="monthly",
+            participa_misiones=True,
+            whatsapp_phone="0000000000",
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            rank_id=rank.id,
+            created_at=now,
+            updated_at=now,
+        )
+    )
     db_session.commit()
 
-    entity_resolver = EntityResolver(session=db_session)
-    # LLM returns a query action for single filter
-    llm = FakeLLMProvider(responses={
-        "cuantos pasantes hay": (
-            '{"action": "query", "query_type": "count_by_specific_rank", '
-            '"params": {"rank": "pasante"}, "confidence": 0.9}'
-        ),
-    })
+    llm = FakeLLMProvider(responses={})
     router = IntentRouter()
     router.set_session(db_session)
     agent = ConversationalAgent(
-        llm=llm, router=router,
-        entity_resolver=entity_resolver,
+        llm=llm,
+        router=router,
+        entity_resolver=EntityResolver(session=db_session),
+        doctor_query_service=DoctorQueryService(db_session),
     )
 
     result = agent.process("cuantos pasantes hay")
-    # Single filter → router returns empty (no doctors seeded), fallback triggers
-    # Since there's no query_executor in this test, we get a graceful message.
-    assert result.agent_action in ("query", "direct"), (
-        f"Expected query or direct, got {result.agent_action}: {result.response_text[:200]}"
-    )
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "doctor_query_service"
+    assert result.response_text == "Resultado: total: 1"
+    assert llm.calls == []
 
 
 def test_followup_reuses_previous_rank_for_count_and_export(db_session):
@@ -409,7 +426,7 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
                 id="doc-pasante-male-followup",
                 name="Dr. Pasante Contexto",
                 normalized_name="dr. pasante contexto",
-                sex="male",
+                sex="M",
                 active=True,
                 service_active=True,
                 availability_mode="monthly",
@@ -426,7 +443,7 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
                 id="doc-pasante-female-followup",
                 name="Dra. Pasante Contexto",
                 normalized_name="dra. pasante contexto",
-                sex="female",
+                sex="F",
                 active=True,
                 service_active=True,
                 availability_mode="monthly",
@@ -474,9 +491,9 @@ def test_followup_reuses_previous_rank_for_count_and_export(db_session):
     assert typo_second.tool_name == "doctor_query_service"
     assert typo_second.response_text == "Resultado: total: 1"
     assert third.agent_action == "export"
-    assert third.document_filename == "REPORTE.pdf"
+    assert third.document_filename == "MEDICOS_FILTRADOS.pdf"
     assert third.tool_result["data"]["rows"] == [
-        {"total": 1}
+        {"name": "Dra. Pasante Contexto", "sex": "F", "rank": "Pasante"}
     ]
 
 
@@ -497,7 +514,7 @@ def test_doctor_query_counts_same_name_distinct_ids(db_session):
                 id="doc-sargento-female-duplicate-name-1",
                 name="Dra. Nombre Repetido",
                 normalized_name="dra. nombre repetido",
-                sex="female",
+                sex="F",
                 active=True,
                 service_active=True,
                 availability_mode="monthly",
@@ -514,7 +531,7 @@ def test_doctor_query_counts_same_name_distinct_ids(db_session):
                 id="doc-sargento-female-duplicate-name-2",
                 name="Dra. Nombre Repetido",
                 normalized_name="dra. nombre repetido-2",
-                sex="female",
+                sex="F",
                 active=True,
                 service_active=True,
                 availability_mode="monthly",
@@ -571,10 +588,10 @@ def test_real_chat_followups_do_not_jump_between_ranks(db_session):
     )
     db_session.add_all([cabo, sargento])
     doctors = [
-        ("cabo-female-1", "Dra. Cabo Una", "female", cabo.id),
-        ("cabo-female-2", "Dra. Cabo Dos", "female", cabo.id),
-        ("cabo-male-1", "Dr. Cabo Uno", "male", cabo.id),
-        ("sargento-female-1", "Dra. Sargento Una", "female", sargento.id),
+        ("cabo-female-1", "Dra. Cabo Una", "F", cabo.id),
+        ("cabo-female-2", "Dra. Cabo Dos", "F", cabo.id),
+        ("cabo-male-1", "Dr. Cabo Uno", "M", cabo.id),
+        ("sargento-female-1", "Dra. Sargento Una", "F", sargento.id),
     ]
     for doctor_id, name, sex, rank_id in doctors:
         db_session.add(
@@ -629,6 +646,12 @@ def test_real_chat_followups_do_not_jump_between_ranks(db_session):
     )
 
     assert cabos_female.response_text == "Resultado: total: 2"
-    assert cabos_male_followup.response_text == "Resultado: total: 1"
+    # Sin palabra de conteo, el service determinista decide la operación por el
+    # texto actual («Y masculinos ?» → list): el contexto de rango se conserva.
+    assert cabos_male_followup.response_text == (
+        "Resultado: name: Dr. Cabo Uno | rank: Cabo | sex: Masculino"
+    )
     assert "Dra. Sargento Una" in sargentos_female_list.response_text
-    assert sargentos_confirm.response_text == "Resultado: total: 1"
+    assert sargentos_confirm.response_text == (
+        "Resultado: name: Dra. Sargento Una | rank: Sargento | sex: Femenino"
+    )
