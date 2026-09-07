@@ -244,7 +244,17 @@ class AssignmentService:
 
         # Separate failures into hard blocks and soft warnings.
         hard_blocks = [r for r in report.blockers if r.code in _HARD_BLOCK_CODES]
-        soft_warnings = [r for r in report.blockers if r.code not in _HARD_BLOCK_CODES]
+        # Unificar códigos con evaluate_slot: la disponibilidad sin cubrir es
+        # "no_availability" (evaluate) y NO "not_available" (eligibility) —
+        # si difieren, las casillas marcadas en el modal nunca coinciden.
+        soft_warnings = [
+            _SoftRuleWarning(
+                code="no_availability" if r.code == "not_available" else r.code,
+                reason=r.reason,
+            )
+            for r in report.blockers
+            if r.code not in _HARD_BLOCK_CODES
+        ]
 
         if hard_blocks:
             raise CalendarServiceError("hard_block", hard_blocks[0].reason)
@@ -290,7 +300,16 @@ class AssignmentService:
             return []
 
         hard_blocks = [r for r in report.blockers if r.code in _HARD_BLOCK_CODES]
-        soft_warnings = [r for r in report.blockers if r.code not in _HARD_BLOCK_CODES]
+        # Ver _run_eligibility: código canónico "no_availability" para el
+        # soft warning de disponibilidad (coincide con evaluate_slot).
+        soft_warnings = [
+            _SoftRuleWarning(
+                code="no_availability" if r.code == "not_available" else r.code,
+                reason=r.reason,
+            )
+            for r in report.blockers
+            if r.code not in _HARD_BLOCK_CODES
+        ]
 
         if hard_blocks:
             raise CalendarServiceError("hard_block", hard_blocks[0].reason)

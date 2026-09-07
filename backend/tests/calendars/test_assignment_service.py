@@ -393,7 +393,7 @@ def test_soft_warning_requires_justification_and_is_stored(db_session) -> None:
     )
 
     assert assignment.override_justification == "Asignación manual autorizada por necesidad operativa."
-    assert assignment.rationale["manual_override_warnings"][0]["code"] == "not_available"
+    assert assignment.rationale["manual_override_warnings"][0]["code"] == "no_availability"
 
 
 def test_assign_doctor_respects_recurring_availability(db_session) -> None:
@@ -1257,3 +1257,45 @@ def test_evaluate_slot_allows_replacement_of_occupied_slot(db_session) -> None:
         exclude_assignment_id=assignment.id,
     )
     assert ok["hard_blocks"] == []
+
+
+def test_assign_force_warning_no_availability_matches_evaluate_code(db_session) -> None:
+    """El modal marca "no_availability" (código de evaluate_slot); al asignar con
+    force_warnings=["no_availability"] debe proceder, no pedir reconfirmar."""
+    from backend.app.application.availability.service import AvailabilityService
+
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session, name="Dr. Solo Lunes")
+    doctor.availability_mode = "fixed"
+    db_session.flush()
+    AvailabilityService(
+        AvailabilityRepository(db_session),
+        DoctorRepository(db_session),
+    ).set_weekly_availability(
+        actor_id="actor-001",
+        doctor_id=doctor.id,
+        days_of_week=[0],  # lunes
+    )
+    service = _make_assignment_service(db_session)
+    target = datetime.date(2026, 5, 15)  # viernes
+
+    # evaluate_slot → el soft warning se identifica como no_availability
+    ev = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=doctor.id,
+        target_date=target,
+        service_area_id=_AREA_ID,
+    )
+    codes = [w["code"] for w in ev["warnings"]]
+    assert "no_availability" in codes, codes
+
+    # Asignar forzando ese código → ya no debe exigir reconfirmar
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=target,
+        service_area_id=_AREA_ID,
+        force_warnings=["no_availability"],
+    )
+    assert assignment.doctor_id == doctor.id
