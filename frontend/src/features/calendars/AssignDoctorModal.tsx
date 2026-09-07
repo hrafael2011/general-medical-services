@@ -28,6 +28,10 @@ export function AssignDoctorModal({
   currentDoctorId, onConfirm, onClose, isLoading, onRemove, submitError,
 }: Props) {
   const [query, setQuery] = useState("");
+  // Por defecto solo se ofrecen médicos cuyo día marcado es este (los fijos
+  // solo en sus días). El encargado puede activar el interruptor para buscar
+  // médicos de otros días; al elegirlos salen las advertencias confirmables.
+  const [includeOthers, setIncludeOthers] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(currentDoctorId ?? null);
   const [step, setStep] = useState<Step>("select");
   const [eligibleDoctors, setEligibleDoctors] = useState<EligibleDoctorRead[]>([]);
@@ -48,7 +52,7 @@ export function AssignDoctorModal({
       setLoadingEligible(true);
       setEligibleError(null);
       try {
-        const res = await calendarsApi.eligibleDoctors(calendarId, date, areaId);
+        const res = await calendarsApi.eligibleDoctors(calendarId, date, areaId, !includeOthers);
         if (!cancelled) {
           setEligibleDoctors(res.doctors);
           setUnavailableDoctors(res.unavailable ?? []);
@@ -65,7 +69,7 @@ export function AssignDoctorModal({
     }
     load();
     return () => { cancelled = true; };
-  }, [calendarId, date, areaId]);
+  }, [calendarId, date, areaId, includeOthers]);
 
   const filtered = eligibleDoctors.filter(d => {
     if (!d.full_name.toLowerCase().includes(query.toLowerCase())) return false;
@@ -137,6 +141,25 @@ export function AssignDoctorModal({
 
         {step === "select" && (
           <>
+            <label
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                fontSize: 12.5, color: "#475569", cursor: "pointer",
+                marginBottom: 10, userSelect: "none",
+              }}
+              title="Al activarlo se listan también médicos cuyo día marcado no es este; al elegirlos deberás confirmar las advertencias."
+            >
+              <input
+                type="checkbox"
+                checked={includeOthers}
+                onChange={e => {
+                  setIncludeOthers(e.target.checked);
+                  setQuery("");
+                }}
+              />
+              Buscar m&eacute;dicos que no son de este d&iacute;a
+            </label>
+
             <div style={{ position: "relative", marginBottom: 12 }}>
               <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
               <input
@@ -196,11 +219,17 @@ export function AssignDoctorModal({
                     </strong>
                     {softUnavailable.map(u => (
                       <div
-                        key={u.doctor_id}
+                        key={`${u.doctor_id}-${u.code}`}
                         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}
                       >
                         <span style={{ color: "#64748b" }}>
-                          {u.full_name} — <span style={{ color: "#b45309" }}>{u.description}</span>
+                          {u.full_name}
+                          {u.outside_pattern && (
+                            <span style={{ display: "block", fontSize: 11.5, color: "#b45309" }}>
+                              No es de este d&iacute;a (d&iacute;a marcado distinto)
+                            </span>
+                          )}
+                          <span style={{ display: "block", color: "#b45309" }}>{u.description}</span>
                         </span>
                         <button
                           className="btn-ghost"
@@ -213,7 +242,7 @@ export function AssignDoctorModal({
                     ))}
                     {hardUnavailable.map(u => (
                       <div
-                        key={u.doctor_id}
+                        key={`${u.doctor_id}-${u.code}`}
                         style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}
                       >
                         <Lock size={12} style={{ color: "#b91c1c", flexShrink: 0 }} />

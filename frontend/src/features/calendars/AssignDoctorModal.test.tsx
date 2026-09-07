@@ -208,4 +208,35 @@ describe("AssignDoctorModal", () => {
     await user.click(screen.getByRole("button", { name: /quitar asignación/i }));
     expect(onRemove).toHaveBeenCalled();
   });
+
+  it("el interruptor de otros días recarga con strict=false y muestra fuera-de-día", async () => {
+    const user = userEvent.setup();
+    const { calendarsApi } = await import("../../api/calendars");
+    const eligibleDoctors = vi.mocked(calendarsApi.eligibleDoctors);
+    eligibleDoctors.mockImplementation(async (_cal, _date, _area, strict = true) =>
+      strict
+        ? { doctors: ELIGIBLE_DOCTORS, unavailable: [] }
+        : {
+            doctors: [],
+            unavailable: [
+              { doctor_id: "d9", full_name: "Dr. Fuera Día", code: "no_availability", description: "No tiene disponibilidad para esta fecha.", is_hard: false, outside_pattern: true },
+            ],
+          }
+    );
+
+    render(<AssignDoctorModal {...BASE_PROPS} />);
+    await waitFor(() => {
+      expect(screen.getByText("Dr. García Martínez")).toBeInTheDocument();
+    });
+    // Por defecto consulta en modo estricto (solo los del día)
+    expect(eligibleDoctors).toHaveBeenLastCalledWith("cal-1", "2026-05-03", "area-1", true);
+
+    // Activar el interruptor → recarga con strict=false y lista al fuera-de-día
+    await user.click(screen.getByRole("checkbox", { name: /no son de este día/i }));
+    await waitFor(() => {
+      expect(eligibleDoctors).toHaveBeenLastCalledWith("cal-1", "2026-05-03", "area-1", false);
+    });
+    expect(await screen.findByText("Dr. Fuera Día")).toBeInTheDocument();
+    expect(screen.getByText(/No es de este día/i)).toBeInTheDocument();
+  });
 });

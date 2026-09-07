@@ -93,6 +93,9 @@ class UnavailableDoctorRead(BaseModel):
     code: str
     description: str
     is_hard: bool
+    # True cuando el médico tiene día marcado y esta fecha no es de los suyos
+    # (solo aparece si el encargado pidió explícitamente ver "otros días").
+    outside_pattern: bool | None = None
 
 
 class EligibleDoctorsResponse(BaseModel):

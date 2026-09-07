@@ -550,6 +550,7 @@ def get_eligible_doctors(
     _user: Annotated[UserModel, Depends(require_ready_user)],
     service: Annotated[AssignmentService, Depends(get_assignment_service)],
     session: Annotated[Session, Depends(get_db_session)],
+    strict: bool = True,
 ) -> EligibleDoctorsResponse:
     repo = CalendarRepository(session)
     version = repo.get_latest_version(calendar_id)
@@ -566,6 +567,7 @@ def get_eligible_doctors(
             version_id=version.id,
             target_date=date,
             service_area_id=area_id,
+            strict=strict,
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc

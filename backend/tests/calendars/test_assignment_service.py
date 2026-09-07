@@ -1178,3 +1178,45 @@ def test_hard_blocks_still_block_doctor_inactive_area_and_hard_block(db_session)
             service_area_id=_AREA_ID,
         )
     assert exc_info.value.code == "hard_block"
+
+
+def test_eligible_strict_hides_fixed_doctor_outside_their_day(db_session) -> None:
+    """Un médico con día marcado (lunes) no aparece el viernes en modo estricto;
+    con strict=False aparece con outside_pattern=True para poder elegirlo."""
+    from backend.app.application.availability.service import AvailabilityService
+
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session, name="Dr. Solo Lunes")
+    doctor.availability_mode = "fixed"
+    db_session.flush()
+    AvailabilityService(
+        AvailabilityRepository(db_session),
+        DoctorRepository(db_session),
+    ).set_weekly_availability(
+        actor_id="actor-001",
+        doctor_id=doctor.id,
+        days_of_week=[0],  # lunes
+    )
+    service = _make_assignment_service(db_session)
+    target = datetime.date(2026, 5, 15)  # viernes
+    assert target.weekday() == 4
+
+    strict_result = service.get_eligible_doctors_for_slot(
+        version_id=version.id,
+        target_date=target,
+        service_area_id=_AREA_ID,
+        strict=True,
+    )
+    assert all(u["doctor_id"] != doctor.id for u in strict_result["unavailable"])
+    assert all(item["doctor"].id != doctor.id for item in strict_result["eligible"])
+
+    relaxed = service.get_eligible_doctors_for_slot(
+        version_id=version.id,
+        target_date=target,
+        service_area_id=_AREA_ID,
+        strict=False,
+    )
+    entries = [u for u in relaxed["unavailable"] if u["doctor_id"] == doctor.id]
+    assert entries, "El médico fuera de su día debe aparecer con strict=False"
+    assert entries[0]["outside_pattern"] is True
+    assert entries[0]["is_hard"] is False

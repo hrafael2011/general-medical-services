@@ -100,6 +100,8 @@ export interface UnavailableDoctorRead {
   code: string;
   description: string;
   is_hard: boolean;
+  /** True cuando el médico tiene día marcado y esta fecha no es de los suyos */
+  outside_pattern?: boolean;
 }
 
 export interface EligibleDoctorsResponse {
@@ -214,9 +216,9 @@ export const calendarsApi = {
   delete: (calendarId: string) =>
     apiFetch<void>(`/calendars/${calendarId}`, { method: "DELETE" }),
 
-  eligibleDoctors: (calendarId: string, date: string, areaId: string) =>
+  eligibleDoctors: (calendarId: string, date: string, areaId: string, strict = true) =>
     apiFetch<EligibleDoctorsResponse>(
-      `/calendars/${calendarId}/eligible-doctors?date=${date}&area_id=${areaId}`,
+      `/calendars/${calendarId}/eligible-doctors?date=${date}&area_id=${areaId}&strict=${strict}`,
     ),
 
   evaluate: (calendarId: string, payload: EvaluationRequest) =>

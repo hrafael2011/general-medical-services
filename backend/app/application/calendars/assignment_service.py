@@ -467,12 +467,49 @@ class AssignmentService:
 
         raise CalendarServiceError("soft_warning", scoring_warnings[0].reason)
 
+    def _doctor_covers_date(
+        self,
+        doctor,
+        records: list,
+        target_date: date,
+    ) -> bool:
+        """¿El patrón del doctor (semanal fijo o día fijo al mes) cubre esta fecha?
+
+        Regla de producto: un médico con día marcado SOLO pertenece a los días
+        que marcó (semanal: solo esos días de la semana; día fijo: solo la
+        semana que calza, p. ej. el último viernes). Los mensuales ("avisa sus
+        días") no se evalúan aquí — su regla se maneja aparte.
+        """
+        if doctor.availability_mode != "fixed":
+            return True
+        for record in records:
+            if record.availability_type == "weekly_fixed":
+                if target_date.weekday() not in (record.days_of_week or []):
+                    continue
+            elif record.availability_type == "recurring":
+                if not matches_recurring_monthly_rule(
+                    target_date,
+                    record.weekday,
+                    record.week_number,
+                ):
+                    continue
+            else:
+                continue
+            # Respetar effective_from / effective_to cuando están definidos
+            if record.effective_from and target_date < record.effective_from:
+                continue
+            if record.effective_to and target_date > record.effective_to:
+                continue
+            return True
+        return False
+
     def get_eligible_doctors_for_slot(
         self,
         *,
         version_id: str,
         target_date: date,
         service_area_id: str,
+        strict: bool = True,
     ) -> list:
         """Return eligible + unavailable doctors for a specific slot (date + area).
 
@@ -481,8 +518,11 @@ class AssignmentService:
         GenerationContext that the domain engine's get_eligible_doctors needs.
 
         Returns {"eligible": [{doctor, altera_orden}], "unavailable": [
-        {doctor_id, full_name, code, description, is_hard}]} — every hidden
-        doctor appears with its reason (spec 02 taxonomía).
+        {doctor_id, full_name, code, description, is_hard, outside_pattern?}]}.
+        Con strict=True (por defecto) los médicos con día marcado (semanal o
+        día fijo al mes) NO aparecen en días que no son los suyos — ni como
+        "no disponibles". strict=False los incluye con outside_pattern=True
+        para que el encargado pueda elegirlos con advertencias si lo desea.
         """
         # 1. Load version and calendar.
         version = self.calendar_repo.get_version_by_id(version_id)
@@ -656,6 +696,17 @@ class AssignmentService:
         for doctor in self.doctor_repo.list_all(status="all"):
             if doctor.id in eligible_ids:
                 continue
+            # En modo estricto, un médico con día marcado que no cubre esta
+            # fecha no aparece en absoluto (regla del encargado: los fijos solo
+            # en sus días). Los bloqueos duros (inactivo, área, restricción)
+            # del mismo médico sí se reportan: se calculan igualmente abajo.
+            records = availability.get(doctor.id, [])
+            outside_pattern = (
+                doctor.availability_mode == "fixed"
+                and not self._doctor_covers_date(doctor, records, target_date)
+            )
+            if strict and outside_pattern:
+                continue
             for item in self._slot_restriction_items(
                 doctor=doctor,
                 target_date=target_date,
@@ -663,13 +714,17 @@ class AssignmentService:
                 calendar=calendar,
                 existing_assignments=existing_dicts,
             ):
-                unavailable.append({
+                entry: dict = {
                     "doctor_id": doctor.id,
                     "full_name": doctor.name,
                     "code": item["code"],
                     "description": item["description"],
                     "is_hard": item["is_hard"],
-                })
+                }
+                # Fuera de su día es un motivo blando (confirmable), no un bloqueo
+                if not item["is_hard"] and outside_pattern:
+                    entry["outside_pattern"] = True
+                unavailable.append(entry)
 
         return {"eligible": result, "unavailable": unavailable}
 
