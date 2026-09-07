@@ -36,7 +36,7 @@ def test_mismatch_primary_day_penalty():
     ctx = _ctx(primary_weekday=0, monthly=[])
     result = rule.evaluate(ctx)
     assert result.score_delta == -PRIMARY_MISMATCH_PENALTY
-    assert any("primario" in w for w in result.warnings)
+    assert any("preferido" in w for w in result.warnings)
 
 
 def test_priority_mandatory_extra_penalty():
@@ -71,7 +71,7 @@ def test_dispersion_penalty_new_weekday():
     result = rule.evaluate(ctx)
     penalty = -PRIMARY_MISMATCH_PENALTY - DISPERSION_PER_WEEKDAY_PENALTY * 3
     assert result.score_delta == penalty
-    assert any("dispersión" in w for w in result.warnings)
+    assert any("distinto" in w for w in result.warnings)
 
 
 def test_no_dispersion_for_first_assignment():

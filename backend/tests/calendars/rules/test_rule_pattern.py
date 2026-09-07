@@ -104,4 +104,4 @@ def test_prior_violations_add_fairness_penalty() -> None:
     )
     result = PatternRule().evaluate(ctx)
     assert result.extra["pattern_penalty"] >= 2 * 5.0
-    assert any("violación" in w for w in result.warnings)
+    assert any("fuera de su patrón" in w for w in result.warnings)

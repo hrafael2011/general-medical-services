@@ -25,7 +25,7 @@ from backend.app.infrastructure.repositories.doctors import DoctorRepository
 # ---------------------------------------------------------------------------
 
 _AREA_ID = "area-emergencia"
-_SPACING_WARNING = "spacing < 14 días desde último turno fuerte"
+_SPACING_WARNING = "Menos de 14 días desde su último turno fuerte."
 
 
 def _make_assignment_service(db_session) -> AssignmentService:

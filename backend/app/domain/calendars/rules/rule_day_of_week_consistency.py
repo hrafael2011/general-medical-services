@@ -48,18 +48,18 @@ class DayOfWeekConsistencyRule(Rule):
         if ctx.primary_weekday is not None and slot_wd != ctx.primary_weekday:
             penalty += PRIMARY_MISMATCH_PENALTY
             warnings.append(
-                f"Día {_wd_name(slot_wd)} no es el día primario "
-                f"({_wd_name(ctx.primary_weekday)})"
+                f"El día {_wd_name(slot_wd)} no es el día preferido del doctor "
+                f"(su preferido es {_wd_name(ctx.primary_weekday)})"
             )
 
         # --- 2. Day-priority extra penalties ---
         priority = ctx.day_priorities.get(slot_wd, "available")
         if priority == "mandatory":
             penalty += -MANDATORY_EXTRA  # +60 effective penalty
-            warnings.append("Día marcado como obligatorio — preferencia muy alta")
+            warnings.append("El día está marcado como obligatorio para el doctor.")
         elif priority == "primary":
             penalty += -PRIMARY_PRIORITY_EXTRA  # +30 effective penalty
-            warnings.append("Día marcado como primario — preferencia alta")
+            warnings.append("El día está marcado como preferente para el doctor.")
 
         # --- 3. Dispersion penalty ---
         # Collect all weekdays already assigned to this doctor in the month.
@@ -75,8 +75,8 @@ class DayOfWeekConsistencyRule(Rule):
                 disp_penalty = DISPERSION_PER_WEEKDAY_PENALTY * new_dispersion
                 penalty += disp_penalty
                 warnings.append(
-                    f"Nuevo día de semana (#{new_dispersion}) — "
-                    f"penalización por dispersión {disp_penalty:.0f}"
+                    "Serviría en un día de la semana distinto a los de "
+                    "sus otros turnos este mes."
                 )
 
         return RuleResult(

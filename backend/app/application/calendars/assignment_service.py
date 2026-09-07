@@ -297,7 +297,7 @@ class AssignmentService:
 
         unacknowledged = [w for w in soft_warnings if w.code not in force_warnings]
         if unacknowledged:
-            raise CalendarServiceError("soft_warning", f"Falta confirmar: {unacknowledged[0].reason}")
+            raise CalendarServiceError("soft_warning", f"Confirma las advertencias antes de asignar: {unacknowledged[0].reason}")
 
         return soft_warnings
 
@@ -461,7 +461,7 @@ class AssignmentService:
             if unacknowledged:
                 raise CalendarServiceError(
                     "soft_warning",
-                    f"Falta confirmar: {unacknowledged[0].reason}",
+                    f"Confirma las advertencias antes de asignar: {unacknowledged[0].reason}",
                 )
             return [*soft_warnings, *scoring_warnings]
 

@@ -60,19 +60,19 @@ class SpacingRule(Rule):
         if strong_dates and not has_active_pattern:
             if ctx.service_area_id in ctx.strong_area_ids:
                 if days_since_strong < MIN_SPACING_STRONG:
-                    warnings.append(f"spacing < 14 días desde último turno fuerte")
+                    warnings.append("Menos de 14 días desde su último turno fuerte.")
             elif ctx.service_area_id == "disponible":
                 if days_since_strong < MIN_SPACING_DISPONIBLE_AFTER_STRONG:
-                    warnings.append(f"spacing < 7 días desde turno fuerte")
+                    warnings.append("Menos de 7 días desde su último turno fuerte.")
 
         # Mission spacing (only this doctor's missions)
         mission_dates = [m["mission_date"] for m in ctx.mission_assignments if m["doctor_id"] == ctx.doctor_id]
         if mission_dates:
             days_since_mission = max(0, (ctx.slot_date - max(mission_dates)).days)
             if ctx.service_area_id in ctx.strong_area_ids and days_since_mission < MIN_SPACING_AFTER_MISSION_STRONG:
-                warnings.append("spacing < 7 días desde misión")
+                warnings.append("Menos de 7 días desde su última misión.")
             elif ctx.service_area_id == "disponible" and days_since_mission < MIN_SPACING_AFTER_MISSION_DISPONIBLE:
-                warnings.append("spacing < 5 días desde misión")
+                warnings.append("Menos de 5 días desde su última misión.")
 
         # Score deltas
         rest_bonus = min(days_since_last, MAX_REST_DAYS) * REST_BONUS_ANY

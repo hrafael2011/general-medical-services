@@ -95,8 +95,11 @@ def compute_candidate_score(
     result = pipeline.evaluate(ctx)
 
     warnings = result.all_warnings
+    # Las advertencias de la regla spacing se detectan por su frase en español
+    # (antes el marcador era la palabra "spacing" dentro del texto en inglés).
     is_spacing_violation = any(
-        "spacing" in w.lower() for w in warnings
+        "días desde su último" in w.lower() or "días desde su última" in w.lower()
+        for w in warnings
     )
 
     # Build CandidateScore with exact same fields as original
