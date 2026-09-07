@@ -91,21 +91,49 @@ class AssignmentService:
         month: int,
         actor_id: str,
     ) -> None:
-        """Execute the ranking refresh (called by the timer)."""
+        """Execute the ranking refresh (called by the timer).
+
+        El Timer dispara 5s después de que la petición HTTP que lo programó ya
+        terminó, por lo que NUNCA debe reutilizar la sesión/servicios de esa
+        petición: hacerlo dejaba una transacción huérfana abierta (con su
+        advisory lock) que bloqueaba todos los recomputes posteriores y agotaba
+        la pool → 500 masivos. Aquí se abre una sesión propia, se commitea y se
+        cierra dentro del hilo.
+        """
+        session = None
         try:
-            self._mission_ranking_service.generate_ranking(
+            from backend.app.application.missions.ranking_service import MissionRankingService
+            from backend.app.infrastructure.db.session import SessionLocal
+            from backend.app.infrastructure.repositories.calendars import CalendarRepository
+            from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+            from backend.app.infrastructure.repositories.doctors import DoctorRepository
+            from backend.app.infrastructure.repositories.missions import MissionRepository
+
+            session = SessionLocal()
+            ranking_service = MissionRankingService(
+                MissionRepository(session),
+                DoctorRepository(session),
+                CalendarRepository(session),
+                CatalogRepository(session),
+                audit=None,  # sin auditoría: la petición original ya audita
+            )
+            ranking_service.generate_ranking(
                 actor_id=actor_id,
                 year=year,
                 month=month,
                 calendar_version_id=calendar_version_id,
             )
+            session.commit()
         except Exception:
+            if session is not None:
+                session.rollback()
             import logging
-            _logger = logging.getLogger(__name__)
-            _logger.exception(
+            logging.getLogger(__name__).exception(
                 "Failed to auto-refresh ranking for %d/%02d", year, month
             )
         finally:
+            if session is not None:
+                session.close()
             self._ranking_timers.pop(f"{year}-{month}", None)
 
     # ------------------------------------------------------------------
