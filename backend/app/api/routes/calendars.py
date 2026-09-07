@@ -615,6 +615,7 @@ def evaluate_slot(
             doctor_id=payload.doctor_id,
             target_date=payload.service_date,
             service_area_id=payload.service_area_id,
+            exclude_assignment_id=payload.replacing_assignment_id,
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc

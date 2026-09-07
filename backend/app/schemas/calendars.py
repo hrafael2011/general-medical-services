@@ -119,6 +119,9 @@ class EvaluationRequest(BaseModel):
     doctor_id: str
     service_date: date
     service_area_id: str
+    # Cuando el modal se abre sobre un turno ocupado para reemplazarlo, se pasa
+    # el id del ocupante para que la evaluación no choque con "slot_occupied".
+    replacing_assignment_id: str | None = None
 
 
 class EvaluationResponse(BaseModel):

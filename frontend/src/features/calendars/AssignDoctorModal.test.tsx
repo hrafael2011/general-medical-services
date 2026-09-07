@@ -167,6 +167,7 @@ describe("AssignDoctorModal", () => {
     await waitFor(() => {
       expect(calendarsApi.evaluate).toHaveBeenCalledWith("cal-1", {
         doctor_id: "d9", service_date: "2026-05-03", service_area_id: "area-1",
+        replacing_assignment_id: null,
       });
     });
   });

@@ -1220,3 +1220,40 @@ def test_eligible_strict_hides_fixed_doctor_outside_their_day(db_session) -> Non
     assert entries, "El médico fuera de su día debe aparecer con strict=False"
     assert entries[0]["outside_pattern"] is True
     assert entries[0]["is_hard"] is False
+
+
+def test_evaluate_slot_allows_replacement_of_occupied_slot(db_session) -> None:
+    """Al reemplazar un turno ocupado, evaluate no bloquea con slot_occupied
+    si se pasa el id del ocupante (exclude_assignment_id)."""
+    _calendar, version = _create_calendar_and_version(db_session)
+    occupant = _create_doctor(db_session, name="Dr. Ocupante")
+    candidate = _create_doctor(db_session, name="Dr. Candidato")
+    service = _make_assignment_service(db_session)
+    slot_date = datetime.date(2026, 5, 15)
+
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=occupant.id,
+        date=slot_date,
+        service_area_id=_AREA_ID,
+    )
+
+    # Sin el id del ocupante → slot_occupied (bloqueo estructural)
+    blocked = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=candidate.id,
+        target_date=slot_date,
+        service_area_id=_AREA_ID,
+    )
+    assert any(b["code"] == "slot_occupied" for b in blocked["hard_blocks"])
+
+    # Reemplazo (con el id del ocupante) → el slot se evalúa como libre
+    ok = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=candidate.id,
+        target_date=slot_date,
+        service_area_id=_AREA_ID,
+        exclude_assignment_id=assignment.id,
+    )
+    assert ok["hard_blocks"] == []

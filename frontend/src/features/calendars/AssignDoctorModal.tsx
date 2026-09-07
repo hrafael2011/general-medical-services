@@ -25,7 +25,7 @@ type Step = "select" | "evaluating" | "review-warnings";
 
 export function AssignDoctorModal({
   calendarId, date, areaId, areaName,
-  currentDoctorId, onConfirm, onClose, isLoading, onRemove, submitError,
+  currentDoctorId, currentAssignmentId, onConfirm, onClose, isLoading, onRemove, submitError,
 }: Props) {
   const [query, setQuery] = useState("");
   // Por defecto solo se ofrecen médicos cuyo día marcado es este (los fijos
@@ -92,6 +92,8 @@ export function AssignDoctorModal({
         doctor_id: doctorId,
         service_date: date,
         service_area_id: areaId,
+        // Reemplazo de un turno ocupado: el ocupante no debe bloquear la evaluación
+        replacing_assignment_id: currentAssignmentId ?? null,
       });
       if (result.hard_blocks.length > 0) {
         setEvaluateError(result.hard_blocks.map(b => b.description).join(" "));

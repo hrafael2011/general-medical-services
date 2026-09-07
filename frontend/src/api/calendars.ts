@@ -123,6 +123,8 @@ export interface EvaluationRequest {
   doctor_id: string;
   service_date: string;
   service_area_id: string;
+  /** Al reemplazar un turno ocupado: id del ocupante para no chocar con slot_occupied */
+  replacing_assignment_id?: string | null;
 }
 
 export interface EvaluationResponse {

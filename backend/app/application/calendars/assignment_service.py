@@ -839,6 +839,7 @@ class AssignmentService:
         doctor_id: str,
         target_date: date,
         service_area_id: str,
+        exclude_assignment_id: str | None = None,
     ) -> dict:
         """Evaluate a doctor for a specific slot.
 
@@ -897,10 +898,17 @@ class AssignmentService:
         ]
 
         # 3g. Slot occupied by another doctor (guard estructural, no confirmable).
+        # Cuando se está REEMPLAZANDO una asignación (el modal conoce el id del
+        # ocupante), ese mismo turno no debe bloquear la evaluación del
+        # reemplazo: se evalúa como si el turno estuviera por quedar libre.
         existing_slot = self.calendar_repo.get_assignment_for_slot(
             version_id, target_date, service_area_id
         )
-        if existing_slot is not None and existing_slot.doctor_id != doctor_id:
+        if (
+            existing_slot is not None
+            and existing_slot.doctor_id != doctor_id
+            and existing_slot.id != exclude_assignment_id
+        ):
             hard_blocks.append({
                 "code": "slot_occupied",
                 "description": "El turno ya está ocupado por otro médico.",
