@@ -71,17 +71,75 @@ export function AssignDoctorModal({
     return () => { cancelled = true; };
   }, [calendarId, date, areaId, includeOthers]);
 
-  const filtered = eligibleDoctors.filter(d => {
-    if (!d.full_name.toLowerCase().includes(query.toLowerCase())) return false;
-    if (d.id === currentDoctorId) return false;
-    return true;
-  }).sort((a, b) => {
-    // Docs that respect pattern first, then alters, then no pattern
-    const pa = a.altera_orden === false ? 0 : a.altera_orden === true ? 1 : 2;
-    const pb = b.altera_orden === false ? 0 : b.altera_orden === true ? 1 : 2;
-    if (pa !== pb) return pa - pb;
-    return a.full_name.localeCompare(b.full_name);
-  });
+  const softUnavailable = unavailableDoctors.filter(u => !u.is_hard && u.doctor_id !== currentDoctorId);
+  const hardUnavailable = unavailableDoctors.filter(u => u.is_hard && u.doctor_id !== currentDoctorId);
+
+  type CandidateKind = "available" | "soft" | "hard";
+  interface CandidateRow {
+    key: string;
+    kind: CandidateKind;
+    doctorId: string;
+    fullName: string;
+    reasons?: string[];
+    outsidePattern?: boolean;
+    alteraOrden?: boolean | null;
+  }
+
+  const q = query.trim().toLowerCase();
+  const matches = (name: string) => !q || name.toLowerCase().includes(q);
+
+  // Lista única y buscable: disponibles del día primero, luego los demás con
+  // motivo (agrupados por médico), y al final los bloqueados (sin clic).
+  // El buscador filtra TODA la lista, no solo los del día.
+  const softByDoctor = new Map<string, CandidateRow>();
+  for (const u of softUnavailable) {
+    const existing = softByDoctor.get(u.doctor_id);
+    if (existing) {
+      if (u.description) existing.reasons!.push(u.description);
+      if (u.outside_pattern) existing.outsidePattern = true;
+    } else {
+      softByDoctor.set(u.doctor_id, {
+        key: `soft-${u.doctor_id}`,
+        kind: "soft",
+        doctorId: u.doctor_id,
+        fullName: u.full_name,
+        reasons: u.description ? [u.description] : [],
+        outsidePattern: !!u.outside_pattern,
+      });
+    }
+  }
+
+  const candidates: CandidateRow[] = [
+    ...eligibleDoctors
+      .filter(d => d.id !== currentDoctorId && matches(d.full_name))
+      .sort((a, b) => {
+        // Docs that respect pattern first, then alters, then no pattern
+        const pa = a.altera_orden === false ? 0 : a.altera_orden === true ? 1 : 2;
+        const pb = b.altera_orden === false ? 0 : b.altera_orden === true ? 1 : 2;
+        if (pa !== pb) return pa - pb;
+        return a.full_name.localeCompare(b.full_name);
+      })
+      .map(d => ({
+        key: d.id,
+        kind: "available" as CandidateKind,
+        doctorId: d.id,
+        fullName: d.full_name,
+        alteraOrden: d.altera_orden,
+      })),
+    ...[...softByDoctor.values()]
+      .filter(r => matches(r.fullName))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    ...hardUnavailable
+      .filter(u => matches(u.full_name))
+      .sort((a, b) => a.full_name.localeCompare(b.full_name))
+      .map(u => ({
+        key: `hard-${u.doctor_id}-${u.code}`,
+        kind: "hard" as CandidateKind,
+        doctorId: u.doctor_id,
+        fullName: u.full_name,
+        reasons: [u.description],
+      })),
+  ];
 
   const handleSelectDoctor = async (doctorId: string) => {
     setSelectedId(doctorId);
@@ -130,8 +188,6 @@ export function AssignDoctorModal({
   const handleConfirmWithWarnings = () => {
     onConfirm(selectedId!, Array.from(acceptedWarnings), justification.trim());
   };
-  const softUnavailable = unavailableDoctors.filter(u => !u.is_hard && u.doctor_id !== currentDoctorId);
-  const hardUnavailable = unavailableDoctors.filter(u => u.is_hard && u.doctor_id !== currentDoctorId);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -143,24 +199,38 @@ export function AssignDoctorModal({
 
         {step === "select" && (
           <>
-            <label
-              style={{
-                display: "flex", alignItems: "center", gap: 8,
-                fontSize: 12.5, color: "#475569", cursor: "pointer",
-                marginBottom: 10, userSelect: "none",
-              }}
-              title="Al activarlo se listan también médicos cuyo día marcado no es este; al elegirlos deberás confirmar las advertencias."
-            >
-              <input
-                type="checkbox"
-                checked={includeOthers}
-                onChange={e => {
-                  setIncludeOthers(e.target.checked);
-                  setQuery("");
+            <div style={{ marginBottom: 10 }}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={includeOthers}
+                onClick={() => { setIncludeOthers(v => !v); setQuery(""); }}
+                title="Al activarlo se listan también médicos cuyo día marcado no es este; al elegirlos deberás confirmar las advertencias."
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  background: "transparent", border: 0, cursor: "pointer", padding: 0,
+                  fontSize: 12.5, color: "#475569", userSelect: "none",
                 }}
-              />
-              Buscar m&eacute;dicos que no son de este d&iacute;a
-            </label>
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 34, height: 20, borderRadius: 999, flexShrink: 0,
+                    background: includeOthers ? "#2563eb" : "#cbd5e1",
+                    position: "relative", transition: "background 0.15s ease",
+                  }}
+                >
+                  <span
+                    style={{
+                      position: "absolute", top: 2, left: includeOthers ? 16 : 2,
+                      width: 16, height: 16, borderRadius: "50%", background: "#fff",
+                      transition: "left 0.15s ease",
+                    }}
+                  />
+                </span>
+                Buscar m&eacute;dicos que no son de este d&iacute;a
+              </button>
+            </div>
 
             <div style={{ position: "relative", marginBottom: 12 }}>
               <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
@@ -178,81 +248,85 @@ export function AssignDoctorModal({
 
             {!loadingEligible && !eligibleError && (
               <>
-                <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 6 }}>
-                  {filtered.length === 0 && (
+                <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 6 }}>
+                  {candidates.length === 0 && (
                     <p style={{ padding: "12px 16px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                      {query ? "Sin resultados." : "No hay doctores disponibles para este slot."}
+                      {q ? "Sin resultados para esa búsqueda." : "No hay médicos para asignar en este turno."}
                     </p>
                   )}
-                  {filtered.map(doc => (
-                    <button
-                      key={doc.id}
-                      onClick={() => handleSelectDoctor(doc.id)}
-                      style={{
-                        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "10px 16px",
-                        background: selectedId === doc.id ? "#bfdbfe" : "transparent",
-                        border: 0, borderBottom: "1px solid #f1f5f9", cursor: "pointer",
-                        textAlign: "left", fontSize: "0.9rem",
-                      }}
-                    >
-                      <span style={{ fontWeight: selectedId === doc.id ? 700 : 400, color: "#1e293b" }}>{doc.full_name}</span>
-                      {doc.altera_orden === false && (
-                        <span className="order-indicator order-respeta">
-                          <CheckCircle2 size={14} /> Respeta el orden
-                        </span>
-                      )}
-                      {doc.altera_orden === true && (
-                        <span className="order-indicator order-altera">
-                          <AlertTriangle size={14} /> Altera el orden
-                        </span>
-                      )}
-                      {doc.altera_orden === null && (
-                        <span className="order-indicator order-sin-patron">Sin orden fijo</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                {(softUnavailable.length > 0 || hardUnavailable.length > 0) && (
-                  <div style={{ marginTop: 12, padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 6, background: "#f8fafc" }}>
-                    <strong style={{ display: "block", fontSize: 13, color: "#475569", marginBottom: 8 }}>
-                      No disponibles
-                    </strong>
-                    {softUnavailable.map(u => (
-                      <div
-                        key={`${u.doctor_id}-${u.code}`}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}
-                      >
-                        <span style={{ color: "#64748b" }}>
-                          {u.full_name}
-                          {u.outside_pattern && (
-                            <span style={{ display: "block", fontSize: 11.5, color: "#b45309" }}>
-                              No es de este d&iacute;a (d&iacute;a marcado distinto)
-                            </span>
-                          )}
-                          <span style={{ display: "block", color: "#b45309" }}>{u.description}</span>
-                        </span>
-                        <button
-                          className="btn-ghost"
-                          style={{ fontSize: 12, padding: "2px 8px", whiteSpace: "nowrap" }}
-                          onClick={() => handleSelectDoctor(u.doctor_id)}
+                  {candidates.map(c => {
+                    const selected = selectedId === c.doctorId;
+                    if (c.kind === "hard") {
+                      return (
+                        <div
+                          key={c.key}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            padding: "7px 16px", borderBottom: "1px solid #f1f5f9",
+                            fontSize: 13, background: "#f8fafc", opacity: 0.8,
+                          }}
                         >
-                          Evaluar de todas formas
-                        </button>
-                      </div>
-                    ))}
-                    {hardUnavailable.map(u => (
-                      <div
-                        key={`${u.doctor_id}-${u.code}`}
-                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}
+                          <Lock size={12} style={{ color: "#b91c1c", flexShrink: 0 }} />
+                          <span style={{ color: "#991b1b" }}>
+                            {c.fullName} — {(c.reasons ?? []).join(" ")}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        key={c.key}
+                        onClick={() => handleSelectDoctor(c.doctorId)}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                          gap: 8, padding: "8px 16px",
+                          background: selected ? "#bfdbfe" : "transparent",
+                          border: 0, borderBottom: "1px solid #f1f5f9", cursor: "pointer",
+                          textAlign: "left", fontSize: "0.9rem",
+                        }}
                       >
-                        <Lock size={12} style={{ color: "#b91c1c", flexShrink: 0 }} />
-                        <span style={{ color: "#991b1b" }}>{u.full_name} — {u.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span style={{ display: "block", fontWeight: selected ? 700 : 500, color: "#1e293b" }}>
+                            {c.fullName}
+                          </span>
+                          {c.kind === "soft" && (
+                            <>
+                              {c.outsidePattern && (
+                                <span style={{ display: "block", fontSize: 11.5, color: "#b45309" }}>
+                                  No es de este d&iacute;a (d&iacute;a marcado distinto)
+                                </span>
+                              )}
+                              <span style={{ display: "block", fontSize: 12, color: "#b45309" }}>
+                                {(c.reasons ?? []).join(" · ")}
+                              </span>
+                            </>
+                          )}
+                        </span>
+                        {c.kind === "available" && c.alteraOrden === false && (
+                          <span className="order-indicator order-respeta">
+                            <CheckCircle2 size={14} /> Respeta el orden
+                          </span>
+                        )}
+                        {c.kind === "available" && c.alteraOrden === true && (
+                          <span className="order-indicator order-altera">
+                            <AlertTriangle size={14} /> Altera el orden
+                          </span>
+                        )}
+                        {c.kind === "available" && c.alteraOrden === null && (
+                          <span className="order-indicator order-sin-patron">Sin orden fijo</span>
+                        )}
+                        {c.kind === "soft" && (
+                          <span
+                            className="btn-ghost"
+                            style={{ fontSize: 11, padding: "2px 6px", whiteSpace: "nowrap", pointerEvents: "none" }}
+                          >
+                            Elegir
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </>
             )}
 
