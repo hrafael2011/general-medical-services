@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     feature_notifications: bool = True
     feature_telegram: bool = True
 
+    # True = APScheduler corre in-process en el API (dev, staging sin worker).
+    # False en producción: los 4 jobs los ejecuta el servicio worker vía cron
+    # (cada 30 min) para que el API pueda dormir y no cobrar 24/7.
+    run_in_process_scheduler: bool = True
+
     # ── Manual-only mode ────────────────────────────────────────────────
     # True = la generación automática está deshabilitada (botón oculto en el
     # frontend y endpoints /generate y /fill-gaps bloqueados con 403).
