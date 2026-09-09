@@ -376,8 +376,13 @@ class DoctorQueryService:
                 func.lower(DepartmentModel.normalized_name) == str(filters["department"]).lower()
             )
         sex_values = filters.get("sex") or []
-        if sex_values and set(sex_values) != {"male", "female"}:
-            conditions.append(DoctorModel.sex.in_(sex_values))
+        requested = {str(v) for v in sex_values}
+        if requested and requested not in ({"male", "female"}, {"M", "F"}):
+            # El resolver expone 'F'/'M' y la BD guarda 'male'/'female' (o
+            # viceversa en fixtures legacy) — se buscan ambas representaciones.
+            _SEX_ALIASES = {"M": "male", "F": "female", "male": "M", "female": "F"}
+            candidates = sorted(requested | {_SEX_ALIASES[v] for v in requested})
+            conditions.append(DoctorModel.sex.in_(candidates))
         return conditions
 
     def _join_catalogs(self, stmt, filters: dict[str, Any]):

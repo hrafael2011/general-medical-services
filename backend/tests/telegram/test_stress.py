@@ -2,57 +2,87 @@
 import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from backend.app.application.telegram.llm import FakeLLMProvider
 from backend.app.application.telegram.agent import ConversationalAgent
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.entity_resolver import EntityResolver
 from backend.app.application.telegram.query_executor import QueryExecutor
+from backend.app.infrastructure.db.base import Base
+from backend.app.infrastructure.db.models import (  # noqa: F401 — registra metadata
+    action_alerts,
+    audit,
+    availability,
+    calendars,
+    catalogs,
+    confirmations,
+    doctors,
+    missions,
+    notifications,
+    telegram,
+    user,
+)
+from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+_RESPONSES = {
+    "medicos activos": (
+        '{"action": "query", "query_type": "count_doctors_total", "params": {}}'
+    ),
+    "por sexo": (
+        '{"action": "query", "query_type": "count_by_sex", "params": {}}'
+    ),
+    "por rango": (
+        '{"action": "query", "query_type": "count_by_rank", "params": {}}'
+    ),
+    "lista": (
+        '{"action": "query", "query_type": "list_active_doctors", "params": {}}'
+    ),
+    "sargentos": (
+        '{"action": "query", "query_type": "count_by_specific_rank", '
+        '"params": {"rank": "sargento"}}'
+    ),
+    "cabos": (
+        '{"action": "query", "query_type": "count_by_specific_rank", '
+        '"params": {"rank": "cabo"}}'
+    ),
+    "resumen operativo": (
+        '{"action": "query", "query_type": "operational_summary", '
+        '"params": {"year": 2026, "month": 5}}'
+    ),
+    "trabajan hoy": (
+        '{"action": "query", "query_type": "doctors_working_date", '
+        '"params": {"date": "2026-05-09"}}'
+    ),
+    "hola": (
+        '{"action": "reply", "response_text": "Hola, soy el asistente de turnos medicos."}'
+    ),
+    "gracias": (
+        '{"action": "reply", "response_text": "De nada, estoy para ayudarte."}'
+    ),
+}
 
 
 @pytest.fixture
-def stress_agent(db_session, sqlite_registry):
-    """Agent with FakeLLMProvider for fast stress testing."""
-    responses = {
-        "medicos activos": (
-            '{"action": "query", "query_type": "count_doctors_total", "params": {}}'
-        ),
-        "por sexo": (
-            '{"action": "query", "query_type": "count_by_sex", "params": {}}'
-        ),
-        "por rango": (
-            '{"action": "query", "query_type": "count_by_rank", "params": {}}'
-        ),
-        "lista": (
-            '{"action": "query", "query_type": "list_active_doctors", "params": {}}'
-        ),
-        "sargentos": (
-            '{"action": "query", "query_type": "count_by_specific_rank", '
-            '"params": {"rank": "sargento"}}'
-        ),
-        "cabos": (
-            '{"action": "query", "query_type": "count_by_specific_rank", '
-            '"params": {"rank": "cabo"}}'
-        ),
-        "resumen operativo": (
-            '{"action": "query", "query_type": "operational_summary", '
-            '"params": {"year": 2026, "month": 5}}'
-        ),
-        "trabajan hoy": (
-            '{"action": "query", "query_type": "doctors_working_date", '
-            '"params": {"date": "2026-05-09"}}'
-        ),
-        "hola": (
-            '{"action": "reply", "response_text": "Hola, soy el asistente de turnos medicos."}'
-        ),
-        "gracias": (
-            '{"action": "reply", "response_text": "De nada, estoy para ayudarte."}'
-        ),
-    }
-    # Seed a doctor so that count queries return non-empty results
-    from datetime import datetime as _dt, UTC as _UTC
-    from backend.app.infrastructure.db.models.doctors import DoctorModel
-    if not db_session.query(DoctorModel).first():
-        db_session.add(DoctorModel(
+def stress_agent(sqlite_registry, tmp_path):
+    """Agente thread-safe: BD sqlite en archivo compartida + sesión/agente nuevos
+    por llamada. La BD `:memory:` de conftest crea una BD *por hilo*, lo que
+    volvía los tests de concurrencia flaky (datos invisibles entre hilos)."""
+    engine = create_engine(
+        f"sqlite+pysqlite:///{tmp_path / 'stress.db'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(
+        bind=engine, autocommit=False, autoflush=False, expire_on_commit=False,
+    )
+
+    from datetime import UTC as _UTC, datetime as _dt
+
+    seed = SessionLocal()
+    if not seed.query(DoctorModel).first():
+        seed.add(DoctorModel(
             id="00000000-0000-0000-0000-000000000001",
             name="Dr. Stress Test",
             normalized_name="dr. stress test",
@@ -61,24 +91,35 @@ def stress_agent(db_session, sqlite_registry):
             service_active=True,
             availability_mode="monthly",
             participa_misiones=True,
+            whatsapp_phone="0000000000",
             monthly_service_target=3,
             monthly_service_max=3,
             monthly_service_limit_mode="warn_only",
             created_at=_dt.now(_UTC),
             updated_at=_dt.now(_UTC),
         ))
-        db_session.commit()
+        seed.commit()
+    seed.close()
 
-    llm = FakeLLMProvider(responses=responses)
-    router = IntentRouter(registry=sqlite_registry)
-    router.set_session(db_session)
-    query_exec = QueryExecutor(db_session, llm)
-    entity_resolver = EntityResolver(session=db_session)
-    agent = ConversationalAgent(
-        llm=llm, router=router,
-        query_executor=query_exec, entity_resolver=entity_resolver,
-    )
-    return agent
+    class _StressAgent:
+        """Crea sesión + agente frescos por llamada → seguro entre hilos."""
+
+        def process(self, text: str):
+            session = SessionLocal()
+            try:
+                llm = FakeLLMProvider(responses=_RESPONSES)
+                router = IntentRouter(registry=sqlite_registry)
+                router.set_session(session)
+                agent = ConversationalAgent(
+                    llm=llm, router=router,
+                    query_executor=QueryExecutor(session, llm),
+                    entity_resolver=EntityResolver(session=session),
+                )
+                return agent.process(text)
+            finally:
+                session.close()
+
+    return _StressAgent()
 
 
 def test_concurrent_10_queries(stress_agent):

@@ -57,9 +57,8 @@ class TestTelegramFeatureDisabled:
 
     def test_webhook_returns_404_when_feature_disabled(self) -> None:
         """POST /api/telegram/webhook returns 404 when Telegram is disabled."""
-        app = create_app()
-        client = TestClient(app)
-        response = client.post("/api/telegram/webhook", json=MINIMAL_PAYLOAD)
+        with _with_telegram_config(feature_enabled=False):
+            response = _test_client.post("/api/telegram/webhook", json=MINIMAL_PAYLOAD)
         assert response.status_code == 404
 
 

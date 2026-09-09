@@ -194,7 +194,7 @@ def _seed_simulation_db(db_session):
             service_active=True,
             availability_mode="variable" if i % 2 == 0 else "fixed",
             participa_misiones=(i % 3 != 0),
-            whatsapp_phone=None,
+            whatsapp_phone=f"1809000{i:04d}",
             monthly_service_target=3,
             monthly_service_max=3,
             monthly_service_limit_mode="warn_only",
