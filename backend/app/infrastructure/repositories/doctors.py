@@ -24,6 +24,10 @@ class DoctorRepository:
         self.session.flush()
         return doctor
 
+    def update(self, doctor: DoctorModel) -> DoctorModel:
+        self.session.flush()
+        return doctor
+
     def get_by_id(self, doctor_id: str) -> DoctorModel | None:
         stmt = select(DoctorModel).where(
             DoctorModel.id == doctor_id, *_not_deleted()

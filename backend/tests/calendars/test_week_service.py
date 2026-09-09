@@ -92,6 +92,16 @@ def test_approve_week_updates_status():
                               start_date=date(2026, 5, 11),
                               end_date=date(2026, 5, 17), status="draft")
     repo.add_week(week2)
+    # A week can only be approved with at least one doctor assigned to it
+    a1 = CalendarAssignmentModel(
+        id=str(uuid4()),
+        calendar_version_id=version.id,
+        calendar_week_id=week.id,
+        service_date=date(2026, 5, 5),
+        service_area_id="area1",
+        doctor_id="doc1",
+    )
+    repo.add_assignment(a1)
 
     triggers = MagicMock()
     service = CalendarService(repo=repo, triggers=triggers, audit=None)
@@ -107,17 +117,24 @@ def test_approve_week_updates_status():
 def test_approve_week_already_approved_raises():
     """Approving an already-approved week raises CalendarServiceError."""
     repo = FakeWeekRepo()
-    cal = CalendarModel(id=str(uuid4()), year=2026, month=5, status="draft",
-                        generation_mode="manual")
+    cal = CalendarModel(
+        id=str(uuid4()), year=2026, month=5, status="draft", generation_mode="manual"
+    )
     repo.add_calendar(cal)
-    version = CalendarVersionModel(id=str(uuid4()), calendar_id=cal.id,
-                                   version_number=1, status="draft")
+    version = CalendarVersionModel(
+        id=str(uuid4()), calendar_id=cal.id, version_number=1, status="draft"
+    )
     repo.add_version(version)
-    week = CalendarWeekModel(id=str(uuid4()), calendar_id=cal.id,
-                             calendar_version_id=version.id,
-                             week_number=1, label="1RA SEMANA",
-                             start_date=date(2026, 5, 4),
-                             end_date=date(2026, 5, 10), status="approved")
+    week = CalendarWeekModel(
+        id=str(uuid4()),
+        calendar_id=cal.id,
+        calendar_version_id=version.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=date(2026, 5, 4),
+        end_date=date(2026, 5, 10),
+        status="approved",
+    )
     repo.add_week(week)
 
     service = CalendarService(repo=repo, triggers=MagicMock(), audit=None)
@@ -128,23 +145,46 @@ def test_approve_week_already_approved_raises():
 def test_approve_all_weeks_sets_calendar_approved():
     """When the last week is approved, calendar status becomes 'approved'."""
     repo = FakeWeekRepo()
-    cal = CalendarModel(id=str(uuid4()), year=2026, month=5, status="partial",
-                        generation_mode="manual")
+    cal = CalendarModel(
+        id=str(uuid4()), year=2026, month=5, status="partial", generation_mode="manual"
+    )
     repo.add_calendar(cal)
-    version = CalendarVersionModel(id=str(uuid4()), calendar_id=cal.id,
-                                   version_number=1, status="draft")
+    version = CalendarVersionModel(
+        id=str(uuid4()), calendar_id=cal.id, version_number=1, status="draft"
+    )
     repo.add_version(version)
-    w1 = CalendarWeekModel(id=str(uuid4()), calendar_id=cal.id,
-                           calendar_version_id=version.id,
-                           week_number=1, label="1RA SEMANA",
-                           start_date=date(2026, 5, 4),
-                           end_date=date(2026, 5, 10), status="approved")
-    w2 = CalendarWeekModel(id=str(uuid4()), calendar_id=cal.id,
-                           calendar_version_id=version.id,
-                           week_number=2, label="2DA SEMANA",
-                           start_date=date(2026, 5, 11),
-                           end_date=date(2026, 5, 17), status="draft")
-    repo.add_week(w1); repo.add_week(w2)
+    w1 = CalendarWeekModel(
+        id=str(uuid4()),
+        calendar_id=cal.id,
+        calendar_version_id=version.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=date(2026, 5, 4),
+        end_date=date(2026, 5, 10),
+        status="approved",
+    )
+    w2 = CalendarWeekModel(
+        id=str(uuid4()),
+        calendar_id=cal.id,
+        calendar_version_id=version.id,
+        week_number=2,
+        label="2DA SEMANA",
+        start_date=date(2026, 5, 11),
+        end_date=date(2026, 5, 17),
+        status="draft",
+    )
+    repo.add_week(w1)
+    repo.add_week(w2)
+    # A week can only be approved with at least one doctor assigned to it
+    a2 = CalendarAssignmentModel(
+        id=str(uuid4()),
+        calendar_version_id=version.id,
+        calendar_week_id=w2.id,
+        service_date=date(2026, 5, 12),
+        service_area_id="area1",
+        doctor_id="doc1",
+    )
+    repo.add_assignment(a2)
 
     triggers = MagicMock()
     service = CalendarService(repo=repo, triggers=triggers, audit=None)
@@ -152,6 +192,37 @@ def test_approve_all_weeks_sets_calendar_approved():
 
     assert result.status == "approved"
     assert cal.status == "approved"
+
+
+def test_approve_week_without_assignments_raises():
+    """A week without assigned doctors cannot be approved (week_empty guard)."""
+    repo = FakeWeekRepo()
+    cal = CalendarModel(
+        id=str(uuid4()), year=2026, month=5, status="draft", generation_mode="manual"
+    )
+    repo.add_calendar(cal)
+    version = CalendarVersionModel(
+        id=str(uuid4()), calendar_id=cal.id, version_number=1, status="draft"
+    )
+    repo.add_version(version)
+    week = CalendarWeekModel(
+        id=str(uuid4()),
+        calendar_id=cal.id,
+        calendar_version_id=version.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=date(2026, 5, 4),
+        end_date=date(2026, 5, 10),
+        status="draft",
+    )
+    repo.add_week(week)
+
+    service = CalendarService(repo=repo, triggers=MagicMock(), audit=None)
+    with pytest.raises(CalendarServiceError, match="sin médicos asignados") as exc_info:
+        service.approve_week(actor_id="user1", week_id=week.id, notes=None)
+
+    assert exc_info.value.code == "week_empty"
+    assert week.status == "draft"
 
 
 def test_unlock_week_stores_hash():

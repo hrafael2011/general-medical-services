@@ -6,10 +6,22 @@ No database access needed — all inputs are plain Python dicts and date objects
 
 import datetime
 
+from backend.app.domain.calendars.objective_weights import (
+    AREA_WEIGHTS as SSOT_AREA_WEIGHTS,
+)
 from backend.app.domain.calendars.scoring import (
+    AREA_WEIGHTS,
+    MISSION_WEIGHT,
     compute_candidate_score,
 )
 from backend.app.domain.calendars.types import SlotRequest
+
+
+def test_area_weights_single_source_of_truth():
+    """scoring re-exporta AREA_WEIGHTS desde objective_weights (SSOT único)."""
+    assert AREA_WEIGHTS is SSOT_AREA_WEIGHTS
+    assert AREA_WEIGHTS == {"emergencia": 3.0, "pista": 2.0, "disponible": 1.0}
+    assert MISSION_WEIGHT == 0.5
 
 # ---------------------------------------------------------------------------
 # Helpers

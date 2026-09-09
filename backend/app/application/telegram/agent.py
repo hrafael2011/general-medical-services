@@ -197,9 +197,27 @@ class ConversationalAgent:
                 response_text="¡Hola! Soy el asistente de turnos medicos. ¿En que puedo ayudarte?",
             )
 
-        # Calendar queries
+        # Calendar queries — semana/mes resueltos a rango de fechas (sin LLM)
         if any(w in text_lower for w in ("semana de", "primera semana", "segunda semana", "tercera semana", "cuarta semana")):
-            if any(w in text_lower for w in ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")):
+            if any(w in text_lower for w in _MONTH_NAME_TO_NUMBER):
+                week_order = 1
+                for order, word in enumerate(("primera", "segunda", "tercera", "cuarta"), start=1):
+                    if f"{word} semana" in text_lower:
+                        week_order = order
+                        break
+                month_year = _extract_month_year(text)  # (mes, año)
+                if month_year is not None:
+                    from datetime import date as _date
+                    from datetime import timedelta as _timedelta
+
+                    month, year = month_year
+                    start_date = _date(year, month, (week_order - 1) * 7 + 1)
+                    end_date = start_date + _timedelta(days=6)
+                    return ClassifiedIntent(
+                        domain="calendario", action="query",
+                        query_type="calendar_assignments",
+                        params={"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
+                    )
                 return ClassifiedIntent(domain="calendario", action="query")
         if "calendario" in text_lower:
             return ClassifiedIntent(domain="calendario", action="query")
@@ -208,9 +226,21 @@ class ConversationalAgent:
         if any(w in text_lower for w in ("exporta", "exportar", "exportalo", "exportame", "esporta", "pdf", "excel", "xlsx")):
             return ClassifiedIntent(domain="medicos", action="export")
 
-        # Mission ranking
+        # Mission queries — distinguir misiones activas del ranking de
+        # candidatos (el SQL de ranking exige year/month del texto).
         if "mision" in text_lower or "misiones" in text_lower:
-            return ClassifiedIntent(domain="medicos", action="query", query_type="mission_ranking")
+            if any(w in text_lower for w in (
+                "activa", "activas", "activo", "activos",
+                "vigente", "vigentes", "en curso", "programadas",
+            )):
+                return ClassifiedIntent(domain="medicos", action="query", query_type="list_active_missions")
+            params = {}
+            month_year = _extract_month_year(text)  # (mes, año)
+            if month_year is not None:
+                params = {"year": month_year[1], "month": month_year[0]}
+            return ClassifiedIntent(
+                domain="medicos", action="query", query_type="mission_ranking", params=params,
+            )
 
         # Doctor count / list queries
         if any(w in text_lower for w in ("cuantos", "cuántos", "cuantas", "cuántas", "total", "conteo", "lista", "listado", "listame", "dame", "muestrame", "mostrame")):
@@ -593,6 +623,54 @@ class ConversationalAgent:
         )
 
 
+    def _calendar_period_followup_result(
+        self,
+        text: str,
+        telegram_user_id: str | None,
+    ) -> AgentResult | None:
+        """Follow-up de calendario: "¿y de julio?" re-aplica el último rango
+        (misma semana) sobre el mes que menciona el usuario."""
+        if self._session_store is None or telegram_user_id is None:
+            return None
+        if not _looks_like_followup(text):
+            return None
+        state = self._session_store.get(telegram_user_id)
+        if state is None or state.last_domain != "calendar_assignments":
+            return None
+        month_year = _extract_month_year(text)  # (mes, año)
+        if month_year is None or self._calendar_query_service is None:
+            return None
+
+        month, year = month_year
+        week_order = 1
+        period = state.last_period or {}
+        prev_start = period.get("start_date")
+        if prev_start:
+            try:
+                from datetime import date as _date
+
+                week_order = (_date.fromisoformat(str(prev_start)).day - 1) // 7 + 1
+            except (KeyError, ValueError):
+                week_order = 1
+        week_order = max(1, min(week_order, 4))
+
+        from datetime import date as _date
+        from datetime import timedelta as _timedelta
+
+        start_date = _date(year, month, (week_order - 1) * 7 + 1)
+        params = {
+            "start_date": start_date.isoformat(),
+            "end_date": (start_date + _timedelta(days=6)).isoformat(),
+        }
+        result = self._calendar_query_service.execute("calendar_assignments", params)
+        if result is None:
+            return None
+        self._remember_result(
+            telegram_user_id, result,
+            query_type="calendar_assignments", params=params,
+        )
+        return result
+
     def _filters_from_query_context(
         self,
         query_type: str | None,
@@ -767,12 +845,21 @@ class ConversationalAgent:
         # Generate NL response
         response_text = self._generate_nl_response(text, nlu_result, tool_result, history)
 
+        # generate_report puede devolver un documento (bytes) para adjuntar.
+        document_bytes = None
+        document_filename = None
+        if isinstance(tool_result, dict):
+            document_bytes = tool_result.get("document")
+            document_filename = tool_result.get("filename")
+
         agent_result = AgentResult(
             response_text=response_text,
             agent_action="query",
             tool_name=nlu_result.tool,
             tool_entities={"tool": nlu_result.tool, "params": nlu_result.params},
             tool_result=tool_result,
+            document_bytes=document_bytes,
+            document_filename=document_filename,
         )
 
         self._remember_result(
@@ -917,7 +1004,7 @@ class ConversationalAgent:
             return "No se encontraron resultados." if not tool_result else str(tool_result)
 
     def _handle_reply(self, text: str, nlu_result: NLUResult) -> AgentResult:
-        """Handle conversational replies (greetings, help, etc.)."""
+        """Handle conversational replies (greetings, help, clarify, out_of_scope)."""
         response_type = nlu_result.params.get("response_type", "unknown")
         if response_type == "greeting":
             return AgentResult(
@@ -928,14 +1015,16 @@ class ConversationalAgent:
             return AgentResult(
                 response_text=(
                     "Puedes consultarme sobre:\n"
-                    "• Doctores disponibles y sus horarios\n"
-                    "• Calendarios de guardias\n"
-                    "• Misiones médicas\n"
-                    "• Carga de servicio por doctor\n\n"
+                    "• Doctores, disponibilidad y restricciones\n"
+                    "• Guardias y calendario del mes\n"
+                    "• Quién puede cubrir un día y área, y por qué\n"
+                    "• Misiones y candidatos\n"
+                    "• Carga de servicio y confirmaciones\n\n"
                     "Ejemplos:\n"
                     "• \"¿Cuántos doctores hay en cirugía?\"\n"
                     "• \"¿Quiénes están de guardia el lunes?\"\n"
-                    "• \"Muéstrame las doctoras disponibles\""
+                    "• \"¿Quién puede cubrir el viernes en Emergencia?\"\n"
+                    "• \"Envíame el reporte de mayo\""
                 ),
                 agent_action="reply",
             )
@@ -943,6 +1032,22 @@ class ConversationalAgent:
             return AgentResult(
                 response_text="¡Hasta luego! Estoy aquí cuando me necesites.",
                 agent_action="reply",
+            )
+        if response_type == "clarify":
+            return AgentResult(
+                response_text=(
+                    "No entiendo tu petición, ¿puedes ser más específico? "
+                    "Por ejemplo: «¿quién está de guardia el lunes en Emergencia?»."
+                ),
+                agent_action="ambiguous",
+            )
+        if response_type == "out_of_scope":
+            return AgentResult(
+                response_text=(
+                    "No tengo esa información o esa acción se realiza en el panel web. "
+                    "Puedo consultar doctores, disponibilidad, guardias, misiones y reportes."
+                ),
+                agent_action="unsupported",
             )
         return AgentResult(
             response_text="¿En qué más puedo ayudarte con los turnos médicos?",
@@ -990,6 +1095,10 @@ class ConversationalAgent:
                 params={},
             )
             return mission_followup
+
+        calendar_followup = self._calendar_period_followup_result(text, telegram_user_id)
+        if calendar_followup is not None:
+            return calendar_followup
 
         classified = self._classify_intent(
             text=text,
@@ -1086,8 +1195,11 @@ class ConversationalAgent:
                 )
                 return router_result
 
-        # QueryExecutor fallback
-        if _count_filter_dims(entity_hints) >= 1 and self._query_executor is not None:
+        # QueryExecutor fallback — también para consultas de médicos sin ruta
+        # determinística (p. ej. "cuantos medicos activos hay" sin filtros).
+        if self._query_executor is not None and (
+            _count_filter_dims(entity_hints) >= 1 or classified.domain == "medicos"
+        ):
             result = self._fallback_to_query_db(text, entity_hints=entity_hints)
             self._remember_result(telegram_user_id, result)
             return result

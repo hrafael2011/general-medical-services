@@ -67,3 +67,13 @@ docs/superpowers/
 .superpowers/
 .vercel/
 .mcp.json
+
+# Claude worktrees
+.claude/worktrees/
+
+# Excel sources (datos de importación)
+excel_sources/
+
+# Playwright E2E (frontend)
+frontend/test-results/
+frontend/playwright-report/

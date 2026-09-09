@@ -11,7 +11,6 @@ from datetime import date, timedelta
 
 from backend.app.domain.availability_rules import matches_recurring_monthly_rule
 from backend.app.domain.calendars.cp_model import OrToolsEngine
-from backend.app.domain.calendars.scoring import compute_candidate_score
 from backend.app.domain.calendars.types import (
     CandidateScore,
     GenerationSummary,
@@ -49,6 +48,10 @@ class GenerationContext:
     required_areas: list[str]
     # Area weights: {"emergencia": 3.0, "pista": 2.0, "disponible": 1.0}
     area_weights: dict[str, float]
+    # Per-day required areas: {date: [area_code, ...]}
+    daily_required_areas: dict[date, list[str]] | None = None
+    # Fairness mode: "strict" | "hybrid" | "lenient"
+    fairness_mode: str = "hybrid"
     # Monthly service target per doctor: {doctor_id: int}. Default 3.
     monthly_service_targets: dict[str, int] | None = None
     # Monthly service max per doctor: {doctor_id: int}. Default 3.
@@ -56,6 +59,9 @@ class GenerationContext:
     # Pattern violations tracker (fairness): {doctor_id: count}. Reset per month.
     # Used by PatternRule to prefer doctors with fewer prior violations.
     pattern_violations: dict[str, int] | None = None
+    # Area rotation mode per doctor: {doctor_id: "fixed"|"auto"|"rotate"}.
+    # Used by AreaRotationRule to determine penalty magnitude.
+    area_rotation_modes: dict[str, str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +127,18 @@ class CalendarEngine:
             # 3. No active hard-block restriction covering slot.date
             if self._has_hard_block(doctor.id, slot.date, ctx):
                 continue
+
+            # 3b. Monthly-mode doctors must have submitted availability for the month
+            if getattr(doctor, "availability_mode", "") == "monthly":
+                month_records = ctx.availability.get(doctor.id, [])
+                has_submitted = any(
+                    getattr(r, "availability_type", "") == "monthly_variable"
+                    and getattr(r, "month", None) == ctx.month
+                    and getattr(r, "year", None) == ctx.year
+                    for r in month_records
+                )
+                if not has_submitted:
+                    continue
 
             # 4. Availability
             if not self._has_availability(doctor.id, slot.date, ctx):
@@ -204,6 +222,27 @@ class CalendarEngine:
         if not records:
             # No availability submitted → treat as available (MVP behaviour)
             return True
+
+        # If the doctor has monthly_variable records for this specific month,
+        # ONLY evaluate monthly_variable, ignoring weekly_fixed/recurring.
+        target_monthly = [
+            r for r in records
+            if r.availability_type == "monthly_variable"
+            and getattr(r, "month", None) == target_date.month
+            and getattr(r, "year", None) == target_date.year
+        ]
+        if target_monthly:
+            for record in target_monthly:
+                rm = getattr(record, "month", None)
+                ry = getattr(record, "year", None)
+                available = (
+                    getattr(record, "available_days", None)
+                    or getattr(record, "available_dates", None)
+                    or []
+                )
+                if target_date.day in available:
+                    return True
+            return False
 
         for record in records:
             availability_type = record.availability_type

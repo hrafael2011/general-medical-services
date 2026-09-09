@@ -1,10 +1,12 @@
 from collections.abc import Generator
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.application.telegram.registry import DEFAULT_QUERY_TYPES, QueryRegistry
+from backend.app.core.config import settings
 from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import action_alerts as _action_alerts  # noqa: F401
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
@@ -75,3 +77,53 @@ def sqlite_router(sqlite_registry, seeded_db):
     router = IntentRouter(registry=sqlite_registry)
     router.set_session(seeded_db["session"])
     return router
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PostgreSQL guard — tests marcados @pytest.mark.db saltan si no hay servidor
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _postgres_reachable() -> bool:
+    if getattr(_postgres_reachable, "_cached", None) is not None:  # pragma: no cover
+        return _postgres_reachable._cached
+    engine = create_engine(settings.database_url, connect_args={"connect_timeout": 2})
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except (SQLAlchemyError, OSError):
+        _postgres_reachable._cached = False
+        return False
+    finally:
+        engine.dispose()
+    _postgres_reachable._cached = True
+    return True
+
+
+@pytest.fixture(scope="session")
+def postgres_available() -> bool:
+    return _postgres_reachable()
+
+
+@pytest.fixture(autouse=True)
+def _skip_db_tests_without_postgres(request) -> None:
+    """Autouse: si el test está marcado `db` (o `e2e`) y no hay PG, saltar limpio."""
+    if not _is_db_or_e2e(request.node):
+        return
+    if not _postgres_reachable():
+        pytest.skip("PostgreSQL no disponible (marcador db/e2e)")
+
+
+def pytest_collection_modifyitems(config, items) -> None:
+    """Salta en colección los tests `db`/`e2e` sin PG — antes de que sus fixtures de
+    scope superior (p.ej. module-scoped) intenten conectar y produzcan ERROR."""
+    marked = [item for item in items if _is_db_or_e2e(item)]
+    if not marked or _postgres_reachable():
+        return
+    skip_marker = pytest.mark.skip(reason="PostgreSQL no disponible (marcador db/e2e)")
+    for item in marked:
+        item.add_marker(skip_marker)
+
+
+def _is_db_or_e2e(item) -> bool:
+    return bool(item.get_closest_marker("db") or item.get_closest_marker("e2e"))

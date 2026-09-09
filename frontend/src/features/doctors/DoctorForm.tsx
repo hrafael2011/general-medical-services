@@ -2,8 +2,6 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/style.css";
 import { doctorsApi, availabilityApi, CreateDoctorPayload, DoctorRead } from "../../api/doctors";
 
 interface Props {
@@ -40,7 +38,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
     doctor?.availability_mode === "monthly" ? "monthly" : "weekly"
   );
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [selectedWeekday, setSelectedWeekday] = useState<number>(4);
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<number>(-1);
 
@@ -52,9 +49,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
     });
   }
 
-  function handleDayPickerSelect(dates: Date[] | undefined) {
-    setSelectedDates(dates ?? []);
-  }
   const [error, setError] = useState("");
   const [gapPrompt, setGapPrompt] = useState<{
     removed: number; calendarIds: string[]; doctorName: string;
@@ -86,7 +80,11 @@ export function DoctorForm({ doctor, onClose }: Props) {
 
     const weekly = availabilityData.find(a => a.availability_type === "weekly_fixed");
     const recurring = availabilityData.find(a => a.availability_type === "recurring");
-    const monthly = availabilityData.find(a => a.availability_type === "monthly_variable");
+    // Find the LATEST monthly_variable record (by year/month)
+    const monthlyRecords = availabilityData
+      .filter(a => a.availability_type === "monthly_variable")
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.month ?? 0) - (a.month ?? 0));
+    const monthly = monthlyRecords[0];
 
     if (weekly && doctor?.availability_mode !== "monthly") {
       setAvMode("weekly");
@@ -96,12 +94,9 @@ export function DoctorForm({ doctor, onClose }: Props) {
       setSelectedWeekday(recurring.weekday ?? 4);
       setSelectedWeekNumber(recurring.week_number ?? -1);
     } else if (monthly) {
+      // Modo mensual: los días se eligen desde el botón "Asignar días"
+      // de la columna Disponibilidad del listado — aquí solo se habilita el modo.
       setAvMode("monthly");
-      const year = monthly.year ?? new Date().getFullYear();
-      const month = monthly.month ?? new Date().getMonth() + 1;
-      setSelectedDates(
-        (monthly.available_dates ?? []).map(d => new Date(year, month - 1, d))
-      );
     }
   }, [availabilityData, doctor?.availability_mode]);
 
@@ -149,16 +144,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
           try {
             if (avMode === "weekly" && selectedDays.length > 0) {
               await availabilityApi.setWeekly(doctorId, { days_of_week: selectedDays });
-            } else if (avMode === "monthly" && selectedDates.length > 0) {
-              const dates = selectedDates;
-              const year = dates[0].getFullYear();
-              const month = dates[0].getMonth() + 1;
-              const dayNumbers = dates.map(d => d.getDate());
-              await availabilityApi.setMonthly(doctorId, {
-                year,
-                month,
-                available_dates: dayNumbers,
-              });
             } else if (avMode === "recurring") {
               await availabilityApi.setRecurring(doctorId, {
                 weekday: selectedWeekday,
@@ -338,16 +323,11 @@ export function DoctorForm({ doctor, onClose }: Props) {
                 </div>
               )}
               {avMode === "monthly" && (
-                <div className="av-calendar">
-                  <DayPicker
-                    mode="multiple"
-                    selected={selectedDates}
-                    onSelect={handleDayPickerSelect}
-                    startMonth={new Date()}
-                    defaultMonth={new Date()}
-                    showOutsideDays={false}
-                  />
-                </div>
+                <p className="av-monthly-note">
+                  El médico avisará sus días cada mes con el botón{" "}
+                  <strong>"Asignar días"</strong> de la columna Disponibilidad en el
+                  listado de médicos.
+                </p>
               )}
               {avMode === "recurring" && (
                 <div className="av-recurring-row">

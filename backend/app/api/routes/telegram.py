@@ -106,6 +106,7 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     from backend.app.application.telegram.orchestrator import TelegramOrchestrator
     from backend.app.application.telegram.query_executor import QueryExecutor
     from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
+    from backend.app.application.telegram.tool_handlers import build_tool_handlers
     from backend.app.application.telegram.tool_registry import ToolRegistry
     from backend.app.application.reports.report_service import ReportService
     from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -133,66 +134,15 @@ def get_orchestrator(session: Annotated[Session, Depends(get_db_session)]):  # n
     entity_resolver = EntityResolver(session=session)
     semantic_layer = SemanticLayerResolver(session)
 
-    # Wire tool registry with deterministic handlers
+    # Wire tool registry with the consolidated MCP catalog (2026-09-05).
+    # Los 21 handlers de datos delegan en services/repos de solo lectura
+    # (tool_handlers.build_tool_handlers). `sql_query` NO se registra: el SQL
+    # Agent no es elegible por el modelo.
     tool_registry = ToolRegistry()
     if use_real:
-
-        def _doctor_handler(**params):
-            resolved = entity_resolver.pre_process(
-                " ".join(f"{k}={v}" for k, v in params.items())
-            ).get("resolved", params)
-            return doctor_svc.execute(
-                " ".join(f"{k}={v}" for k, v in params.items()),
-                resolved,
-            )
-
-        tool_registry.register("list_doctors", _doctor_handler)
-        tool_registry.register("count_doctors", _doctor_handler)
-        tool_registry.register("doctors_by_sex", _doctor_handler)
-        tool_registry.register("doctors_by_rank", _doctor_handler)
-        tool_registry.register("doctors_by_department", _doctor_handler)
-
-        tool_registry.register(
-            "calendar_assignments",
-            lambda **params: calendar_svc.execute("list_calendar_assignments_by_date_range", params),
-        )
-        tool_registry.register(
-            "calendar_assigned_count",
-            lambda **params: calendar_svc.execute("count_assigned_doctors_by_month", params),
-        )
-        tool_registry.register(
-            "calendar_status",
-            lambda **params: calendar_svc.execute("calendar_status", params),
-        )
-
-        # Mission tools — route through IntentRouter (prevents SQL Agent fallback)
-        def _mission_list_handler(**params):
-            result = router.handle(
-                action="query",
-                query_type="list_active_missions",
-                params=params,
-            )
-            return result
-
-        def _mission_status_handler(**params):
-            result = router.handle(
-                action="query",
-                query_type="pending_mission_confirmation",
-                params=params,
-            )
-            return result
-
-        tool_registry.register("mission_list", _mission_list_handler)
-        tool_registry.register("mission_status", _mission_status_handler)
-
-        def _sql_handler(**params):
-            result = query_executor.execute(
-                nl_query=params.get("question", ""),
-                user_text=params.get("question", ""),
-            )
-            return result
-
-        tool_registry.register("sql_query", _sql_handler)
+        handlers = build_tool_handlers(session=session)
+        for tool_name, handler in handlers.items():
+            tool_registry.register(tool_name, handler)
 
     memory = MemoryManager(TelegramRepository(session))
     agent = ConversationalAgent(

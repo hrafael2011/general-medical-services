@@ -20,6 +20,18 @@ run_frontend_checks() {
   npm --prefix frontend run lint
 }
 
+# PostgreSQL descartable para E2E (scripts/test-db.sh, puerto 5434, sin volumen)
+TEST_DB_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:5434/medical_shifts_test"
+
+run_e2e() {
+  # El trap garantiza que postgres-test se elimine aunque pytest falle.
+  trap './scripts/test-db.sh down' EXIT
+  ./scripts/test-db.sh reset
+  DATABASE_URL="$TEST_DB_URL" ./.venv/bin/alembic upgrade head
+  DATABASE_URL="$TEST_DB_URL" ./.venv/bin/python -m backend.scripts.seed_e2e
+  DATABASE_URL="$TEST_DB_URL" ./.venv/bin/python -m pytest backend/tests/e2e -m e2e -q --tb=short
+}
+
 case "$TARGET" in
   unit)
     run_backend_unit
@@ -34,7 +46,7 @@ case "$TARGET" in
     run_frontend_unit
     ;;
   e2e)
-    echo "E2E suite is not implemented yet."
+    run_e2e
     ;;
   scheduling)
     run_backend_unit

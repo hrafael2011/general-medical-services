@@ -5,7 +5,6 @@ and that CORS is locked down to only the Vercel frontend in production.
 """
 from contextlib import contextmanager
 
-import pytest
 from starlette.testclient import TestClient
 
 from backend.app.core.config import settings
@@ -129,17 +128,15 @@ class TestCORSLockedInProduction:
         assert response.status_code == 500
         assert response.headers.get("access-control-allow-origin") == self.PRODUCTION_ORIGIN
 
-    @pytest.mark.parametrize("origin", [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:8999",
-        "http://127.0.0.1:5173",
-    ])
-    def test_non_production_allows_localhost(self, origin):
+    def test_non_production_allows_all_origins(self):
+        # Contrato real: fuera de production/staging, create_app() monta
+        # CORSMiddleware con allow_origins=["*"]. En requests simples sin
+        # cookies Starlette responde "Access-Control-Allow-Origin: *"; con
+        # cookies (allow_credentials=True) haría echo del Origin.
         with _with_env("local"):
             client = TestClient(create_app())
-            response = client.get("/api/health", headers={"Origin": origin})
-        assert response.headers.get("access-control-allow-origin") == origin
+            response = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
+        assert response.headers.get("access-control-allow-origin") == "*"
 
 
 EXPECTED_CSP = (

@@ -1,5 +1,6 @@
 // frontend/src/features/calendars/CalendarGrid.test.tsx
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -43,6 +44,11 @@ vi.mock("../../api/calendars", () => ({
     unlock: vi.fn(),
     assignDoctor: vi.fn(),
     removeAssignment: vi.fn(),
+    eligibleDoctors: vi.fn().mockResolvedValue({
+      doctors: [{ id: "d2", full_name: "Dr. PÉREZ", specialty: null, rank_name: null, altera_orden: null }],
+      unavailable: [],
+    }),
+    evaluate: vi.fn().mockResolvedValue({ hard_blocks: [], warnings: [] }),
   },
 }));
 
@@ -100,7 +106,7 @@ describe("CalendarGrid", () => {
     expect(await screen.findByText(/mayo 2026.*versión 1/i)).toBeInTheDocument();
   });
 
-  it("muestra botón Generar calendario con reglas en modo draft", async () => {
+  it("no muestra botón Generar calendario con reglas (modo manual, FEATURE_MANUAL_ONLY)", async () => {
     vi.mocked(calendarsApi.listWeeks).mockResolvedValueOnce(allDraftWeeks);
     vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
       calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
@@ -109,32 +115,8 @@ describe("CalendarGrid", () => {
       gaps: [],
     });
     renderGrid();
-    expect(await screen.findByRole("button", { name: /generar calendario con reglas/i })).toBeInTheDocument();
-  });
-
-  it("refresca semanas después de generar con reglas", async () => {
-    const { calendarsApi } = await import("../../api/calendars");
-    const userEvent = await import("@testing-library/user-event");
-    vi.mocked(calendarsApi.listWeeks).mockResolvedValueOnce(allDraftWeeks);
-    vi.mocked(calendarsApi.getGrid).mockResolvedValueOnce({
-      calendar: { id: "c1", year: 2026, month: 5, status: "draft", generation_mode: "manual", created_by: null, approved_by: null, created_at: "", updated_at: "", approved_at: null },
-      version: { id: "v1", calendar_id: "c1", version_number: 1, status: "draft", created_by: null, reason: null, created_at: "" },
-      slots: [],
-      gaps: [],
-    });
-    renderGrid();
-
     await screen.findByText("Semanas");
-    expect(calendarsApi.listWeeks).toHaveBeenCalledTimes(1);
-
-    await userEvent.default.click(
-      screen.getByRole("button", { name: /generar calendario con reglas/i }),
-    );
-
-    await waitFor(() => {
-      expect(calendarsApi.generate).toHaveBeenCalledWith("c1");
-      expect(calendarsApi.listWeeks).toHaveBeenCalledTimes(2);
-    });
+    expect(screen.queryByRole("button", { name: /generar calendario con reglas/i })).not.toBeInTheDocument();
   });
 
   it("oculta generación con reglas si existe una semana aprobada", async () => {
@@ -171,10 +153,13 @@ describe("CalendarGrid", () => {
     await screen.findAllByText("4");
     const dots = container.querySelectorAll(".calendar-area-dot");
     expect(dots.length).toBeGreaterThan(0);
-    // Areas are sorted alphabetically: Disponible (green), Emergencia (red), Pista (blue)
-    expect(dots[0].getAttribute("style")).toMatch(/#16a34a|rgb\(22,\s*163,\s*74\)/);
-    expect(dots[1].getAttribute("style")).toMatch(/#dc2626|rgb\(220,\s*38,\s*38\)/);
-    expect(dots[2].getAttribute("style")).toMatch(/#2563eb|rgb\(37,\s*99,\s*235\)/);
+    // Los dots siguen el orden de render del día (no alfabético): verificar presencia
+    // de cada color de área, no posición. Mapa real: Emergencia #dc2626, Pista #2563eb,
+    // Disponible #16a34a (AREA_COLOR_MAP en CalendarGrid.tsx)
+    const dotStyles = Array.from(dots).map(d => d.getAttribute("style") ?? "");
+    expect(dotStyles.some(s => /#dc2626|rgb\(220,\s*38,\s*38\)/.test(s))).toBe(true);
+    expect(dotStyles.some(s => /#2563eb|rgb\(37,\s*99,\s*235\)/.test(s))).toBe(true);
+    expect(dotStyles.some(s => /#16a34a|rgb\(22,\s*163,\s*74\)/.test(s))).toBe(true);
   });
 
   it("muestra '+ Asignar médico' en áreas vacías en modo draft", async () => {
@@ -223,6 +208,22 @@ describe("CalendarGrid", () => {
     expect(dashes.length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /generar calendario con reglas/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /editar calendario/i })).not.toBeInTheDocument();
+  });
+
+  it("muestra banner de error cuando falla la asignación", async () => {
+    vi.mocked(calendarsApi.assignDoctor).mockRejectedValue(new Error("Doctor no disponible"));
+    const user = userEvent.setup();
+    renderGrid();
+    await screen.findByText("Semanas");
+    const assignLabels = await screen.findAllByText("+ Asignar médico");
+    await user.click(assignLabels[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Dr. PÉREZ")).toBeInTheDocument();
+    });
+    await user.click(screen.getByText("Dr. PÉREZ"));
+    await waitFor(() => {
+      expect(screen.getAllByText(/No se pudo asignar/).length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   it("muestra estado parcial cuando solo algunas semanas están aprobadas", async () => {

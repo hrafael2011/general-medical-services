@@ -322,4 +322,5 @@ Exit criteria:
 
 | Version | Fecha | Issue | Trigger | Resumen |
 |---------|-------|-------|---------|---------|
+| 1.1.0 | 2026-09-05 | — | Modo manual | Las fases 5-6 describen el camino implementado; desde 2026-09-05 el sistema opera en modo manual por defecto (`FEATURE_MANUAL_ONLY=true`): los endpoints `generate`/`fill-gaps` responden 403 y el botón no aparece en la UI. La generación automática (Phase 6) queda disponible opcionalmente reactivando el flag. `fill_gaps` queda deprecado (segundo motor greedy conservado solo para reactivación). |
 | 1.0.0 | 2026-04-30 | — | Inicial | Versión inicial. Define roadmap de implementación en 14 fases (0-10 + reglas transversales), con tareas, criterios de salida y dependencias entre fases. |

@@ -3,6 +3,14 @@ from datetime import date
 
 from backend.app.domain.availability_rules import matches_recurring_monthly_rule
 
+# Nombres legibles para los mensajes (el sistema es usado por personal médico,
+# no por desarrolladores: nada de "(mode=fixed)", "weekday" ni puntajes).
+WEEKDAY_NAMES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+MONTH_NAMES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
 
 @dataclass
 class EligibilityResult:
@@ -33,18 +41,18 @@ class InactiveDoctorSpec:
             return EligibilityResult(
                 passed=False,
                 code="doctor_inactive",
-                reason=f"Doctor '{doctor.name}' is not active (active=False).",
+                reason=f"El doctor {doctor.name} está inactivo en el sistema.",
             )
         if not doctor.service_active:
             return EligibilityResult(
                 passed=False,
                 code="doctor_inactive",
-                reason=f"Doctor '{doctor.name}' is not service-active (service_active=False).",
+                reason=f"El doctor {doctor.name} no está activo para servicio.",
             )
         return EligibilityResult(
             passed=True,
             code="doctor_active",
-            reason=f"Doctor '{doctor.name}' is active and service-active.",
+            reason=f"El doctor {doctor.name} está activo para servicio.",
         )
 
 
@@ -58,15 +66,12 @@ class AllowedServiceAreaSpec:
             return EligibilityResult(
                 passed=True,
                 code="area_allowed",
-                reason=f"Service area '{service_area_id}' is allowed for doctor '{doctor.name}'.",
+                reason=f"El área está permitida para el doctor {doctor.name}.",
             )
         return EligibilityResult(
             passed=False,
             code="area_not_allowed",
-            reason=(
-                f"Service area '{service_area_id}' is not in the allowed areas "
-                f"for doctor '{doctor.name}'."
-            ),
+            reason=f"El área no está entre las permitidas para el doctor {doctor.name}.",
         )
 
 
@@ -81,14 +86,14 @@ class NoActiveHardBlockSpec:
                     passed=False,
                     code="has_hard_block",
                     reason=(
-                        f"Doctor '{doctor.name}' has an active hard block on {on_date}: "
-                        f"{detail}."
+                        f"El doctor {doctor.name} tiene una restricción activa "
+                        f"el {on_date}: {detail}."
                     ),
                 )
         return EligibilityResult(
             passed=True,
             code="no_hard_block",
-            reason=f"No active hard-block restrictions found for doctor '{doctor.name}' on {on_date}.",
+            reason=f"El doctor {doctor.name} no tiene restricciones activas el {on_date}.",
         )
 
 
@@ -132,16 +137,16 @@ class AvailabilitySpec:
                     passed=True,
                     code="available",
                     reason=(
-                        f"Doctor '{doctor.name}' has an availability record "
-                        f"covering weekday {weekday} on {target_date}."
+                        f"El doctor {doctor.name} tiene registrado el "
+                        f"{WEEKDAY_NAMES[weekday]} como su día de servicio."
                     ),
                 )
             return EligibilityResult(
                 passed=False,
                 code="not_available",
                 reason=(
-                    f"Doctor '{doctor.name}' (mode=fixed) has no fixed availability "
-                    f"record that covers weekday {weekday} on {target_date}."
+                    f"El doctor {doctor.name} no tiene registrado el "
+                    f"{WEEKDAY_NAMES[weekday]} como su día de servicio."
                 ),
             )
 
@@ -152,9 +157,9 @@ class AvailabilitySpec:
                     passed=True,
                     code="available",
                     reason=(
-                        f"Doctor '{doctor.name}' (mode=monthly) has not submitted availability "
-                        f"for the period containing {target_date}; "
-                        "exclusion from generation is handled by the pending-availability check."
+                        f"El doctor {doctor.name} aún no ha marcado sus días "
+                        f"disponibles de {MONTH_NAMES[target_date.month - 1]} de "
+                        f"{target_date.year}."
                     ),
                 )
             day = target_date.day
@@ -167,16 +172,17 @@ class AvailabilitySpec:
                         passed=True,
                         code="available",
                         reason=(
-                            f"Doctor '{doctor.name}' (mode=monthly) declared availability "
-                            f"on day {day} of the month ({target_date})."
+                            f"El doctor {doctor.name} marcó el día {day} como "
+                            f"disponible en {MONTH_NAMES[target_date.month - 1]}."
                         ),
                     )
             return EligibilityResult(
                 passed=False,
                 code="not_available",
                 reason=(
-                    f"Doctor '{doctor.name}' (mode=monthly) did not include day {target_date.day} "
-                    f"in their available dates for {target_date.strftime('%Y-%m')}."
+                    f"El doctor {doctor.name} no marcó el día {target_date.day} como "
+                    f"disponible en {MONTH_NAMES[target_date.month - 1]} de "
+                    f"{target_date.year}."
                 ),
             )
 
@@ -185,8 +191,8 @@ class AvailabilitySpec:
             passed=False,
             code="not_available",
             reason=(
-                f"Doctor '{doctor.name}' has an unrecognised availability_mode '{mode}'; "
-                "cannot determine availability."
+                f"El doctor {doctor.name} tiene un tipo de disponibilidad "
+                f"no reconocido ('{mode}')."
             ),
         )
 

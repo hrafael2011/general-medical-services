@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DoctorList } from "./DoctorList";
@@ -11,6 +11,10 @@ const mockListDoctors = vi.fn().mockResolvedValue({
   ],
   total: 3,
 });
+
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ addToast: vi.fn() }),
+}));
 
 vi.mock("../../api/doctors", () => ({
   doctorsApi: {
@@ -31,9 +35,28 @@ vi.mock("../../api/doctors", () => ({
     deactivateService: vi.fn(),
   },
   availabilityApi: {
-    list: vi.fn().mockResolvedValue([
-      { id: "a1", doctor_id: "d1", availability_type: "weekly_fixed", days_of_week: [0, 2], available_dates: null, weekday: null, week_number: null, year: null, month: null },
-    ]),
+    list: vi.fn().mockImplementation((doctorId: string) => {
+      if (doctorId === "d4") {
+        const now = new Date();
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return Promise.resolve([
+          {
+            id: "a4", doctor_id: "d4", availability_type: "monthly_variable", days_of_week: null,
+            available_dates: [3, 7, 15], weekday: null, week_number: null,
+            year: now.getFullYear(), month: now.getMonth() + 1,
+          },
+          {
+            id: "a3", doctor_id: "d4", availability_type: "monthly_variable", days_of_week: null,
+            available_dates: [2, 10], weekday: null, week_number: null,
+            year: prev.getFullYear(), month: prev.getMonth() + 1,
+          },
+        ]);
+      }
+      return Promise.resolve([
+        { id: "a1", doctor_id: "d1", availability_type: "weekly_fixed", days_of_week: [0, 2], available_dates: null, weekday: null, week_number: null, year: null, month: null },
+      ]);
+    }),
+    setMonthly: vi.fn().mockResolvedValue({}),
   },
 }));
 
@@ -77,7 +100,7 @@ describe("DoctorList", () => {
 
   it("usa columnas ejecutivas en el listado", async () => {
     renderList();
-    expect(await screen.findByText("Status servicio")).toBeInTheDocument();
+    expect(await screen.findByText("Estado servicio")).toBeInTheDocument();
     expect(screen.getAllByText("Activo").length).toBeGreaterThan(0);
     expect(screen.getByText("Departamento")).toBeInTheDocument();
     expect(screen.queryByText("Sexo")).not.toBeInTheDocument();
@@ -121,15 +144,74 @@ describe("DoctorList", () => {
     renderList();
     fireEvent.click(await screen.findByLabelText("Solo activos"));
 
-    expect(mockListDoctors).toHaveBeenCalledWith("all");
-    expect(mockListDoctors).toHaveBeenCalledWith("active");
+    // list(statusFilter, monthlyFilter) — monthlyFilter undefined cuando está apagado
+    expect(mockListDoctors).toHaveBeenCalledWith("all", undefined);
+    expect(mockListDoctors).toHaveBeenCalledWith("active", undefined);
   });
 
   it("solicita solo inactivos al activar el filtro", async () => {
     renderList();
     fireEvent.click(await screen.findByLabelText("Solo inactivos"));
 
-    expect(mockListDoctors).toHaveBeenCalledWith("all");
-    expect(mockListDoctors).toHaveBeenCalledWith("inactive");
+    expect(mockListDoctors).toHaveBeenCalledWith("all", undefined);
+    expect(mockListDoctors).toHaveBeenCalledWith("inactive", undefined);
+  });
+
+  it("el perfil de un médico mensual muestra los días guardados del mes", async () => {
+    mockListDoctors.mockResolvedValue({
+      items: [
+        { id: "d4", name: "Dr. Mensual", sex: "male", service_active: true, active: true, participa_misiones: true, monthly_service_target: 3, monthly_service_max: 3, monthly_service_limit_mode: "warn_only", availability_mode: "monthly", rank_id: null, department_id: null, phone: null, notes: null, service_inactive_reason_id: null, service_inactive_detail: null, whatsapp_phone: null, allowed_area_ids: ["area-1"] },
+      ],
+      total: 1,
+    });
+
+    renderList();
+    fireEvent.click(await screen.findByText("Dr. Mensual"));
+
+    expect(await screen.findByText(/Mensual \(.*\): días 3, 7, 15/)).toBeInTheDocument();
+  });
+
+  it("Asignar días reabre con los días ya guardados del mes actual", async () => {
+    mockListDoctors.mockResolvedValue({
+      items: [
+        { id: "d4", name: "Dr. Mensual", sex: "male", service_active: true, active: true, participa_misiones: true, monthly_service_target: 3, monthly_service_max: 3, monthly_service_limit_mode: "warn_only", availability_mode: "monthly", rank_id: null, department_id: null, phone: null, notes: null, service_inactive_reason_id: null, service_inactive_detail: null, whatsapp_phone: null, allowed_area_ids: ["area-1"] },
+      ],
+      total: 1,
+    });
+
+    renderList();
+    fireEvent.click(await screen.findByRole("button", { name: "Asignar días" }));
+
+    expect(await screen.findByText(/Días seleccionados:\s*3, 7, 15/)).toBeInTheDocument();
+  });
+
+  it("guarda los días en el mes visible aunque sea un mes anterior", async () => {
+    mockListDoctors.mockResolvedValue({
+      items: [
+        { id: "d4", name: "Dr. Mensual", sex: "male", service_active: true, active: true, participa_misiones: true, monthly_service_target: 3, monthly_service_max: 3, monthly_service_limit_mode: "warn_only", availability_mode: "monthly", rank_id: null, department_id: null, phone: null, notes: null, service_inactive_reason_id: null, service_inactive_detail: null, whatsapp_phone: null, allowed_area_ids: ["area-1"] },
+      ],
+      total: 1,
+    });
+
+    renderList();
+    fireEvent.click(await screen.findByRole("button", { name: "Asignar días" }));
+    // Mes actual preseleccionado
+    expect(await screen.findByText(/Días seleccionados:\s*3, 7, 15/)).toBeInTheDocument();
+
+    // Navegar al mes anterior: preselecciona los días guardados de ESE mes
+    fireEvent.click(screen.getByRole("button", { name: /previous month/i }));
+    expect(await screen.findByText(/Días seleccionados:\s*2, 10/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar días" }));
+
+    const prev = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+    const { availabilityApi } = await import("../../api/doctors");
+    await waitFor(() => {
+      expect(vi.mocked(availabilityApi.setMonthly)).toHaveBeenCalledWith("d4", {
+        year: prev.getFullYear(),
+        month: prev.getMonth() + 1,
+        available_dates: [2, 10],
+      });
+    });
   });
 });

@@ -91,21 +91,49 @@ class AssignmentService:
         month: int,
         actor_id: str,
     ) -> None:
-        """Execute the ranking refresh (called by the timer)."""
+        """Execute the ranking refresh (called by the timer).
+
+        El Timer dispara 5s después de que la petición HTTP que lo programó ya
+        terminó, por lo que NUNCA debe reutilizar la sesión/servicios de esa
+        petición: hacerlo dejaba una transacción huérfana abierta (con su
+        advisory lock) que bloqueaba todos los recomputes posteriores y agotaba
+        la pool → 500 masivos. Aquí se abre una sesión propia, se commitea y se
+        cierra dentro del hilo.
+        """
+        session = None
         try:
-            self._mission_ranking_service.generate_ranking(
+            from backend.app.application.missions.ranking_service import MissionRankingService
+            from backend.app.infrastructure.db.session import SessionLocal
+            from backend.app.infrastructure.repositories.calendars import CalendarRepository
+            from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+            from backend.app.infrastructure.repositories.doctors import DoctorRepository
+            from backend.app.infrastructure.repositories.missions import MissionRepository
+
+            session = SessionLocal()
+            ranking_service = MissionRankingService(
+                MissionRepository(session),
+                DoctorRepository(session),
+                CalendarRepository(session),
+                CatalogRepository(session),
+                audit=None,  # sin auditoría: la petición original ya audita
+            )
+            ranking_service.generate_ranking(
                 actor_id=actor_id,
                 year=year,
                 month=month,
                 calendar_version_id=calendar_version_id,
             )
+            session.commit()
         except Exception:
+            if session is not None:
+                session.rollback()
             import logging
-            _logger = logging.getLogger(__name__)
-            _logger.exception(
+            logging.getLogger(__name__).exception(
                 "Failed to auto-refresh ranking for %d/%02d", year, month
             )
         finally:
+            if session is not None:
+                session.close()
             self._ranking_timers.pop(f"{year}-{month}", None)
 
     # ------------------------------------------------------------------
@@ -216,7 +244,17 @@ class AssignmentService:
 
         # Separate failures into hard blocks and soft warnings.
         hard_blocks = [r for r in report.blockers if r.code in _HARD_BLOCK_CODES]
-        soft_warnings = [r for r in report.blockers if r.code not in _HARD_BLOCK_CODES]
+        # Unificar códigos con evaluate_slot: la disponibilidad sin cubrir es
+        # "no_availability" (evaluate) y NO "not_available" (eligibility) —
+        # si difieren, las casillas marcadas en el modal nunca coinciden.
+        soft_warnings = [
+            _SoftRuleWarning(
+                code="no_availability" if r.code == "not_available" else r.code,
+                reason=r.reason,
+            )
+            for r in report.blockers
+            if r.code not in _HARD_BLOCK_CODES
+        ]
 
         if hard_blocks:
             raise CalendarServiceError("hard_block", hard_blocks[0].reason)
@@ -262,14 +300,23 @@ class AssignmentService:
             return []
 
         hard_blocks = [r for r in report.blockers if r.code in _HARD_BLOCK_CODES]
-        soft_warnings = [r for r in report.blockers if r.code not in _HARD_BLOCK_CODES]
+        # Ver _run_eligibility: código canónico "no_availability" para el
+        # soft warning de disponibilidad (coincide con evaluate_slot).
+        soft_warnings = [
+            _SoftRuleWarning(
+                code="no_availability" if r.code == "not_available" else r.code,
+                reason=r.reason,
+            )
+            for r in report.blockers
+            if r.code not in _HARD_BLOCK_CODES
+        ]
 
         if hard_blocks:
             raise CalendarServiceError("hard_block", hard_blocks[0].reason)
 
         unacknowledged = [w for w in soft_warnings if w.code not in force_warnings]
         if unacknowledged:
-            raise CalendarServiceError("soft_warning", f"Falta confirmar: {unacknowledged[0].reason}")
+            raise CalendarServiceError("soft_warning", f"Confirma las advertencias antes de asignar: {unacknowledged[0].reason}")
 
         return soft_warnings
 
@@ -301,7 +348,7 @@ class AssignmentService:
 
         reason = f"Ya alcanzó el máximo mensual ({monthly_max}) servicios."
         if getattr(doctor, "monthly_service_limit_mode", "warn_only") == "hard_limit":
-            raise CalendarServiceError("hard_block", reason)
+            reason += " (límite configurado como duro; se trata como advertencia)."
         return _MonthlyLimitWarning(reason)
 
     def _apply_monthly_limit(
@@ -311,6 +358,7 @@ class AssignmentService:
         doctor,
         target_date: date,
         force_warnings: list[str] | None,
+        override_justification: str | None,
         soft_warnings: list,
         exclude_assignment_id: str | None = None,
     ) -> list:
@@ -322,6 +370,8 @@ class AssignmentService:
         )
         if monthly_warning is None:
             return soft_warnings
+        if override_justification:
+            return [*soft_warnings, monthly_warning]
         if force_warnings is not None and monthly_warning.code in force_warnings:
             return [*soft_warnings, monthly_warning]
         raise CalendarServiceError("soft_warning", monthly_warning.reason)
@@ -430,11 +480,47 @@ class AssignmentService:
             if unacknowledged:
                 raise CalendarServiceError(
                     "soft_warning",
-                    f"Falta confirmar: {unacknowledged[0].reason}",
+                    f"Confirma las advertencias antes de asignar: {unacknowledged[0].reason}",
                 )
             return [*soft_warnings, *scoring_warnings]
 
         raise CalendarServiceError("soft_warning", scoring_warnings[0].reason)
+
+    def _doctor_covers_date(
+        self,
+        doctor,
+        records: list,
+        target_date: date,
+    ) -> bool:
+        """¿El patrón del doctor (semanal fijo o día fijo al mes) cubre esta fecha?
+
+        Regla de producto: un médico con día marcado SOLO pertenece a los días
+        que marcó (semanal: solo esos días de la semana; día fijo: solo la
+        semana que calza, p. ej. el último viernes). Los mensuales ("avisa sus
+        días") no se evalúan aquí — su regla se maneja aparte.
+        """
+        if doctor.availability_mode != "fixed":
+            return True
+        for record in records:
+            if record.availability_type == "weekly_fixed":
+                if target_date.weekday() not in (record.days_of_week or []):
+                    continue
+            elif record.availability_type == "recurring":
+                if not matches_recurring_monthly_rule(
+                    target_date,
+                    record.weekday,
+                    record.week_number,
+                ):
+                    continue
+            else:
+                continue
+            # Respetar effective_from / effective_to cuando están definidos
+            if record.effective_from and target_date < record.effective_from:
+                continue
+            if record.effective_to and target_date > record.effective_to:
+                continue
+            return True
+        return False
 
     def get_eligible_doctors_for_slot(
         self,
@@ -442,12 +528,20 @@ class AssignmentService:
         version_id: str,
         target_date: date,
         service_area_id: str,
+        strict: bool = True,
     ) -> list:
-        """Return eligible doctors for a specific slot (date + area).
+        """Return eligible + unavailable doctors for a specific slot (date + area).
 
         Loads all necessary data (doctors, areas, availability, restrictions,
         existing assignments, historical assignments, missions) and builds a
         GenerationContext that the domain engine's get_eligible_doctors needs.
+
+        Returns {"eligible": [{doctor, altera_orden}], "unavailable": [
+        {doctor_id, full_name, code, description, is_hard, outside_pattern?}]}.
+        Con strict=True (por defecto) los médicos con día marcado (semanal o
+        día fijo al mes) NO aparecen en días que no son los suyos — ni como
+        "no disponibles". strict=False los incluye con outside_pattern=True
+        para que el encargado pueda elegirlos con advertencias si lo desea.
         """
         # 1. Load version and calendar.
         version = self.calendar_repo.get_version_by_id(version_id)
@@ -613,7 +707,149 @@ class AssignmentService:
                 "altera_orden": altera_orden,
             })
 
-        return result
+        # 13. Unavailable doctors with reasons (spec 02 taxonomía compartida).
+        # Incluye a todos los médicos (no solo service-active) para que los
+        # inactivos aparezcan con su razón doctor_inactive (is_hard).
+        eligible_ids = {item["doctor"].id for item in result}
+        unavailable: list[dict] = []
+        for doctor in self.doctor_repo.list_all(status="all"):
+            if doctor.id in eligible_ids:
+                continue
+            # En modo estricto, un médico con día marcado que no cubre esta
+            # fecha no aparece en absoluto (regla del encargado: los fijos solo
+            # en sus días). Los bloqueos duros (inactivo, área, restricción)
+            # del mismo médico sí se reportan: se calculan igualmente abajo.
+            records = availability.get(doctor.id, [])
+            outside_pattern = (
+                doctor.availability_mode == "fixed"
+                and not self._doctor_covers_date(doctor, records, target_date)
+            )
+            if strict and outside_pattern:
+                continue
+            for item in self._slot_restriction_items(
+                doctor=doctor,
+                target_date=target_date,
+                service_area_id=service_area_id,
+                calendar=calendar,
+                existing_assignments=existing_dicts,
+            ):
+                entry: dict = {
+                    "doctor_id": doctor.id,
+                    "full_name": doctor.name,
+                    "code": item["code"],
+                    "description": item["description"],
+                    "is_hard": item["is_hard"],
+                }
+                # Fuera de su día es un motivo blando (confirmable), no un bloqueo
+                if not item["is_hard"] and outside_pattern:
+                    entry["outside_pattern"] = True
+                unavailable.append(entry)
+
+        return {"eligible": result, "unavailable": unavailable}
+
+    def _slot_restriction_items(
+        self,
+        *,
+        doctor,
+        target_date: date,
+        service_area_id: str,
+        calendar,
+        existing_assignments: list[dict],
+    ) -> list[dict]:
+        """Taxonomía spec 02 para un doctor en un slot (fuente única).
+
+        Hard (nunca confirmables): doctor_inactive, area_not_allowed, has_hard_block.
+        Warnings (confirmables): no_availability, already_assigned_today, monthly_max_exceeded.
+        """
+        items: list[dict] = []
+
+        if not doctor.active or not doctor.service_active:
+            items.append({
+                "code": "doctor_inactive",
+                "description": "El médico no está activo o no tiene servicio activo.",
+                "is_hard": True,
+            })
+
+        allowed_areas = self.doctor_repo.get_allowed_areas(doctor.id)
+        if service_area_id not in allowed_areas:
+            items.append({
+                "code": "area_not_allowed",
+                "description": "El médico no tiene permiso para esta área.",
+                "is_hard": True,
+            })
+
+        restrictions = self.availability_repo.list_active_restrictions_for_doctor(
+            doctor.id, target_date
+        )
+        for r in restrictions:
+            if getattr(r, "severity", None) == "hard_block":
+                items.append({
+                    "code": "has_hard_block",
+                    "description": getattr(r, "reason", None) or "Restricción de tipo hard block.",
+                    "is_hard": True,
+                })
+                break
+
+        no_availability_reason: str | None = None
+
+        # Doctors in monthly mode must have reported availability for the month
+        # (same rule as engine.get_eligible_doctors).
+        if getattr(doctor, "availability_mode", "") == "monthly":
+            has_submitted = any(
+                getattr(r, "availability_type", "") == "monthly_variable"
+                and getattr(r, "month", None) == target_date.month
+                and getattr(r, "year", None) == target_date.year
+                for r in self.availability_repo.list_availability_for_doctor(doctor.id)
+            )
+            if not has_submitted:
+                no_availability_reason = "No reportó disponibilidad para este mes."
+
+        if no_availability_reason is None and not self._has_availability_for_date(
+            doctor.id, target_date, target_date.year, target_date.month
+        ):
+            no_availability_reason = "No tiene disponibilidad para esta fecha."
+
+        if no_availability_reason is not None:
+            items.append({
+                "code": "no_availability",
+                "description": no_availability_reason,
+                "is_hard": False,
+            })
+
+        # Si hay un hard block, solo se reportan los hard (igual que evaluate_slot
+        # detiene la evaluación en el primer bloqueo duro).
+        hard_items = [item for item in items if item["is_hard"]]
+        if hard_items:
+            return hard_items
+
+        if any(
+            a["doctor_id"] == doctor.id and a["service_date"] == target_date
+            for a in existing_assignments
+        ):
+            items.append({
+                "code": "already_assigned_today",
+                "description": "Ya tiene un turno asignado en esta fecha.",
+                "is_hard": False,
+            })
+
+        monthly_count = sum(
+            1
+            for a in existing_assignments
+            if a["doctor_id"] == doctor.id
+            and belongs_to_operational_month(a["service_date"], calendar.year, calendar.month)
+        )
+        monthly_max = getattr(doctor, "monthly_service_max", 3) or 3
+        if monthly_count >= monthly_max:
+            description = f"Ya alcanzó el máximo mensual ({monthly_max}) servicios."
+            if getattr(doctor, "monthly_service_limit_mode", "warn_only") == "hard_limit":
+                description += " (límite configurado como duro; se trata como advertencia)."
+            items.append({
+                "code": "monthly_max_exceeded",
+                "description": description,
+                "is_hard": False,
+            })
+
+        return items
 
     def evaluate_slot(
         self,
@@ -622,6 +858,7 @@ class AssignmentService:
         doctor_id: str,
         target_date: date,
         service_area_id: str,
+        exclude_assignment_id: str | None = None,
     ) -> dict:
         """Evaluate a doctor for a specific slot.
 
@@ -657,74 +894,40 @@ class AssignmentService:
                 f"Doctor '{doctor_id}' not found.",
             )
 
-        hard_blocks: list[dict] = []
-
-        # 3a. Inactive doctor.
-        if not doctor.active or not doctor.service_active:
-            hard_blocks.append({
-                "code": "doctor_inactive",
-                "description": "El médico no está activo o no tiene servicio activo.",
-            })
-
-        # 3b. Area not allowed.
-        allowed_areas = self.doctor_repo.get_allowed_areas(doctor.id)
-        if service_area_id not in allowed_areas:
-            hard_blocks.append({
-                "code": "area_not_allowed",
-                "description": "El médico no tiene permiso para esta área.",
-            })
-
-        # 3c. Has hard-block restriction.
-        restrictions = self.availability_repo.list_active_restrictions_for_doctor(
-            doctor.id, target_date
-        )
-        for r in restrictions:
-            if getattr(r, "severity", None) == "hard_block":
-                hard_blocks.append({
-                    "code": "has_hard_block",
-                    "description": getattr(r, "reason", None) or "Restricción de tipo hard block.",
-                })
-                break
-
-        # 3d. No availability for target_date.
-        if not self._has_availability_for_date(
-            doctor.id, target_date, target_date.year, target_date.month
-        ):
-            hard_blocks.append({
-                "code": "no_availability",
-                "description": "No tiene disponibilidad para esta fecha.",
-            })
-
-        # 3e. Already assigned on this date.
-        existing_today = self.calendar_repo.list_assignments_for_date(version_id, target_date)
-        if any(a.doctor_id == doctor_id for a in existing_today):
-            hard_blocks.append({
-                "code": "already_assigned_today",
-                "description": "Ya tiene un turno asignado en esta fecha.",
-            })
-
-        # 3f. Monthly max exceeded.
-        monthly_assignments_all = self.calendar_repo.list_assignments(version_id)
-        monthly_for_doctor = [
-            a
-            for a in monthly_assignments_all
-            if a.doctor_id == doctor_id
-            and belongs_to_operational_month(a.service_date, calendar.year, calendar.month)
-        ]
-        monthly_max = getattr(doctor, "monthly_service_max", 3) or 3
-        if len(monthly_for_doctor) >= monthly_max:
-            limit_item = {
-                "code": "monthly_max_exceeded",
-                "description": f"Ya alcanzó el máximo mensual ({monthly_max}) servicios.",
+        # 3. Taxonomía spec 02 (fuente única): hard críticos vs warnings confirmables.
+        existing_dicts = [
+            {
+                "doctor_id": a.doctor_id,
+                "service_date": a.service_date,
+                "service_area_id": a.service_area_id,
             }
-            if getattr(doctor, "monthly_service_limit_mode", "warn_only") == "hard_limit":
-                hard_blocks.append(limit_item)
+            for a in self.calendar_repo.list_assignments(version_id)
+        ]
+        restriction_items = self._slot_restriction_items(
+            doctor=doctor,
+            target_date=target_date,
+            service_area_id=service_area_id,
+            calendar=calendar,
+            existing_assignments=existing_dicts,
+        )
+        hard_blocks: list[dict] = [
+            {"code": item["code"], "description": item["description"]}
+            for item in restriction_items
+            if item["is_hard"]
+        ]
 
-        # 3g. Slot occupied by another doctor.
+        # 3g. Slot occupied by another doctor (guard estructural, no confirmable).
+        # Cuando se está REEMPLAZANDO una asignación (el modal conoce el id del
+        # ocupante), ese mismo turno no debe bloquear la evaluación del
+        # reemplazo: se evalúa como si el turno estuviera por quedar libre.
         existing_slot = self.calendar_repo.get_assignment_for_slot(
             version_id, target_date, service_area_id
         )
-        if existing_slot is not None and existing_slot.doctor_id != doctor_id:
+        if (
+            existing_slot is not None
+            and existing_slot.doctor_id != doctor_id
+            and existing_slot.id != exclude_assignment_id
+        ):
             hard_blocks.append({
                 "code": "slot_occupied",
                 "description": "El turno ya está ocupado por otro médico.",
@@ -734,7 +937,13 @@ class AssignmentService:
         if hard_blocks:
             return {"hard_blocks": hard_blocks, "warnings": []}
 
-        warning_items = [
+        # 4. Confirmable warnings + soft-rule scoring warnings.
+        warning_items: list[dict] = [
+            {"code": item["code"], "description": item["description"]}
+            for item in restriction_items
+            if not item["is_hard"]
+        ]
+        warning_items.extend(
             {"code": warning.code, "description": warning.reason}
             for warning in self._collect_scoring_warnings(
                 version_id=version_id,
@@ -742,12 +951,7 @@ class AssignmentService:
                 target_date=target_date,
                 service_area_id=service_area_id,
             )
-        ]
-        if len(monthly_for_doctor) >= monthly_max:
-            warning_items.append({
-                "code": "monthly_max_exceeded",
-                "description": f"Ya alcanzó el máximo mensual ({monthly_max}) servicios.",
-            })
+        )
 
         return {"hard_blocks": hard_blocks, "warnings": warning_items}
 
@@ -821,6 +1025,7 @@ class AssignmentService:
             doctor=doctor,
             target_date=date,
             force_warnings=force_warnings,
+            override_justification=override_justification,
             soft_warnings=soft_warnings_raw,
         )
         soft_warnings_raw = self._apply_scoring_warnings(
@@ -832,6 +1037,9 @@ class AssignmentService:
             override_justification=override_justification,
             soft_warnings=soft_warnings_raw,
         )
+
+        # 4b. Justification is optional when forcing warnings (audit keeps
+        # overridden_warnings regardless). Decisión de producto: opcional.
 
         # 5. Persist assignment.
         stored_justification = override_justification if override_justification else None
@@ -1027,6 +1235,7 @@ class AssignmentService:
             doctor=doctor,
             target_date=assignment.service_date,
             force_warnings=force_warnings,
+            override_justification=override_justification,
             soft_warnings=soft_warnings_raw,
             exclude_assignment_id=assignment.id,
         )
@@ -1040,6 +1249,8 @@ class AssignmentService:
             soft_warnings=soft_warnings_raw,
             exclude_assignment_id=assignment.id,
         )
+
+        # Justificación opcional al forzar warnings (audit con overridden_warnings).
 
         old_doctor_id = assignment.doctor_id
         should_notify = self._is_unlocked_approved_version(version)

@@ -27,6 +27,9 @@ class DoctorAvailabilityModel(Base):
     week_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    day_priority: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="available"
+    )
     submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

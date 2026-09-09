@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client";
@@ -54,10 +54,12 @@ describe("UsersView", () => {
 
     renderUsers();
 
+    // Esperar a que termine la carga inicial antes de abrir el modal
+    await waitForElementToBeRemoved(() => screen.queryByText(/cargando usuarios/i));
     fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Usuario Nuevo" } });
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "deleted@example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^crear usuario$/i }));
 
     await waitFor(() => {
       expect(addToast).toHaveBeenCalledWith(

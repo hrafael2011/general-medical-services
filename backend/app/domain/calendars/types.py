@@ -22,7 +22,7 @@ class CandidateScore:
     days_since_last: int  # days since last service of any type
     days_since_strong: int  # days since last emergencia/pista
     monthly_count: int  # assignments this month so far
-    warnings: list[str]  # soft-rule warnings, e.g. "spacing < 14 days"
+    warnings: list[str]  # soft-rule warnings en lenguaje claro, e.g. "Menos de 14 días desde su último turno fuerte."
     is_spacing_violation: bool  # True if hard spacing would block (reserved for future hard mode)
 
 

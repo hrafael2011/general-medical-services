@@ -138,38 +138,46 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        process_notification_queue,
-        IntervalTrigger(seconds=30),
-        id="process_notifications",
-        name="Process notification queue",
-        max_instances=1,
-    )
-    scheduler.add_job(
-        send_pre_service_reminders,
-        IntervalTrigger(minutes=5),
-        id="send_reminders",
-        name="Send pre-service reminders",
-    )
-    scheduler.add_job(
-        check_unconfirmed_escalamiento,
-        IntervalTrigger(minutes=15),
-        id="check_escalamiento",
-        name="Check unconfirmed escalamiento",
-    )
-    scheduler.add_job(
-        process_overdue_confirmations,
-        IntervalTrigger(minutes=10),
-        id="process_overdue",
-        name="Process overdue confirmations",
-    )
-    scheduler.start()
-    app.state.scheduler = scheduler
-    logger.info("APScheduler started with 4 notification jobs")
-    yield
-    scheduler.shutdown(wait=False)
-    logger.info("APScheduler shut down")
+    if settings.run_in_process_scheduler:
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(
+            process_notification_queue,
+            IntervalTrigger(seconds=30),
+            id="process_notifications",
+            name="Process notification queue",
+            max_instances=1,
+        )
+        scheduler.add_job(
+            send_pre_service_reminders,
+            IntervalTrigger(minutes=5),
+            id="send_reminders",
+            name="Send pre-service reminders",
+        )
+        scheduler.add_job(
+            check_unconfirmed_escalamiento,
+            IntervalTrigger(minutes=15),
+            id="check_escalamiento",
+            name="Check unconfirmed escalamiento",
+        )
+        scheduler.add_job(
+            process_overdue_confirmations,
+            IntervalTrigger(minutes=10),
+            id="process_overdue",
+            name="Process overdue confirmations",
+        )
+        scheduler.start()
+        app.state.scheduler = scheduler
+        logger.info("APScheduler started with 4 notification jobs")
+    else:
+        app.state.scheduler = None
+        logger.info("APScheduler in-process disabled — jobs corren via worker (Railway cron)")
+    try:
+        yield
+    finally:
+        scheduler = getattr(app.state, "scheduler", None)
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+            logger.info("APScheduler shut down")
 
 
 def create_app() -> FastAPI:

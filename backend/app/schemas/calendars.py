@@ -87,8 +87,20 @@ class EligibleDoctorRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UnavailableDoctorRead(BaseModel):
+    doctor_id: str
+    full_name: str
+    code: str
+    description: str
+    is_hard: bool
+    # True cuando el médico tiene día marcado y esta fecha no es de los suyos
+    # (solo aparece si el encargado pidió explícitamente ver "otros días").
+    outside_pattern: bool | None = None
+
+
 class EligibleDoctorsResponse(BaseModel):
     doctors: list[EligibleDoctorRead]
+    unavailable: list[UnavailableDoctorRead] = []
 
 
 # --- Slot Evaluation ---
@@ -107,6 +119,9 @@ class EvaluationRequest(BaseModel):
     doctor_id: str
     service_date: date
     service_area_id: str
+    # Cuando el modal se abre sobre un turno ocupado para reemplazarlo, se pasa
+    # el id del ocupante para que la evaluación no choque con "slot_occupied".
+    replacing_assignment_id: str | None = None
 
 
 class EvaluationResponse(BaseModel):

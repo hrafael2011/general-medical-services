@@ -263,6 +263,15 @@ def test_approve_week_endpoint(client, session):
         end_date=date(2026, 5, 10),
         status="draft",
     )
+    # A week can only be approved with at least one doctor assigned to it
+    _create_doctor(session, doctor_id="doc-1", name="Dr. Uno")
+    _create_assignment(
+        session,
+        version_id=ver.id,
+        doctor_id="doc-1",
+        service_date=date(2026, 5, 5),
+        area_id="area-1",
+    )
     session.flush()
 
     response = client.post(

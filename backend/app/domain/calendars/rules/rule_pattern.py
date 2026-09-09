@@ -19,9 +19,9 @@ is unavoidable.
 """
 from backend.app.domain.calendars.rules.interface import Rule, RuleContext, RuleResult
 
-PATTERN_PENALTY_SAME_WEEK = 30.0
-PATTERN_PENALTY_CONSECUTIVE_STRONG = 40.0
-PATTERN_PENALTY_TIER_MISMATCH = 20.0
+PATTERN_PENALTY_SAME_WEEK = 200.0
+PATTERN_PENALTY_CONSECUTIVE_STRONG = 300.0
+PATTERN_PENALTY_TIER_MISMATCH = 150.0
 PATTERN_PENALTY_PER_PRIOR_VIOLATION = 5.0
 
 
@@ -45,7 +45,7 @@ class PatternRule(Rule):
         ]
         if existing_this_week:
             penalty += PATTERN_PENALTY_SAME_WEEK
-            warnings.append("Pattern: más de 1 servicio en la misma semana")
+            warnings.append("Más de un servicio en la misma semana.")
 
         # --- Constraint 2: no consecutive strong weeks (T2-T4) ---
         is_strong = ctx.service_area_id in ctx.strong_area_ids
@@ -53,12 +53,12 @@ class PatternRule(Rule):
             prev_week = ctx.weekly_assignments.get(ctx.slot_week_number - 1, [])
             if any(a["service_area_id"] in ctx.strong_area_ids for a in prev_week):
                 penalty += PATTERN_PENALTY_CONSECUTIVE_STRONG
-                warnings.append("Pattern: servicios fuertes en semanas consecutivas")
+                warnings.append("Servicios fuertes en semanas consecutivas (muy seguidos).")
 
             next_week = ctx.weekly_assignments.get(ctx.slot_week_number + 1, [])
             if any(a["service_area_id"] in ctx.strong_area_ids for a in next_week):
                 penalty += PATTERN_PENALTY_CONSECUTIVE_STRONG
-                warnings.append("Pattern: servicios fuertes en semanas consecutivas")
+                warnings.append("Servicios fuertes en semanas consecutivas (muy seguidos).")
 
         # --- Constraint 3: weekly cadence by tier ---
         if tier == 2:
@@ -75,7 +75,8 @@ class PatternRule(Rule):
             penalty += ctx.pattern_violations_count * PATTERN_PENALTY_PER_PRIOR_VIOLATION
             if ctx.pattern_violations_count > 0:
                 warnings.append(
-                    f"Pattern: {ctx.pattern_violations_count} violación(es) previa(s) en el mes"
+                    f"Ya acumula {ctx.pattern_violations_count} servicio(s) "
+                    "fuera de su patrón este mes."
                 )
 
         return RuleResult(

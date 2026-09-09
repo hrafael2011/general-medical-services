@@ -166,7 +166,7 @@ def _create_doctor(
         monthly_service_target=3,
         monthly_service_max=6,
         monthly_service_limit_mode="warn_only",
-        availability_mode="monthly",
+        availability_mode="fixed",
         created_by="actor-001",
         created_at=now,
         updated_at=now,

@@ -32,6 +32,7 @@ from backend.app.schemas.calendars import (
     EvaluationResponse,
     HardBlockItem,
     ReplaceAssignmentRequest,
+    UnavailableDoctorRead,
     UnresolvedGapRead,
     WarningItem,
     WeekRead,
@@ -65,6 +66,8 @@ _ERROR_STATUS: dict[str, int] = {
     "week_empty": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "week_locked": status.HTTP_409_CONFLICT,
     "calendar_not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "manual_only": status.HTTP_403_FORBIDDEN,
+    "justification_required": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 
@@ -547,6 +550,7 @@ def get_eligible_doctors(
     _user: Annotated[UserModel, Depends(require_ready_user)],
     service: Annotated[AssignmentService, Depends(get_assignment_service)],
     session: Annotated[Session, Depends(get_db_session)],
+    strict: bool = True,
 ) -> EligibleDoctorsResponse:
     repo = CalendarRepository(session)
     version = repo.get_latest_version(calendar_id)
@@ -559,10 +563,11 @@ def get_eligible_doctors(
             },
         )
     try:
-        doctors = service.get_eligible_doctors_for_slot(
+        result = service.get_eligible_doctors_for_slot(
             version_id=version.id,
             target_date=date,
             service_area_id=area_id,
+            strict=strict,
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
@@ -575,8 +580,11 @@ def get_eligible_doctors(
                 rank_name=getattr(item["doctor"], "rank_name", None),
                 altera_orden=item["altera_orden"],
             )
-            for item in doctors
-        ]
+            for item in result["eligible"]
+        ],
+        unavailable=[
+            UnavailableDoctorRead(**item) for item in result["unavailable"]
+        ],
     )
 
 
@@ -607,6 +615,7 @@ def evaluate_slot(
             doctor_id=payload.doctor_id,
             target_date=payload.service_date,
             service_area_id=payload.service_area_id,
+            exclude_assignment_id=payload.replacing_assignment_id,
         )
     except CalendarServiceError as exc:
         raise _http_exc(exc) from exc
@@ -627,6 +636,11 @@ def generate_calendar(
     service: Annotated[GenerationService, Depends(get_generation_service)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> GenerationResponse:
+    if settings.feature_manual_only:
+        raise _http_exc(CalendarServiceError(
+            "manual_only",
+            "La generación automática está deshabilitada en modo manual.",
+        ))
     try:
         summary = service.generate(
             actor_id=current_user.id,
@@ -672,6 +686,11 @@ def fill_gaps(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict:
     """Fill only unresolved gaps without touching existing assignments."""
+    if settings.feature_manual_only:
+        raise _http_exc(CalendarServiceError(
+            "manual_only",
+            "La generación automática está deshabilitada en modo manual.",
+        ))
     try:
         result = service.fill_gaps(
             actor_id=current_user.id,

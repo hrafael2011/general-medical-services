@@ -60,6 +60,21 @@ class AvailabilityRepository:
             self.session.delete(record)
             self.session.flush()
 
+    def delete_by_types_for_doctor(self, doctor_id: str, types: list[str]) -> int:
+        """Delete availability records for a doctor matching the given types.
+        Returns the count of deleted records.
+        """
+        stmt = select(DoctorAvailabilityModel).where(
+            DoctorAvailabilityModel.doctor_id == doctor_id,
+            DoctorAvailabilityModel.availability_type.in_(types),
+        )
+        records = list(self.session.scalars(stmt))
+        for record in records:
+            self.session.delete(record)
+        if records:
+            self.session.flush()
+        return len(records)
+
     def delete_all_for_doctor(self, doctor_id: str) -> None:
         stmt = select(DoctorAvailabilityModel).where(
             DoctorAvailabilityModel.doctor_id == doctor_id

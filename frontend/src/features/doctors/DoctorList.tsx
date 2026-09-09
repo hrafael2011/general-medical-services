@@ -1,4 +1,5 @@
-import { Ban, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Trash2, Users, X, XCircle } from "lucide-react";
+import { Ban, CalendarDays, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Trash2, Users, X, XCircle } from "lucide-react";
+import { QuickAvailabilityModal } from "./QuickAvailabilityModal";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -25,6 +26,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   const [detail, setDetail] = useState("");
   const [actionError, setActionError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [avModalDoctor, setAvModalDoctor] = useState<{ id: string; name: string } | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["doctors", statusFilter, monthlyFilter],
@@ -201,6 +203,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                 <th>Departamento</th>
                 <th>Estado servicio</th>
                 <th>Áreas</th>
+                <th>Disponibilidad</th>
                 <th>Misiones</th>
               </tr>
             </thead>
@@ -248,6 +251,17 @@ export function DoctorList({ onAdd, onEdit }: Props) {
                         </div>
                       )}
                   </td>
+                  <td>
+                    {doc.availability_mode === "monthly" && doc.service_active ? (
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: "0.8rem", padding: "2px 8px", whiteSpace: "nowrap" }}
+                        onClick={(e) => { e.stopPropagation(); setAvModalDoctor({ id: doc.id, name: doc.name }); }}
+                      >
+                        <CalendarDays size={14} /> Asignar días
+                      </button>
+                    ) : "—"}
+                  </td>
                   <td>{doc.service_active && doc.participa_misiones ? "Sí" : "No"}</td>
                 </tr>
               ))}
@@ -287,6 +301,19 @@ export function DoctorList({ onAdd, onEdit }: Props) {
           onDetailChange={setDetail}
           onDeactivate={submitDeactivation}
           onReactivate={() => reactivate.mutate(selectedDoctor.id)}
+        />
+      )}
+
+      {avModalDoctor && (
+        <QuickAvailabilityModal
+          doctorId={avModalDoctor.id}
+          doctorName={avModalDoctor.name}
+          onClose={() => setAvModalDoctor(null)}
+          onSaved={() => {
+            setAvModalDoctor(null);
+            qc.invalidateQueries({ queryKey: ["doctors"] });
+            qc.invalidateQueries({ queryKey: ["doctor-availability"] });
+          }}
         />
       )}
 
@@ -481,7 +508,18 @@ function normalizeAvailability(availability: AvailabilityRead[], availabilityMod
 
   // Monthly mode: avisa sus días cada mes
   if (availabilityMode === "monthly") {
-    return ["Mensual: avisa sus días cada mes"];
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const monthly = availability
+      .filter(item => item.availability_type === "monthly_variable" && (item.available_dates?.length ?? 0) > 0)
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.month ?? 0) - (a.month ?? 0));
+    if (monthly.length === 0) return ["Mensual: avisa sus días cada mes"];
+    return monthly.map(item => {
+      const month = item.month ?? 0;
+      const period = item.year && month >= 1 && month <= 12
+        ? `${monthNames[month - 1]} ${item.year}`
+        : "";
+      return `Mensual${period ? ` (${period})` : ""}: días ${(item.available_dates ?? []).join(", ")}`;
+    });
   }
 
   return availability.map(item => {

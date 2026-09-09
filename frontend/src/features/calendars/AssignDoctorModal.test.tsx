@@ -12,6 +12,7 @@ vi.mock("../../api/calendars", () => ({
   },
   // Re-export types so the import works
   EligibleDoctorRead: {},
+  UnavailableDoctorRead: {},
   WarningItem: {},
 }));
 
@@ -35,7 +36,7 @@ const BASE_PROPS = {
 describe("AssignDoctorModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: ELIGIBLE_DOCTORS });
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: ELIGIBLE_DOCTORS, unavailable: [] });
   });
 
   it("muestra la fecha y área en el título", async () => {
@@ -61,11 +62,11 @@ describe("AssignDoctorModal", () => {
     expect(screen.getByText(/cargando doctores disponibles/i)).toBeInTheDocument();
   });
 
-  it("muestra mensaje cuando no hay doctores disponibles", async () => {
-    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: [] });
+  it("muestra mensaje cuando no hay médicos para asignar", async () => {
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({ doctors: [], unavailable: [] });
     render(<AssignDoctorModal {...BASE_PROPS} />);
     await waitFor(() => {
-      expect(screen.getByText(/no hay doctores disponibles/i)).toBeInTheDocument();
+      expect(screen.getByText(/no hay médicos para asignar/i)).toBeInTheDocument();
     });
   });
 
@@ -91,7 +92,7 @@ describe("AssignDoctorModal", () => {
     });
     await user.click(screen.getByText("Dr. García Martínez"));
     await waitFor(() => {
-      expect(onConfirm).toHaveBeenCalledWith("d1", []);
+      expect(onConfirm).toHaveBeenCalledWith("d1", [], "");
     });
   });
 
@@ -131,16 +132,63 @@ describe("AssignDoctorModal", () => {
       expect(screen.getByText(/Advertencias de reglas/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Excede carga semanal/i)).toBeInTheDocument();
-    // Button should be disabled until all warnings are checked
+    // Button disabled until all warnings are checked
     expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeDisabled();
 
-    // Check the warning checkbox
+    // Check the warning checkbox — button enables (justificación opcional)
     await user.click(screen.getByText(/Excede carga semanal/i));
-    expect(screen.getByRole("button", { name: /asignar con advertencias/i })).toBeEnabled();
+    const confirmBtn = screen.getByRole("button", { name: /asignar con advertencias/i });
+    expect(confirmBtn).toBeEnabled();
 
-    // Click confirm
-    await user.click(screen.getByRole("button", { name: /asignar con advertencias/i }));
-    expect(onConfirm).toHaveBeenCalledWith("d1", ["weekly_overload"]);
+    // Confirmar sin justificación → onConfirm con justificación vacía
+    await user.click(confirmBtn);
+    expect(onConfirm).toHaveBeenCalledWith("d1", ["weekly_overload"], "");
+  });
+
+  it("lista con motivo clicable: al elegirlo se evalúa y salen advertencias", async () => {
+    const user = userEvent.setup();
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({
+      doctors: [],
+      unavailable: [
+        { doctor_id: "d9", full_name: "Dr. Oculto", code: "no_availability", description: "No tiene disponibilidad para esta fecha.", is_hard: false },
+      ],
+    });
+    vi.mocked(calendarsApi.evaluate).mockResolvedValue({
+      hard_blocks: [],
+      warnings: [{ code: "no_availability", description: "No tiene disponibilidad para esta fecha." }],
+    });
+
+    render(<AssignDoctorModal {...BASE_PROPS} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Dr\. Oculto/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/No tiene disponibilidad para esta fecha/)).toBeInTheDocument();
+    // La fila entera es clicable (ya no hay botón "Evaluar de todas formas")
+    expect(screen.queryByRole("button", { name: /evaluar de todas formas/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Dr\. Oculto/i }));
+    await waitFor(() => {
+      expect(calendarsApi.evaluate).toHaveBeenCalledWith("cal-1", {
+        doctor_id: "d9", service_date: "2026-05-03", service_area_id: "area-1",
+        replacing_assignment_id: null,
+      });
+    });
+    expect(await screen.findByText(/Advertencias de reglas/i)).toBeInTheDocument();
+  });
+
+  it("muestra médicos con bloqueo duro: visibles pero sin clic", async () => {
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({
+      doctors: [],
+      unavailable: [
+        { doctor_id: "d8", full_name: "Dr. Inactivo", code: "doctor_inactive", description: "El médico no está activo o no tiene servicio activo.", is_hard: true },
+      ],
+    });
+
+    render(<AssignDoctorModal {...BASE_PROPS} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Dr\. Inactivo/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/no está activo/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Dr\. Inactivo/i })).not.toBeInTheDocument();
   });
 
   it("llama onClose al hacer clic en Cancelar", async () => {
@@ -163,5 +211,69 @@ describe("AssignDoctorModal", () => {
     });
     await user.click(screen.getByRole("button", { name: /quitar asignación/i }));
     expect(onRemove).toHaveBeenCalled();
+  });
+
+  it("el interruptor de otros días recarga con strict=false y muestra fuera-de-día", async () => {
+    const user = userEvent.setup();
+    const { calendarsApi } = await import("../../api/calendars");
+    const eligibleDoctors = vi.mocked(calendarsApi.eligibleDoctors);
+    eligibleDoctors.mockImplementation(async (_cal, _date, _area, strict = true) =>
+      strict
+        ? { doctors: ELIGIBLE_DOCTORS, unavailable: [] }
+        : {
+            doctors: [],
+            unavailable: [
+              { doctor_id: "d9", full_name: "Dr. Fuera Día", code: "no_availability", description: "No tiene disponibilidad para esta fecha.", is_hard: false, outside_pattern: true },
+            ],
+          }
+    );
+
+    render(<AssignDoctorModal {...BASE_PROPS} />);
+    await waitFor(() => {
+      expect(screen.getByText("Dr. García Martínez")).toBeInTheDocument();
+    });
+    // Por defecto consulta en modo estricto (solo los del día)
+    expect(eligibleDoctors).toHaveBeenLastCalledWith("cal-1", "2026-05-03", "area-1", true);
+
+    // Activar el interruptor (switch) → recarga con strict=false y lista al fuera-de-día
+    await user.click(screen.getByRole("switch", { name: /no son de este día/i }));
+    await waitFor(() => {
+      expect(eligibleDoctors).toHaveBeenLastCalledWith("cal-1", "2026-05-03", "area-1", false);
+    });
+    expect(await screen.findByText("Dr. Fuera Día")).toBeInTheDocument();
+    expect(screen.getByText(/No es de este día/i)).toBeInTheDocument();
+  });
+
+  it("el buscador encuentra médicos con motivo y los disponibles van primero", async () => {
+    const user = userEvent.setup();
+    vi.mocked(calendarsApi.eligibleDoctors).mockResolvedValue({
+      doctors: ELIGIBLE_DOCTORS,
+      unavailable: [
+        { doctor_id: "d9", full_name: "Dr. Oculto", code: "no_availability", description: "Sin disponibilidad para esta fecha.", is_hard: false },
+        { doctor_id: "d8", full_name: "Dr. Inactivo", code: "doctor_inactive", description: "Inactivo.", is_hard: true },
+      ],
+    });
+
+    render(<AssignDoctorModal {...BASE_PROPS} />);
+    await waitFor(() => {
+      expect(screen.getByText("Dr. García Martínez")).toBeInTheDocument();
+    });
+    await screen.findByText(/Dr\. Oculto/);
+
+    // Orden: los disponibles del día primero, los de otros días después
+    const buttons = screen.getAllByRole("button").map(b => b.textContent ?? "");
+    const garcia = buttons.findIndex(t => t.includes("García"));
+    const oculto = buttons.findIndex(t => t.includes("Oculto"));
+    expect(garcia).toBeGreaterThanOrEqual(0);
+    expect(oculto).toBeGreaterThan(garcia);
+
+    // El buscador filtra TODA la lista (no solo los del día)
+    await user.type(screen.getByPlaceholderText(/buscar/i), "oculto");
+    expect(screen.queryByText("Dr. García Martínez")).not.toBeInTheDocument();
+    expect(screen.getByText(/Dr\. Oculto/)).toBeInTheDocument();
+    // El bloqueado sigue visible (atenuado, sin clic) al coincidir con "inacti"
+    await user.clear(screen.getByPlaceholderText(/buscar/i));
+    await user.type(screen.getByPlaceholderText(/buscar/i), "inactivo");
+    expect(screen.getByText(/Dr\. Inactivo/)).toBeInTheDocument();
   });
 });

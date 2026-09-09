@@ -3,7 +3,10 @@ import pytest
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.service import CalendarService
-from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel
+from backend.app.infrastructure.db.models.calendars import (
+    CalendarAssignmentModel,
+    CalendarVersionModel,
+)
 from backend.app.infrastructure.repositories.audit import AuditRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 
@@ -130,9 +133,18 @@ def test_approve_version_generates_mission_ranking(db_session) -> None:
         mission_ranking_service=ranking_service,
     )
 
-    calendar = service.create_calendar(
-        actor_id="actor-001", month=5, year=2026, notes=None
-    )
+    calendar = service.create_calendar(actor_id="actor-001", month=5, year=2026, notes=None)
+
+    # create_calendar emits an initial (empty) ranking for the new version
+    assert len(ranking_service.calls) == 1
+    initial_call = ranking_service.calls[0]
+    initial_version = CalendarRepository(db_session).get_latest_version(calendar.id)
+    assert initial_call == {
+        "actor_id": "actor-001",
+        "year": 2026,
+        "month": 5,
+        "calendar_version_id": initial_version.id,
+    }
 
     version = service.approve_version(
         actor_id="actor-001",
@@ -141,13 +153,15 @@ def test_approve_version_generates_mission_ranking(db_session) -> None:
         notes=None,
     )
 
+    # approve_version emits the definitive ranking for the approved version
     assert ranking_service.calls == [
+        initial_call,
         {
             "actor_id": "actor-001",
             "year": 2026,
             "month": 5,
             "calendar_version_id": version.id,
-        }
+        },
     ]
 
 
@@ -186,7 +200,16 @@ def test_approve_version_is_only_approval_boundary(db_session) -> None:
 
     assert calendar.status == "draft"
     assert version.status == "draft"
-    assert ranking_service.calls == []
+    # create_calendar emits the initial ranking; adding assignments must not
+    # emit another one — approve_version is the only ranking boundary.
+    assert ranking_service.calls == [
+        {
+            "actor_id": "actor-001",
+            "year": 2026,
+            "month": 5,
+            "calendar_version_id": version.id,
+        }
+    ]
     assert triggers.calls == []
     assert audit_repo.count(action_type="calendar_approved") == 0
 
@@ -205,7 +228,13 @@ def test_approve_version_is_only_approval_boundary(db_session) -> None:
             "year": 2026,
             "month": 5,
             "calendar_version_id": version.id,
-        }
+        },
+        {
+            "actor_id": "actor-001",
+            "year": 2026,
+            "month": 5,
+            "calendar_version_id": version.id,
+        },
     ]
     assert len(triggers.calls) == 1
     assert triggers.calls[0]["assignments"] == [assignment]
@@ -337,8 +366,8 @@ def test_new_version_without_approval_raises(db_session) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_soft_delete_cascade_to_versions(db_session) -> None:
-    """Soft-deleting a calendar sets deleted_at on the calendar and all its versions."""
+def test_delete_calendar_cascades_to_versions(db_session) -> None:
+    """Deleting a calendar permanently removes it and all its versions."""
     from datetime import UTC, datetime
     from uuid import uuid4
 
@@ -347,9 +376,7 @@ def test_soft_delete_cascade_to_versions(db_session) -> None:
     service = _make_service(db_session)
     repo = CalendarRepository(db_session)
 
-    calendar = service.create_calendar(
-        actor_id="actor-001", month=5, year=2026, notes=None,
-    )
+    calendar = service.create_calendar(actor_id="actor-001", month=5, year=2026, notes=None)
 
     v2 = CalendarVersionModel(
         id=str(uuid4()),
@@ -363,32 +390,27 @@ def test_soft_delete_cascade_to_versions(db_session) -> None:
 
     service.soft_delete_calendar(actor_id="actor-001", calendar_id=calendar.id)
 
-    deleted_cal = repo.get_calendar_by_id_including_deleted(calendar.id)
-    assert deleted_cal.deleted_at is not None
+    # Permanent deletion: the calendar row is gone from the DB
+    assert repo.get_calendar_by_id_including_deleted(calendar.id) is None
 
-    # list_versions filters out deleted versions
-    assert len(repo.list_versions(calendar.id)) == 0
-
-    # But versions still exist in DB with deleted_at set
-    versions_raw = list(db_session.scalars(
-        select(CalendarVersionModel).where(CalendarVersionModel.calendar_id == calendar.id)
-    ))
-    assert len(versions_raw) == 2
-    for v in versions_raw:
-        assert v.deleted_at is not None
+    # All versions were deleted in the cascade (not just hidden)
+    versions_raw = list(
+        db_session.scalars(
+            select(CalendarVersionModel).where(CalendarVersionModel.calendar_id == calendar.id)
+        )
+    )
+    assert versions_raw == []
 
 
-def test_restore_calendar(db_session) -> None:
-    """Restoring a soft-deleted calendar clears deleted_at on calendar and all versions."""
+def test_restore_deleted_calendar_raises(db_session) -> None:
+    """Deleted calendars are permanently removed, so restore raises calendar_not_found."""
     from datetime import UTC, datetime
     from uuid import uuid4
 
     service = _make_service(db_session)
     repo = CalendarRepository(db_session)
 
-    calendar = service.create_calendar(
-        actor_id="actor-001", month=5, year=2026, notes=None,
-    )
+    calendar = service.create_calendar(actor_id="actor-001", month=5, year=2026, notes=None)
     v2 = CalendarVersionModel(
         id=str(uuid4()),
         calendar_id=calendar.id,
@@ -400,25 +422,18 @@ def test_restore_calendar(db_session) -> None:
     repo.add_version(v2)
 
     service.soft_delete_calendar(actor_id="actor-001", calendar_id=calendar.id)
-    service.restore_calendar(actor_id="actor-001", calendar_id=calendar.id)
 
-    restored = repo.get_calendar_by_id(calendar.id)
-    assert restored is not None
-    assert restored.deleted_at is None
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.restore_calendar(actor_id="actor-001", calendar_id=calendar.id)
 
-    versions = repo.list_versions(calendar.id)
-    assert len(versions) == 2
-    for v in versions:
-        assert v.deleted_at is None
+    assert exc_info.value.code == "calendar_not_found"
 
 
 def test_restore_non_deleted_calendar_raises(db_session) -> None:
     """Restoring a calendar that is not deleted raises CalendarServiceError."""
     service = _make_service(db_session)
 
-    calendar = service.create_calendar(
-        actor_id="actor-001", month=5, year=2026, notes=None,
-    )
+    calendar = service.create_calendar(actor_id="actor-001", month=5, year=2026, notes=None)
 
     with pytest.raises(CalendarServiceError) as exc_info:
         service.restore_calendar(actor_id="actor-001", calendar_id=calendar.id)
@@ -427,7 +442,7 @@ def test_restore_non_deleted_calendar_raises(db_session) -> None:
 
 
 def test_list_deleted_calendars(db_session) -> None:
-    """list_deleted_calendars returns only soft-deleted calendars."""
+    """Deletion is permanent, so list_deleted_calendars stays empty."""
     service = _make_service(db_session)
 
     c1 = service.create_calendar(actor_id="actor-001", month=5, year=2026, notes=None)
@@ -438,33 +453,32 @@ def test_list_deleted_calendars(db_session) -> None:
     service.soft_delete_calendar(actor_id="actor-001", calendar_id=c2.id)
 
     deleted = service.list_deleted_calendars()
-    assert len(deleted) == 2
-    deleted_ids = {c.id for c in deleted}
-    assert c1.id in deleted_ids
-    assert c2.id in deleted_ids
-    assert c3.id not in deleted_ids
+    assert deleted == []
+
+    remaining = service.list_calendars()
+    remaining_ids = {c.id for c in remaining}
+    assert c1.id not in remaining_ids
+    assert c2.id not in remaining_ids
+    assert c3.id in remaining_ids
 
 
 def test_get_calendar_including_deleted(db_session) -> None:
-    """get_calendar_by_id returns None for deleted; _including_deleted returns the object."""
+    """After permanent deletion no query (including _including_deleted) returns the row."""
     service = _make_service(db_session)
     repo = CalendarRepository(db_session)
 
-    calendar = service.create_calendar(
-        actor_id="actor-001", month=5, year=2026, notes=None,
-    )
+    calendar = service.create_calendar(actor_id="actor-001", month=5, year=2026, notes=None)
+
+    assert repo.get_calendar_by_id_including_deleted(calendar.id) is not None
+
     service.soft_delete_calendar(actor_id="actor-001", calendar_id=calendar.id)
 
     assert repo.get_calendar_by_id(calendar.id) is None
-
-    found = repo.get_calendar_by_id_including_deleted(calendar.id)
-    assert found is not None
-    assert found.id == calendar.id
-    assert found.deleted_at is not None
+    assert repo.get_calendar_by_id_including_deleted(calendar.id) is None
 
 
-def test_soft_delete_does_not_affect_other_calendars(db_session) -> None:
-    """Soft-deleting one calendar does not touch other calendars or their versions."""
+def test_delete_calendar_does_not_affect_other_calendars(db_session) -> None:
+    """Deleting one calendar does not touch other calendars or their versions."""
     from datetime import UTC, datetime
     from uuid import uuid4
 
@@ -496,17 +510,15 @@ def test_soft_delete_does_not_affect_other_calendars(db_session) -> None:
         assert v.deleted_at is None
 
 
-def test_version_queries_exclude_deleted(db_session) -> None:
-    """get_version_by_id, list_versions, get_latest_version exclude soft-deleted versions."""
+def test_version_queries_after_permanent_delete(db_session) -> None:
+    """get_version_by_id, list_versions, get_latest_version return nothing after deletion."""
     from datetime import UTC, datetime
     from uuid import uuid4
 
     service = _make_service(db_session)
     repo = CalendarRepository(db_session)
 
-    calendar = service.create_calendar(
-        actor_id="actor-001", month=5, year=2026, notes=None,
-    )
+    calendar = service.create_calendar(actor_id="actor-001", month=5, year=2026, notes=None)
     v2 = CalendarVersionModel(
         id=str(uuid4()),
         calendar_id=calendar.id,

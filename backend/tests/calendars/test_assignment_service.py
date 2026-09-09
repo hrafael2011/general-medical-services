@@ -11,7 +11,10 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarVersionModel,
     CalendarWeekModel,
 )
-from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
+from backend.app.infrastructure.db.models.availability import (
+    DoctorAvailabilityModel,
+    DoctorRestrictionModel,
+)
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -22,7 +25,7 @@ from backend.app.infrastructure.repositories.doctors import DoctorRepository
 # ---------------------------------------------------------------------------
 
 _AREA_ID = "area-emergencia"
-_SPACING_WARNING = "spacing < 14 días desde último turno fuerte"
+_SPACING_WARNING = "Menos de 14 días desde su último turno fuerte."
 
 
 def _make_assignment_service(db_session) -> AssignmentService:
@@ -33,12 +36,19 @@ def _make_assignment_service(db_session) -> AssignmentService:
     )
 
 
-def _create_doctor(db_session, *, active: bool = True, service_active: bool = True):
+def _create_doctor(
+    db_session,
+    *,
+    active: bool = True,
+    service_active: bool = True,
+    allowed_area_ids: list[str] | None = None,
+    name: str = "Dr. Test",
+):
     """Create a doctor via DoctorService and optionally add allowed area."""
     doctor_svc = DoctorService(DoctorRepository(db_session))
     doctor = doctor_svc.create_doctor(
         actor_id="actor-001",
-        name="Dr. Test",
+        name=name,
         sex="male",
         rank_id=None,
         department_id=None,
@@ -50,7 +60,7 @@ def _create_doctor(db_session, *, active: bool = True, service_active: bool = Tr
         monthly_service_limit_mode="warn_only",
         # monthly mode with no submitted records passes AvailabilitySpec
         availability_mode="monthly",
-        allowed_area_ids=[_AREA_ID],
+        allowed_area_ids=allowed_area_ids or [_AREA_ID],
     )
     if not active:
         doctor.active = False
@@ -383,7 +393,7 @@ def test_soft_warning_requires_justification_and_is_stored(db_session) -> None:
     )
 
     assert assignment.override_justification == "Asignación manual autorizada por necesidad operativa."
-    assert assignment.rationale["manual_override_warnings"][0]["code"] == "not_available"
+    assert assignment.rationale["manual_override_warnings"][0]["code"] == "no_availability"
 
 
 def test_assign_doctor_respects_recurring_availability(db_session) -> None:
@@ -471,7 +481,7 @@ def test_assign_doctor_warns_when_warn_only_monthly_max_is_reached(db_session) -
             actor_id="actor-001",
             version_id=version.id,
             doctor_id=doctor.id,
-            date=datetime.date(2026, 5, 16),
+            date=datetime.date(2026, 5, 22),
             service_area_id=_AREA_ID,
         )
 
@@ -481,14 +491,16 @@ def test_assign_doctor_warns_when_warn_only_monthly_max_is_reached(db_session) -
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor.id,
-        date=datetime.date(2026, 5, 16),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
         force_warnings=["monthly_max_exceeded"],
+        override_justification="Necesidad operativa: único disponible.",
     )
     assert assignment.rationale["overridden_warnings"] == ["monthly_max_exceeded"]
 
 
-def test_assign_doctor_blocks_when_hard_limit_monthly_max_is_reached(db_session) -> None:
+def test_assign_doctor_warns_when_hard_limit_monthly_max_is_reached(db_session) -> None:
+    """hard_limit ya no bloquea: el máximo mensual es warning confirmable (spec 02)."""
     _calendar, version = _create_calendar_and_version(db_session)
     doctor = _create_doctor(db_session)
     doctor.monthly_service_max = 1
@@ -513,7 +525,18 @@ def test_assign_doctor_blocks_when_hard_limit_monthly_max_is_reached(db_session)
             service_area_id=_AREA_ID,
         )
 
-    assert exc_info.value.code == "hard_block"
+    assert exc_info.value.code == "soft_warning"
+
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 16),
+        service_area_id=_AREA_ID,
+        force_warnings=["monthly_max_exceeded"],
+        override_justification="Necesidad operativa.",
+    )
+    assert assignment.rationale["overridden_warnings"] == ["monthly_max_exceeded"]
 
 
 def test_assign_doctor_counts_monthly_max_by_operational_month(db_session) -> None:
@@ -541,7 +564,7 @@ def test_assign_doctor_counts_monthly_max_by_operational_month(db_session) -> No
             service_area_id=_AREA_ID,
         )
 
-    assert exc_info.value.code == "hard_block"
+    assert exc_info.value.code == "soft_warning"
 
 
 def test_evaluate_slot_reports_warn_only_monthly_max(db_session) -> None:
@@ -563,12 +586,12 @@ def test_evaluate_slot_reports_warn_only_monthly_max(db_session) -> None:
     result = service.evaluate_slot(
         version_id=version.id,
         doctor_id=doctor.id,
-        target_date=datetime.date(2026, 5, 2),
+        target_date=datetime.date(2026, 5, 4),
         service_area_id=_AREA_ID,
     )
 
     assert result["hard_blocks"] == []
-    assert result["warnings"][0]["code"] == "monthly_max_exceeded"
+    assert any(w["code"] == "monthly_max_exceeded" for w in result["warnings"])
 
 
 def test_evaluate_slot_maps_service_area_uuid_for_spacing_warnings(db_session) -> None:
@@ -639,7 +662,7 @@ def test_assign_doctor_requires_spacing_warning_confirmation_when_called_directl
             actor_id="actor-001",
             version_id=version.id,
             doctor_id=doctor.id,
-            date=datetime.date(2026, 5, 20),
+            date=datetime.date(2026, 5, 22),
             service_area_id=_AREA_ID,
         )
 
@@ -650,9 +673,10 @@ def test_assign_doctor_requires_spacing_warning_confirmation_when_called_directl
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor.id,
-        date=datetime.date(2026, 5, 20),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
         force_warnings=[_SPACING_WARNING],
+        override_justification="Necesidad operativa: reemplazo de guardia.",
     )
 
     assert assignment.rationale["overridden_warnings"] == [_SPACING_WARNING]
@@ -702,7 +726,7 @@ def test_replace_assignment_requires_spacing_warning_confirmation_when_called_di
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor_a.id,
-        date=datetime.date(2026, 5, 20),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
     )
 
@@ -721,6 +745,7 @@ def test_replace_assignment_requires_spacing_warning_confirmation_when_called_di
         assignment_id=assignment.id,
         new_doctor_id=doctor_b.id,
         force_warnings=[_SPACING_WARNING],
+        override_justification="Necesidad operativa: reemplazo de guardia.",
     )
 
     assert updated.doctor_id == doctor_b.id
@@ -851,15 +876,16 @@ def test_evaluate_slot_reports_multiple_warnings(db_session) -> None:
         date=datetime.date(2026, 5, 15),
         service_area_id=_AREA_ID,
     )
-    # Second assignment also triggers spacing warning (May 15→16 is <14 days)
+    # Second assignment also triggers spacing warning (May 15→22 is <14 days)
     # AND reaches monthly max — force both
     service.assign_doctor(
         actor_id="actor-001",
         version_id=version.id,
         doctor_id=doctor.id,
-        date=datetime.date(2026, 5, 16),
+        date=datetime.date(2026, 5, 22),
         service_area_id=_AREA_ID,
         force_warnings=["monthly_max_exceeded", _SPACING_WARNING],
+        override_justification="Necesidad operativa.",
     )
 
     # Now evaluate for May 20 — should have both spacing (<14 days from strong)
@@ -876,3 +902,400 @@ def test_evaluate_slot_reports_multiple_warnings(db_session) -> None:
         f"Expected >=2 warnings (spacing + monthly_max), "
         f"got {len(warning_codes)}: {warning_codes}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Taxonomía spec 02 (Fase 2): hard críticos vs warnings confirmables
+# ---------------------------------------------------------------------------
+
+
+def test_evaluate_slot_returns_no_availability_as_warning(db_session) -> None:
+    """Un doctor con disponibilidad fija que no cubre la fecha es warning, no hard block."""
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor_svc = DoctorService(DoctorRepository(db_session))
+    doctor = doctor_svc.create_doctor(
+        actor_id="actor-001",
+        name="Dr. Fixed Monday",
+        sex="male",
+        rank_id=None,
+        department_id=None,
+        notes=None,
+        participa_misiones=True,
+        whatsapp_phone="+18095551234",
+        monthly_service_target=3,
+        monthly_service_max=999,
+        monthly_service_limit_mode="warn_only",
+        availability_mode="fixed",
+        allowed_area_ids=[_AREA_ID],
+    )
+    now = datetime.datetime.now(datetime.UTC)
+    db_session.add(DoctorAvailabilityModel(
+        id=str(uuid4()),
+        doctor_id=doctor.id,
+        availability_type="weekly_fixed",
+        days_of_week=[0],  # solo lunes
+        available_dates=None,
+        weekday=None,
+        week_number=None,
+        year=None,
+        month=None,
+        submitted_at=None,
+        effective_from=None,
+        effective_to=None,
+        source="manual",
+        review_status="approved",
+        created_by="actor-001",
+        created_at=now,
+        updated_at=now,
+    ))
+    db_session.flush()
+    service = _make_assignment_service(db_session)
+
+    result = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=doctor.id,
+        target_date=datetime.date(2026, 5, 15),  # viernes
+        service_area_id=_AREA_ID,
+    )
+
+    assert result["hard_blocks"] == []
+    assert any(w["code"] == "no_availability" for w in result["warnings"])
+
+
+def test_evaluate_slot_returns_monthly_hard_limit_as_warning(db_session) -> None:
+    """monthly_service_limit_mode=hard_limit ya no produce hard block en evaluate_slot."""
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session)
+    doctor.monthly_service_max = 1
+    doctor.monthly_service_limit_mode = "hard_limit"
+    db_session.flush()
+    service = _make_assignment_service(db_session)
+
+    service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+    )
+
+    result = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=doctor.id,
+        target_date=datetime.date(2026, 5, 16),
+        service_area_id=_AREA_ID,
+    )
+
+    assert result["hard_blocks"] == []
+    monthly_warnings = [
+        w for w in result["warnings"] if w["code"] == "monthly_max_exceeded"
+    ]
+    assert len(monthly_warnings) == 1
+    assert "advertencia" in monthly_warnings[0]["description"]
+
+
+def test_evaluate_slot_returns_already_assigned_today_as_warning(db_session) -> None:
+    """Un doctor ya asignado en la fecha es warning para otra área el mismo día."""
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session, allowed_area_ids=[_AREA_ID, "area-pista"])
+    doctor.monthly_service_max = 999
+    db_session.flush()
+    service = _make_assignment_service(db_session)
+
+    service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+    )
+
+    result = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=doctor.id,
+        target_date=datetime.date(2026, 5, 15),
+        service_area_id="area-pista",
+    )
+
+    assert result["hard_blocks"] == []
+    assert any(w["code"] == "already_assigned_today" for w in result["warnings"])
+
+
+def test_assign_without_justification_when_forcing_warnings_succeeds(db_session) -> None:
+    """Forzar warnings sin justificación ahora es válido (decisión de producto)."""
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session)
+    doctor.monthly_service_max = 1
+    db_session.flush()
+    service = _make_assignment_service(db_session)
+
+    service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+    )
+
+    assigned = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 22),
+        service_area_id=_AREA_ID,
+        force_warnings=["monthly_max_exceeded"],
+    )
+
+    assert assigned is not None
+    assert assigned.doctor_id == doctor.id
+
+
+def test_assign_with_force_and_justification_persists_audit_event(db_session) -> None:
+    """Asignación forzada con justificación queda registrada en auditoría."""
+    from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
+
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session)
+    doctor.monthly_service_max = 1
+    db_session.flush()
+    audit = AuditService(AuditRepository(db_session))
+    service = AssignmentService(
+        CalendarRepository(db_session),
+        DoctorRepository(db_session),
+        AvailabilityRepository(db_session),
+        audit=audit,
+    )
+
+    service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+    )
+
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=datetime.date(2026, 5, 22),
+        service_area_id=_AREA_ID,
+        force_warnings=["monthly_max_exceeded"],
+        override_justification="Necesidad operativa: único disponible.",
+    )
+
+    assert assignment.override_justification == "Necesidad operativa: único disponible."
+    events = audit.repo.list()
+    added_events = [e for e in events if e.action_type == "assignment_added"]
+    assert len(added_events) == 2
+
+
+def test_get_eligible_doctors_includes_unavailable_with_reasons(db_session) -> None:
+    """Los médicos ocultos aparecen en unavailable con su razón (spec 02)."""
+    _calendar, version = _create_calendar_and_version(db_session)
+    # Doctor inactivo → hard (doctor_inactive)
+    _create_doctor(db_session, active=False, name="Dr. Inactivo")
+    # Doctor mensual sin disponibilidad reportada → warning no_availability
+    _create_doctor(db_session, name="Dr. Sin Reporte")
+    service = _make_assignment_service(db_session)
+
+    result = service.get_eligible_doctors_for_slot(
+        version_id=version.id,
+        target_date=datetime.date(2026, 5, 15),
+        service_area_id=_AREA_ID,
+    )
+
+    assert isinstance(result, dict)
+    assert "eligible" in result and "unavailable" in result
+    unavailable = result["unavailable"]
+    assert len(unavailable) == 2
+
+    inactive_items = [u for u in unavailable if u["code"] == "doctor_inactive"]
+    assert len(inactive_items) == 1
+    assert inactive_items[0]["is_hard"] is True
+    assert inactive_items[0]["full_name"] == "Dr. Inactivo"
+
+    no_avail_items = [u for u in unavailable if u["code"] == "no_availability"]
+    assert len(no_avail_items) == 1
+    assert no_avail_items[0]["is_hard"] is False
+
+
+def test_hard_blocks_still_block_doctor_inactive_area_and_hard_block(db_session) -> None:
+    """Los 3 críticos siguen bloqueando la asignación (spec 02)."""
+    _calendar, version = _create_calendar_and_version(db_session)
+
+    # 1. doctor_inactive
+    inactive = _create_doctor(db_session, service_active=False, name="Dr. Inactivo Srv")
+    service = _make_assignment_service(db_session)
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.assign_doctor(
+            actor_id="actor-001",
+            version_id=version.id,
+            doctor_id=inactive.id,
+            date=datetime.date(2026, 5, 15),
+            service_area_id=_AREA_ID,
+        )
+    assert exc_info.value.code == "hard_block"
+
+    # 2. area_not_allowed
+    doctor = _create_doctor(db_session)  # solo _AREA_ID
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.assign_doctor(
+            actor_id="actor-001",
+            version_id=version.id,
+            doctor_id=doctor.id,
+            date=datetime.date(2026, 5, 15),
+            service_area_id="area-pista",
+        )
+    assert exc_info.value.code == "hard_block"
+
+    # 3. has_hard_block
+    restricted = _create_doctor(db_session, name="Dr. Restringido")
+    now = datetime.datetime.now(datetime.UTC)
+    db_session.add(DoctorRestrictionModel(
+        id=str(uuid4()),
+        doctor_id=restricted.id,
+        reason_id=None,
+        restriction_type="manual",
+        severity="hard_block",
+        description="Licencia activa.",
+        starts_at=datetime.date(2026, 5, 1),
+        ends_at=datetime.date(2026, 5, 31),
+        source="manual",
+        review_status="approved",
+        created_by="actor-001",
+        created_at=now,
+        updated_at=now,
+    ))
+    db_session.flush()
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.assign_doctor(
+            actor_id="actor-001",
+            version_id=version.id,
+            doctor_id=restricted.id,
+            date=datetime.date(2026, 5, 15),
+            service_area_id=_AREA_ID,
+        )
+    assert exc_info.value.code == "hard_block"
+
+
+def test_eligible_strict_hides_fixed_doctor_outside_their_day(db_session) -> None:
+    """Un médico con día marcado (lunes) no aparece el viernes en modo estricto;
+    con strict=False aparece con outside_pattern=True para poder elegirlo."""
+    from backend.app.application.availability.service import AvailabilityService
+
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session, name="Dr. Solo Lunes")
+    doctor.availability_mode = "fixed"
+    db_session.flush()
+    AvailabilityService(
+        AvailabilityRepository(db_session),
+        DoctorRepository(db_session),
+    ).set_weekly_availability(
+        actor_id="actor-001",
+        doctor_id=doctor.id,
+        days_of_week=[0],  # lunes
+    )
+    service = _make_assignment_service(db_session)
+    target = datetime.date(2026, 5, 15)  # viernes
+    assert target.weekday() == 4
+
+    strict_result = service.get_eligible_doctors_for_slot(
+        version_id=version.id,
+        target_date=target,
+        service_area_id=_AREA_ID,
+        strict=True,
+    )
+    assert all(u["doctor_id"] != doctor.id for u in strict_result["unavailable"])
+    assert all(item["doctor"].id != doctor.id for item in strict_result["eligible"])
+
+    relaxed = service.get_eligible_doctors_for_slot(
+        version_id=version.id,
+        target_date=target,
+        service_area_id=_AREA_ID,
+        strict=False,
+    )
+    entries = [u for u in relaxed["unavailable"] if u["doctor_id"] == doctor.id]
+    assert entries, "El médico fuera de su día debe aparecer con strict=False"
+    assert entries[0]["outside_pattern"] is True
+    assert entries[0]["is_hard"] is False
+
+
+def test_evaluate_slot_allows_replacement_of_occupied_slot(db_session) -> None:
+    """Al reemplazar un turno ocupado, evaluate no bloquea con slot_occupied
+    si se pasa el id del ocupante (exclude_assignment_id)."""
+    _calendar, version = _create_calendar_and_version(db_session)
+    occupant = _create_doctor(db_session, name="Dr. Ocupante")
+    candidate = _create_doctor(db_session, name="Dr. Candidato")
+    service = _make_assignment_service(db_session)
+    slot_date = datetime.date(2026, 5, 15)
+
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=occupant.id,
+        date=slot_date,
+        service_area_id=_AREA_ID,
+    )
+
+    # Sin el id del ocupante → slot_occupied (bloqueo estructural)
+    blocked = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=candidate.id,
+        target_date=slot_date,
+        service_area_id=_AREA_ID,
+    )
+    assert any(b["code"] == "slot_occupied" for b in blocked["hard_blocks"])
+
+    # Reemplazo (con el id del ocupante) → el slot se evalúa como libre
+    ok = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=candidate.id,
+        target_date=slot_date,
+        service_area_id=_AREA_ID,
+        exclude_assignment_id=assignment.id,
+    )
+    assert ok["hard_blocks"] == []
+
+
+def test_assign_force_warning_no_availability_matches_evaluate_code(db_session) -> None:
+    """El modal marca "no_availability" (código de evaluate_slot); al asignar con
+    force_warnings=["no_availability"] debe proceder, no pedir reconfirmar."""
+    from backend.app.application.availability.service import AvailabilityService
+
+    _calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session, name="Dr. Solo Lunes")
+    doctor.availability_mode = "fixed"
+    db_session.flush()
+    AvailabilityService(
+        AvailabilityRepository(db_session),
+        DoctorRepository(db_session),
+    ).set_weekly_availability(
+        actor_id="actor-001",
+        doctor_id=doctor.id,
+        days_of_week=[0],  # lunes
+    )
+    service = _make_assignment_service(db_session)
+    target = datetime.date(2026, 5, 15)  # viernes
+
+    # evaluate_slot → el soft warning se identifica como no_availability
+    ev = service.evaluate_slot(
+        version_id=version.id,
+        doctor_id=doctor.id,
+        target_date=target,
+        service_area_id=_AREA_ID,
+    )
+    codes = [w["code"] for w in ev["warnings"]]
+    assert "no_availability" in codes, codes
+
+    # Asignar forzando ese código → ya no debe exigir reconfirmar
+    assignment = service.assign_doctor(
+        actor_id="actor-001",
+        version_id=version.id,
+        doctor_id=doctor.id,
+        date=target,
+        service_area_id=_AREA_ID,
+        force_warnings=["no_availability"],
+    )
+    assert assignment.doctor_id == doctor.id

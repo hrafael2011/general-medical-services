@@ -10,6 +10,8 @@ testpaths = ["backend/tests"]
 pythonpath = ["."]
 markers = [
     "integration: tests that use real PostgreSQL and DeepSeek API (skip by default)",
+    "db: tests that require a real PostgreSQL server (skip when unreachable)",
+    "e2e: API end-to-end tests against real PostgreSQL + FastAPI TestClient",
 ]
-addopts = ["-m", "not integration"]
+addopts = ["-m", "not integration and not e2e"]
 

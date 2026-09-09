@@ -1,7 +1,10 @@
+import hashlib
 import logging
 from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
+
+from sqlalchemy import text
 
 from backend.app.application.audit.service import AuditService
 from backend.app.domain.calendars.scoring import MISSION_WEIGHT
@@ -49,6 +52,21 @@ class MissionRankingService:
         now = datetime.now(UTC)
 
         try:
+            # --- Lock de asesoría por período+versión: serializa recomputes ---
+            # concurrentes del mismo ranking. Sin esto, dos peticiones que
+            # borran/insertan las mismas filas se bloquean entre sí con
+            # tuple-locks, encadenan y agotan la pool (→ 500 masivos, sesión
+            # expulsada). El lock se libera al commit/rollback de la transacción.
+            # (Solo Postgres: es la DB de producción; en SQLite de tests no
+            # existe y no hace falta por ser monohilo.)
+            if self.mission_repo.session.get_bind().dialect.name == "postgresql":
+                lock_key = f"mission-ranking:{year}:{month}:{calendar_version_id or ''}"
+                lock_id = int(hashlib.md5(lock_key.encode()).hexdigest()[:15], 16)
+                self.mission_repo.session.execute(
+                    text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                    {"lock_id": lock_id},
+                )
+
             # --- Step 0: build UUID → weight map from DB ---
             area_weights: dict[str, float] = {
                 sa.id: float(sa.load_weight)
@@ -178,6 +196,11 @@ class MissionRankingService:
 
         except Exception:
             logger.exception("Failed to generate ranking for %d/%02d", year, month)
+            # Nunca dejar trabajo a medias ni una transacción colgada: si el
+            # recompute falla, se aborta TODO (incluida la asignación que lo
+            # disparó) y el estado de la DB queda limpio.
+            self.mission_repo.session.rollback()
+            raise
             raise
 
     def get_ranking(

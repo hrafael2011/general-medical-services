@@ -17,6 +17,7 @@ from backend.app.application.telegram.message_router import (
     TelegramMessageRouter,
 )
 from backend.app.application.telegram.chitchat import ChitchatHandler
+from backend.app.application.telegram.tool_registry import QUERY_ROLES
 from backend.app.core.config import settings
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -27,6 +28,10 @@ _MSG_NOT_LINKED = (
 )
 _MSG_INACTIVE_ACCOUNT = "Tu cuenta de sistema está inactiva. Contacta al administrador."
 _MSG_MUST_CHANGE_PASSWORD = "Debes cambiar tu contraseña temporal antes de usar el asistente."
+_MSG_QUERIES_ROLE_DENIED = (
+    "El bot de consultas está disponible solo para el encargado o el administrador. "
+    "Si eres médico, usa el bot de notificaciones para confirmar tus guardias."
+)
 _CONFIRMATION_COMMAND_RE = re.compile(
     r"^/(recibido|confirmar)\s+([A-Za-z0-9_\-=]+)\s*$",
     re.IGNORECASE,
@@ -536,6 +541,28 @@ class TelegramOrchestrator:
                 fallback_reason="must_change_password",
             )
             return _MSG_MUST_CHANGE_PASSWORD
+
+        # 2b. Role gate (defensivo): las consultas del bot son solo para
+        # encargado/admin. El linking ya restringe, pero un rol no autorizado
+        # no debe entrar al path de consultas.
+        if user.role not in QUERY_ROLES:
+            self._log_and_send(
+                telegram_user_id=telegram_user_id,
+                chat_id=chat_id,
+                text=text,
+                response_text=_MSG_QUERIES_ROLE_DENIED,
+                matched_user_id=user.id,
+                user_role=user.role,
+                intent_id=None,
+                entities=None,
+                confidence=None,
+                tool_name=None,
+                tool_request=None,
+                tool_response=None,
+                status="completed",
+                fallback_reason="role_not_allowed",
+            )
+            return _MSG_QUERIES_ROLE_DENIED
 
         # 3. Update last_used_at
         link.last_used_at = datetime.now(UTC)

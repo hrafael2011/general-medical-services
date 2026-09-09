@@ -1,13 +1,37 @@
+"""Tests del CalendarQueryService — contrato post-tools (2026-09-06).
+
+El bot migró a function calling con catálogo MCP (spec 15). El service interno
+`CalendarQueryService` sigue vivo como backend determinista de las tools
+`calendar_assignments`, `calendar_assigned_count` y `calendar_status`
+(dispatch en `ConversationalAgent._dispatch_tool` y `_process_legacy`;
+cableado en `api/routes/telegram.py`). Estos tests lo ejercitan por su API
+real: `execute(query_type, params)`.
+
+El clasificador legacy que parseaba frases como «la primera semana de julio»
+(typos, orden invertido, reutilización del rango en follow-ups, export
+contextual del listado anterior) fue removido del producto: esas capacidades
+son hoy del NLU (LLM) y del catálogo de tools. Los casos que cubrían esos
+paths de clasificación se eliminaron:
+
+- «primea/seguna semana», «semana primera», sin palabra «servicio» → el
+  entendimiento tolerante a variantes es del NLU, no de código determinista
+  (catálogo: test_mcp_catalog.py::test_every_tool_has_canonical_question_in_description).
+- follow-up que reutilizaba el rango de la semana previa («y de julio?») →
+  removido: `_merge_followup_context` solo fusiona filtros rank/sex/department;
+  la persistencia de sesión la cubre test_session_persistence.py.
+- export contextual del listado («esporta ese listado a pdf») → la maquinaria
+  de export vive en IntentRouter (test_intent_router.py::test_router_export_action_without_format,
+  test_router_export_with_format_pdf) y el reporte del catálogo es
+  `generate_report` (test_mcp_catalog.py::test_bounded_values_use_enums).
+"""
+
 import uuid
 from datetime import UTC, date, datetime
 
+import pytest
 from sqlalchemy import select
 
-from backend.app.application.telegram.agent import ConversationalAgent
 from backend.app.application.telegram.calendar_query_service import CalendarQueryService
-from backend.app.application.telegram.intent_router import IntentRouter
-from backend.app.application.telegram.llm import FakeLLMProvider
-from backend.app.application.telegram.memory import SessionStore
 from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     CalendarModel,
@@ -46,7 +70,7 @@ def _seed_doctor(session, name: str) -> DoctorModel:
         id=str(uuid.uuid4()),
         name=name,
         normalized_name=name.lower(),
-        sex="male",
+        sex="M",
         active=True,
         service_active=True,
         availability_mode="monthly",
@@ -110,24 +134,16 @@ def _seed_calendar_assignment(
     session.commit()
 
 
-def _agent(session) -> tuple[ConversationalAgent, FakeLLMProvider]:
-    llm = FakeLLMProvider(responses={
-        "julio": '{"action": "reply", "response_text": "No se encontraron resultados."}',
-        "agosto": '{"action": "reply", "response_text": "No se encontraron resultados."}',
-    })
-    router = IntentRouter()
-    router.set_session(session)
-    return (
-        ConversationalAgent(
-            llm=llm,
-            router=router,
-            calendar_query_service=CalendarQueryService(session),
-        ),
-        llm,
-    )
+# ---------------------------------------------------------------------------
+# list_calendar_assignments_by_date_range / calendar_assignments
+# ---------------------------------------------------------------------------
 
 
-def test_first_week_query_uses_approved_calendar_assignments(db_session):
+@pytest.mark.parametrize(
+    "query_type",
+    ["calendar_assignments", "list_calendar_assignments_by_date_range"],
+)
+def test_list_assignments_approved_period_returns_doctors(db_session, query_type):
     _seed_calendar_assignment(
         db_session,
         year=2026,
@@ -136,9 +152,11 @@ def test_first_week_query_uses_approved_calendar_assignments(db_session):
         service_date=date(2026, 7, 3),
         doctor_name="Dr. Julio Aprobado",
     )
-    agent, llm = _agent(db_session)
+    service = CalendarQueryService(db_session)
 
-    result = agent.process("cuales son los medicos de servicio la primera semana de julio 2026")
+    result = service.execute(
+        query_type, {"start_date": "2026-07-01", "end_date": "2026-07-07"}
+    )
 
     assert result.agent_action == "query"
     assert result.tool_name == "calendar_query_service"
@@ -147,98 +165,13 @@ def test_first_week_query_uses_approved_calendar_assignments(db_session):
         "start_date": "2026-07-01",
         "end_date": "2026-07-07",
     }
-    assert llm.calls == []
+    assert result.tool_result["status_used"] == "approved"
+    assert result.tool_result["calendar_exists"] is True
+    assert result.tool_result["draft_count"] == 0
+    assert len(result.tool_result["data"]["rows"]) == 1
 
 
-def test_first_week_query_accepts_common_typo_primea(db_session):
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=7,
-        status="approved",
-        service_date=date(2026, 7, 3),
-        doctor_name="Dr. Julio Typo",
-    )
-    agent, llm = _agent(db_session)
-
-    result = agent.process("cuales medicos estan de servicio la primea semana de julio")
-
-    assert result.agent_action == "query"
-    assert result.tool_name == "calendar_query_service"
-    assert "Dr. Julio Typo" in result.response_text
-    assert llm.calls == []
-
-
-def test_week_query_without_service_word_still_uses_calendar(db_session):
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=7,
-        status="approved",
-        service_date=date(2026, 7, 1),
-        doctor_name="Dr. Julio Sin Servicio",
-    )
-    agent, llm = _agent(db_session)
-
-    result = agent.process("cuales medicos estan la primera semana de julio")
-
-    assert result.agent_action == "query"
-    assert result.tool_name == "calendar_query_service"
-    assert "Dr. Julio Sin Servicio" in result.response_text
-    assert result.tool_entities["period"] == {
-        "start_date": "2026-07-01",
-        "end_date": "2026-07-07",
-    }
-    assert llm.calls == []
-
-
-def test_week_query_accepts_reversed_order_semana_primera(db_session):
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=7,
-        status="approved",
-        service_date=date(2026, 7, 1),
-        doctor_name="Dra. Julio Orden Invertido",
-    )
-    agent, llm = _agent(db_session)
-
-    result = agent.process("cuales medicos estan de servicio la semana primera de julio")
-
-    assert result.agent_action == "query"
-    assert result.tool_name == "calendar_query_service"
-    assert "Dra. Julio Orden Invertido" in result.response_text
-    assert result.tool_entities["period"] == {
-        "start_date": "2026-07-01",
-        "end_date": "2026-07-07",
-    }
-    assert llm.calls == []
-
-
-def test_second_week_query_accepts_common_typo_seguna(db_session):
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=7,
-        status="approved",
-        service_date=date(2026, 7, 8),
-        doctor_name="Dra. Julio Segunda Typo",
-    )
-    agent, llm = _agent(db_session)
-
-    result = agent.process("cuales medicos estan la seguna semana de julio")
-
-    assert result.agent_action == "query"
-    assert result.tool_name == "calendar_query_service"
-    assert "Dra. Julio Segunda Typo" in result.response_text
-    assert result.tool_entities["period"] == {
-        "start_date": "2026-07-08",
-        "end_date": "2026-07-14",
-    }
-    assert llm.calls == []
-
-
-def test_first_week_query_mentions_draft_when_no_approved_calendar(db_session):
+def test_list_assignments_draft_period_mentions_borrador(db_session):
     _seed_calendar_assignment(
         db_session,
         year=2026,
@@ -247,131 +180,45 @@ def test_first_week_query_mentions_draft_when_no_approved_calendar(db_session):
         service_date=date(2026, 8, 4),
         doctor_name="Dr. Agosto Borrador",
     )
-    agent, llm = _agent(db_session)
+    service = CalendarQueryService(db_session)
 
-    result = agent.process("cuales son los medicos de servicio la primera semana de agosto 2026")
+    result = service.execute(
+        "calendar_assignments", {"start_date": "2026-08-01", "end_date": "2026-08-07"}
+    )
 
     assert result.agent_action == "query"
     assert result.tool_name == "calendar_query_service"
     assert "no hay calendario aprobado" in result.response_text.lower()
     assert "borrador" in result.response_text.lower()
+    assert result.tool_result["calendar_exists"] is True
     assert result.tool_result["draft_count"] == 1
-    assert llm.calls == []
+    assert result.tool_result["data"]["rows"] == []
 
 
-def test_first_week_month_followup_reuses_previous_week_range(db_session):
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=8,
-        status="draft",
-        service_date=date(2026, 8, 4),
-        doctor_name="Dr. Agosto Borrador",
-    )
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=7,
-        status="approved",
-        service_date=date(2026, 7, 4),
-        doctor_name="Dr. Julio Seguimiento",
-    )
-    llm = FakeLLMProvider(responses={
-        "julio": '{"action": "reply", "response_text": "No se encontraron resultados."}',
-        "agosto": '{"action": "reply", "response_text": "No se encontraron resultados."}',
-    })
-    router = IntentRouter()
-    router.set_session(db_session)
-    agent = ConversationalAgent(
-        llm=llm,
-        router=router,
-        calendar_query_service=CalendarQueryService(db_session),
-        session_store=SessionStore(),
+def test_list_assignments_empty_period_returns_no_results(db_session):
+    service = CalendarQueryService(db_session)
+
+    result = service.execute(
+        "calendar_assignments", {"start_date": "2026-07-01", "end_date": "2026-07-07"}
     )
 
-    first = agent.process(
-        "cuales son los medicos que estan de servicio la primera semana de agosto 2026",
-        telegram_user_id="tg-calendar-transcript",
-    )
-    followup = agent.process(
-        "ok entiendo y de julio ?",
-        telegram_user_id="tg-calendar-transcript",
-    )
-
-    assert "borrador" in first.response_text.lower()
-    assert followup.agent_action == "query"
-    assert followup.tool_name == "calendar_query_service"
-    assert "Dr. Julio Seguimiento" in followup.response_text
-    assert followup.tool_entities["period"] == {
-        "start_date": "2026-07-01",
-        "end_date": "2026-07-07",
-    }
-    assert llm.calls == []
+    assert result.agent_action == "query"
+    assert "No se encontraron servicios aprobados" in result.response_text
+    assert result.tool_result["calendar_exists"] is False
+    assert result.tool_result["draft_count"] == 0
+    assert result.tool_result["data"]["rows"] == []
 
 
-def test_contextual_export_reuses_previous_calendar_listing(db_session):
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=7,
-        status="approved",
-        service_date=date(2026, 7, 1),
-        doctor_name="Dr. Julio Export Uno",
-    )
-    _seed_calendar_assignment(
-        db_session,
-        year=2026,
-        month=7,
-        status="approved",
-        service_date=date(2026, 7, 2),
-        doctor_name="Dra. Julio Export Dos",
-    )
-    llm = FakeLLMProvider(responses={
-        "esporta": '{"action": "reply", "response_text": "No se encontraron resultados."}',
-    })
-    router = IntentRouter()
-    router.set_session(db_session)
-    agent = ConversationalAgent(
-        llm=llm,
-        router=router,
-        calendar_query_service=CalendarQueryService(db_session),
-        session_store=SessionStore(),
-    )
-
-    listing = agent.process(
-        "cuales medicos estan de servicio la primera semana de julio 2026",
-        telegram_user_id="tg-calendar-export",
-    )
-    export = agent.process(
-        "esporta ese listado a pdf",
-        telegram_user_id="tg-calendar-export",
-    )
-    short_export = agent.process(
-        "exportalo a pdf",
-        telegram_user_id="tg-calendar-export",
-    )
-    plural_export = agent.process(
-        "exportalos",
-        telegram_user_id="tg-calendar-export",
-    )
-
-    assert listing.tool_name == "calendar_query_service"
-    assert export.agent_action == "export"
-    assert export.document_bytes is not None
-    assert export.document_filename == "SERVICIOS_CALENDARIO.pdf"
-    assert export.tool_result["row_count"] == 2
-    assert short_export.agent_action == "export"
-    assert short_export.document_bytes is not None
-    assert short_export.document_filename == "SERVICIOS_CALENDARIO.pdf"
-    assert short_export.tool_result["row_count"] == 2
-    assert plural_export.agent_action == "export"
-    assert plural_export.document_bytes is not None
-    assert plural_export.document_filename == "SERVICIOS_CALENDARIO.pdf"
-    assert plural_export.tool_result["row_count"] == 2
-    assert llm.calls == []
+# ---------------------------------------------------------------------------
+# count_assigned_doctors_by_month / calendar_assigned_count
+# ---------------------------------------------------------------------------
 
 
-def test_monthly_assigned_doctor_count_uses_approved_calendar(db_session):
+@pytest.mark.parametrize(
+    "query_type",
+    ["calendar_assigned_count", "count_assigned_doctors_by_month"],
+)
+def test_count_assigned_doctors_uses_approved_calendar(db_session, query_type):
     _seed_calendar_assignment(
         db_session,
         year=2026,
@@ -380,19 +227,20 @@ def test_monthly_assigned_doctor_count_uses_approved_calendar(db_session):
         service_date=date(2026, 7, 10),
         doctor_name="Dr. Julio Mensual",
     )
-    agent, llm = _agent(db_session)
+    service = CalendarQueryService(db_session)
 
-    result = agent.process("cuantos medicos estan incluidos en el calendario de julio 2026")
+    result = service.execute(query_type, {"year": 2026, "month": 7})
 
     assert result.agent_action == "query"
     assert result.tool_name == "calendar_query_service"
+    assert result.tool_entities["period"] == {"year": 2026, "month": 7}
     assert result.tool_result["data"]["rows"] == [{"total": 1}]
     assert result.tool_result["status_used"] == "approved"
+    assert result.tool_result["draft_count"] == 0
     assert "total: 1" in result.response_text
-    assert llm.calls == []
 
 
-def test_monthly_assigned_doctor_count_mentions_draft_when_no_approved_calendar(db_session):
+def test_count_assigned_doctors_mentions_borrador_when_no_approved_calendar(db_session):
     _seed_calendar_assignment(
         db_session,
         year=2026,
@@ -401,13 +249,61 @@ def test_monthly_assigned_doctor_count_mentions_draft_when_no_approved_calendar(
         service_date=date(2026, 8, 10),
         doctor_name="Dr. Agosto Mensual",
     )
-    agent, llm = _agent(db_session)
+    service = CalendarQueryService(db_session)
 
-    result = agent.process("cuantos medicos estan incluidos en el calendario de agosto 2026")
+    result = service.execute("calendar_assigned_count", {"year": 2026, "month": 8})
 
     assert result.agent_action == "query"
     assert result.tool_name == "calendar_query_service"
     assert "no hay calendario aprobado" in result.response_text.lower()
     assert "borrador" in result.response_text.lower()
+    assert result.tool_result["calendar_exists"] is True
     assert result.tool_result["draft_count"] == 1
-    assert llm.calls == []
+    assert result.tool_result["data"]["rows"] == [{"total": 0}]
+
+
+# ---------------------------------------------------------------------------
+# calendar_status
+# ---------------------------------------------------------------------------
+
+
+def test_calendar_status_existing_calendar(db_session):
+    _seed_calendar_assignment(
+        db_session,
+        year=2026,
+        month=7,
+        status="approved",
+        service_date=date(2026, 7, 10),
+        doctor_name="Dr. Julio Estado",
+    )
+    service = CalendarQueryService(db_session)
+
+    result = service.execute("calendar_status", {"year": 2026, "month": 7})
+
+    assert result.agent_action == "query"
+    assert result.tool_name == "calendar_query_service"
+    assert result.tool_entities["period"] == {"year": 2026, "month": 7}
+    assert result.tool_result["calendar_exists"] is True
+    assert "approved" in result.response_text
+
+
+def test_calendar_status_missing_calendar(db_session):
+    service = CalendarQueryService(db_session)
+
+    result = service.execute("calendar_status", {"year": 2026, "month": 9})
+
+    assert result.agent_action == "query"
+    assert result.tool_result["calendar_exists"] is False
+    assert "No existe un calendario" in result.response_text
+
+
+# ---------------------------------------------------------------------------
+# Contrato del execute()
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_query_type_returns_none(db_session):
+    """Fuera de los 5 query types soportados, execute() devuelve None."""
+    service = CalendarQueryService(db_session)
+
+    assert service.execute("assign_by_week", {}) is None
