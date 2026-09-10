@@ -1,0 +1,333 @@
+{
+  "_comentario": [
+    "Set de evaluación del enrutado NLU — 35 casos, 5 por cada colisión conocida.",
+    "Cada caso declara la tool correcta, las tools que la confunden (wrong_alternatives)",
+    "y los params que el discriminador debe producir.",
+    "En expected_params, los centinelas @today / @tomorrow / @month_start / @month_end",
+    "se resuelven con la fecha de corrida (ver eval_harness.py).",
+    "Los params que no aparecen aquí NO se evalúan (el harness solo verifica lo declarado)."
+  ],
+  "cases": [
+    {
+      "id": "C1-01",
+      "collision": 1,
+      "user_input": "¿Qué médicos hicieron servicio el 3 de agosto?",
+      "expected_tool": "calendar_assignments",
+      "expected_params": {"start_date": "2026-08-03", "end_date": "2026-08-03"},
+      "wrong_alternatives": ["list_doctors", "doctor_service_history"],
+      "reasoning": "Trae FECHA + pregunta por médicos. El discriminador es la fecha: gana calendar_assignments, no list_doctors."
+    },
+    {
+      "id": "C1-02",
+      "collision": 1,
+      "user_input": "¿Quiénes están de guardia el 15 de septiembre?",
+      "expected_tool": "calendar_assignments",
+      "expected_params": {"start_date": "2026-09-15", "end_date": "2026-09-15"},
+      "wrong_alternatives": ["list_doctors", "doctor_service_history"],
+      "reasoning": "Fecha específica + guardias. Un solo día → misma fecha en start y end."
+    },
+    {
+      "id": "C1-03",
+      "collision": 1,
+      "user_input": "Muéstrame las guardias del 1 al 7 de agosto",
+      "expected_tool": "calendar_assignments",
+      "expected_params": {"start_date": "2026-08-01", "end_date": "2026-08-07"},
+      "wrong_alternatives": ["list_doctors", "calendar_status"],
+      "reasoning": "Rango explícito. calendar_status no acepta rangos, solo mes/año."
+    },
+    {
+      "id": "C1-04",
+      "collision": 1,
+      "user_input": "¿Quién cubrió Emergencia el 20 de julio?",
+      "expected_tool": "calendar_assignments",
+      "expected_params": {"start_date": "2026-07-20", "end_date": "2026-07-20", "service_area": "Emergencia"},
+      "wrong_alternatives": ["slot_explanation", "list_doctors"],
+      "reasoning": "Fecha + área, pero pregunta por lo ASIGNADO (hecho pasado), no por candidatos ni por una explicación."
+    },
+    {
+      "id": "C1-05",
+      "collision": 1,
+      "user_input": "¿Cuántos médicos varones hay?",
+      "expected_tool": "list_doctors",
+      "expected_params": {"sex": "M", "count": true},
+      "wrong_alternatives": ["calendar_assignments", "doctor_service_history"],
+      "reasoning": "Dirección inversa: sin fecha y filtrando una CARACTERÍSTICA. Aquí sí gana list_doctors; el caso fija que la regla no empuje todo a calendar_assignments."
+    },
+
+    {
+      "id": "C2-01",
+      "collision": 2,
+      "user_input": "¿Quién está disponible mañana?",
+      "expected_tool": "doctors_available_on",
+      "expected_params": {"date": "@tomorrow"},
+      "wrong_alternatives": ["list_doctors", "availability_report_status"],
+      "reasoning": "UN día concreto (relativo) → doctors_available_on. Depende de la fecha de hoy en el prompt."
+    },
+    {
+      "id": "C2-02",
+      "collision": 2,
+      "user_input": "¿Quiénes reportaron disponibilidad para el 5 de agosto?",
+      "expected_tool": "doctors_available_on",
+      "expected_params": {"date": "2026-08-05"},
+      "wrong_alternatives": ["availability_report_status", "list_doctors"],
+      "reasoning": "Día concreto. 'Reportaron' tienta a availability_report_status, pero esa es mensual."
+    },
+    {
+      "id": "C2-03",
+      "collision": 2,
+      "user_input": "¿Quiénes ya reportaron su disponibilidad de agosto?",
+      "expected_tool": "availability_report_status",
+      "expected_params": {"month": 8, "year": 2026},
+      "wrong_alternatives": ["doctors_available_on", "list_doctors"],
+      "reasoning": "MES completo, no un día → availability_report_status."
+    },
+    {
+      "id": "C2-04",
+      "collision": 2,
+      "user_input": "¿Quién falta por reportar disponibilidad este mes?",
+      "expected_tool": "availability_report_status",
+      "expected_params": {"month": "@current_month", "year": "@current_year"},
+      "wrong_alternatives": ["doctors_available_on", "list_doctors"],
+      "reasoning": "'Falta por reportar' es exactamente lo que devuelve availability_report_status (quién no envió)."
+    },
+    {
+      "id": "C2-05",
+      "collision": 2,
+      "user_input": "¿Cuántos médicos están activos en el pool de turnos?",
+      "expected_tool": "list_doctors",
+      "expected_params": {"count": true},
+      "wrong_alternatives": ["doctors_available_on", "availability_report_status"],
+      "reasoning": "Dirección inversa: 'activo en el pool' es pool_active (estado del sistema), no disponibilidad reportada."
+    },
+
+    {
+      "id": "C3-01",
+      "collision": 3,
+      "user_input": "¿Cómo va el calendario de agosto?",
+      "expected_tool": "calendar_status",
+      "expected_params": {"month": 8, "year": 2026},
+      "wrong_alternatives": ["calendar_assignments", "list_doctors"],
+      "reasoning": "'Cómo va' pide ESTADO/RESUMEN → calendar_status."
+    },
+    {
+      "id": "C3-02",
+      "collision": 3,
+      "user_input": "¿Cuántas semanas aprobadas tiene septiembre?",
+      "expected_tool": "calendar_status",
+      "expected_params": {"month": 9, "year": 2026},
+      "wrong_alternatives": ["calendar_assignments"],
+      "reasoning": "Semanas aprobadas/borrador es campo de calendar_status."
+    },
+    {
+      "id": "C3-03",
+      "collision": 3,
+      "user_input": "¿Hay huecos sin cubrir en agosto?",
+      "expected_tool": "calendar_status",
+      "expected_params": {"month": 8, "year": 2026},
+      "wrong_alternatives": ["calendar_assignments", "list_doctors"],
+      "reasoning": "Los huecos (unresolved_gaps) los reporta calendar_status."
+    },
+    {
+      "id": "C3-04",
+      "collision": 3,
+      "user_input": "Muéstrame todas las guardias de agosto",
+      "expected_tool": "calendar_assignments",
+      "expected_params": {"start_date": "2026-08-01", "end_date": "2026-08-31"},
+      "wrong_alternatives": ["calendar_status"],
+      "reasoning": "Caso límite del bloque 3: mes completo pero SIN pedir estado ni huecos → calendar_assignments con los bordes del mes."
+    },
+    {
+      "id": "C3-05",
+      "collision": 3,
+      "user_input": "¿Qué guardias hay el 10 de agosto?",
+      "expected_tool": "calendar_assignments",
+      "expected_params": {"start_date": "2026-08-10", "end_date": "2026-08-10"},
+      "wrong_alternatives": ["calendar_status"],
+      "reasoning": "Fecha concreta, no estado del mes."
+    },
+
+    {
+      "id": "C4-01",
+      "collision": 4,
+      "user_input": "¿Quién puede cubrir el 3 de agosto en Emergencia?",
+      "expected_tool": "slot_recommendation",
+      "expected_params": {"date": "2026-08-03", "service_area": "Emergencia"},
+      "wrong_alternatives": ["doctors_available_on", "slot_explanation"],
+      "reasoning": "'PUEDE cubrir' pide evaluación de reglas → slot_recommendation, no el listado crudo."
+    },
+    {
+      "id": "C4-02",
+      "collision": 4,
+      "user_input": "Dame opciones para asignar Pista el 12 de julio",
+      "expected_tool": "slot_recommendation",
+      "expected_params": {"date": "2026-07-12", "service_area": "Pista"},
+      "wrong_alternatives": ["doctors_available_on", "list_doctors"],
+      "reasoning": "'Opciones para asignar' implica candidatos evaluados."
+    },
+    {
+      "id": "C4-03",
+      "collision": 4,
+      "user_input": "¿Por qué García no está asignado el 3 de agosto en Emergencia?",
+      "expected_tool": "slot_explanation",
+      "expected_params": {"date": "2026-08-03", "service_area": "Emergencia", "doctor_name": "García"},
+      "wrong_alternatives": ["slot_recommendation", "doctors_available_on"],
+      "reasoning": "Médico nombrado + 'por qué no' → bloqueos y advertencias de ESE médico."
+    },
+    {
+      "id": "C4-04",
+      "collision": 4,
+      "user_input": "¿García está asignado el 20 de agosto en Pista?",
+      "expected_tool": "slot_explanation",
+      "expected_params": {"date": "2026-08-20", "service_area": "Pista", "doctor_name": "García"},
+      "wrong_alternatives": ["calendar_assignments", "slot_recommendation"],
+      "reasoning": "Un médico concreto en un slot concreto. calendar_assignments listaría todos, no explica el caso de uno."
+    },
+    {
+      "id": "C4-05",
+      "collision": 4,
+      "user_input": "¿Quiénes reportaron que pueden el 3 de agosto?",
+      "expected_tool": "doctors_available_on",
+      "expected_params": {"date": "2026-08-03"},
+      "wrong_alternatives": ["slot_recommendation", "availability_report_status"],
+      "reasoning": "Dirección inversa: 'reportaron' = listado crudo sin evaluar reglas."
+    },
+
+    {
+      "id": "C5-01",
+      "collision": 5,
+      "user_input": "¿Cómo va la carga de médicos en agosto?",
+      "expected_tool": "workload_ranking",
+      "expected_params": {"month": 8, "year": 2026},
+      "wrong_alternatives": ["doctor_service_history", "mission_candidates"],
+      "reasoning": "Ranking de TODOS por carga mensual."
+    },
+    {
+      "id": "C5-02",
+      "collision": 5,
+      "user_input": "¿Quién lleva más guardias este mes?",
+      "expected_tool": "workload_ranking",
+      "expected_params": {"month": "@current_month", "year": "@current_year", "criterion": "load"},
+      "wrong_alternatives": ["doctor_service_history", "list_doctors"],
+      "reasoning": "'Quién lleva más' = extremo del ranking → criterion load."
+    },
+    {
+      "id": "C5-03",
+      "collision": 5,
+      "user_input": "¿Quién va más corto de su meta mensual?",
+      "expected_tool": "workload_ranking",
+      "expected_params": {"criterion": "target_gap"},
+      "wrong_alternatives": ["doctor_service_history", "mission_candidates"],
+      "reasoning": "'Corto de meta' = target_gap, no load."
+    },
+    {
+      "id": "C5-04",
+      "collision": 5,
+      "user_input": "¿Cuántas guardias lleva García en agosto?",
+      "expected_tool": "doctor_service_history",
+      "expected_params": {"doctor_name": "García", "month": 8, "year": 2026},
+      "wrong_alternatives": ["workload_ranking", "calendar_assignments"],
+      "reasoning": "Un médico nombrado → su historial, no el ranking completo."
+    },
+    {
+      "id": "C5-05",
+      "collision": 5,
+      "user_input": "¿Quiénes son candidatos para la misión del 15 de agosto?",
+      "expected_tool": "mission_candidates",
+      "expected_params": {"mission_date": "2026-08-15"},
+      "wrong_alternatives": ["workload_ranking", "slot_recommendation"],
+      "reasoning": "Candidatos de MISIÓN usan el ranking de misiones, no el de guardias."
+    },
+
+    {
+      "id": "C6-01",
+      "collision": 6,
+      "user_input": "¿Quiénes confirmaron su asignación de agosto?",
+      "expected_tool": "confirmation_status",
+      "expected_params": {"month": 8, "year": 2026},
+      "wrong_alternatives": ["notification_status", "action_alerts"],
+      "reasoning": "'Confirmaron' es la palabra clave del dominio de confirmaciones."
+    },
+    {
+      "id": "C6-02",
+      "collision": 6,
+      "user_input": "¿Quién falta por confirmar?",
+      "expected_tool": "confirmation_status",
+      "expected_params": {},
+      "wrong_alternatives": ["notification_status", "availability_report_status"],
+      "reasoning": "Ojo: 'falta por confirmar' NO es lo mismo que 'falta por reportar' (colisión 2)."
+    },
+    {
+      "id": "C6-03",
+      "collision": 6,
+      "user_input": "¿Cómo van las notificaciones?",
+      "expected_tool": "notification_status",
+      "expected_params": {},
+      "wrong_alternatives": ["confirmation_status", "action_alerts"],
+      "reasoning": "'Notificaciones' = eventos de ENVÍO."
+    },
+    {
+      "id": "C6-04",
+      "collision": 6,
+      "user_input": "¿Falló algún envío esta semana?",
+      "expected_tool": "notification_status",
+      "expected_params": {"status": "failed"},
+      "wrong_alternatives": ["confirmation_status", "action_alerts"],
+      "reasoning": "'Falló un envío' es un evento de notificación fallido."
+    },
+    {
+      "id": "C6-05",
+      "collision": 6,
+      "user_input": "¿Qué tengo pendiente por atender?",
+      "expected_tool": "action_alerts",
+      "expected_params": {},
+      "wrong_alternatives": ["confirmation_status", "notification_status"],
+      "reasoning": "Sin dominio explícito, 'pendiente por atender' cae en las alertas del sistema. No se exige `status`: la tool ya filtra por open cuando se omite."
+    },
+
+    {
+      "id": "C7-01",
+      "collision": 7,
+      "user_input": "Mándame el reporte de agosto",
+      "expected_tool": "generate_report",
+      "expected_params": {"type": "monthly", "month": 8, "year": 2026},
+      "wrong_alternatives": ["calendar_status", "list_doctors"],
+      "reasoning": "'Mándame' + 'reporte' piden un DOCUMENTO, no datos en el chat."
+    },
+    {
+      "id": "C7-02",
+      "collision": 7,
+      "user_input": "Genera el PDF del calendario de septiembre",
+      "expected_tool": "generate_report",
+      "expected_params": {"type": "monthly", "month": 9, "year": 2026},
+      "wrong_alternatives": ["calendar_status"],
+      "reasoning": "PDF explícito → generate_report."
+    },
+    {
+      "id": "C7-03",
+      "collision": 7,
+      "user_input": "Envíame la lista semanal",
+      "expected_tool": "generate_report",
+      "expected_params": {"type": "weekly"},
+      "wrong_alternatives": ["calendar_assignments", "calendar_status"],
+      "reasoning": "'Lista semanal' es el type=weekly del reporte."
+    },
+    {
+      "id": "C7-04",
+      "collision": 7,
+      "user_input": "¿Cómo está el calendario de agosto?",
+      "expected_tool": "calendar_status",
+      "expected_params": {"month": 8, "year": 2026},
+      "wrong_alternatives": ["generate_report", "calendar_assignments"],
+      "reasoning": "Dirección inversa: quiere ver los datos, no un documento."
+    },
+    {
+      "id": "C7-05",
+      "collision": 7,
+      "user_input": "¿Cuántos médicos hay en el pool?",
+      "expected_tool": "list_doctors",
+      "expected_params": {"count": true},
+      "wrong_alternatives": ["generate_report", "calendar_status"],
+      "reasoning": "Conteo simple; nada que ver con reportes pese a la ambigüedad de 'reporte'."
+    }
+  ]
+}

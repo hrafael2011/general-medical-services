@@ -178,8 +178,8 @@ def handle_list_doctors(params: dict[str, Any], deps: dict[str, Any]) -> dict[st
         if dept_id is None:
             return _err(f"No existe el departamento «{params['department']}».")
         stmt = stmt.where(DoctorModel.department_id == dept_id)
-    if params.get("area"):
-        area = _resolve_area(deps, params["area"])
+    if params.get("service_area"):
+        area = _resolve_area(deps, params["service_area"])
         if "error" in area:
             return area
         allowed = select(DoctorAllowedAreaModel.doctor_id).where(

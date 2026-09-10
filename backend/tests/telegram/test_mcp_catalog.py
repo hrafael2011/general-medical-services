@@ -21,7 +21,10 @@ from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.availability import DoctorAvailabilityModel
 from backend.app.infrastructure.db.models.calendars import CalendarModel, CalendarVersionModel
 from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
-from backend.app.infrastructure.db.models.doctors import DoctorModel
+from backend.app.infrastructure.db.models.doctors import (
+    DoctorAllowedAreaModel,
+    DoctorModel,
+)
 from backend.app.infrastructure.db.models.telegram import TelegramUserLinkModel
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.telegram import TelegramRepository
@@ -81,6 +84,50 @@ def test_bounded_values_use_enums() -> None:
 
     reply = by_name["reply"]["parameters"]["properties"]["response_type"]
     assert reply["enum"] == ["greeting", "help", "farewell", "clarify", "out_of_scope"]
+
+
+def test_prompt_renders_every_tool_under_a_domain_header() -> None:
+    """El prompt agrupa las tools por dominio y no pierde ninguna al renderizar.
+
+    Agrupar baja el factor de ramificación (el modelo compara 3-5 candidatos
+    por dominio en vez de 22 planas), pero un grupo mal armado haría
+    desaparecer una tool del prompt sin que nada avise.
+    """
+    prompt = tool_registry.build_tools_prompt()
+
+    for name in (t["name"] for t in tool_registry.ALL_TOOLS):
+        assert name in prompt, f"{name} no aparece en el prompt"
+
+    for domain_name, domain_tools in tool_registry.DOMAIN_GROUPS:
+        assert domain_name in prompt, f"Falta el encabezado «{domain_name}»"
+        assert domain_tools, f"El dominio «{domain_name}» está vacío"
+
+    grouped = [t["name"] for _, tools in tool_registry.DOMAIN_GROUPS for t in tools]
+    assert len(grouped) == len(set(grouped)), "Tool repetida en dos dominios"
+
+
+def test_all_area_params_share_one_contract() -> None:
+    """Toda tool con filtro de área expone `service_area` con el mismo enum.
+
+    Regresión: `list_doctors` usaba `area` sin enum y `calendar_assignments`
+    usaba `service_area` sin enum, mientras `slot_recommendation` sí lo tenía.
+    Tres nombres/formas para el mismo filtro: el modelo no podía saber que eran
+    lo mismo, y una tool con enum invita a inventar variantes en las otras.
+    """
+    area_params: list[tuple[str, str, list[str] | None]] = []
+    for tool in tool_registry.ALL_TOOLS:
+        for pname, pschema in tool["parameters"].get("properties", {}).items():
+            if pname == "area" or pname.endswith("_area"):
+                area_params.append((tool["name"], pname, pschema.get("enum")))
+
+    assert area_params, "Ninguna tool expone filtro de área: el test quedó vacío"
+    for tool_name, pname, penum in area_params:
+        assert pname == "service_area", (
+            f"{tool_name} expone `{pname}` en vez de `service_area`"
+        )
+        assert penum == tool_registry._SERVICE_AREA_ENUM, (
+            f"{tool_name}.service_area no usa el enum compartido"
+        )
 
 
 def test_required_params_are_declared() -> None:
@@ -235,6 +282,82 @@ def test_handlers_never_write(db_session) -> None:
 # ---------------------------------------------------------------------------
 # 3. Delegación a services de application (test_tools_delegate)
 # ---------------------------------------------------------------------------
+
+
+def test_list_doctors_filters_by_service_area(db_session) -> None:
+    """`service_area` debe filtrar por doctor_allowed_areas.
+
+    Regresión: `handle_list_doctors` leía `params["area"]`, así que el
+    `service_area` que expone el catálogo se descartaba en silencio (el
+    dispatcher usa `**params`, no valida claves) y la consulta devolvía TODOS
+    los médicos en vez de los del área pedida.
+    """
+    now = datetime.now(UTC)
+
+    emergencia = ServiceAreaModel(
+        id=str(uuid.uuid4()),
+        code="emergencia",
+        display_name="Emergencia",
+        active=True,
+        required_for_daily_coverage=True,
+        load_weight=3,
+        created_at=now,
+        updated_at=now,
+    )
+    pista = ServiceAreaModel(
+        id=str(uuid.uuid4()),
+        code="pista",
+        display_name="Pista",
+        active=True,
+        required_for_daily_coverage=True,
+        load_weight=2,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add_all([emergencia, pista])
+
+    def _doc(name: str) -> DoctorModel:
+        return DoctorModel(
+            id=str(uuid.uuid4()),
+            name=name,
+            normalized_name=_normalized(name),
+            sex="M",
+            rank_id=None,
+            department_id=None,
+            active=True,
+            service_active=True,
+            participa_misiones=True,
+            whatsapp_phone="+18095550000",
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            availability_mode="monthly",
+            pool_active=True,
+            deleted_at=None,
+            created_at=now,
+            updated_at=now,
+        )
+
+    doc_emergencia = _doc("Dr. Emergencia")
+    doc_pista = _doc("Dr. Pista")
+    db_session.add_all([doc_emergencia, doc_pista])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            DoctorAllowedAreaModel(
+                doctor_id=doc_emergencia.id, service_area_id=emergencia.id
+            ),
+            DoctorAllowedAreaModel(doctor_id=doc_pista.id, service_area_id=pista.id),
+        ]
+    )
+    db_session.flush()
+
+    handlers = tool_handlers.build_tool_handlers(session=db_session)
+    result = handlers["list_doctors"](service_area="Emergencia")
+
+    assert result["ok"] is True
+    assert [row["name"] for row in result["rows"]] == ["Dr. Emergencia"]
 
 
 def _deps_with_mocks() -> dict:

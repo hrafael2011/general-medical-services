@@ -15,6 +15,7 @@ catálogo en sí):
 """
 
 import json
+from datetime import date
 
 from backend.app.application.telegram.intent_classifier import NLUEngine, NLUResult
 from backend.app.application.telegram.llm import FakeLLMProvider
@@ -55,6 +56,22 @@ class TestNLUEngine:
         assert result.tool == "list_doctors"
         assert result.params.get("count") is True
         assert result.confidence == 0.95
+
+    def test_system_prompt_includes_today_for_relative_dates(self):
+        """El prompt lleva la fecha de hoy.
+
+        Sin ella, «hoy» y «mañana» no se pueden convertir a YYYY-MM-DD, y
+        `doctors_available_on` / `slot_recommendation` exigen una fecha exacta:
+        el modelo solo podría inventarla, justo lo que el prompt prohíbe.
+        """
+        llm = FakeLLMProvider(responses={"disponible": _nlu_json()})
+        engine = NLUEngine(llm)
+        engine.classify("quien esta disponible manana")
+
+        system_prompt = llm.calls[0]["messages"][0]["content"]
+        assert date.today().isoformat() in system_prompt, (
+            "El system prompt no incluye la fecha de hoy"
+        )
 
     def test_classifies_greeting_as_reply_greeting(self):
         """Saludo → reply con response_type greeting."""
