@@ -390,6 +390,10 @@ class DoctorQueryService:
             _SEX_ALIASES = {"M": "male", "F": "female", "male": "M", "female": "F"}
             candidates = sorted(requested | {_SEX_ALIASES[v] for v in requested})
             conditions.append(DoctorModel.sex.in_(candidates))
+        if filters.get("doctor_name"):
+            conditions.append(
+                func.lower(DoctorModel.name).contains(str(filters["doctor_name"]).lower())
+            )
         return conditions
 
     def _join_catalogs(self, stmt, filters: dict[str, Any]):

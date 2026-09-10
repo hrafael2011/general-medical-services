@@ -31,9 +31,12 @@ class TestNameCondition:
     def test_name_filter_adds_ilike_condition(self):
         service = object.__new__(DoctorQueryService)
         conditions = service._base_conditions({"doctor_name": "ACOSTA"})
-        # La condición de nombre debe estar presente y contener el valor.
         rendered = [str(c) for c in conditions]
-        assert any("acosta" in r.lower() for r in rendered), rendered
+        # La condición de nombre debe estar presente...
+        assert any("lower(doctors.name)" in r.lower() for r in rendered), rendered
+        # ...y el valor debe viajar parametrizado (nunca interpolado en el SQL).
+        bound = [v for c in conditions for v in c.compile().params.values()]
+        assert any("acosta" in str(v).lower() for v in bound), bound
 
     def test_empty_filters_keep_base_conditions_only(self):
         service = object.__new__(DoctorQueryService)
