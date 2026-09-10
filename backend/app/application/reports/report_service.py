@@ -98,9 +98,21 @@ class ReportService:
     # Excel: doctor history for a period
     # ------------------------------------------------------------------
 
-    def generate_doctor_history_excel(self, year: int, month: int) -> bytes:
-        """Return an xlsx workbook with per-doctor assignment counts for a period."""
+    def generate_doctor_history_excel(self, year: int | None, month: int | None) -> bytes:
+        """Return an xlsx workbook with per-doctor assignment counts for a period.
+
+        Sin período explícito se usa el mes en curso, como el resto del
+        catálogo. Antes, `month=None` reventaba el `:02d` del título
+        («unsupported format string passed to NoneType.__format__») y ese
+        TypeError crudo llegaba al usuario por Telegram.
+        """
         import openpyxl  # lazy import
+
+        today = date.today()
+        if month is None:
+            month = today.month
+        if year is None:
+            year = today.year
 
         # Collect assignments for the period (if a calendar exists)
         assignments: list = []

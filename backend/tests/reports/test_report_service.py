@@ -201,6 +201,30 @@ def test_doctor_history_excel_no_calendar(service, mock_calendar_repo, mock_doct
     assert result[:2] == b"\x50\x4b"
 
 
+@pytest.mark.parametrize(
+    ("year", "month"),
+    [(None, None), (2026, None), (None, 4)],
+    ids=["sin-mes-ni-anio", "solo-anio", "solo-mes"],
+)
+def test_doctor_history_excel_sin_periodo_no_rompe(
+    service, mock_calendar_repo, mock_doctor_repo, year, month
+):
+    """Sin mes y/o año el reporte sale igual, con el período actual.
+
+    Regresión: `ws.title = f"Historial {month:02d}-{year}"` con month=None
+    levantaba «unsupported format string passed to NoneType.__format__» — y ese
+    texto crudo de Python viajaba al usuario por Telegram (casos #8, #14 y #83
+    del corpus de 243: «Exporta en Excel los medicos activos para servicio»).
+    """
+    mock_doctor_repo.list_all.return_value = []
+    mock_calendar_repo.get_calendar_by_period.return_value = None
+
+    result = service.generate_doctor_history_excel(year, month)
+
+    assert isinstance(result, bytes)
+    assert result[:2] == b"\x50\x4b"
+
+
 # ---------------------------------------------------------------------------
 # generate_notifications_summary
 # ---------------------------------------------------------------------------
