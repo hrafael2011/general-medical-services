@@ -1,7 +1,7 @@
 """
 DB-backed integration tests for GenerationService.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
+Uses the PostgreSQL db_session fixture from conftest.py.
 Follows the ORM-direct pattern from test_assignment_service.py.
 """
 

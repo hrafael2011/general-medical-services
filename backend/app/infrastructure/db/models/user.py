@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, JSON
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,7 +15,7 @@ class UserModel(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     role: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     permissions: Mapped[list[str]] = mapped_column(
-        JSONB().with_variant(JSON, "sqlite"),
+        JSONB(),
         nullable=False,
         default=list,
         server_default="[]",

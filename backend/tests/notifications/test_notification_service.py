@@ -1,7 +1,7 @@
 """
 DB-backed integration tests for NotificationService.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
+Uses the PostgreSQL db_session fixture from conftest.py.
 """
 
 import uuid
@@ -17,6 +17,7 @@ from backend.app.application.notifications.templates import (
     render_mission_summary_encargado,
 )
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
+from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 from backend.app.infrastructure.repositories.notifications import (
     BACKOFF_SECONDS,
@@ -205,6 +206,24 @@ def test_process_retries_on_failure(db_session) -> None:
 
 
 def test_process_failure_creates_action_alert(db_session) -> None:
+    # El alert de fallo lleva created_by = event.created_by (FK a users.id).
+    # SQLite no validaba FKs; PostgreSQL sí, así que el actor tiene que existir.
+    db_session.add(
+        UserModel(
+            id="actor-test",
+            email="actor-test@test.com",
+            password_hash="hash",
+            name="Actor Test",
+            role="admin",
+            active=True,
+            must_change_password=False,
+            token_version=1,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    db_session.flush()
+
     class FailingProvider:
         name = "failing"
 

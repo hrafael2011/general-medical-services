@@ -1,7 +1,8 @@
 """Tests for WhatsApp webhook endpoints.
 
-All tests use FastAPI TestClient with in-memory SQLite — no real Meta
-webhook calls or WhatsApp messages are sent.
+All tests use FastAPI TestClient against the shared PostgreSQL test
+database (conftest fixtures) — no real Meta webhook calls or WhatsApp
+messages are sent.
 """
 
 import hashlib
@@ -12,12 +13,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from backend.app.core.config import settings
-from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
 from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
@@ -25,35 +22,8 @@ from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
 
 
-@pytest.fixture(scope="function")
-def db_session():
-    """In-memory SQLite session with only webhook-relevant tables.
-
-    UserModel (JSONB permissions column) is excluded because SQLite
-    doesn't support the PostgreSQL JSONB type.
-    """
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    # Manually create only tables the webhook needs (skip UserModel — JSONB
-    # is unsupported in SQLite).
-    DoctorModel.__table__.create(engine, checkfirst=True)
-    NotificationEventModel.__table__.create(engine, checkfirst=True)
-    ConfirmationRequestModel.__table__.create(engine, checkfirst=True)
-    RankModel.__table__.create(engine, checkfirst=True)
-    DepartmentModel.__table__.create(engine, checkfirst=True)
-
-    SessionLocal = sessionmaker(
-        bind=engine, autocommit=False, autoflush=False, expire_on_commit=False
-    )
-    with SessionLocal() as session:
-        yield session
-
-    engine.dispose()
-
+# The `db_session` fixture comes from the conftest (PostgreSQL, full schema);
+# UserModel's JSONB column is fine there, so no manual table creation needed.
 
 # Meta signs every webhook request with HMAC-SHA256 using the app secret.
 # The route now rejects unsigned requests, so tests must configure the

@@ -4,12 +4,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from backend.app.api.dependencies import get_current_user
-from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
 from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
 from backend.app.infrastructure.db.models import calendars as _calendars  # noqa: F401
@@ -25,35 +21,21 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarVersionModel,
     CalendarWeekModel,
 )
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
 
 
 @pytest.fixture()
-def session():
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(
-        bind=engine,
-        autocommit=False,
-        autoflush=False,
-        expire_on_commit=False,
-    )
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+def user(session):
+    """Usuario autenticado de los tests, persistido en la sesión.
 
-
-@pytest.fixture()
-def user():
-    return _user.UserModel(
+    PostgreSQL valida la FK confirmation_requests.created_by → users.id
+    (el trigger de aprobación crea la solicitud con created_by=actor);
+    SQLite no la validaba y el usuario nunca existía como fila.
+    """
+    user = _user.UserModel(
         id="test-actor",
         email="actor@example.com",
         password_hash="hash",
@@ -65,6 +47,9 @@ def user():
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
+    session.add(user)
+    session.flush()
+    return user
 
 
 @pytest.fixture()
@@ -156,6 +141,29 @@ def _create_doctor(session, *, doctor_id: str, name: str) -> DoctorModel:
     return doctor
 
 
+def _seed_service_area(session, area_id: str) -> None:
+    """Garantiza que exista el área que referencia el assignment.
+
+    PostgreSQL valida la FK calendar_assignments.service_area_id →
+    service_areas.id; SQLite no la validaba y los assignments con área
+    inexistente pasaban igual.
+    """
+    if session.get(ServiceAreaModel, area_id) is not None:
+        return
+    now = datetime.now(UTC)
+    session.add(ServiceAreaModel(
+        id=area_id,
+        code=area_id,
+        display_name=area_id,
+        active=True,
+        required_for_daily_coverage=True,
+        load_weight=1,
+        created_at=now,
+        updated_at=now,
+    ))
+    session.flush()
+
+
 def _create_assignment(
     session,
     *,
@@ -164,6 +172,7 @@ def _create_assignment(
     service_date: date,
     area_id: str,
 ) -> CalendarAssignmentModel:
+    _seed_service_area(session, area_id)
     assignment = CalendarAssignmentModel(
         id=f"a-{uuid4().hex[:8]}",
         calendar_version_id=version_id,

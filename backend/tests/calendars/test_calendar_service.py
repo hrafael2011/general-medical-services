@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from backend.app.application.audit.service import AuditService
@@ -7,12 +9,55 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarAssignmentModel,
     CalendarVersionModel,
 )
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.repositories.audit import AuditRepository
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
 
 
 def _make_service(db_session) -> CalendarService:
     return CalendarService(CalendarRepository(db_session))
+
+
+def _seed_assignment_parents(db_session) -> None:
+    """Siembra area-001 y doctor-001 referenciados por los assignments.
+
+    PostgreSQL valida las FKs de calendar_assignments (service_area_id →
+    service_areas.id y doctor_id → doctors.id); SQLite no las validaba y los
+    seeds con ids colgantes pasaban igual. Las filas se crean con flush
+    explícito para que existan antes del INSERT del assignment.
+    """
+    now = datetime.now(UTC)
+    if db_session.get(ServiceAreaModel, "area-001") is None:
+        db_session.add(ServiceAreaModel(
+            id="area-001",
+            code="area-001",
+            display_name="Área 001",
+            active=True,
+            required_for_daily_coverage=True,
+            load_weight=1,
+            created_at=now,
+            updated_at=now,
+        ))
+        db_session.flush()
+    if db_session.get(DoctorModel, "doctor-001") is None:
+        db_session.add(DoctorModel(
+            id="doctor-001",
+            name="Dr. Approve",
+            normalized_name="dr. approve",
+            sex="male",
+            active=True,
+            service_active=True,
+            participa_misiones=True,
+            whatsapp_phone="+18095551234",
+            monthly_service_target=3,
+            monthly_service_max=3,
+            monthly_service_limit_mode="warn_only",
+            availability_mode="monthly",
+            created_at=now,
+            updated_at=now,
+        ))
+        db_session.flush()
 
 
 class _FakeMissionRankingService:
@@ -184,6 +229,7 @@ def test_approve_version_is_only_approval_boundary(db_session) -> None:
         generation_mode="assisted_auto",
     )
     version = CalendarRepository(db_session).get_latest_version(calendar.id)
+    _seed_assignment_parents(db_session)
     assignment = CalendarAssignmentModel(
         id="assignment-approval-boundary",
         calendar_version_id=version.id,
@@ -279,6 +325,7 @@ def test_reapprove_unlocked_calendar_does_not_send_initial_notifications(db_sess
         notes=None,
     )
     version = repo.get_latest_version(calendar.id)
+    _seed_assignment_parents(db_session)
     assignment = CalendarAssignmentModel(
         id="assignment-unlock-reapprove",
         calendar_version_id=version.id,

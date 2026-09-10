@@ -1,7 +1,7 @@
 """
 DB-backed integration tests for MissionCandidateService.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
+Uses the PostgreSQL db_session fixture from conftest.py.
 Creates ORM models directly without going through higher-level layers.
 """
 
@@ -179,6 +179,11 @@ def test_rank_candidates_for_date_marks_same_day_service_unavailable(db_session)
     doctor_a = _create_doctor(db_session, name="Dr. A")
     doctor_b = _create_doctor(db_session, name="Dr. B")
     version = _create_approved_calendar_version(db_session)
+    emergencia = _create_service_area(
+        db_session,
+        code="emergencia",
+        display_name="Emergencia",
+    )
 
     ranking_service = _make_ranking_service(db_session)
     ranking_service.generate_ranking(
@@ -194,7 +199,7 @@ def test_rank_candidates_for_date_marks_same_day_service_unavailable(db_session)
             calendar_version_id=version.id,
             service_date=_MISSION_DATE,
             service_start_at=None,
-            service_area_id="emergencia",
+            service_area_id=emergencia.id,
             doctor_id=doctor_a.id,
             assignment_source="manual",
             rationale=None,
@@ -361,6 +366,11 @@ def test_confirm_mission_rejects_same_day_service_doctor(db_session) -> None:
     """Confirming a mission must reject doctors who already have service that day."""
     doctor = _create_doctor(db_session, name="Dr. Ocupado")
     version = _create_approved_calendar_version(db_session)
+    emergencia = _create_service_area(
+        db_session,
+        code="emergencia",
+        display_name="Emergencia",
+    )
 
     ranking_service = _make_ranking_service(db_session)
     ranking_service.generate_ranking(
@@ -376,7 +386,7 @@ def test_confirm_mission_rejects_same_day_service_doctor(db_session) -> None:
             calendar_version_id=version.id,
             service_date=_MISSION_DATE,
             service_start_at=None,
-            service_area_id="emergencia",
+            service_area_id=emergencia.id,
             doctor_id=doctor.id,
             assignment_source="manual",
             rationale=None,

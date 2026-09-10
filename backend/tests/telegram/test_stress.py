@@ -2,7 +2,6 @@
 import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.application.telegram.llm import FakeLLMProvider
@@ -10,20 +9,6 @@ from backend.app.application.telegram.agent import ConversationalAgent
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.entity_resolver import EntityResolver
 from backend.app.application.telegram.query_executor import QueryExecutor
-from backend.app.infrastructure.db.base import Base
-from backend.app.infrastructure.db.models import (  # noqa: F401 — registra metadata
-    action_alerts,
-    audit,
-    availability,
-    calendars,
-    catalogs,
-    confirmations,
-    doctors,
-    missions,
-    notifications,
-    telegram,
-    user,
-)
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 
 _RESPONSES = {
@@ -65,15 +50,15 @@ _RESPONSES = {
 
 
 @pytest.fixture
-def stress_agent(sqlite_registry, tmp_path):
-    """Agente thread-safe: BD sqlite en archivo compartida + sesión/agente nuevos
-    por llamada. La BD `:memory:` de conftest crea una BD *por hilo*, lo que
-    volvía los tests de concurrencia flaky (datos invisibles entre hilos)."""
-    engine = create_engine(
-        f"sqlite+pysqlite:///{tmp_path / 'stress.db'}",
-        connect_args={"check_same_thread": False, "timeout": 30},
-    )
-    Base.metadata.create_all(engine)
+def stress_agent(pg_registry, engine):
+    """Agente thread-safe: PostgreSQL compartido + sesión/agente nuevos por
+    llamada.
+
+    Antes esto usaba un archivo SQLite porque la base `:memory:` de conftest
+    creaba una base *por hilo* y los tests de concurrencia salían flaky (datos
+    invisibles entre hilos). Con PostgreSQL cada hilo abre su propia conexión y
+    todas ven los mismos datos, que es justo lo que el test quiere medir.
+    """
     SessionLocal = sessionmaker(
         bind=engine, autocommit=False, autoflush=False, expire_on_commit=False,
     )
@@ -81,24 +66,23 @@ def stress_agent(sqlite_registry, tmp_path):
     from datetime import UTC as _UTC, datetime as _dt
 
     seed = SessionLocal()
-    if not seed.query(DoctorModel).first():
-        seed.add(DoctorModel(
-            id="00000000-0000-0000-0000-000000000001",
-            name="Dr. Stress Test",
-            normalized_name="dr. stress test",
-            sex="male",
-            active=True,
-            service_active=True,
-            availability_mode="monthly",
-            participa_misiones=True,
-            whatsapp_phone="0000000000",
-            monthly_service_target=3,
-            monthly_service_max=3,
-            monthly_service_limit_mode="warn_only",
-            created_at=_dt.now(_UTC),
-            updated_at=_dt.now(_UTC),
-        ))
-        seed.commit()
+    seed.add(DoctorModel(
+        id="00000000-0000-0000-0000-000000000001",
+        name="Dr. Stress Test",
+        normalized_name="dr. stress test",
+        sex="male",
+        active=True,
+        service_active=True,
+        availability_mode="monthly",
+        participa_misiones=True,
+        whatsapp_phone="0000000000",
+        monthly_service_target=3,
+        monthly_service_max=3,
+        monthly_service_limit_mode="warn_only",
+        created_at=_dt.now(_UTC),
+        updated_at=_dt.now(_UTC),
+    ))
+    seed.commit()
     seed.close()
 
     class _StressAgent:
@@ -108,7 +92,7 @@ def stress_agent(sqlite_registry, tmp_path):
             session = SessionLocal()
             try:
                 llm = FakeLLMProvider(responses=_RESPONSES)
-                router = IntentRouter(registry=sqlite_registry)
+                router = IntentRouter(registry=pg_registry)
                 router.set_session(session)
                 agent = ConversationalAgent(
                     llm=llm, router=router,

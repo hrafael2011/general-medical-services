@@ -1,20 +1,12 @@
 """
 Tests for QueryRegistry and IntentRouter.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
+Uses the PostgreSQL db_session fixture from conftest.py.
 """
-
-import uuid
-from datetime import UTC, datetime
-
-import pytest
 
 from backend.app.application.telegram.types import AgentResult
 from backend.app.application.telegram.intent_router import IntentRouter
 from backend.app.application.telegram.registry import QueryRegistry
-from backend.app.infrastructure.db.session import SessionLocal
-
-UTC = UTC
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +167,7 @@ def test_router_export_with_format_pdf() -> None:
         query_type="list_active_doctors",
         sql_template=(
             "SELECT name, sex, availability_mode "
-            "FROM doctors WHERE active = 1 AND service_active = 1"
+            "FROM doctors WHERE active = TRUE AND service_active = TRUE"
         ),
         params_schema={},
         description="List active doctors",
@@ -330,7 +322,7 @@ def test_router_export_excel_format(db_session) -> None:
     router.set_session(db_session)
     router._registry.register(
         query_type="list_doctors_excel",
-        sql_template="SELECT name, sex FROM doctors WHERE active = 1 AND service_active = 1",
+        sql_template="SELECT name, sex FROM doctors WHERE active = TRUE AND service_active = TRUE",
         params_schema={},
         description="Lista médicos para Excel",
     )
@@ -543,7 +535,7 @@ def test_router_export_excel_with_30_columns_does_not_crash(db_session) -> None:
     cols = ", ".join(["name AS col" + str(i) for i in range(30)])
     router._registry.register(
         query_type="wide_export",
-        sql_template=f"SELECT {cols} FROM doctors WHERE active = 1 AND service_active = 1",
+        sql_template=f"SELECT {cols} FROM doctors WHERE active = TRUE AND service_active = TRUE",
         params_schema={},
         description="30 columnas",
     )

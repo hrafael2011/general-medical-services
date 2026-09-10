@@ -2,9 +2,10 @@
 Tests de integración para QueryExecutor con DeepSeekProvider real.
 
 Requieren DEEPSEEK_API_KEY en .env. Se saltean automáticamente si no está configurada.
-Usan el DB SQLite en memoria del fixture db_session — el LLM genera SQL,
-pero puede producir sintaxis PostgreSQL que SQLite no soporta. Las pruebas
-verifican la estructura de respuesta más que el contenido exacto.
+Usan el PostgreSQL del fixture db_session — el mismo motor que producción, así
+que el SQL que genera el LLM se ejecuta de verdad y no contra un dialecto
+distinto. Las pruebas verifican la estructura de respuesta más que el
+contenido exacto.
 """
 
 import uuid
@@ -118,7 +119,7 @@ def test_extract_sql_plain(executor_no_db: QueryExecutor) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Full execute() con LLM real + SQLite
+# Full execute() con LLM real + PostgreSQL
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -131,7 +132,7 @@ def real_executor(db_session) -> QueryExecutor:
 def test_execute_returns_ok_structure(real_executor: QueryExecutor, db_session) -> None:
     _seed_doctors(db_session)
     result = real_executor.execute("¿Cuántos médicos hay en el sistema?")
-    # El LLM puede generar SQL incompatible con SQLite — verificamos la estructura
+    # El LLM puede generar SQL que no calce con el schema — verificamos la estructura
     assert "ok" in result
     if result["ok"]:
         assert "data" in result

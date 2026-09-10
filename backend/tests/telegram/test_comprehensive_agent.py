@@ -2,15 +2,13 @@
 Prueba exhaustiva del agente conversacional — simula usuario real.
 
 Evalúa todos los templates, fallback, export, edge cases y errores.
-Usa SQLite en memoria con datos realistas.
+Usa PostgreSQL con datos realistas.
 """
 
-import io
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
-from sqlalchemy import text as sa_text
 
 from backend.app.application.telegram.agent import ConversationalAgent
 from backend.app.application.telegram.intent_classifier import NLUEngine
@@ -267,53 +265,53 @@ class TestAllQueryTypes:
     """Prueba cada uno de los 20 query types registrados."""
 
     # ── count_doctors_total ──
-    def test_count_doctors_total(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_doctors_total(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="count_doctors_total", params={}, user_message="cuantos médicos hay"
         )
         assert "total" in result.response_text.lower() or "15" in result.response_text or "Resultado" in result.response_text
 
     # ── count_by_sex ──
-    def test_count_by_sex(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_by_sex(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="count_by_sex", params={}, user_message="médicos por sexo"
         )
         assert "masculino" in result.response_text.lower() or "femenino" in result.response_text.lower() or "Resultado" in result.response_text.lower()
 
     # ── doctors_by_sex ──
-    def test_doctors_by_sex_male(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_doctors_by_sex_male(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="doctors_by_sex", params={"sex": "male"}, user_message="médicos hombres"
         )
         assert result.response_text is not None
         assert "No se encontraron" not in result.response_text
 
-    def test_doctors_by_sex_female(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_doctors_by_sex_female(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="doctors_by_sex", params={"sex": "female"}, user_message="médicos mujeres"
         )
         assert result.response_text is not None
         assert "No se encontraron" not in result.response_text
 
     # ── count_by_rank ──
-    def test_count_by_rank(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_by_rank(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="count_by_rank", params={}, user_message="médicos por rango"
         )
         assert result.response_text is not None
         assert "No se encontraron" not in result.response_text
 
     # ── count_by_specific_rank ──
-    def test_count_by_specific_rank_cabo(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_by_specific_rank_cabo(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="count_by_specific_rank", params={"rank": "cabo"},
             user_message="cuántos cabos hay"
         )
         assert result.response_text is not None
         assert "No se encontraron" not in result.response_text
 
-    def test_count_by_specific_rank_sargento(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_by_specific_rank_sargento(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="count_by_specific_rank", params={"rank": "sargento"},
             user_message="cuántos sargentos hay"
         )
@@ -321,8 +319,8 @@ class TestAllQueryTypes:
         assert "No se encontraron" not in result.response_text
 
     # ── doctors_by_rank ──
-    def test_doctors_by_rank(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_doctors_by_rank(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="doctors_by_rank", params={"rank": "cabo"},
             user_message="lista de cabos"
         )
@@ -330,8 +328,8 @@ class TestAllQueryTypes:
         assert "No se encontraron" not in result.response_text
 
     # ── list_active_doctors ──
-    def test_list_active_doctors(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_list_active_doctors(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="list_active_doctors", params={}, user_message="lista de médicos activos"
         )
         assert "No se encontraron" not in result.response_text
@@ -339,8 +337,8 @@ class TestAllQueryTypes:
         assert "Resultado" in result.response_text or "encontraron" in result.response_text.lower()
 
     # ── doctor_detail ──
-    def test_doctor_detail_by_search(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_doctor_detail_by_search(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="doctor_detail",
             params={"search": "%García%", "search_id": "none"},
             user_message="detalle de García"
@@ -349,21 +347,20 @@ class TestAllQueryTypes:
         assert "No se encontraron" not in result.response_text
 
     # ── doctors_pending_availability ──
-    def test_doctors_pending_availability(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_doctors_pending_availability(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="doctors_pending_availability",
             params={"year": 2026, "month": 5},
             user_message="médicos sin disponibilidad en mayo"
         )
         # 2 doctors were left without availability
         assert result.response_text is not None
-        # With SQLite adaptation, EXISTS subquery works differently
         # Just verify it doesn't crash
         assert isinstance(result, AgentResult)
 
     # ── calendar_status_month ──
-    def test_calendar_status_month(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_calendar_status_month(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="calendar_status_month",
             params={"year": 2026, "month": 5},
             user_message="estado del calendario mayo"
@@ -372,9 +369,9 @@ class TestAllQueryTypes:
         assert "No se encontraron" not in result.response_text
 
     # ── doctors_working_date ──
-    def test_doctors_working_date(self, sqlite_router) -> None:
+    def test_doctors_working_date(self, pg_router) -> None:
         today_str = date.today().strftime("%Y-%m-%d")
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="doctors_working_date",
             params={"date": today_str},
             user_message="médicos que trabajan hoy"
@@ -383,11 +380,11 @@ class TestAllQueryTypes:
         assert "No se encontraron" not in result.response_text
 
     # ── assignment_count_by_date_range ──
-    def test_assignment_count_by_date_range(self, sqlite_router) -> None:
+    def test_assignment_count_by_date_range(self, pg_router) -> None:
         today = date.today()
         start = today.strftime("%Y-%m-%d")
         end = (today + timedelta(days=10)).strftime("%Y-%m-%d")
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="assignment_count_by_date_range",
             params={"start_date": start, "end_date": end},
             user_message="servicios por médico esta semana"
@@ -395,8 +392,8 @@ class TestAllQueryTypes:
         assert result.response_text is not None
         assert "No se encontraron" not in result.response_text
 
-    def test_count_assigned_doctors_by_month(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_assigned_doctors_by_month(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query",
             query_type="count_assigned_doctors_by_month",
             params={"year": 2026, "month": 5},
@@ -404,8 +401,8 @@ class TestAllQueryTypes:
         )
         assert "8" in result.response_text
 
-    def test_list_assigned_doctors_by_month_does_not_show_ids(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_list_assigned_doctors_by_month_does_not_show_ids(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query",
             query_type="list_assigned_doctors_by_month",
             params={"year": 2026, "month": 5},
@@ -416,8 +413,8 @@ class TestAllQueryTypes:
         assert "_id" not in result.response_text
 
     # ── mission_ranking ──
-    def test_mission_ranking(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_mission_ranking(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="mission_ranking",
             params={"year": 2026, "month": 5},
             user_message="ranking de misiones mayo"
@@ -427,8 +424,8 @@ class TestAllQueryTypes:
         assert isinstance(result, AgentResult)
 
     # ── operational_summary ──
-    def test_operational_summary(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_operational_summary(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="operational_summary",
             params={"year": 2026, "month": 5},
             user_message="resumen operativo mayo"
@@ -437,9 +434,9 @@ class TestAllQueryTypes:
         assert isinstance(result, AgentResult)
 
     # ── doctor_history_60d ──
-    def test_doctor_history_60d(self, sqlite_router, seeded_db) -> None:
+    def test_doctor_history_60d(self, pg_router, seeded_db) -> None:
         doctor_id = seeded_db["doctors"][0].id
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="doctor_history_60d",
             params={"doctor_id": doctor_id},
             user_message="historial de este médico"
@@ -448,8 +445,8 @@ class TestAllQueryTypes:
         assert isinstance(result, AgentResult)
 
     # ── count_doctors_by_department ──
-    def test_count_doctors_by_department(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_doctors_by_department(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="count_doctors_by_department",
             params={}, user_message="médicos por departamento"
         )
@@ -457,8 +454,8 @@ class TestAllQueryTypes:
         assert "No se encontraron" not in result.response_text
 
     # ── count_by_specific_sex ──
-    def test_count_by_specific_sex(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_count_by_specific_sex(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="count_by_specific_sex",
             params={"sex": "male"}, user_message="cuántos hombres hay"
         )
@@ -466,8 +463,8 @@ class TestAllQueryTypes:
         assert "No se encontraron" not in result.response_text
 
     # ── doctor_history_by_name ──
-    def test_doctor_history_by_name(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_doctor_history_by_name(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="doctor_history_by_name",
             params={"search": "%García%"}, user_message="historial de García"
         )
@@ -475,11 +472,11 @@ class TestAllQueryTypes:
         assert isinstance(result, AgentResult)
 
     # ── assignments_by_area ──
-    def test_assignments_by_area(self, sqlite_router) -> None:
+    def test_assignments_by_area(self, pg_router) -> None:
         today = date.today()
         start = today.strftime("%Y-%m-%d")
         end = (today + timedelta(days=30)).strftime("%Y-%m-%d")
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="assignments_by_area",
             params={"area_code": "%EMERG%", "start_date": start, "end_date": end},
             user_message="asignaciones en emergencia este mes"
@@ -488,8 +485,8 @@ class TestAllQueryTypes:
         assert isinstance(result, AgentResult)
 
     # ── unresolved_gaps_month ──
-    def test_unresolved_gaps_month(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_unresolved_gaps_month(self, pg_router) -> None:
+        result = pg_router.handle(
             action="query", query_type="unresolved_gaps_month",
             params={"year": 2026, "month": 5},
             user_message="huecos sin asignar en mayo"
@@ -507,8 +504,8 @@ class TestAllQueryTypes:
 class TestExports:
     """Prueba exportación a PDF y Excel para cada template."""
 
-    def test_export_pdf_list_active_doctors(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_export_pdf_list_active_doctors(self, pg_router) -> None:
+        result = pg_router.handle(
             action="export", query_type="list_active_doctors", params={},
             user_message="exporta médicos activos", format="pdf"
         )
@@ -516,24 +513,24 @@ class TestExports:
         assert len(result.document_bytes) > 100
         assert result.document_filename.endswith(".pdf")
 
-    def test_export_excel_list_active_doctors(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_export_excel_list_active_doctors(self, pg_router) -> None:
+        result = pg_router.handle(
             action="export", query_type="list_active_doctors", params={},
             user_message="exporta médicos activos", format="excel"
         )
         assert result.document_bytes is not None
         assert result.document_filename.endswith(".xlsx")
 
-    def test_export_pdf_count_by_sex(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_export_pdf_count_by_sex(self, pg_router) -> None:
+        result = pg_router.handle(
             action="export", query_type="count_by_sex", params={},
             user_message="exporta médicos por sexo", format="pdf"
         )
         assert result.document_bytes is not None
         assert len(result.document_bytes) > 100
 
-    def test_export_pdf_mission_ranking(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_export_pdf_mission_ranking(self, pg_router) -> None:
+        result = pg_router.handle(
             action="export", query_type="mission_ranking",
             params={"year": 2026, "month": 5},
             user_message="ranking de misiones PDF", format="pdf"
@@ -541,8 +538,8 @@ class TestExports:
         # May be empty, but should not crash
         assert isinstance(result, AgentResult)
 
-    def test_export_pdf_operational_summary(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_export_pdf_operational_summary(self, pg_router) -> None:
+        result = pg_router.handle(
             action="export", query_type="operational_summary",
             params={"year": 2026, "month": 5},
             user_message="resumen operativo PDF", format="pdf"
@@ -550,16 +547,16 @@ class TestExports:
         assert result.document_bytes is not None
         assert len(result.document_bytes) > 100
 
-    def test_export_pdf_doctors_pending_availability(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_export_pdf_doctors_pending_availability(self, pg_router) -> None:
+        result = pg_router.handle(
             action="export", query_type="doctors_pending_availability",
             params={"year": 2026, "month": 5},
             user_message="médicos sin disponibilidad PDF", format="pdf"
         )
         assert isinstance(result, AgentResult)
 
-    def test_export_pdf_doctors_by_rank(self, sqlite_router) -> None:
-        result = sqlite_router.handle(
+    def test_export_pdf_doctors_by_rank(self, pg_router) -> None:
+        result = pg_router.handle(
             action="export", query_type="doctors_by_rank",
             params={"rank": "cabo"},
             user_message="cabos PDF", format="pdf"
@@ -567,9 +564,9 @@ class TestExports:
         assert result.document_bytes is not None
         assert len(result.document_bytes) > 100
 
-    def test_export_pdf_assignments_by_area(self, sqlite_router) -> None:
+    def test_export_pdf_assignments_by_area(self, pg_router) -> None:
         today = date.today()
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="export", query_type="assignments_by_area",
             params={"area_code": "%EMERG%", "start_date": today.strftime("%Y-%m-%d"),
                     "end_date": (today + timedelta(days=30)).strftime("%Y-%m-%d")},
@@ -577,9 +574,9 @@ class TestExports:
         )
         assert isinstance(result, AgentResult)
 
-    def test_export_empty_returns_graceful(self, sqlite_router) -> None:
+    def test_export_empty_returns_graceful(self, pg_router) -> None:
         """Export sin resultados → no genera documento, mensaje descriptivo."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="export", query_type="mission_ranking",
             params={"year": 2020, "month": 1},
             user_message="ranking vacío", format="pdf"
@@ -596,9 +593,9 @@ class TestExports:
 class TestFallbackAndEdgeCases:
     """Prueba queries fuera de template y casos límite."""
 
-    def test_unknown_query_type_returns_not_found(self, sqlite_router) -> None:
+    def test_unknown_query_type_returns_not_found(self, pg_router) -> None:
         """Query type no registrado → fallback message."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="nonexistent_query_xyz", params={},
             user_message="una pregunta que no existe"
         )
@@ -613,66 +610,66 @@ class TestFallbackAndEdgeCases:
         )
         assert "encontrar" in result.response_text.lower()
 
-    def test_empty_params_still_works(self, sqlite_router) -> None:
+    def test_empty_params_still_works(self, pg_router) -> None:
         """Query sin params → debería funcionar si el template no requiere params."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="count_doctors_total", params={},
             user_message="cuántos médicos hay"
         )
         assert "encontrar" not in result.response_text.lower()
 
-    def test_invalid_action_returns_fallback(self, sqlite_router) -> None:
+    def test_invalid_action_returns_fallback(self, pg_router) -> None:
         """Acción desconocida → fallback genérico."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="teleport", query_type=None, params={}, user_message="haz magia"
         )
         assert "encontrar" in result.response_text.lower()
 
-    def test_query_with_nonexistent_param_value(self, sqlite_router) -> None:
+    def test_query_with_nonexistent_param_value(self, pg_router) -> None:
         """Query con valor de parámetro que no existe → resultados vacíos."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="doctors_by_sex",
             params={"sex": "alien"}, user_message="médicos alien"
         )
         assert "encontraron" in result.response_text.lower()
 
-    def test_export_without_format_defaults_to_pdf(self, sqlite_router) -> None:
+    def test_export_without_format_defaults_to_pdf(self, pg_router) -> None:
         """Export sin format → PDF por defecto."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="export", query_type="list_active_doctors", params={},
             user_message="exporta médicos"
         )
         assert result.document_bytes is not None
         assert result.document_filename.endswith(".pdf")
 
-    def test_reply_action_does_not_touch_db(self, sqlite_router) -> None:
+    def test_reply_action_does_not_touch_db(self, pg_router) -> None:
         """Reply → respuesta directa, sin consulta."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="reply", query_type=None, params={},
             user_message="hola", response_text="¡Hola! ¿En qué puedo ayudarte?"
         )
         assert result.response_text == "¡Hola! ¿En qué puedo ayudarte?"
         assert result.document_bytes is None
 
-    def test_ambiguous_action_uses_llm_text(self, sqlite_router) -> None:
+    def test_ambiguous_action_uses_llm_text(self, pg_router) -> None:
         """Ambiguous con response_text del LLM."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="ambiguous", query_type=None, params={},
             user_message="asigna a Pérez",
             response_text="¿En qué área querés asignar a Pérez: Emergencia o Pista?"
         )
         assert "Emergencia" in result.response_text
 
-    def test_ambiguous_falls_back_to_default(self, sqlite_router) -> None:
+    def test_ambiguous_falls_back_to_default(self, pg_router) -> None:
         """Ambiguous sin response_text → default."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="ambiguous", query_type=None, params={}, user_message="no sé"
         )
         assert "específico" in result.response_text.lower()
 
-    def test_router_handles_sql_injection_attempt(self, sqlite_router) -> None:
+    def test_router_handles_sql_injection_attempt(self, pg_router) -> None:
         """Intento de inyección SQL vía params → debe ser seguro (parametrized query)."""
-        result = sqlite_router.handle(
+        result = pg_router.handle(
             action="query", query_type="doctors_by_rank",
             params={"rank": "'; DROP TABLE doctors; --"},
             user_message="intento de inyección"
@@ -784,12 +781,12 @@ class TestAgentPipeline:
         assert "hola" in result.response_text.lower()
         assert "asistente de turnos" in result.response_text.lower()
 
-    def test_agent_low_confidence_triggers_clarification(self, seeded_db, sqlite_router) -> None:
+    def test_agent_low_confidence_triggers_clarification(self, seeded_db, pg_router) -> None:
         """confidence < 0.6 → ambiguous."""
         llm = FakeLLMProvider(responses={
             "algo": '{"action": "query", "query_type": "count_doctors_total", "confidence": 0.3}',
         })
-        agent = ConversationalAgent(llm=llm, router=sqlite_router)
+        agent = ConversationalAgent(llm=llm, router=pg_router)
         result = agent.process(text="algo raro")
         assert result.agent_action == "ambiguous"
 
@@ -839,7 +836,7 @@ class TestAgentPipeline:
 class TestRegistryIntegrity:
     """Verifica integridad del registry con los 20 templates."""
 
-    def test_all_20_templates_registered(self, sqlite_router) -> None:
+    def test_all_20_templates_registered(self, pg_router) -> None:
         expected = {
             "count_doctors_total", "count_by_sex", "doctors_by_sex",
             "count_by_rank", "count_by_specific_rank", "doctors_by_rank",
@@ -851,15 +848,15 @@ class TestRegistryIntegrity:
             "doctor_history_by_name", "assignments_by_area",
             "unresolved_gaps_month",
         }
-        registered = {e["query_type"] for e in sqlite_router.registry.list_all()}
+        registered = {e["query_type"] for e in pg_router.registry.list_all()}
         missing = expected - registered
         assert not missing, f"Faltan templates: {missing}"
 
-    def test_all_templates_have_export_filename(self, sqlite_router) -> None:
+    def test_all_templates_have_export_filename(self, pg_router) -> None:
         """Cada template con export debe tener filename en _EXPORT_FILENAME_MAP."""
         from backend.app.application.telegram.intent_router import _EXPORT_FILENAME_MAP
         exportable = {k for k, v in _EXPORT_FILENAME_MAP.items()}
-        registered = {e["query_type"] for e in sqlite_router.registry.list_all()}
+        registered = {e["query_type"] for e in pg_router.registry.list_all()}
         missing = registered - exportable
         # Not all queries need export entries, but common ones should
         assert "count_doctors_total" in exportable or "count_doctors_total" not in missing

@@ -1,6 +1,6 @@
 """End-to-end integration tests: Generate → Manual Adjust → Verify.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
+Uses the PostgreSQL db_session fixture from conftest.py.
 """
 
 import datetime

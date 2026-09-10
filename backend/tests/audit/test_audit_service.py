@@ -1,9 +1,11 @@
 import pytest
+from datetime import UTC, datetime
 
 from backend.app.application.accounts.errors import InvalidCredentialsError
 from backend.app.application.accounts.service import AccountService
 from backend.app.application.audit.service import AuditService
 from backend.app.application.doctors.service import DoctorService
+from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel
 from backend.app.infrastructure.repositories.audit import AuditRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.users import UserRepository
@@ -14,6 +16,28 @@ from backend.app.infrastructure.repositories.users import UserRepository
 
 def make_audit_service(db_session) -> AuditService:
     return AuditService(AuditRepository(db_session))
+
+
+@pytest.fixture
+def seeded_reasons(db_session) -> None:
+    """deactivate_service() asigna service_inactive_reason_id (FK a
+    deactivation_reasons). SQLite no validaba FKs; PostgreSQL sí, así que los
+    motivos usados por los tests tienen que existir."""
+    now = datetime.now(UTC)
+    for reason_id in ("reason-001", "r1"):
+        db_session.add(
+            DeactivationReasonModel(
+                id=reason_id,
+                code=f"code-{reason_id}",
+                display_name=f"Motivo {reason_id}",
+                active=True,
+                requires_detail=False,
+                severity="info",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    db_session.flush()
 
 
 def make_doctor_service(db_session, audit_service=None) -> DoctorService:
@@ -82,7 +106,7 @@ def test_audit_event_contains_doctor_name_in_after_snapshot(db_session) -> None:
     assert events[0].after_snapshot["name"] == doctor.name
 
 
-def test_audit_event_for_service_deactivation(db_session) -> None:
+def test_audit_event_for_service_deactivation(db_session, seeded_reasons) -> None:
     audit = make_audit_service(db_session)
     doctor_service = make_doctor_service(db_session, audit_service=audit)
 
@@ -94,7 +118,7 @@ def test_audit_event_for_service_deactivation(db_session) -> None:
     assert "doctor_service_deactivated" in action_types
 
 
-def test_audit_event_for_service_reactivation(db_session) -> None:
+def test_audit_event_for_service_reactivation(db_session, seeded_reasons) -> None:
     audit = make_audit_service(db_session)
     doctor_service = make_doctor_service(db_session, audit_service=audit)
 
@@ -139,7 +163,7 @@ def test_audit_event_for_doctor_deletion(db_session) -> None:
 # Append-only / ordering
 # ---------------------------------------------------------------------------
 
-def test_append_only_no_update_method(db_session) -> None:
+def test_append_only_no_update_method(db_session, seeded_reasons) -> None:
     """AuditRepository exposes no update or delete — all events are preserved
     and returned in descending order by occurred_at."""
     audit = make_audit_service(db_session)
@@ -195,7 +219,7 @@ def test_filter_by_actor_id(db_session) -> None:
     assert events[0].actor_id == "actor-1"
 
 
-def test_filter_by_action_type(db_session) -> None:
+def test_filter_by_action_type(db_session, seeded_reasons) -> None:
     audit = make_audit_service(db_session)
     doctor_service = make_doctor_service(db_session, audit_service=audit)
 

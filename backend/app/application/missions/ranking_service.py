@@ -57,8 +57,9 @@ class MissionRankingService:
             # borran/insertan las mismas filas se bloquean entre sí con
             # tuple-locks, encadenan y agotan la pool (→ 500 masivos, sesión
             # expulsada). El lock se libera al commit/rollback de la transacción.
-            # (Solo Postgres: es la DB de producción; en SQLite de tests no
-            # existe y no hace falta por ser monohilo.)
+            # (Guard por dialecto: `pg_advisory_xact_lock` es específico de
+            # PostgreSQL. La suite corre contra PostgreSQL, así que este camino
+            # también se ejercita en los tests.)
             if self.mission_repo.session.get_bind().dialect.name == "postgresql":
                 lock_key = f"mission-ranking:{year}:{month}:{calendar_version_id or ''}"
                 lock_id = int(hashlib.md5(lock_key.encode()).hexdigest()[:15], 16)

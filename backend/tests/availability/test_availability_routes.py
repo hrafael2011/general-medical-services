@@ -1,20 +1,17 @@
 """Tests for availability API routes."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from backend.app.api.dependencies import get_current_user
 from backend.app.api.routes.availability import get_availability_service
 from backend.app.application.availability.errors import AvailabilityError
 from backend.app.application.availability.service import AvailabilityService
-from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models.availability import (
     DoctorAvailabilityModel,
     DoctorRestrictionModel,
@@ -23,22 +20,6 @@ from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
-
-
-@pytest.fixture
-def engine():
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
-
-
-@pytest.fixture
-def session_local(engine):
-    return sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
 
 
 @pytest.fixture
@@ -79,6 +60,10 @@ def seed_data(engine):
         updated_at=datetime.now(UTC),
     )
     sess.add(doctor)
+    # SQLAlchemy ordena los INSERT por relationship(), no por ForeignKey suelto:
+    # sin este flush insertaría las hijas antes que el doctor y PostgreSQL
+    # rechazaría la FK (SQLite no la validaba y lo tapaba).
+    sess.flush()
 
     avail = DoctorAvailabilityModel(
         id=str(uuid4()),

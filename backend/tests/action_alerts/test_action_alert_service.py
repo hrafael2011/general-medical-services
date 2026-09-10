@@ -1,4 +1,9 @@
+from datetime import UTC, datetime
+
+import pytest
+
 from backend.app.application.action_alerts.service import ActionAlertService
+from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 
 
@@ -6,7 +11,29 @@ def _make_service(db_session) -> ActionAlertService:
     return ActionAlertService(ActionAlertRepository(db_session))
 
 
-def test_create_alert_starts_open(db_session) -> None:
+@pytest.fixture
+def seeded_user(db_session) -> None:
+    """Los servicios setean created_by / resolved_by / dismissed_by como FK a
+    users.id. SQLite no validaba FKs; PostgreSQL sí, así que el actor tiene que
+    existir como usuario."""
+    db_session.add(
+        UserModel(
+            id="user-1",
+            email="user-1@test.com",
+            password_hash="hash",
+            name="Actor Test",
+            role="admin",
+            active=True,
+            must_change_password=False,
+            token_version=1,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    db_session.flush()
+
+
+def test_create_alert_starts_open(db_session, seeded_user) -> None:
     service = _make_service(db_session)
 
     alert = service.create_alert(
@@ -28,7 +55,7 @@ def test_create_alert_starts_open(db_session) -> None:
     assert alert.resolved_at is None
 
 
-def test_count_open_by_section_ignores_resolved(db_session) -> None:
+def test_count_open_by_section_ignores_resolved(db_session, seeded_user) -> None:
     service = _make_service(db_session)
     repo = ActionAlertRepository(db_session)
 
@@ -51,7 +78,7 @@ def test_count_open_by_section_ignores_resolved(db_session) -> None:
     assert counts == {"calendar": 1}
 
 
-def test_dismiss_alert_keeps_record(db_session) -> None:
+def test_dismiss_alert_keeps_record(db_session, seeded_user) -> None:
     service = _make_service(db_session)
     repo = ActionAlertRepository(db_session)
     alert = service.create_alert(

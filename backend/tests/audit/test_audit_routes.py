@@ -5,32 +5,13 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from backend.app.api.dependencies import get_current_user
-from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models.audit import AuditEventModel
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.main import create_app
-
-
-@pytest.fixture
-def engine():
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
-
-
-@pytest.fixture
-def session_local(engine):
-    return sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
 
 
 @pytest.fixture

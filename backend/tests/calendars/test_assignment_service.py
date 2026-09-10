@@ -36,6 +36,46 @@ def _make_assignment_service(db_session) -> AssignmentService:
     )
 
 
+# Código y nombre reales por id de seed: el servicio de asignación identifica
+# las áreas "fuertes" por `code` (`strong_codes = {"emergencia", "pista"}`),
+# así que el code debe coincidir con el del catálogo de producción.
+_AREA_SEED_META = {
+    _AREA_ID: ("emergencia", "Emergencia"),
+    "area-pista": ("pista", "Pista"),
+}
+
+
+def _seed_service_area(db_session, area_id: str, *, strong: bool = True) -> None:
+    """Garantiza que exista la fila ServiceAreaModel que referencian los seeds.
+
+    PostgreSQL valida las FKs: doctor_allowed_areas y calendar_assignments
+    referencian service_areas.id, así que el área tiene que existir antes de
+    que SQLAlchemy emita esos INSERT (SQLite no validaba la FK y lo tapaba).
+
+    `strong=False` siembra un código fuera de {"emergencia", "pista"} para
+    tests que no quieren contexto de espaciado (<14 días tras turno fuerte).
+    """
+    if db_session.get(ServiceAreaModel, area_id) is not None:
+        return
+    if strong:
+        code, display_name = _AREA_SEED_META.get(area_id, (area_id, area_id))
+    else:
+        code = f"{area_id}-weak"
+        display_name = area_id
+    now = datetime.datetime.now(datetime.UTC)
+    db_session.add(ServiceAreaModel(
+        id=area_id,
+        code=code,
+        display_name=display_name,
+        active=True,
+        required_for_daily_coverage=True,
+        load_weight=3,
+        created_at=now,
+        updated_at=now,
+    ))
+    db_session.flush()
+
+
 def _create_doctor(
     db_session,
     *,
@@ -43,23 +83,29 @@ def _create_doctor(
     service_active: bool = True,
     allowed_area_ids: list[str] | None = None,
     name: str = "Dr. Test",
+    sex: str = "male",
+    monthly_service_target: int = 3,
+    monthly_service_max: int = 3,
+    monthly_service_limit_mode: str = "warn_only",
+    availability_mode: str = "monthly",
 ):
     """Create a doctor via DoctorService and optionally add allowed area."""
+    for area_id in allowed_area_ids or [_AREA_ID]:
+        _seed_service_area(db_session, area_id)
     doctor_svc = DoctorService(DoctorRepository(db_session))
     doctor = doctor_svc.create_doctor(
         actor_id="actor-001",
         name=name,
-        sex="male",
+        sex=sex,
         rank_id=None,
         department_id=None,
         notes=None,
         participa_misiones=True,
         whatsapp_phone="+18095551234",
-        monthly_service_target=3,
-        monthly_service_max=3,
-        monthly_service_limit_mode="warn_only",
-        # monthly mode with no submitted records passes AvailabilitySpec
-        availability_mode="monthly",
+        monthly_service_target=monthly_service_target,
+        monthly_service_max=monthly_service_max,
+        monthly_service_limit_mode=monthly_service_limit_mode,
+        availability_mode=availability_mode,
         allowed_area_ids=allowed_area_ids or [_AREA_ID],
     )
     if not active:
@@ -252,22 +298,7 @@ def test_replace_assignment(db_session) -> None:
     doctor_a = _create_doctor(db_session)
 
     # Create second doctor with same allowed area
-    doctor_svc = DoctorService(DoctorRepository(db_session))
-    doctor_b = doctor_svc.create_doctor(
-        actor_id="actor-001",
-        name="Dr. B",
-        sex="female",
-        rank_id=None,
-        department_id=None,
-        notes=None,
-        participa_misiones=True,
-        whatsapp_phone="+18095551234",
-        monthly_service_target=3,
-        monthly_service_max=3,
-        monthly_service_limit_mode="warn_only",
-        availability_mode="monthly",
-        allowed_area_ids=[_AREA_ID],
-    )
+    doctor_b = _create_doctor(db_session, name="Dr. B", sex="female")
 
     service = _make_assignment_service(db_session)
 
@@ -292,22 +323,7 @@ def test_replace_assignment(db_session) -> None:
 def test_replace_assignment_from_approved_week_raises(db_session) -> None:
     calendar, version = _create_calendar_and_version(db_session)
     doctor_a = _create_doctor(db_session)
-    doctor_svc = DoctorService(DoctorRepository(db_session))
-    doctor_b = doctor_svc.create_doctor(
-        actor_id="actor-001",
-        name="Dr. B",
-        sex="female",
-        rank_id=None,
-        department_id=None,
-        notes=None,
-        participa_misiones=True,
-        whatsapp_phone="+18095551234",
-        monthly_service_target=3,
-        monthly_service_max=3,
-        monthly_service_limit_mode="warn_only",
-        availability_mode="monthly",
-        allowed_area_ids=[_AREA_ID],
-    )
+    doctor_b = _create_doctor(db_session, name="Dr. B", sex="female")
     service = _make_assignment_service(db_session)
 
     assignment = service.assign_doctor(
@@ -354,22 +370,7 @@ def test_hard_block_prevents_assignment(db_session) -> None:
 
 def test_soft_warning_requires_justification_and_is_stored(db_session) -> None:
     _calendar, version = _create_calendar_and_version(db_session)
-    doctor_svc = DoctorService(DoctorRepository(db_session))
-    doctor = doctor_svc.create_doctor(
-        actor_id="actor-001",
-        name="Dr. Fixed",
-        sex="male",
-        rank_id=None,
-        department_id=None,
-        notes=None,
-        participa_misiones=True,
-        whatsapp_phone="+18095551234",
-        monthly_service_target=3,
-        monthly_service_max=3,
-        monthly_service_limit_mode="warn_only",
-        availability_mode="fixed",
-        allowed_area_ids=[_AREA_ID],
-    )
+    doctor = _create_doctor(db_session, name="Dr. Fixed", availability_mode="fixed")
     service = _make_assignment_service(db_session)
 
     with pytest.raises(CalendarServiceError) as exc_info:
@@ -398,21 +399,13 @@ def test_soft_warning_requires_justification_and_is_stored(db_session) -> None:
 
 def test_assign_doctor_respects_recurring_availability(db_session) -> None:
     _calendar, version = _create_calendar_and_version(db_session)
-    doctor_svc = DoctorService(DoctorRepository(db_session))
-    doctor = doctor_svc.create_doctor(
-        actor_id="actor-001",
+    doctor = _create_doctor(
+        db_session,
         name="Dr. Recurring",
-        sex="male",
-        rank_id=None,
-        department_id=None,
-        notes=None,
-        participa_misiones=True,
-        whatsapp_phone="+18095551234",
         monthly_service_target=1,
         monthly_service_max=1,
         monthly_service_limit_mode="hard_limit",
         availability_mode="fixed",
-        allowed_area_ids=[_AREA_ID],
     )
     now = datetime.datetime.now(datetime.UTC)
     db_session.add(DoctorAvailabilityModel(
@@ -595,17 +588,7 @@ def test_evaluate_slot_reports_warn_only_monthly_max(db_session) -> None:
 
 
 def test_evaluate_slot_maps_service_area_uuid_for_spacing_warnings(db_session) -> None:
-    now = datetime.datetime.now(datetime.UTC)
-    db_session.add(ServiceAreaModel(
-        id=_AREA_ID,
-        code="emergencia",
-        display_name="Emergencia",
-        active=True,
-        required_for_daily_coverage=True,
-        load_weight=3,
-        created_at=now,
-        updated_at=now,
-    ))
+    _seed_service_area(db_session, _AREA_ID)
     _calendar, version = _create_calendar_and_version(db_session)
     doctor = _create_doctor(db_session)
     doctor.monthly_service_max = 999
@@ -632,17 +615,7 @@ def test_evaluate_slot_maps_service_area_uuid_for_spacing_warnings(db_session) -
 
 
 def test_assign_doctor_requires_spacing_warning_confirmation_when_called_directly(db_session) -> None:
-    now = datetime.datetime.now(datetime.UTC)
-    db_session.add(ServiceAreaModel(
-        id=_AREA_ID,
-        code="emergencia",
-        display_name="Emergencia",
-        active=True,
-        required_for_daily_coverage=True,
-        load_weight=3,
-        created_at=now,
-        updated_at=now,
-    ))
+    _seed_service_area(db_session, _AREA_ID)
     _calendar, version = _create_calendar_and_version(db_session)
     doctor = _create_doctor(db_session)
     doctor.monthly_service_max = 999
@@ -683,34 +656,10 @@ def test_assign_doctor_requires_spacing_warning_confirmation_when_called_directl
 
 
 def test_replace_assignment_requires_spacing_warning_confirmation_when_called_directly(db_session) -> None:
-    now = datetime.datetime.now(datetime.UTC)
-    db_session.add(ServiceAreaModel(
-        id=_AREA_ID,
-        code="emergencia",
-        display_name="Emergencia",
-        active=True,
-        required_for_daily_coverage=True,
-        load_weight=3,
-        created_at=now,
-        updated_at=now,
-    ))
+    _seed_service_area(db_session, _AREA_ID)
     _calendar, version = _create_calendar_and_version(db_session)
     doctor_a = _create_doctor(db_session)
-    doctor_b = DoctorService(DoctorRepository(db_session)).create_doctor(
-        actor_id="actor-001",
-        name="Dr. Spacing B",
-        sex="female",
-        rank_id=None,
-        department_id=None,
-        notes=None,
-        participa_misiones=True,
-        whatsapp_phone="+18095551234",
-        monthly_service_target=3,
-        monthly_service_max=999,
-        monthly_service_limit_mode="warn_only",
-        availability_mode="monthly",
-        allowed_area_ids=[_AREA_ID],
-    )
+    doctor_b = _create_doctor(db_session, name="Dr. Spacing B", sex="female", monthly_service_max=999)
     doctor_a.monthly_service_max = 999
     db_session.flush()
     service = _make_assignment_service(db_session)
@@ -850,17 +799,7 @@ def test_evaluate_slot_reports_hard_blocks_for_inactive_doctor(db_session) -> No
 
 def test_evaluate_slot_reports_multiple_warnings(db_session) -> None:
     """evaluate_slot reports both spacing and monthly_max warnings together."""
-    now = datetime.datetime.now(datetime.UTC)
-    db_session.add(ServiceAreaModel(
-        id=_AREA_ID,
-        code="emergencia",
-        display_name="Emergencia",
-        active=True,
-        required_for_daily_coverage=True,
-        load_weight=3,
-        created_at=now,
-        updated_at=now,
-    ))
+    _seed_service_area(db_session, _AREA_ID)
     _calendar, version = _create_calendar_and_version(db_session)
     doctor = _create_doctor(db_session)
     doctor.monthly_service_max = 2
@@ -912,21 +851,11 @@ def test_evaluate_slot_reports_multiple_warnings(db_session) -> None:
 def test_evaluate_slot_returns_no_availability_as_warning(db_session) -> None:
     """Un doctor con disponibilidad fija que no cubre la fecha es warning, no hard block."""
     _calendar, version = _create_calendar_and_version(db_session)
-    doctor_svc = DoctorService(DoctorRepository(db_session))
-    doctor = doctor_svc.create_doctor(
-        actor_id="actor-001",
+    doctor = _create_doctor(
+        db_session,
         name="Dr. Fixed Monday",
-        sex="male",
-        rank_id=None,
-        department_id=None,
-        notes=None,
-        participa_misiones=True,
-        whatsapp_phone="+18095551234",
-        monthly_service_target=3,
         monthly_service_max=999,
-        monthly_service_limit_mode="warn_only",
         availability_mode="fixed",
-        allowed_area_ids=[_AREA_ID],
     )
     now = datetime.datetime.now(datetime.UTC)
     db_session.add(DoctorAvailabilityModel(
@@ -1024,6 +953,13 @@ def test_evaluate_slot_returns_already_assigned_today_as_warning(db_session) -> 
 def test_assign_without_justification_when_forcing_warnings_succeeds(db_session) -> None:
     """Forzar warnings sin justificación ahora es válido (decisión de producto)."""
     _calendar, version = _create_calendar_and_version(db_session)
+    # El test fuerza sólo "monthly_max_exceeded": con un área fuerte el
+    # espaciado (<14 días desde el último turno fuerte) dispararía una
+    # advertencia adicional no forzada. En SQLite no había fila de área y el
+    # contexto de espaciado quedaba vacío; en PostgreSQL la fila es obligatoria
+    # por la FK, así que se siembra como área no fuerte para conservar el
+    # escenario original.
+    _seed_service_area(db_session, _AREA_ID, strong=False)
     doctor = _create_doctor(db_session)
     doctor.monthly_service_max = 1
     db_session.flush()

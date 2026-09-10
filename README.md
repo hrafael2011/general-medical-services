@@ -240,7 +240,9 @@ Turnos medicos system/
 | API E2E (PostgreSQL real descartable) | pytest `-m e2e` | `./scripts/test.sh e2e` |
 | UI E2E (Playwright, backend real) | @playwright/test | `cd frontend && npm run test:e2e` |
 
-**Marcadores pytest:** `db` = requiere PostgreSQL real (skip limpio si no hay servidor); `e2e` = API end-to-end contra la app real; `integration` = PostgreSQL + DeepSeek API (excluido por defecto). El unit-run no depende de PostgreSQL.
+**Marcadores pytest:** `db` = requiere PostgreSQL real (skip limpio si no hay servidor); `e2e` = API end-to-end contra la app real; `integration` = PostgreSQL + DeepSeek API (excluido por defecto).
+
+**La suite backend corre contra PostgreSQL, no SQLite** — el mismo motor que producción, para que un test no pase por una laxitud que producción no tiene (SQLite no valida claves foráneas, entre otras). El unit-run necesita el `postgres-test` del puerto 5434: `./scripts/test.sh unit` lo levanta solo si no responde, o a mano con `./scripts/test-db.sh up`. La base de test se controla con `TEST_DATABASE_URL` (por defecto `postgresql+psycopg://postgres:postgres@127.0.0.1:5434/medical_shifts_test`); en CI apunta al servicio `postgres` del workflow.
 
 **Infraestructura E2E:** el servicio `postgres-test` (puerto 5434, descartable) se crea/destruye con `./scripts/test-db.sh {up|down|reset}`; el seed compartido es `backend/scripts/seed_e2e.py` (admin `admin@turnos.com` + catálogos + médicos). Playwright usa `webServer` (backend en :8011 + frontend en :5199) y `globalSetup` que migra y siembra la base de prueba.
 

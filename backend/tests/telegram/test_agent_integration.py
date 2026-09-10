@@ -2,8 +2,8 @@
 Tests de integración del agente conversacional — flujo LLM-first (2026-09-05).
 
 Pipeline actual: FakeLLM (NLU) → ConversationalAgent (LLM-first) → ToolRegistry
-(handlers del catálogo MCP de 22 tools) → SQLite real → generate_response en
-español usando SOLO los datos devueltos por el handler.
+(handlers del catálogo MCP de 22 tools) → PostgreSQL real → generate_response
+en español usando SOLO los datos devueltos por el handler.
 
 El `ScriptedAgentLLM` devuelve el JSON del NLU en la fase de clasificación y,
 en la fase de formateo, hace eco del payload del handler: así la respuesta
@@ -58,36 +58,36 @@ def _seed_doctors(db_session, count: int = 3) -> list[DoctorModel]:
     return doctors
 
 
-def _make_router_sqlite(db_session) -> IntentRouter:
-    """IntentRouter con SQL SQLite-compatible y sesión configurada."""
+def _make_router(db_session) -> IntentRouter:
+    """IntentRouter con SQL de PostgreSQL y sesión configurada."""
     registry = QueryRegistry()
     registry.register_many([
         {
-            "query_type": "sqlite_count_doctors",
+            "query_type": "test_count_doctors",
             "sql_template": (
                 "SELECT COUNT(*) AS total FROM doctors "
-                "WHERE active = 1 AND service_active = 1"
+                "WHERE active = TRUE AND service_active = TRUE"
             ),
             "params_schema": {},
-            "description": "Cuenta medicos activos (SQLite).",
+            "description": "Cuenta medicos activos (PostgreSQL).",
         },
         {
-            "query_type": "sqlite_list_doctors",
+            "query_type": "test_list_doctors",
             "sql_template": (
                 "SELECT name, sex FROM doctors "
-                "WHERE active = 1 AND service_active = 1 ORDER BY name"
+                "WHERE active = TRUE AND service_active = TRUE ORDER BY name"
             ),
             "params_schema": {},
-            "description": "Lista medicos activos (SQLite).",
+            "description": "Lista medicos activos (PostgreSQL).",
         },
         {
-            "query_type": "sqlite_doctors_by_sex",
+            "query_type": "test_doctors_by_sex",
             "sql_template": (
                 "SELECT name, sex FROM doctors "
-                "WHERE sex = :sex AND active = 1 AND service_active = 1"
+                "WHERE sex = :sex AND active = TRUE AND service_active = TRUE"
             ),
             "params_schema": {"sex": "str"},
-            "description": "Medicos por sexo (SQLite).",
+            "description": "Medicos por sexo (PostgreSQL).",
         },
     ])
     router = IntentRouter(registry=registry)
@@ -97,7 +97,7 @@ def _make_router_sqlite(db_session) -> IntentRouter:
 
 def _make_agent_with_llm(llm: FakeLLMProvider, db_session) -> ConversationalAgent:
     """Agente legacy (fallback por keywords) — usado por los tests de coherencia."""
-    return ConversationalAgent(llm=llm, router=_make_router_sqlite(db_session))
+    return ConversationalAgent(llm=llm, router=_make_router(db_session))
 
 
 class ScriptedAgentLLM:
@@ -134,7 +134,7 @@ class ScriptedAgentLLM:
 
 
 def _make_llm_first_agent(llm, db_session) -> ConversationalAgent:
-    """Agente LLM-first con el catálogo MCP cableado contra SQLite real."""
+    """Agente LLM-first con el catálogo MCP cableado contra PostgreSQL real."""
     registry = ToolRegistry()
     for name, handler in build_tool_handlers(session=db_session).items():
         registry.register(name, handler)
@@ -182,12 +182,12 @@ def test_coherencia_consulta_ambigua_pide_aclaracion(db_session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests de integración: NLU → tool del catálogo → handler SQLite → respuesta
+# Tests de integración: NLU → tool del catálogo → handler PostgreSQL → respuesta
 # ---------------------------------------------------------------------------
 
 
 def test_integracion_count_doctors_ejecuta_sql(db_session) -> None:
-    """NLU list_doctors count:true → handler real en SQLite → respuesta con total."""
+    """NLU list_doctors count:true → handler real en PostgreSQL → respuesta con total."""
     _seed_doctors(db_session, count=3)
 
     llm = ScriptedAgentLLM(

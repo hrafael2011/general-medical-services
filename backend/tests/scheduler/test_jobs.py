@@ -9,8 +9,6 @@ patches must target the source modules, not the jobs module.
 from datetime import UTC, datetime, timedelta, date
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 def _make_scalars_result(items):
     """Build a mock that mimics SQLAlchemy scalars() Result.

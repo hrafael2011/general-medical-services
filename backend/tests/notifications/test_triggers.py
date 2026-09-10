@@ -1,20 +1,32 @@
 """
 DB-backed integration tests for NotificationTriggers.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
-Doctors are created as real ORM rows; mission/assignment objects are faked
-with types.SimpleNamespace so no additional DB setup is required for those.
+Uses the PostgreSQL db_session fixture from conftest.py.
+Doctors, calendar assignments and missions are created as real ORM rows:
+notification_events and confirmation_requests carry FKs to those tables, and
+SQLite never validated them, so the old SimpleNamespace fakes no longer work
+against PostgreSQL.
 """
 
 import datetime
 import types
 import uuid
 
+import pytest
+
 from backend.app.application.confirmations.service import ConfirmationRequestService
 from backend.app.application.notifications.providers import FakeProvider
 from backend.app.application.notifications.service import NotificationService
 from backend.app.application.notifications.triggers import NotificationTriggers
+from backend.app.infrastructure.db.models.calendars import (
+    CalendarAssignmentModel,
+    CalendarModel,
+    CalendarVersionModel,
+)
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
+from backend.app.infrastructure.db.models.missions import MissionAssignmentModel
+from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.notifications import NotificationRepository
@@ -58,6 +70,28 @@ def _now() -> datetime.datetime:
     return datetime.datetime.now(datetime.UTC)
 
 
+@pytest.fixture
+def actor_user(db_session) -> None:
+    """confirmation_requests.created_by es FK a users.id. SQLite no validaba
+    FKs; PostgreSQL sí, así que el actor usado por los triggers tiene que
+    existir como usuario."""
+    db_session.add(
+        UserModel(
+            id=_ACTOR,
+            email="actor-test@test.com",
+            password_hash="hash",
+            name="Actor Test",
+            role="admin",
+            active=True,
+            must_change_password=False,
+            token_version=1,
+            created_at=_now(),
+            updated_at=_now(),
+        )
+    )
+    db_session.flush()
+
+
 def _create_doctor(
     db_session,
     *,
@@ -95,22 +129,87 @@ def _create_doctor(
     return doctor
 
 
-def _make_assignment(*, doctor_id: str, assignment_id: str | None = None) -> types.SimpleNamespace:
-    return types.SimpleNamespace(
-        id=assignment_id or str(uuid.uuid4()),
-        doctor_id=doctor_id,
-        service_date=datetime.date(2026, 5, 1),
-        service_area_id="emergencia",
+def _make_assignment(
+    db_session,
+    *,
+    doctor_id: str,
+    assignment_id: str | None = None,
+) -> CalendarAssignmentModel:
+    """Crea una fila real de calendar_assignments (con su cadena de padres:
+    calendario, versión y área de servicio). notification_events.assignment_id
+    y confirmation_requests.assignment_id son FKs a esa tabla, y PostgreSQL las
+    valida (SQLite no)."""
+    now = _now()
+    calendar = CalendarModel(
+        id=str(uuid.uuid4()),
+        year=2026,
+        month=5,
+        status="approved",
+        created_at=now,
+        updated_at=now,
     )
+    db_session.add(calendar)
+    db_session.flush()
+
+    version = CalendarVersionModel(
+        id=str(uuid.uuid4()),
+        calendar_id=calendar.id,
+        version_number=1,
+        status="approved",
+        created_at=now,
+    )
+    db_session.add(version)
+    db_session.flush()
+
+    area = ServiceAreaModel(
+        id=str(uuid.uuid4()),
+        code=f"area-{uuid.uuid4().hex}",
+        display_name="Emergencia",
+        active=True,
+        load_weight=1,
+        start_hour=7,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(area)
+    db_session.flush()
+
+    assignment = CalendarAssignmentModel(
+        id=assignment_id or str(uuid.uuid4()),
+        calendar_version_id=version.id,
+        service_date=datetime.date(2026, 5, 1),
+        service_area_id=area.id,
+        doctor_id=doctor_id,
+        created_at=now,
+    )
+    db_session.add(assignment)
+    db_session.flush()
+    return assignment
 
 
-def _make_mission(*, mission_id: str | None = None) -> types.SimpleNamespace:
-    return types.SimpleNamespace(
+def _make_mission(
+    db_session,
+    *,
+    mission_id: str | None = None,
+) -> MissionAssignmentModel:
+    """Crea una fila real de mission_assignments. notification_events.mission_id
+    y confirmation_requests.mission_id son FKs a esa tabla, y PostgreSQL las
+    valida (SQLite no)."""
+    now = _now()
+    mission = MissionAssignmentModel(
         id=mission_id or str(uuid.uuid4()),
         mission_date=datetime.date(2026, 5, 10),
+        participant_count=1,
         location="Base Sur",
         description=None,
+        source="manual",
+        status="confirmed",
+        created_at=now,
+        updated_at=now,
     )
+    db_session.add(mission)
+    db_session.flush()
+    return mission
 
 
 def _make_participant(*, doctor_id: str) -> types.SimpleNamespace:
@@ -127,8 +226,8 @@ def test_on_calendar_approved_queues_notifications(db_session) -> None:
     doc1 = _create_doctor(db_session, name="Dr. Alpha", whatsapp_phone="+18095551111")
     doc2 = _create_doctor(db_session, name="Dr. Beta", whatsapp_phone="+18095552222")
 
-    a1 = _make_assignment(doctor_id=doc1.id)
-    a2 = _make_assignment(doctor_id=doc2.id)
+    a1 = _make_assignment(db_session, doctor_id=doc1.id)
+    a2 = _make_assignment(db_session, doctor_id=doc2.id)
 
     triggers = _make_triggers(db_session)
     count = triggers.on_calendar_approved(actor_id=_ACTOR, assignments=[a1, a2])
@@ -145,8 +244,8 @@ def test_on_calendar_approved_idempotent(db_session) -> None:
     doc1 = _create_doctor(db_session, name="Dr. Gamma", whatsapp_phone="+18095553333")
     doc2 = _create_doctor(db_session, name="Dr. Delta", whatsapp_phone="+18095554444")
 
-    a1 = _make_assignment(doctor_id=doc1.id, assignment_id="assign-idempotent-1")
-    a2 = _make_assignment(doctor_id=doc2.id, assignment_id="assign-idempotent-2")
+    a1 = _make_assignment(db_session, doctor_id=doc1.id, assignment_id="assign-idempotent-1")
+    a2 = _make_assignment(db_session, doctor_id=doc2.id, assignment_id="assign-idempotent-2")
 
     triggers = _make_triggers(db_session)
     triggers.on_calendar_approved(actor_id=_ACTOR, assignments=[a1, a2])
@@ -158,9 +257,9 @@ def test_on_calendar_approved_idempotent(db_session) -> None:
     assert len(all_events) == 2
 
 
-def test_on_calendar_approved_creates_confirmation_requests(db_session) -> None:
+def test_on_calendar_approved_creates_confirmation_requests(db_session, actor_user) -> None:
     doc1 = _create_doctor(db_session, name="Dr. Confirm Service", whatsapp_phone="+18095553333")
-    assignment = _make_assignment(doctor_id=doc1.id, assignment_id="assign-confirm-service")
+    assignment = _make_assignment(db_session, doctor_id=doc1.id, assignment_id="assign-confirm-service")
 
     triggers = _make_confirming_triggers(db_session)
     triggers.on_calendar_approved(actor_id=_ACTOR, assignments=[assignment])
@@ -187,7 +286,7 @@ def test_on_mission_confirmed_queues_participant_and_summary(db_session) -> None
     doc1 = _create_doctor(db_session, name="Dr. Echo", whatsapp_phone="+18095555555")
     doc2 = _create_doctor(db_session, name="Dr. Foxtrot", whatsapp_phone="+18095556666")
 
-    mission = _make_mission()
+    mission = _make_mission(db_session)
     p1 = _make_participant(doctor_id=doc1.id)
     p2 = _make_participant(doctor_id=doc2.id)
 
@@ -215,7 +314,7 @@ def test_on_mission_confirmed_no_summary_without_encargado_phone(db_session) -> 
     doc1 = _create_doctor(db_session, name="Dr. Golf", whatsapp_phone="+18095557777")
     doc2 = _create_doctor(db_session, name="Dr. Hotel", whatsapp_phone="+18095558888")
 
-    mission = _make_mission()
+    mission = _make_mission(db_session)
     p1 = _make_participant(doctor_id=doc1.id)
     p2 = _make_participant(doctor_id=doc2.id)
 
@@ -238,9 +337,9 @@ def test_on_mission_confirmed_no_summary_without_encargado_phone(db_session) -> 
     assert "mission_participant" in notification_types
 
 
-def test_on_mission_confirmed_creates_confirmation_requests(db_session) -> None:
+def test_on_mission_confirmed_creates_confirmation_requests(db_session, actor_user) -> None:
     doc1 = _create_doctor(db_session, name="Dr. Confirm Mission", whatsapp_phone="+18095557777")
-    mission = _make_mission(mission_id="mission-confirm")
+    mission = _make_mission(db_session, mission_id="mission-confirm")
     participant = _make_participant(doctor_id=doc1.id)
 
     triggers = _make_confirming_triggers(db_session)
@@ -268,9 +367,9 @@ def test_on_mission_confirmed_creates_confirmation_requests(db_session) -> None:
     assert notification.payload["confirmation_request_id"] == confirmations[0].id
 
 
-def test_calendar_assignment_added_after_approval_creates_change_confirmation(db_session) -> None:
+def test_calendar_assignment_added_after_approval_creates_change_confirmation(db_session, actor_user) -> None:
     doc1 = _create_doctor(db_session, name="Dr. Calendar Change", whatsapp_phone="+18095550001")
-    assignment = _make_assignment(doctor_id=doc1.id, assignment_id="assign-calendar-change")
+    assignment = _make_assignment(db_session, doctor_id=doc1.id, assignment_id="assign-calendar-change")
 
     triggers = _make_confirming_triggers(db_session)
     triggers.on_calendar_assignment_added_after_approval(
@@ -296,10 +395,10 @@ def test_calendar_assignment_added_after_approval_creates_change_confirmation(db
     assert events[0].payload["confirmation_request_id"] == confirmations[0].id
 
 
-def test_mission_participants_changed_notifies_removed_and_confirms_added(db_session) -> None:
+def test_mission_participants_changed_notifies_removed_and_confirms_added(db_session, actor_user) -> None:
     removed = _create_doctor(db_session, name="Dr. Removed", whatsapp_phone="+18095550002")
     added = _create_doctor(db_session, name="Dr. Added", whatsapp_phone="+18095550003")
-    mission = _make_mission(mission_id="mission-change")
+    mission = _make_mission(db_session, mission_id="mission-change")
 
     removed_participant = _make_participant(doctor_id=removed.id)
     added_participant = _make_participant(doctor_id=added.id)

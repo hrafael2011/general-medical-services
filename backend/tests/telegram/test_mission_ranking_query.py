@@ -53,7 +53,12 @@ def test_mission_ranking_query_uses_current_schema(db_session):
         reasons={},
         warnings=[],
     )
-    db_session.add_all([doctor, ranking, entry])
+    db_session.add_all([doctor, ranking])
+    # SQLAlchemy ordena los INSERT por relationship(), no por ForeignKey suelto:
+    # sin este flush insertaría la entrada antes que el ranking/doctor y
+    # PostgreSQL rechazaría la FK (SQLite no la validaba y lo tapaba).
+    db_session.flush()
+    db_session.add(entry)
     db_session.commit()
 
     router = IntentRouter()
@@ -110,7 +115,12 @@ def test_agent_routes_mission_ranking_month_without_llm(db_session):
         reasons={},
         warnings=[],
     )
-    db_session.add_all([doctor, ranking, entry])
+    db_session.add_all([doctor, ranking])
+    # SQLAlchemy ordena los INSERT por relationship(), no por ForeignKey suelto:
+    # sin este flush insertaría la entrada antes que el ranking/doctor y
+    # PostgreSQL rechazaría la FK (SQLite no la validaba y lo tapaba).
+    db_session.flush()
+    db_session.add(entry)
     db_session.commit()
 
     llm = FakeLLMProvider(responses={

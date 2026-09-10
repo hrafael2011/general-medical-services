@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import get_db_session
 from backend.app.core.security import create_access_token
-from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel, RankModel
+from backend.app.infrastructure.db.models.catalogs import (
+    DeactivationReasonModel,
+    RankModel,
+    ServiceAreaModel,
+)
 from backend.app.infrastructure.db.models.doctors import DoctorAllowedAreaModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.user import PasswordHistoryModel, UserModel
@@ -313,6 +317,10 @@ def test_hard_delete_user_removes_password_history(
         deleted_at=now,
     )
     db_session.add(user)
+    # SQLAlchemy ordena los INSERT por relationship(), no por ForeignKey suelto:
+    # sin este flush insertaría el password_history antes que el usuario y
+    # PostgreSQL rechazaría la FK (SQLite no la validaba y lo tapaba).
+    db_session.flush()
     db_session.add(
         PasswordHistoryModel(
             id=str(uuid4()),
@@ -353,10 +361,24 @@ def test_hard_delete_doctor_removes_allowed_areas(
         deleted_at=now,
     )
     db_session.add(doctor)
+    # `doctor_allowed_areas` tiene DOS FKs que PostgreSQL valida: el doctor y el
+    # área de servicio. Antes bastaba un uuid inventado porque SQLite no las
+    # validaba; ahora el área tiene que existir de verdad.
+    area = ServiceAreaModel(
+        id=str(uuid4()),
+        code="emergencia",
+        display_name="Emergencia",
+        load_weight=1,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(area)
+    # Y el doctor debe insertarse antes que sus áreas permitidas.
+    db_session.flush()
     db_session.add(
         DoctorAllowedAreaModel(
             doctor_id=doctor.id,
-            service_area_id=str(uuid4()),
+            service_area_id=area.id,
         )
     )
     db_session.commit()

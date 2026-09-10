@@ -6,15 +6,9 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from backend.app.api.dependencies import get_current_user
-from backend.app.api.routes.auth import get_account_service
 from backend.app.application.accounts.errors import InvalidPasswordChangeError
 from backend.app.application.accounts.service import AccountService
-from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import user as _user  # noqa: F401
 from backend.app.infrastructure.db.models.set_password_token import SetPasswordTokenModel
 from backend.app.infrastructure.db.models.user import (
@@ -119,18 +113,15 @@ def test_change_own_password_allows_new_password(db_session) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _make_shared_db():
-    """Create a shared in-memory SQLite engine + SessionLocal for API tests."""
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(
-        bind=engine, autocommit=False, autoflush=False, expire_on_commit=False,
-    )
-    return engine, SessionLocal
+@pytest.fixture
+def shared_db(session_local):
+    """SessionLocal bound to the shared PostgreSQL test engine (conftest).
+
+    The schema already exists — it is created once per run by the `pg_engine`
+    fixture — so there is nothing to create here. Each test starts with empty
+    tables because the conftest truncates them on teardown.
+    """
+    return session_local
 
 
 def _create_client(SessionLocal):
@@ -190,11 +181,10 @@ def _seed_user_and_token(SessionLocal, raw_token: str, **overrides):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def test_validate_set_password_token_returns_masked_email():
+def test_validate_set_password_token_returns_masked_email(shared_db):
     """Valid token returns masked email like 'u***@test.com'."""
-    _, SessionLocal = _make_shared_db()
-    _seed_user_and_token(SessionLocal, "mask-email-token")
-    client = _create_client(SessionLocal)
+    _seed_user_and_token(shared_db, "mask-email-token")
+    client = _create_client(shared_db)
 
     resp = client.get("/api/auth/set-password?token=mask-email-token")
     assert resp.status_code == 200
@@ -205,10 +195,9 @@ def test_validate_set_password_token_returns_masked_email():
     assert data["expires_at"] is not None
 
 
-def test_validate_set_password_token_invalid_token():
+def test_validate_set_password_token_invalid_token(shared_db):
     """Bogus token returns valid=False."""
-    _, SessionLocal = _make_shared_db()
-    client = _create_client(SessionLocal)
+    client = _create_client(shared_db)
 
     resp = client.get("/api/auth/set-password?token=bogus-token")
     assert resp.status_code == 200
@@ -220,14 +209,12 @@ def test_validate_set_password_token_invalid_token():
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def test_set_password_history_blocks_reuse():
+def test_set_password_history_blocks_reuse(shared_db):
     """Use token A to set password, then use token B to try the same password → 400."""
     import uuid
 
-    _, SessionLocal = _make_shared_db()
-
     # Seed one user and two valid tokens
-    sess = SessionLocal()
+    sess = shared_db()
     user = UserModel(
         id="test-user",
         email="user@test.com",
@@ -258,7 +245,7 @@ def test_set_password_history_blocks_reuse():
     sess.commit()
     sess.close()
 
-    client = _create_client(SessionLocal)
+    client = _create_client(shared_db)
 
     # First request: set password via token-a
     resp1 = client.post("/api/auth/set-password", json={
@@ -281,10 +268,9 @@ def test_set_password_history_blocks_reuse():
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def test_set_password_rate_limited():
+def test_set_password_rate_limited(shared_db):
     """Returns 429 after 5+ rapid requests with invalid tokens."""
-    _, SessionLocal = _make_shared_db()
-    client = _create_client(SessionLocal)
+    client = _create_client(shared_db)
 
     for i in range(5):
         resp = client.post("/api/auth/set-password", json={
@@ -302,12 +288,11 @@ def test_set_password_rate_limited():
     assert "Intenta de nuevo" in resp.json()["detail"]
 
 
-def test_set_password_rate_limit_respects_window():
+def test_set_password_rate_limit_respects_window(shared_db):
     """Old attempts outside the 15-min window should not count."""
-    _, SessionLocal = _make_shared_db()
 
     # Seed 5 set-password attempts that are 16 minutes old (outside the 15-min window)
-    sess = SessionLocal()
+    sess = shared_db()
     old_time = datetime.now(UTC) - timedelta(minutes=16)
     for i in range(5):
         sess.add(LoginAttemptModel(
@@ -320,7 +305,7 @@ def test_set_password_rate_limit_respects_window():
     sess.commit()
     sess.close()
 
-    client = _create_client(SessionLocal)
+    client = _create_client(shared_db)
 
     # Should NOT be rate limited (old attempts are pruned)
     resp = client.post("/api/auth/set-password", json={
@@ -335,11 +320,10 @@ def test_set_password_rate_limit_respects_window():
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def test_set_password_full_success():
+def test_set_password_full_success(shared_db):
     """Complete set-password flow: valid token → password is set and persisted."""
-    _, SessionLocal = _make_shared_db()
-    user, token, raw_token = _seed_user_and_token(SessionLocal, "success-token")
-    client = _create_client(SessionLocal)
+    user, token, raw_token = _seed_user_and_token(shared_db, "success-token")
+    client = _create_client(shared_db)
 
     resp = client.post("/api/auth/set-password", json={
         "token": raw_token,
@@ -348,7 +332,7 @@ def test_set_password_full_success():
     assert resp.status_code == 200
 
     # Verify the password hash was updated in the database
-    sess = SessionLocal()
+    sess = shared_db()
     updated_user = sess.query(UserModel).filter(UserModel.id == user.id).first()
     assert updated_user is not None
     assert updated_user.password_hash != "initial-hash"

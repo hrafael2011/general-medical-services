@@ -3,13 +3,9 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from backend.app.api.dependencies import get_current_user
 from backend.app.application.accounts.service import AccountService
-from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
 from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
 from backend.app.infrastructure.db.models import calendars as _calendars  # noqa: F401
@@ -24,26 +20,6 @@ from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.users import UserRepository
 from backend.app.main import create_app
 from backend.app.core.config import settings
-
-
-@pytest.fixture()
-def session():
-    # StaticPool ensures all connections share the same in-memory SQLite database,
-    # which is necessary because FastAPI runs sync route handlers in a thread pool.
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(
-        bind=engine, autocommit=False, autoflush=False, expire_on_commit=False
-    )
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
 
 
 @pytest.fixture()

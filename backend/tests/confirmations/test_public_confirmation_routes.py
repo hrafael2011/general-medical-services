@@ -1,14 +1,10 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from backend.app.application.confirmations.service import ConfirmationRequestService
-from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import action_alerts as _action_alerts  # noqa: F401
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
 from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
@@ -19,31 +15,112 @@ from backend.app.infrastructure.db.models import missions as _missions  # noqa: 
 from backend.app.infrastructure.db.models import notifications as _notifications  # noqa: F401
 from backend.app.infrastructure.db.models import telegram as _telegram  # noqa: F401
 from backend.app.infrastructure.db.models import user as _user  # noqa: F401
+from backend.app.infrastructure.db.models.calendars import (
+    CalendarAssignmentModel,
+    CalendarModel,
+    CalendarVersionModel,
+)
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
+from backend.app.infrastructure.db.models.missions import MissionAssignmentModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.confirmations import ConfirmationRequestRepository
 from backend.app.main import create_app
 
 
-@pytest.fixture()
-def session():
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+@pytest.fixture(autouse=True)
+def seeded(session) -> None:
+    """Sembrado de la misión y la asignación referenciadas por FK.
+
+    Los create_request de estos tests pasan `mission_id="mission-secret-id"` y
+    `assignment_id="assignment-secret-id"`. PostgreSQL valida las foreign keys
+    (SQLite no), así que esas filas deben existir de verdad.
+    """
+    now = datetime.now(UTC)
+    doctor = _doctor(session, name="Dra. Semilla")
+
+    calendar = CalendarModel(
+        id=str(uuid.uuid4()),
+        year=2026,
+        month=5,
+        status="approved",
+        created_by=None,
+        approved_by=None,
+        created_at=now,
+        updated_at=now,
+        approved_at=now,
     )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(
-        bind=engine,
-        autocommit=False,
-        autoflush=False,
-        expire_on_commit=False,
+    session.add(calendar)
+    # SQLAlchemy ordena los INSERT por relationship(), no por ForeignKey suelto:
+    # sin este flush insertaría las hijas antes que el padre y PostgreSQL
+    # rechazaría la FK (SQLite no la validaba y lo tapaba).
+    session.flush()
+
+    version = CalendarVersionModel(
+        id=str(uuid.uuid4()),
+        calendar_id=calendar.id,
+        version_number=1,
+        status="approved",
+        created_by=None,
+        reason=None,
+        created_at=now,
+        approved_at=now,
+        approved_by=None,
     )
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+    session.add(version)
+    session.flush()
+
+    area = ServiceAreaModel(
+        id=str(uuid.uuid4()),
+        code="semilla",
+        display_name="Área Semilla",
+        active=True,
+        required_for_daily_coverage=True,
+        load_weight=1,
+        start_hour=7,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(area)
+    session.flush()
+
+    session.add(
+        CalendarAssignmentModel(
+            id="assignment-secret-id",
+            calendar_version_id=version.id,
+            service_date=date(2026, 5, 20),
+            service_start_at=None,
+            service_area_id=area.id,
+            doctor_id=doctor.id,
+            assignment_source="manual",
+            rationale=None,
+            override_justification=None,
+            created_by=None,
+            created_at=now,
+        )
+    )
+    session.flush()
+
+    session.add(
+        MissionAssignmentModel(
+            id="mission-secret-id",
+            mission_date=date(2026, 5, 20),
+            mission_start_at=None,
+            mission_end_at=None,
+            participant_count=2,
+            location=None,
+            description=None,
+            source="manual",
+            status="draft",
+            created_by=None,
+            confirmed_by=None,
+            confirmed_at=None,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        )
+    )
+    session.flush()
 
 
 def _client(db_session) -> TestClient:

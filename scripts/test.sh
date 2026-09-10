@@ -4,7 +4,32 @@ set -euo pipefail
 TARGET="${1:-unit}"
 PHASE="${2:-}"
 
+# PostgreSQL descartable para tests y E2E (scripts/test-db.sh, puerto 5434, sin volumen)
+TEST_DB_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:5434/medical_shifts_test"
+
+# La suite backend corre contra PostgreSQL — el mismo motor que producción, sin
+# SQLite. Si el postgres-test no responde, se levanta solo: sin él no hay tests.
+ensure_test_db() {
+  if TEST_DB_URL="$TEST_DB_URL" ./.venv/bin/python - <<'PY' 2>/dev/null
+import os, sys
+from sqlalchemy import create_engine, text
+try:
+    engine = create_engine(os.environ["TEST_DB_URL"], connect_args={"connect_timeout": 2})
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    engine.dispose()
+except Exception:
+    sys.exit(1)
+PY
+  then
+    return 0
+  fi
+  echo "postgres-test (5434) no responde; levantándolo..."
+  ./scripts/test-db.sh up
+}
+
 run_backend_unit() {
+  ensure_test_db
   ./.venv/bin/python -m pytest backend/tests -q
 }
 
@@ -21,8 +46,6 @@ run_frontend_checks() {
 }
 
 # PostgreSQL descartable para E2E (scripts/test-db.sh, puerto 5434, sin volumen)
-TEST_DB_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:5434/medical_shifts_test"
-
 run_e2e() {
   # El trap garantiza que postgres-test se elimine aunque pytest falle.
   trap './scripts/test-db.sh down' EXIT

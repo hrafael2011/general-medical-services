@@ -6,11 +6,13 @@ import pytest
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.doctors.service import DoctorService
 from backend.app.application.catalogs.service import CatalogService
+from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.missions import (
     MissionAssignmentModel,
     MissionParticipantModel,
 )
+from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.application.doctors.errors import DoctorServiceError
@@ -28,6 +30,49 @@ def _make_alerting_service(db_session) -> DoctorService:
         mission_repo=MissionRepository(db_session),
         action_alerts=ActionAlertService(ActionAlertRepository(db_session)),
     )
+
+
+@pytest.fixture
+def seeded_reasons(db_session) -> None:
+    """deactivate_service() asigna service_inactive_reason_id (FK a
+    deactivation_reasons). SQLite no validaba FKs; PostgreSQL sí, así que los
+    motivos usados por los tests tienen que existir."""
+    now = datetime.now(UTC)
+    for reason_id in ("reason-001", "r1"):
+        db_session.add(
+            DeactivationReasonModel(
+                id=reason_id,
+                code=f"code-{reason_id}",
+                display_name=f"Motivo {reason_id}",
+                active=True,
+                requires_detail=False,
+                severity="info",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    db_session.flush()
+
+
+@pytest.fixture
+def seeded_actor_user(db_session) -> None:
+    """Las alertas de reemplazo llevan created_by=actor_id (FK a users.id).
+    SQLite no validaba FKs; PostgreSQL sí, así que el actor tiene que existir."""
+    db_session.add(
+        UserModel(
+            id="a",
+            email="actor-a@test.com",
+            password_hash="hash",
+            name="Actor A",
+            role="admin",
+            active=True,
+            must_change_password=False,
+            token_version=1,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    db_session.flush()
 
 
 def _create_confirmed_mission_with_participant(db_session, doctor_id: str):
@@ -280,7 +325,7 @@ def test_update_doctor_omitted_nullable_fields_are_not_changed(db_session) -> No
     assert updated.whatsapp_phone == "555-3333"
 
 
-def test_deactivate_and_reactivate_service(db_session) -> None:
+def test_deactivate_and_reactivate_service(db_session, seeded_reasons) -> None:
     service = _make_service(db_session)
 
     doctor = service.create_doctor(
@@ -304,7 +349,7 @@ def test_deactivate_and_reactivate_service(db_session) -> None:
     assert doctor.participa_misiones is True
 
 
-def test_service_active_filter(db_session) -> None:
+def test_service_active_filter(db_session, seeded_reasons) -> None:
     service = _make_service(db_session)
     repo = DoctorRepository(db_session)
 
@@ -330,7 +375,7 @@ def test_service_active_filter(db_session) -> None:
     assert "Inactive Doc" in names
 
 
-def test_list_all_active_only_filters_service_active_doctors(db_session) -> None:
+def test_list_all_active_only_filters_service_active_doctors(db_session, seeded_reasons) -> None:
     service = _make_service(db_session)
     repo = DoctorRepository(db_session)
 
@@ -359,7 +404,7 @@ def test_list_all_active_only_filters_service_active_doctors(db_session) -> None
     assert "Service Active Doc" in active_names
 
 
-def test_deactivate_service_creates_alert_for_future_confirmed_mission(db_session) -> None:
+def test_deactivate_service_creates_alert_for_future_confirmed_mission(db_session, seeded_reasons, seeded_actor_user) -> None:
     service = _make_alerting_service(db_session)
     alerts = ActionAlertRepository(db_session)
 
@@ -383,7 +428,7 @@ def test_deactivate_service_creates_alert_for_future_confirmed_mission(db_sessio
     assert "Doctor Mission" in open_alerts[0].message
 
 
-def test_deactivate_service_does_not_duplicate_replacement_alert(db_session) -> None:
+def test_deactivate_service_does_not_duplicate_replacement_alert(db_session, seeded_reasons, seeded_actor_user) -> None:
     service = _make_alerting_service(db_session)
     alerts = ActionAlertRepository(db_session)
 

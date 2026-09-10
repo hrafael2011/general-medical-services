@@ -3,12 +3,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from backend.app.api.dependencies import get_current_user
-from backend.app.infrastructure.db.base import Base
 from backend.app.infrastructure.db.models import audit as _audit  # noqa: F401
 from backend.app.infrastructure.db.models import availability as _availability  # noqa: F401
 from backend.app.infrastructure.db.models import calendars as _calendars  # noqa: F401
@@ -35,29 +31,8 @@ _ACTOR = "actor-test"
 
 
 @pytest.fixture()
-def session():
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(
-        bind=engine,
-        autocommit=False,
-        autoflush=False,
-        expire_on_commit=False,
-    )
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-@pytest.fixture()
-def user():
-    return _user.UserModel(
+def user(session):
+    user = _user.UserModel(
         id=_ACTOR,
         email="actor@example.com",
         password_hash="hash",
@@ -69,6 +44,12 @@ def user():
         created_at=datetime.datetime.now(datetime.UTC),
         updated_at=datetime.datetime.now(datetime.UTC),
     )
+    # El confirm de una misión crea confirmation_requests con created_by=actor:
+    # en PostgreSQL esa columna tiene FK a users, así que el actor debe existir
+    # (SQLite no validaba la FK y el test pasaba igual).
+    session.add(user)
+    session.commit()
+    return user
 
 
 @pytest.fixture()

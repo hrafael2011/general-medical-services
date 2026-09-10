@@ -1,7 +1,7 @@
 """
 DB-backed integration tests for MissionRankingService.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
+Uses the PostgreSQL db_session fixture from conftest.py.
 Creates ORM models directly without going through service layers.
 """
 
@@ -16,6 +16,7 @@ from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
     CalendarVersionModel,
 )
+from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 from backend.app.infrastructure.db.models.missions import MissionCandidateRankingModel
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -131,18 +132,40 @@ def _create_calendar_version(
     return version
 
 
+def _create_service_area(
+    db_session,
+    *,
+    code: str = "emergencia",
+    display_name: str = "Emergencia",
+    load_weight: int = 1,
+) -> ServiceAreaModel:
+    """Create a real service area — `calendar_assignments.service_area_id` es FK."""
+    now = _now()
+    area = ServiceAreaModel(
+        id=str(uuid4()),
+        code=code,
+        display_name=display_name,
+        load_weight=load_weight,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(area)
+    db_session.flush()
+    return area
+
+
 def _add_assignment(
     db_session,
     *,
     calendar_version_id: str,
     doctor_id: str,
     service_date: datetime.date,
-    service_area_id: str = "emergencia",
+    service_area_id: str,
 ) -> CalendarAssignmentModel:
     """Insert a CalendarAssignmentModel directly.
 
-    SQLite does not enforce FK constraints, so service_area_id can be any
-    string without a matching ServiceAreaModel row.
+    `service_area_id` debe ser el id de un `ServiceAreaModel` ya insertado:
+    PostgreSQL sí valida esa FK.
     """
     now = _now()
     assignment = CalendarAssignmentModel(
@@ -188,6 +211,7 @@ def test_generate_ranking_orders_by_load(db_session) -> None:
     (i.e. higher position number — worse rank, since positions are 1-based ascending by load).
     """
     version = _create_calendar_version(db_session)
+    area = _create_service_area(db_session)
 
     doctor_low = _create_doctor(db_session, name="Dr. Low Load")
     doctor_high = _create_doctor(db_session, name="Dr. High Load")
@@ -199,12 +223,14 @@ def test_generate_ranking_orders_by_load(db_session) -> None:
         calendar_version_id=version.id,
         doctor_id=doctor_high.id,
         service_date=first_day,
+        service_area_id=area.id,
     )
     _add_assignment(
         db_session,
         calendar_version_id=version.id,
         doctor_id=doctor_high.id,
         service_date=first_day.replace(day=2),
+        service_area_id=area.id,
     )
     # doctor_low gets no assignments
 
