@@ -181,12 +181,19 @@ def run(cases: list[dict], session_factory, *, verbose: bool) -> dict:
             turns: list[dict] = []
             for segment in case["segments"]:
                 capture.last = None
-                response = orchestrator.handle_message(
-                    telegram_user_id=tg_id,
-                    telegram_username=tg_id,
-                    chat_id=case["id"],
-                    text=segment,
-                )
+                try:
+                    response = orchestrator.handle_message(
+                        telegram_user_id=tg_id,
+                        telegram_username=tg_id,
+                        chat_id=case["id"],
+                        text=segment,
+                    )
+                except Exception as exc:  # noqa: BLE001 — un caso no debe tumbar la corrida
+                    # Un mensaje que revienta el pipeline aborta la transacción
+                    # de Postgres y, sin rollback, todo lo que siga falla en
+                    # cascada hasta matar la corrida entera.
+                    session.rollback()
+                    response = f"[ERROR] {type(exc).__name__}: {exc}"
                 turns.append(
                     {
                         "text": segment,
