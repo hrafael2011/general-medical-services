@@ -194,3 +194,63 @@ class TestOperationalQueryHandler:
         assert "3 resultados" in text
         assert "Ana" in text
         assert "Luis" in text
+
+
+class TestDominioManda:
+    """La decisión del NLU (`domain`) decide quién responde, no el orden fijo.
+
+    Regresión del caso reportado: «Que medicos estan de servicio el 3 de
+    agosto». El NLU elige `calendar_assignments` → domain="calendario", pero
+    `resolve()` llamaba a `doctor_service.execute()` sin mirar el dominio.
+    Como `_filters_from_resolved` devuelve {} (no None), ese servicio nunca
+    devolvía None y respondía él con TODOS los médicos (41) en vez de los
+    asignados a la fecha.
+    """
+
+    def _handler(self, *, doctor_service, calendar_service=None):
+        return OperationalQueryHandler(
+            semantic_layer=None,
+            doctor_service=doctor_service,
+            calendar_service=calendar_service,
+            intent_router=None,
+            sql_executor=None,
+            llm_provider=None,
+        )
+
+    def test_dominio_no_medicos_no_lo_responde_el_servicio_de_medicos(self):
+        """Con domain="calendario" el servicio de médicos no debe ejecutarse."""
+        doctor_service = MagicMock()
+        doctor_service.execute.return_value = DummyResult(
+            ok=True,
+            response_text="Se encontraron 41 resultados. Los primeros: ...",
+            match_type="doctor_service",
+        )
+        handler = self._handler(doctor_service=doctor_service)
+
+        handler.resolve(
+            user_text="Que medicos estan de servicio el 3 de agosto",
+            domain="calendario",
+            action="query",
+            entities={"start_date": "2026-08-03", "end_date": "2026-08-03"},
+        )
+
+        doctor_service.execute.assert_not_called()
+
+    def test_dominio_medicos_si_lo_responde_el_servicio_de_medicos(self):
+        """La contracara: con domain="medicos" sí responde (no romper lo que anda)."""
+        doctor_service = MagicMock()
+        doctor_service.execute.return_value = DummyResult(
+            ok=True, response_text="40 médicos activos", match_type="doctor_service"
+        )
+        handler = self._handler(doctor_service=doctor_service)
+
+        result = handler.resolve(
+            user_text="Cuantos medicos hay",
+            domain="medicos",
+            action="count",
+            entities={},
+        )
+
+        doctor_service.execute.assert_called_once()
+        assert result is not None
+        assert "40" in result.response_text

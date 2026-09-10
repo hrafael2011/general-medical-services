@@ -85,8 +85,11 @@ class OperationalQueryHandler:
         if result is not None:
             return result
 
-        # 2. Doctor query service
-        if self._doctor_service:
+        # 2. Doctor query service — solo si el NLU dijo que la consulta es de
+        #    médicos. Sin este gate respondía CUALQUIER pregunta: su filtro
+        #    vacío ({}) nunca devuelve None, así que una consulta de calendario
+        #    terminaba en la lista completa de médicos.
+        if self._doctor_service and domain == "medicos":
             agent_result = self._doctor_service.execute(user_text, entities)
             if agent_result is not None and agent_result.response_text:
                 return self._make_result(
