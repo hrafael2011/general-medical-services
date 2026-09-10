@@ -17,12 +17,24 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from backend.app.application.telegram.llm import LLMProvider
 from backend.app.application.telegram.tool_registry import build_tools_prompt
 
 logger = logging.getLogger(__name__)
+
+# weekday() de datetime: 0 = lunes.
+_WEEKDAYS_ES = (
+    "lunes",
+    "martes",
+    "miércoles",
+    "jueves",
+    "viernes",
+    "sábado",
+    "domingo",
+)
 
 
 @dataclass
@@ -44,6 +56,11 @@ variantes de una misma consulta son parámetros de la herramienta, no herramient
 
 {system_context}
 
+FECHA DE HOY: {today} ({weekday}).
+Convierte las fechas relativas con esa referencia ("hoy" → {today}, "mañana" → el día
+siguiente, "ayer" → el anterior). NUNCA inventes una fecha que el usuario no dio ni
+que no se deduzca de hoy.
+
 CATALOGO DE VALORES DEL SISTEMA (usa SOLO estos valores exactos para filtros):
 Rangos militares (orden jerarquico): Asimilado Militar, Raso, Cabo, Sargento, Sargento mayor, Segundo Teniente, Primer Teniente, Capitan, Mayor, Teniente Coronel, Coronel
 Areas de servicio: Emergencia, Pista, Disponible
@@ -60,7 +77,7 @@ REGLAS:
 - params: parámetros que necesita la herramienta. Extrae del texto del usuario.
   * sexo: usa "F" para femenino/mujer/doctora, "M" para masculino/hombre/doctor. NO uses "female"/"male".
   * rango: usa el nombre EXACTO del catalogo de rangos de arriba. NO inventes ni modifiques.
-  * area: usa el nombre EXACTO del catalogo de areas. NO inventes.
+  * service_area: usa el nombre EXACTO del catalogo de areas. NO inventes.
   * departamento: extrae tal cual lo dice el usuario.
   * fechas: convierte a YYYY-MM-DD.
   * Nombres de doctores: extrae apellidos o nombres como aparecen.
@@ -76,13 +93,78 @@ REGLAS ESTRICTAS (contrato de comportamiento):
   params={{"response_type":"out_of_scope"}}.
 - Si NO entiendes la petición (incoherente, sin relación con el sistema) → tool="reply",
   params={{"response_type":"clarify"}}.
-- Si la petición es de ESCRITURA (asignar, aprobar, generar calendario, desbloquear, eliminar,
-  crear, modificar médicos o reglas) → tool="reply", params={{"response_type":"out_of_scope"}}:
-  eso se hace en el panel web.
+- Si la petición es de ESCRITURA (asignar, aprobar, generar o modificar el calendario,
+  desbloquear, eliminar, crear, editar médicos o reglas) → tool="reply",
+  params={{"response_type":"out_of_scope"}}: eso se hace en el panel web.
+  OJO: «generar el calendario» (crear turnos) es ESCRITURA, pero «mándame el reporte/PDF»
+  es LECTURA → generate_report. Enviar un documento NO es escribir en el sistema.
 - Saludo → tool="reply", params={{"response_type":"greeting"}}.
 - Gracias/despedida → tool="reply", params={{"response_type":"farewell"}}.
 - "Qué puedes hacer"/ayuda → tool="reply", params={{"response_type":"help"}}.
-- NUNCA inventes datos, médicos, fechas ni conteos: el backend devuelve los datos reales."""
+- NUNCA inventes datos, médicos, fechas ni conteos: el backend devuelve los datos reales.
+
+DESAMBIGUACIÓN DE COLISIONES CONOCIDAS:
+Varias herramientas compiten por la misma frase. NO elijas por parecido general: lee el
+DISCRIMINADOR de cada bloque y decide por esa palabra clave. Cuando el bloque diga
+"NO USES X", esa herramienta queda descartada aunque su descripción suene parecida.
+
+1) FECHA vs CARACTERÍSTICAS vs HISTORIAL
+   Tools: calendar_assignments / list_doctors / doctor_service_history
+   Discriminador: ¿la frase trae una FECHA?
+   - fecha + guardias/turnos/quiénes trabajaron → calendar_assignments (start_date, end_date).
+   - NO USES list_doctors: filtra características del médico (sexo, rango, departamento), no fechas.
+   - NO USES doctor_service_history: es el acumulado de UN médico nombrado.
+
+2) DISPONIBILIDAD: DÍA vs MES vs ESTADO DEL SISTEMA
+   Tools: doctors_available_on / availability_report_status / list_doctors
+   Discriminador: ¿UN día concreto, el MES completo, o ninguno?
+   - un día ("hoy", "mañana", "el 5") → doctors_available_on (date).
+   - el mes, "quién falta", "quién no reportó" → availability_report_status (month, year).
+   - NO USES list_doctors: ahí "disponible" es service_active/pool_active (estado del sistema),
+     no disponibilidad reportada por el médico.
+   - "disponible" a secas, sin día ni mes → needs_clarification (pregunta cuál).
+
+3) CALENDARIO: ESTADO DEL MES vs GUARDIAS DE FECHAS
+   Tools: calendar_status / calendar_assignments
+   Discriminador: ¿pide ESTADO/RESUMEN o las GUARDIAS en sí?
+   - "cómo va", "estado", "semanas aprobadas", "huecos" → calendar_status (month, year).
+   - fechas concretas o un rango → calendar_assignments (start_date, end_date).
+   - un mes completo sin pedir estado ni huecos → calendar_assignments con start_date = primer
+     día del mes y end_date = último día del mes.
+
+4) SLOT: REPORTÓ vs PUEDE CUBRIR vs UN MÉDICO
+   Tools: doctors_available_on / slot_recommendation / slot_explanation
+   Discriminador: ¿listado crudo, candidatos evaluados, o un médico nombrado?
+   - "quiénes reportaron" → doctors_available_on (date). Crudo: sin evaluar reglas.
+   - "quién PUEDE cubrir", "opciones para asignar" + área →
+     slot_recommendation (date, service_area).
+   - "por qué <médico>", "por qué no <médico>" →
+     slot_explanation (date, service_area, doctor_name).
+   - Si el bloque requiere service_area, date o doctor_name y la frase no lo trae →
+     needs_clarification en vez de adivinar.
+
+5) CARGA: TODOS vs UNO vs MISIÓN
+   Tools: workload_ranking / doctor_service_history / mission_candidates
+   Discriminador: ¿ranking completo, un médico, o candidatos de misión?
+   - "quién lleva más/menos", "top", "corto de meta" → workload_ranking (month, year, criterion).
+   - un médico nombrado ("cuántas guardias lleva García") → doctor_service_history (doctor_name).
+   - "candidatos para la misión", "quién puede ir" → mission_candidates (mission_date).
+
+6) PENDIENTES: CONFIRMACIÓN vs ENVÍO vs ALERTA
+   Tools: confirmation_status / notification_status / action_alerts
+   Discriminador: ¿confirmó, se envió, o hay que atenderlo?
+   - "confirmó", "falta confirmar", "declinó" → confirmation_status.
+   - "notificación", "se envió", "falló el envío" → notification_status.
+   - "qué tengo pendiente por atender", "alertas" → action_alerts.
+   - "qué está pendiente" sin dominio → action_alerts.
+
+7) REPORTE: DOCUMENTO vs DATOS EN EL CHAT
+   Tools: generate_report / calendar_status / list_doctors
+   Discriminador: ¿pide un DOCUMENTO o quiere ver los datos?
+   - "mándame", "envía", "PDF", "imprime", "reporte de agosto" →
+     generate_report (type, month, year).
+   - "cómo va", "estado", "información", "cuántos" → calendar_status o list_doctors.
+   - NO USES generate_report si quiere los datos en el chat: esa tool produce un PDF."""
 
 
 class NLUEngine:
@@ -110,10 +192,13 @@ class NLUEngine:
             NLUResult with tool name, params, confidence.
         """
         context = self._format_history(conversation_history)
+        today = date.today()
         system_prompt = NLU_SYSTEM_PROMPT.format(
             tools_section=self._tools_prompt,
             conversation_context=context,
             system_context=system_context,
+            today=today.isoformat(),
+            weekday=_WEEKDAYS_ES[today.weekday()],
         )
 
         messages: list[dict] = [

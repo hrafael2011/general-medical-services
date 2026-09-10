@@ -68,7 +68,12 @@ CANONICAL_QUESTIONS: dict[str, str] = {
 }
 
 _SEX_ENUM = ["M", "F"]
-_AREA_HINT = "Área de servicio: Emergencia, Pista o Disponible"
+
+# Áreas de servicio del MVP (spec 02). Único contrato del catálogo: TODA tool
+# que filtre por área usa este enum y este texto. Si se agrega un área en la
+# tabla `service_areas`, hay que sumarla aquí o el modelo no podrá pedirla.
+_SERVICE_AREA_ENUM = ["Emergencia", "Pista", "Disponible"]
+_SERVICE_AREA_HINT = "Área de servicio (valor exacto): Emergencia, Pista o Disponible"
 
 
 def _p(name: str, canonical: str, *, extra: str = "") -> str:
@@ -99,7 +104,11 @@ DOCTOR_TOOLS: list[dict[str, Any]] = [
                 "sex": {"type": "string", "enum": _SEX_ENUM, "description": "M (masculino) o F (femenino)"},
                 "rank": {"type": "string", "description": "Rango militar exacto (ej: Capitán, Mayor)"},
                 "department": {"type": "string", "description": "Departamento (ej: cirugía, pediatría)"},
-                "area": {"type": "string", "description": _AREA_HINT},
+                "service_area": {
+                    "type": "string",
+                    "enum": _SERVICE_AREA_ENUM,
+                    "description": _SERVICE_AREA_HINT,
+                },
                 "service_active": {"type": "boolean", "description": "Solo médicos con servicio activo (default true)"},
                 "pool_active": {"type": "boolean", "description": "Solo médicos activos en el pool de turnos (default true)"},
                 "participa_misiones": {"type": "boolean", "description": "Filtrar por participación en misiones"},
@@ -221,7 +230,11 @@ CALENDAR_TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "start_date": {"type": "string", "description": "Fecha inicio YYYY-MM-DD"},
                 "end_date": {"type": "string", "description": "Fecha fin YYYY-MM-DD (igual a start para un día)"},
-                "service_area": {"type": "string", "description": _AREA_HINT},
+                "service_area": {
+                    "type": "string",
+                    "enum": _SERVICE_AREA_ENUM,
+                    "description": _SERVICE_AREA_HINT,
+                },
                 "doctor_name": {"type": "string", "description": "Filtrar por médico"},
                 "source": {"type": "string", "enum": ["manual", "generated"], "description": "Origen de la asignación"},
             },
@@ -255,7 +268,11 @@ CALENDAR_TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "date": {"type": "string", "description": "Fecha YYYY-MM-DD"},
-                "service_area": {"type": "string", "enum": ["Emergencia", "Pista", "Disponible"], "description": _AREA_HINT},
+                "service_area": {
+                    "type": "string",
+                    "enum": _SERVICE_AREA_ENUM,
+                    "description": _SERVICE_AREA_HINT,
+                },
             },
             "required": ["date", "service_area"],
         },
@@ -271,7 +288,11 @@ CALENDAR_TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "date": {"type": "string", "description": "Fecha YYYY-MM-DD"},
-                "service_area": {"type": "string", "enum": ["Emergencia", "Pista", "Disponible"], "description": _AREA_HINT},
+                "service_area": {
+                    "type": "string",
+                    "enum": _SERVICE_AREA_ENUM,
+                    "description": _SERVICE_AREA_HINT,
+                },
                 "doctor_name": {"type": "string", "description": "Nombre o apellido del médico"},
             },
             "required": ["date", "service_area", "doctor_name"],
@@ -500,45 +521,58 @@ GENERAL_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
-ALL_TOOLS = (
-    DOCTOR_TOOLS
-    + CALENDAR_TOOLS
-    + AVAILABILITY_TOOLS
-    + MISSION_TOOLS
-    + CONFIRMATION_TOOLS
-    + NOTIFICATION_TOOLS
-    + ALERT_TOOLS
-    + AUDIT_TOOLS
-    + CONFIG_TOOLS
-    + REPORT_TOOLS
-    + GENERAL_TOOLS
-)
+# Agrupación por dominio: el modelo decide dentro de un grupo temático de 1-6
+# tools en vez de comparar las 22 planas. `ALL_TOOLS` se DERIVA de aquí para
+# que no exista una segunda lista que se pueda desincronizar.
+DOMAIN_GROUPS: list[tuple[str, list[dict[str, Any]]]] = [
+    ("MÉDICOS", DOCTOR_TOOLS),
+    ("CALENDARIO Y TURNOS", CALENDAR_TOOLS),
+    ("DISPONIBILIDAD REPORTADA", AVAILABILITY_TOOLS),
+    ("MISIONES", MISSION_TOOLS),
+    ("CONFIRMACIONES", CONFIRMATION_TOOLS),
+    ("NOTIFICACIONES Y ALERTAS", NOTIFICATION_TOOLS + ALERT_TOOLS),
+    ("AUDITORÍA Y CONFIGURACIÓN", AUDIT_TOOLS + CONFIG_TOOLS),
+    ("REPORTES", REPORT_TOOLS),
+    ("CONVERSACIONAL", GENERAL_TOOLS),
+]
+
+ALL_TOOLS: list[dict[str, Any]] = [
+    tool for _, domain_tools in DOMAIN_GROUPS for tool in domain_tools
+]
+
+
+def _format_params(tool: dict[str, Any]) -> list[str]:
+    """Una línea por parámetro: `nombre: tipo (enum) (requerido) — descripción`."""
+    properties = tool["parameters"].get("properties", {})
+    if not properties:
+        return []
+
+    required = tool["parameters"].get("required", [])
+    lines = ["   Parámetros:"]
+    for pname, pschema in properties.items():
+        ptype = pschema.get("type", "any")
+        pdesc = pschema.get("description", "")
+        penum = ""
+        if pschema.get("enum"):
+            penum = f" ({'/'.join(str(e) for e in pschema['enum'])})"
+        req = " (requerido)" if pname in required else " (opcional)"
+        lines.append(f"   - {pname}: {ptype}{penum}{req} — {pdesc}")
+    return lines
 
 
 def build_tools_prompt() -> str:
     """Genera la sección de herramientas del system prompt del NLU.
 
-    Incluye las 22 tools del catálogo con sus preguntas canónicas.
+    Agrupa las 22 tools por dominio para bajar el factor de ramificación.
     `sql_query` NO aparece: el SQL Agent no es elegible por el modelo.
     """
     lines: list[str] = ["HERRAMIENTAS DISPONIBLES:"]
-    for index, tool in enumerate(ALL_TOOLS, start=1):
-        lines.append(f"\n{index}. {tool['name']}")
-        lines.append(f"   {tool['description']}")
-        properties = tool["parameters"].get("properties", {})
-        if properties:
-            param_parts: list[str] = []
-            for pname, pschema in properties.items():
-                ptype = pschema.get("type", "any")
-                pdesc = pschema.get("description", "")
-                penum = ""
-                if pschema.get("enum"):
-                    penum = f" ({'/'.join(str(e) for e in pschema['enum'])})"
-                required = " (requerido)" if pname in tool["parameters"].get("required", []) else " (opcional)"
-                param_parts.append(f"{pname}: {ptype}{penum}{required} — {pdesc}")
-            lines.append("   Parámetros:")
-            for part in param_parts:
-                lines.append(f"   - {part}")
+    for domain_name, domain_tools in DOMAIN_GROUPS:
+        lines.append(f"\n## {domain_name}")
+        for index, tool in enumerate(domain_tools, start=1):
+            lines.append(f"\n{index}. {tool['name']}")
+            lines.append(f"   {tool['description']}")
+            lines.extend(_format_params(tool))
     return "\n".join(lines)
 
 
