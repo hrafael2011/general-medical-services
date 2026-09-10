@@ -62,9 +62,15 @@ class ConfirmationRequestService:
             updated_at=now,
         )
         try:
-            return self.repo.add(request)
+            # SAVEPOINT, no `session.rollback()`. La transacción es de la RUTA
+            # (Route → Service → Repository (flush) → Route (commit)): un
+            # rollback acá deshacía todo lo que la ruta ya había escenificado
+            # —la aprobación de la semana, las notificaciones anteriores— y la
+            # ruta igual respondía 200. El fallo era mudo: no se guardaba nada
+            # y nadie se enteraba. Con el savepoint sólo se deshace el INSERT.
+            with self.repo.session.begin_nested():
+                return self.repo.add(request)
         except IntegrityError:
-            self.repo.session.rollback()
             existing = self.repo.get_by_idempotency_key(idempotency_key)
             if existing is not None:
                 return existing

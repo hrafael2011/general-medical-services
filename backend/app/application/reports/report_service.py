@@ -95,6 +95,66 @@ class ReportService:
         return buf.getvalue()
 
     # ------------------------------------------------------------------
+    # PDF: doctor listing
+    # ------------------------------------------------------------------
+
+    def generate_doctor_list_pdf(
+        self,
+        *,
+        sex: str | None = None,
+        rank: str | None = None,
+        department: str | None = None,
+    ) -> bytes:
+        """Return a PDF listing the doctors, optionally filtered.
+
+        `("doctor_list", "pdf")` estaba mapeado a `generate_doctor_dossier`, que
+        exige UN médico concreto — y el despachador le pasaba `doctor_id=None`,
+        que el contrato no tiene. Resultado: toda exportación de un listado
+        moría en «Médico no encontrado», incluso frases sin ningún nombre.
+        Listar es lo contrario de dossierear: acá van todos.
+
+        Los filtros son los que el contrato ya declara (`sex`, `rank`,
+        `department`); hasta ahora se descartaban en silencio, así que «los
+        medicos femeninos» devolvía el listado completo.
+        """
+        from backend.app.application.reports.weasyprint_gen import (
+            generate_doctor_list_pdf as render_doctor_list_pdf,
+        )
+
+        doctors = self.doctor_repo.list_all()
+        if sex:
+            doctors = [d for d in doctors if d.sex == sex]
+        if rank:
+            doctors = [
+                d
+                for d in doctors
+                if d.rank and d.rank.normalized_name.lower() == rank.lower()
+            ]
+        if department:
+            doctors = [
+                d
+                for d in doctors
+                if d.department
+                and d.department.normalized_name.lower() == department.lower()
+            ]
+
+        columns = ["#", "RANGO", "NOMBRE", "DEPARTAMENTO"]
+        rows = [
+            {
+                "#": str(index),
+                "RANGO": doctor.rank.name if doctor.rank else "",
+                "NOMBRE": doctor.name,
+                "DEPARTAMENTO": doctor.department.name if doctor.department else "",
+            }
+            for index, doctor in enumerate(doctors, start=1)
+        ]
+        return render_doctor_list_pdf(
+            rows,
+            title="LISTADO DE MÉDICOS",
+            columns=columns,
+        )
+
+    # ------------------------------------------------------------------
     # Excel: doctor history for a period
     # ------------------------------------------------------------------
 

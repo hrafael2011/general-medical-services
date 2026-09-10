@@ -98,7 +98,7 @@ class OperationalQueryHandler:
 
         # 3. Calendar query service
         if self._calendar_service:
-            query_type = self._detect_calendar_query(user_text)
+            query_type = self._detect_calendar_query(user_text, entities)
             if query_type:
                 agent_result = self._calendar_service.execute(query_type, entities)
                 if agent_result is not None and agent_result.response_text:
@@ -208,12 +208,26 @@ class OperationalQueryHandler:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _detect_calendar_query(self, text: str) -> str | None:
-        """Detect calendar-specific intents from user text."""
+    def _detect_calendar_query(
+        self, text: str, entities: dict[str, Any] | None = None
+    ) -> str | None:
+        """Detect calendar-specific intents from user text.
+
+        Sólo se devuelve un query_type cuyos datos de entrada existan de verdad.
+        Antes, toda frase con «calendario» que no dijera «estado» caía en
+        `list_calendar_assignments_by_date_range`, que indexa
+        `params["start_date"]` sin defensa: «Hay calendario de junio 2026?» no
+        trae rango de fechas, así que reventaba con KeyError y el usuario no
+        recibía nada. Sin fechas el detector se abstiene — sustituir otra
+        consulta sería contestar algo que nadie pidió — y el pipeline sigue.
+        """
         text_lower = text.lower()
-        if "calendario" in text_lower or "calendario" in text_lower:
-            if "estado" in text_lower or "status" in text_lower:
-                return "calendar_status"
+        if "calendario" not in text_lower:
+            return None
+        if "estado" in text_lower or "status" in text_lower:
+            return "calendar_status"
+        fechas = entities or {}
+        if fechas.get("start_date") and fechas.get("end_date"):
             return "list_calendar_assignments_by_date_range"
         return None
 

@@ -254,3 +254,73 @@ class TestDominioManda:
         doctor_service.execute.assert_called_once()
         assert result is not None
         assert "40" in result.response_text
+
+
+class TestCalendarQueryWithoutDates:
+    """Una pregunta de calendario sin fechas no puede reventar.
+
+    `_detect_calendar_query` mandaba TODA frase con «calendario» que no dijera
+    «estado» a `list_calendar_assignments_by_date_range`, que indexa
+    `params["start_date"]` sin defensa. Frases como «Hay calendario de junio
+    2026?» no traen rango de fechas: la consulta moría con KeyError y el usuario
+    no recibía nada. Once turnos del corpus caían exactamente acá.
+    """
+
+    def _handler(self, calendar_service):
+        return OperationalQueryHandler(
+            semantic_layer=None,
+            doctor_service=None,
+            calendar_service=calendar_service,
+            intent_router=None,
+            sql_executor=None,
+            llm_provider=None,
+        )
+
+    def test_question_about_a_month_does_not_crash(self, db_session):
+        from backend.app.application.telegram.calendar_query_service import (
+            CalendarQueryService,
+        )
+
+        handler = self._handler(CalendarQueryService(db_session))
+
+        result = handler.resolve(
+            user_text="Hay calendario de junio 2026?",
+            domain="calendario",
+            action="query",
+            entities={"month": 6, "year": 2026},
+        )
+
+        # Se abstiene: sin fechas no puede listar por rango, y sustituir otra
+        # consulta sería responder algo que nadie pidió. El pipeline sigue.
+        assert result is None
+
+    def test_a_real_date_range_still_lists_assignments(self):
+        """La contracara: con fechas de verdad, el listado por rango sigue vivo."""
+        handler = self._handler(MagicMock())
+
+        query_type = handler._detect_calendar_query(
+            "Dame las guardias del calendario del 1 al 15 de julio",
+            {"start_date": "2026-07-01", "end_date": "2026-07-15"},
+        )
+
+        assert query_type == "list_calendar_assignments_by_date_range"
+
+    def test_asking_about_estado_keeps_its_own_query(self):
+        """«estado» no depende de las fechas y no debe cambiar de rama."""
+        handler = self._handler(MagicMock())
+
+        assert (
+            handler._detect_calendar_query("Cual es el estado del calendario de julio?", {})
+            == "calendar_status"
+        )
+
+    def test_un_rango_a_medias_no_alcanza(self):
+        """Con una sola punta del rango no hay rango que listar."""
+        handler = self._handler(MagicMock())
+
+        assert (
+            handler._detect_calendar_query(
+                "Dame las guardias del calendario", {"start_date": "2026-07-01"}
+            )
+            is None
+        )

@@ -44,12 +44,20 @@ class TelegramRouteDecision:
 # Deterministic pattern groups
 # ---------------------------------------------------------------------------
 
-# Report request indicators — keywords that signal report/export intent
+# Report request indicators — señales de que se pide un DOCUMENTO.
+#
+# Un verbo de consulta («dame», «envíame», «muéstrame») no lo es: «Dame las
+# misiones de julio» es una pregunta normal. Cuando la lista incluía esos
+# verbos, cualquier consulta entraba al generador de reportes —que solo sabe
+# armar 5 tipos— y terminaba en «No reconocí el tipo de reporte»: 50 turnos
+# murieron ahí. «genera»/«crea» eran peores todavía: crear el calendario es una
+# ESCRITURA y se convertía en un PDF en vez de rechazarse.
+#
+# Se pide un formato (PDF/Excel), un sustantivo de documento (reporte,
+# informe, exportación…) o un verbo explícito de exportar/descargar.
 _REPORT_KEYWORDS = re.compile(
-    r"\b(genera|generar|crea|crear|exporta|exportar|descarga|descargar|"
-    r"m[aá]ndame|env[ií]a(me)?|dame|s[aá]ca(me)?|haz(me)?)\s"
-    r"|"
-    r"\b(PDF|Excel|reporte|listado|exportaci[oó]n|documento)\b",
+    r"\b(PDF|Excel|XLSX|reporte|informe|documento|exportaci[oó]n|"
+    r"hoja\s+de\s+c[aá]lculo|exporta\w*|descarga\w*|desc[aá]rgame)\b",
     re.IGNORECASE,
 )
 

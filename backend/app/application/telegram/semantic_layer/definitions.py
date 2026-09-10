@@ -16,43 +16,66 @@ from .models import Dimension, Filter, Metric, SemanticQuery
 # ---------------------------------------------------------------------------
 # Helper builders
 # ---------------------------------------------------------------------------
-def _build_where(filters: list[Filter], param_prefix: str = "f") -> tuple[str, dict[str, Any]]:
+def _build_where(
+    filters: list[Filter],
+    dim_map: dict[str, Dimension] | None = None,
+    param_prefix: str = "f",
+) -> tuple[str, dict[str, Any]]:
     """Translate SemanticQuery filters into a WHERE clause fragment.
+
+    ``f.field`` es el nombre **semántico** de la dimensión (``rank``), no una
+    columna: hay que resolverlo a su expresión SQL (``r.name``). Emitir la clave
+    cruda producía ``WHERE rank = :f_0`` → ``UndefinedColumn``; el error quedaba
+    tragado aguas arriba y el usuario recibía el total **sin filtrar**, sin
+    ninguna señal de que su filtro se había perdido.
+
+    ``dim_map`` permite a una plantilla restringir o reescribir el vocabulario
+    de filtros cuando su FROM no tiene las tablas del mapa global.
 
     Returns ``(where_fragment, params)``.  The fragment starts with ``AND``
     so it can be appended directly after existing ``WHERE`` conditions.
     """
+    dims = DIMENSIONS if dim_map is None else dim_map
     clauses: list[str] = []
     params: dict[str, Any] = {}
     for idx, f in enumerate(filters):
+        dim = dims.get(f.field)
+        if dim is None:
+            # Falla fuerte: un filtro que no se puede expresar es un bug de
+            # definición. Ignorarlo en silencio devolvería un número falso.
+            raise ValueError(
+                f"El filtro '{f.field}' no tiene expresión SQL en esta consulta: "
+                f"ninguna dimensión con ese nombre existe en su FROM."
+            )
+        expr = dim.sql_expression
         key = f"{param_prefix}_{idx}"
         if f.operator == "eq":
-            clauses.append(f"{f.field} = :{key}")
+            clauses.append(f"{expr} = :{key}")
             params[key] = f.value
         elif f.operator == "ne":
-            clauses.append(f"{f.field} != :{key}")
+            clauses.append(f"{expr} != :{key}")
             params[key] = f.value
         elif f.operator == "gt":
-            clauses.append(f"{f.field} > :{key}")
+            clauses.append(f"{expr} > :{key}")
             params[key] = f.value
         elif f.operator == "gte":
-            clauses.append(f"{f.field} >= :{key}")
+            clauses.append(f"{expr} >= :{key}")
             params[key] = f.value
         elif f.operator == "lt":
-            clauses.append(f"{f.field} < :{key}")
+            clauses.append(f"{expr} < :{key}")
             params[key] = f.value
         elif f.operator == "lte":
-            clauses.append(f"{f.field} <= :{key}")
+            clauses.append(f"{expr} <= :{key}")
             params[key] = f.value
         elif f.operator == "in":
-            clauses.append(f"{f.field} = ANY(:{key})")
+            clauses.append(f"{expr} = ANY(:{key})")
             params[key] = f.value if isinstance(f.value, list) else [f.value]
         elif f.operator == "like":
-            clauses.append(f"{f.field} ILIKE :{key}")
+            clauses.append(f"{expr} ILIKE :{key}")
             params[key] = f"%{f.value}%"
         elif f.operator == "between":
             # value must be a 2-tuple/list
-            clauses.append(f"{f.field} BETWEEN :{key}_a AND :{key}_b")
+            clauses.append(f"{expr} BETWEEN :{key}_a AND :{key}_b")
             params[f"{key}_a"] = f.value[0]
             params[f"{key}_b"] = f.value[1]
     if not clauses:
@@ -147,7 +170,11 @@ DIMENSIONS: dict[str, Dimension] = {
     "status": Dimension(
         name="status",
         display_name="Estado",
-        sql_expression="COALESCE(c.status, ma.status)",
+        # `COALESCE(c.status, ma.status)` era inválido por construcción: ninguna
+        # plantilla tiene `calendars c` y `mission_assignments ma` a la vez, así
+        # que el COALESCE siempre apuntaba a una tabla ausente. La única métrica
+        # que declara `status` es `active_missions`, cuyo FROM trae `ma`.
+        sql_expression="ma.status",
         supported_metrics=None,
     ),
     "mission_date": Dimension(
@@ -157,6 +184,18 @@ DIMENSIONS: dict[str, Dimension] = {
         supported_metrics=None,
     ),
 }
+
+# Variantes de `date` / `mission_date` para las ramas de `pending_confirmations`,
+# que no pueden usar las expresiones globales porque les falta la tabla.
+_DATE_AS_MISSION_DATE = Dimension(
+    name="date", display_name="Fecha", sql_expression="ma.mission_date"
+)
+_MISSION_DATE_AS_SERVICE_DATE = Dimension(
+    name="mission_date", display_name="Fecha de Misión", sql_expression="ca.service_date"
+)
+_DATE_AS_GAP_DATE = Dimension(
+    name="date", display_name="Fecha", sql_expression="ug.service_date"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +339,8 @@ def _tpl_mission_ranking(sq: SemanticQuery) -> tuple[str, dict[str, Any]]:
 FROM mission_candidate_rankings mcr
 JOIN mission_candidate_ranking_entries mcre ON mcre.mission_candidate_ranking_id = mcr.id
 JOIN doctors d ON d.id = mcre.doctor_id
+LEFT JOIN ranks r ON r.id = d.rank_id
+LEFT JOIN departments dep ON dep.id = d.department_id
 WHERE mcr.year = :year AND mcr.month = :month{where_sql}
 {group}
 {order}
@@ -323,6 +364,7 @@ JOIN doctors d ON d.id = ca.doctor_id
 LEFT JOIN ranks r ON r.id = d.rank_id
 LEFT JOIN departments dep ON dep.id = d.department_id
 LEFT JOIN service_areas sa ON sa.id = ca.service_area_id
+LEFT JOIN calendar_weeks cw ON cw.id = ca.calendar_week_id
 WHERE c.deleted_at IS NULL
   AND cv.deleted_at IS NULL
   AND cv.version_number = (
@@ -451,8 +493,13 @@ def _tpl_unresolved_gaps(sq: SemanticQuery) -> tuple[str, dict[str, Any]]:
         if f.field == "month" and f.operator == "eq":
             month = f.value
 
-    where_sql, where_params = _build_where([f for f in sq.filters if f.field not in ("year", "month")])
-    dim_select, group_by = _build_group_by(sq.dimensions, DIMENSIONS)
+    # `unresolved_gaps` no tiene `calendar_assignments` en su FROM: la fecha del
+    # hueco es la suya propia, no la de una asignación.
+    dims = {**DIMENSIONS, "date": _DATE_AS_GAP_DATE}
+    where_sql, where_params = _build_where(
+        [f for f in sq.filters if f.field not in ("year", "month")], dims
+    )
+    dim_select, group_by = _build_group_by(sq.dimensions, dims)
     select = f"""ug.service_date,
     sa.display_name AS area,
     ug.reason_code,
@@ -525,9 +572,15 @@ def _tpl_pending_confirmations(sq: SemanticQuery) -> tuple[str, dict[str, Any]]:
         if f.field == "confirmation_type" and f.operator == "eq":
             confirmation_type = f.value
 
-    where_sql, where_params = _build_where([f for f in sq.filters if f.field != "confirmation_type"])
+    # Las dos ramas tienen FROM distintos —la de misión no tiene calendario y
+    # la de servicio no tiene misión— así que cada una traduce «la fecha de lo
+    # que se confirma» a la columna que sí existe en su FROM.
+    restantes = [f for f in sq.filters if f.field != "confirmation_type"]
 
     if confirmation_type == "mission":
+        where_sql, where_params = _build_where(
+            restantes, {**DIMENSIONS, "date": _DATE_AS_MISSION_DATE}
+        )
         sql = f"""SELECT
     d.name AS doctor,
     ma.mission_date,
@@ -543,6 +596,9 @@ WHERE ma.deleted_at IS NULL
 ORDER BY ma.mission_date ASC
 LIMIT 50""".strip()
     else:
+        where_sql, where_params = _build_where(
+            restantes, {**DIMENSIONS, "mission_date": _MISSION_DATE_AS_SERVICE_DATE}
+        )
         sql = f"""SELECT
     d.name AS doctor,
     ca.service_date,
@@ -583,6 +639,8 @@ LEFT JOIN calendar_assignments ca ON ca.doctor_id = d.id
 LEFT JOIN calendar_versions cv ON cv.id = ca.calendar_version_id
 LEFT JOIN calendars c ON c.id = cv.calendar_id
 LEFT JOIN service_areas sa ON sa.id = ca.service_area_id
+LEFT JOIN ranks r ON r.id = d.rank_id
+LEFT JOIN departments dep ON dep.id = d.department_id
 WHERE d.active = TRUE
   AND d.service_active = TRUE
   AND d.deleted_at IS NULL

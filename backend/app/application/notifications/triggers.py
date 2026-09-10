@@ -74,6 +74,11 @@ class NotificationTriggers:
         """Queue initial_assignment notifications for all assignments."""
         count = 0
         for assignment in assignments:
+            # El id se lee ANTES del try. Dentro del `except` la instancia puede
+            # estar inutilizable (sesión expirada o revertida por otro); si esa
+            # lectura lanza, la excepción reemplaza a la original y tumba la
+            # aprobación entera por un fallo al formatear un log.
+            assignment_id = assignment.id
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
                 phone = _resolve_recipient_phone(doctor)
@@ -84,11 +89,11 @@ class NotificationTriggers:
                 )
                 notification = self.notification_service.queue(
                     notification_type="initial_assignment",
-                    idempotency_key=f"assign:{assignment.id}",
+                    idempotency_key=f"assign:{assignment_id}",
                     recipient_doctor_id=assignment.doctor_id,
                     recipient_phone=phone,
                     payload={"message": message},
-                    assignment_id=assignment.id,
+                    assignment_id=assignment_id,
                     created_by=actor_id,
                 )
                 if self.confirmation_service is not None:
@@ -109,7 +114,7 @@ class NotificationTriggers:
                 count += 1
             except Exception:
                 logger.warning(
-                    "Failed to queue calendar notification for assignment %s", assignment.id,
+                    "Failed to queue calendar notification for assignment %s", assignment_id,
                     exc_info=True,
                 )
                 continue
@@ -132,6 +137,9 @@ class NotificationTriggers:
 
         count = 0
         for assignment in assignments:
+            # El id se lee ANTES del try: dentro del `except` la instancia puede
+            # estar inutilizable y la lectura del log tumbaría la aprobación.
+            assignment_id = assignment.id
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
                 phone = _resolve_recipient_phone(doctor)
@@ -150,17 +158,17 @@ class NotificationTriggers:
                 )
                 notification = self.notification_service.queue(
                     notification_type="initial_assignment",
-                    idempotency_key=f"assign:{assignment.id}",
+                    idempotency_key=f"assign:{assignment_id}",
                     recipient_doctor_id=assignment.doctor_id,
                     recipient_phone=phone,
                     payload={"message": message},
-                    assignment_id=assignment.id,
+                    assignment_id=assignment_id,
                     created_by=actor_id,
                 )
                 if self.confirmation_service is not None:
                     confirmation = self.confirmation_service.create_request(
                         confirmation_type="service",
-                        idempotency_key=f"service:{assignment.id}:{assignment.doctor_id}",
+                        idempotency_key=f"service:{assignment_id}:{assignment.doctor_id}",
                         doctor_id=assignment.doctor_id,
                         notification_id=notification.id,
                         assignment_id=assignment.id,
@@ -176,7 +184,7 @@ class NotificationTriggers:
             except Exception:
                 logger.warning(
                     "Failed to queue week notification for assignment %s",
-                    assignment.id,
+                    assignment_id,
                     exc_info=True,
                 )
                 continue
@@ -304,8 +312,11 @@ class NotificationTriggers:
         mission_date = str(mission.mission_date)
 
         for participant in participants:
+            # Igual que en las asignaciones: el id se lee ANTES del try para que
+            # el log del `except` no pueda lanzar por tocar una instancia muerta.
+            participant_id = participant.doctor_id
             try:
-                doctor = self.doctor_repo.get_by_id(participant.doctor_id)
+                doctor = self.doctor_repo.get_by_id(participant_id)
                 phone = _resolve_recipient_phone(doctor)
                 message = render_mission_participant(
                     mission_date=mission_date,
@@ -315,8 +326,8 @@ class NotificationTriggers:
                 )
                 notification = self.notification_service.queue(
                     notification_type="mission_participant",
-                    idempotency_key=f"mission_participant:{mission.id}:{participant.doctor_id}",
-                    recipient_doctor_id=participant.doctor_id,
+                    idempotency_key=f"mission_participant:{mission.id}:{participant_id}",
+                    recipient_doctor_id=participant_id,
                     recipient_phone=phone,
                     payload={"message": message},
                     mission_id=mission.id,
@@ -325,8 +336,8 @@ class NotificationTriggers:
                 if self.confirmation_service is not None:
                     confirmation = self.confirmation_service.create_request(
                         confirmation_type="mission",
-                        idempotency_key=f"mission:{mission.id}:{participant.doctor_id}",
-                        doctor_id=participant.doctor_id,
+                        idempotency_key=f"mission:{mission.id}:{participant_id}",
+                        doctor_id=participant_id,
                         notification_id=notification.id,
                         mission_id=mission.id,
                         due_at=self._confirmation_due_at(),
@@ -341,7 +352,7 @@ class NotificationTriggers:
             except Exception:
                 logger.warning(
                     "Failed to queue mission notification for participant %s",
-                    participant.doctor_id,
+                    participant_id,
                     exc_info=True,
                 )
                 continue

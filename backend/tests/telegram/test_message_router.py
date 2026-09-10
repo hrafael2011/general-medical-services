@@ -103,3 +103,54 @@ class TestRouteDecisionContract:
         router = TelegramMessageRouter(llm_provider=None)
         decision = router.classify("   ")
         assert decision.route == "clarification"
+
+
+class TestReportTriggerNeedsADocumentIndicator:
+    """Un verbo de consulta NO es una petición de documento.
+
+    `_REPORT_KEYWORDS` incluía «dame», «envíame», «genera», «crea»… de modo que
+    cualquier consulta normal entraba al generador de reportes, que solo sabe
+    armar 5 tipos y terminaba en «No reconocí el tipo de reporte». Fueron 50
+    turnos que murieron ahí. Peor: «Genera el calendario de septiembre» es una
+    ESCRITURA y se convertía en un PDF en vez de rechazarse.
+    """
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Dame las misiones de julio",
+            "Dame el listado de medicos activos",
+            "Envíame el ranking de misiones de agosto",
+            "Dame el resumen de medicos por sexo",
+        ],
+    )
+    def test_plain_data_question_is_not_a_report(self, text):
+        decision = TelegramMessageRouter(llm_provider=None).classify(text)
+        assert decision.route != "report_request"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Genera el calendario de septiembre",
+            "Crea el calendario de agosto",
+        ],
+    )
+    def test_write_request_is_not_a_report(self, text):
+        """Crear/generar el calendario es escritura: eso no es un documento."""
+        decision = TelegramMessageRouter(llm_provider=None).classify(text)
+        assert decision.route != "report_request"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Exporta en PDF los pasantes",
+            "Exporta el ranking de misiones de agosto en Excel",
+            "Descárgame el reporte de julio",
+            "Mándame el calendario aprobado en Excel",
+            "Dame el calendario en PDF",
+            "Exporta los pendientes de confirmacion",
+        ],
+    )
+    def test_document_request_still_routes_to_reports(self, text):
+        decision = TelegramMessageRouter(llm_provider=None).classify(text)
+        assert decision.route == "report_request"

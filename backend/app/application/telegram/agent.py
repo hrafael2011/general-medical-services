@@ -33,17 +33,52 @@ from backend.app.application.telegram.types import AgentResult
 logger = logging.getLogger(__name__)
 
 _FOLLOWUP_PATTERNS = [
+    # «Y …» al principio es anafórico («Y de pasantes?»). A mitad de frase
+    # puede ser la conjunción que une dos sustantivos de una lista —«de
+    # departamento y sexo», «masculino y femenino»— y ahí no dice nada. Se
+    # distingue por lo que sigue: una preposición o un artículo arrancan una
+    # cláusula nueva («ok entiendo y de julio?»), un sustantivo suelto
+    # continúa la lista.
     re.compile(
-        r"\b(y|son|ellos|ellas|eso|esa|esos|esas|mismo|misma|"
-        r"exp[oó]rtalo|exportalo|esportalo)\b",
+        r"^\s*y\b|\by\s+(de|del|el|la|los|las|en|para|por|con|ahora)\b",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\b(femenin[oa]s?|feminios?|femenios?|masculin[oa]s?|pdf|excel|listado|lista)\b",
+        r"\b(ellos|ellas|eso|esa|esos|esas|mismo|misma|"
+        r"exp[oó]rtal[oa]s?|exportal[oa]s?|esportalo)\b",
         re.IGNORECASE,
     ),
     re.compile(r"\b\d+\s+o\s+\d+\b", re.IGNORECASE),
+    # Correcciones. Una corrección no se entiende sola: «No, de sargentos» sólo
+    # tiene sentido sobre el turno anterior. Faltaba por completo, y los casos
+    # multi-turno del corpus son casi todos correcciones.
+    # El «no» pide coma para no confundirse con una pregunta que empieza con
+    # negación («No hay calendario de julio?» es un turno nuevo).
+    re.compile(r"^\s*(no|perd[oó]n)\s*,", re.IGNORECASE),
+    re.compile(r"^\s*(mejor|m[aá]s\s+bien|quise\s+decir)\b", re.IGNORECASE),
+    # Restricción del conjunto anterior: «los que…», «el que…».
+    re.compile(
+        r"\b(los|las|el|la|esos|esas|aquellos|aquellas)\s+que\b",
+        re.IGNORECASE,
+    ),
+    # Anáfora posesiva: «su rango», «sus áreas» remiten a algo ya nombrado.
+    # Si no hay turno anterior del que tirar, `_merge_followup_context` no hace
+    # nada, así que un falso positivo acá no inventa contexto.
+    re.compile(r"\b(sus?)\b", re.IGNORECASE),
 ]
+
+# Cuidado al tocar esta lista: la puerta tiene que ser ESTRECHA. Un falso
+# positivo no es inocuo — `_merge_followup_context` inyecta los filtros del
+# turno anterior en la consulta nueva, y el usuario recibe un número creíble y
+# equivocado. Dos patrones que estuvieron acá y se sacaron por eso:
+#
+#   - palabras temáticas (femenino, masculino, pdf, excel, listado, lista):
+#     marcaban 75 de los 243 casos del corpus siendo preguntas nuevas.
+#   - el verbo «son»: «Cuantos medicos son cabo?» quedaba como seguimiento.
+#
+# Con la lista actual, los 10 turnos de seguimiento del corpus se reconocen y
+# los falsos positivos sobre los 243 turnos iniciales son 9, todos ellos
+# referencias genuinas al turno anterior.
 
 
 _FILTER_DIMS = {

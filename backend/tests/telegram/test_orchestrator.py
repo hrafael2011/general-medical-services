@@ -1,7 +1,7 @@
 """
 DB-backed integration tests for TelegramOrchestrator.
 
-Uses the in-memory SQLite db_session fixture from conftest.py.
+Uses the PostgreSQL db_session fixture from conftest.py.
 """
 
 import uuid
@@ -372,3 +372,30 @@ def test_confirmation_command_is_blocked_for_internal_users(db_session) -> None:
 
     assert "cuentas internas" in response
     assert agent.calls == []
+
+
+def test_unknown_report_type_falls_through_instead_of_dead_ending(db_session) -> None:
+    """«Exporta los servicios de julio» no es ninguno de los 5 tipos de reporte.
+
+    Antes el orquestador respondía «No reconocí el tipo de reporte» y la
+    consulta moría ahí: ni documento ni dato. Ahora cae al agente NLU, que
+    responde lo que sí puede responder o pide aclaración — que es la regla
+    acordada: no adivinar, pero tampoco dejar al usuario sin salida.
+    """
+    user = _new_user(db_session)
+    _new_link(db_session, user_id=user.id, telegram_user_id="tg-report-unknown")
+    bot = FakeBotClient()
+    agent = StubAgent(AgentResult(response_text="Servicios de julio: 12 en Urgencias."))
+    orchestrator = _make_orchestrator(db_session, agent=agent, bot_client=bot)
+
+    response = orchestrator.handle_message(
+        telegram_user_id="tg-report-unknown",
+        telegram_username="testuser",
+        chat_id=123,
+        text="Exporta los servicios de la primera semana de julio",
+    )
+
+    assert response == "Servicios de julio: 12 en Urgencias."
+    assert len(agent.calls) == 1, "la consulta tiene que llegar al agente NLU"
+    enviados = [m.get("text", "") for m in bot.sent]
+    assert not any("No reconocí el tipo de reporte" in t for t in enviados)

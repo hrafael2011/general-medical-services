@@ -17,7 +17,8 @@ Uso:
     # comparar dos corridas
     ... --compare baseline.json despues.json
 
-Requiere DEEPSEEK_API_KEY válida (usa el LLM real). Sin ella, aborta.
+Requiere DEEPSEEK_API_KEY válida Y TELEGRAM_BOT_TOKEN (usa el LLM real). Sin
+cualquiera de las dos, aborta.
 """
 
 from __future__ import annotations
@@ -136,8 +137,30 @@ def _admin_user_id(session: Session) -> str:
     return user.id
 
 
-def preflight() -> None:
-    """Aborta si la API no responde, antes de gastar 243 llamadas."""
+def preflight(session: Session) -> None:
+    """Aborta si el NLU no va a ser el real, o si la API no responde.
+
+    El orden importa: primero la comprobación que no gasta nada.
+
+    1. `use_real = settings.telegram_bot_token and settings.deepseek_api_key`
+       (api/routes/telegram.py). Sin el token, el NLU queda en `None` y el
+       agente cae EN SILENCIO al matcheo por palabras clave: la corrida
+       terminaría, escribiría su JSON y mediría otra cosa sin un solo error.
+       Se comprueba sobre el orquestador ya cableado —el mismo que usan los
+       casos— en vez de repetir la condición acá, que es como se desincroniza.
+    2. La sonda a DeepSeek, que sí cuesta una llamada.
+    """
+    from backend.app.api.routes.telegram import get_orchestrator
+
+    if get_orchestrator(session)._nlu_engine is None:
+        raise SystemExit(
+            "El NLU real NO está activo: falta TELEGRAM_BOT_TOKEN (o "
+            "DEEPSEEK_API_KEY).\n"
+            "Sin él el agente responde por matcheo de palabras clave y la "
+            "corrida mediría otra cosa, sin error visible.\n"
+            "Exportá TELEGRAM_BOT_TOKEN antes de correr la línea base."
+        )
+
     from backend.app.application.telegram.llm import DeepSeekProvider
 
     probe = DeepSeekProvider().chat_complete(
@@ -276,13 +299,17 @@ def main() -> int:
     if not os.environ.get("DEEPSEEK_API_KEY"):
         print("Falta DEEPSEEK_API_KEY.", file=sys.stderr)
         return 2
-    preflight()
 
     url = os.environ.get(
         "DATABASE_URL",
         "postgresql+psycopg://postgres:postgres@127.0.0.1:5433/medical_shifts",
     )
     engine = create_engine(url)
+
+    # El motor se crea antes de la guarda porque comprobarla exige cablear el
+    # orquestador, y eso necesita sesión.
+    with Session(engine) as probe_session:
+        preflight(probe_session)
 
     cases = parse_corpus(CORPUS)
     if args.only:

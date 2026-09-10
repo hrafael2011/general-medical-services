@@ -1,9 +1,11 @@
 """Tests for TelegramReportRequest contract validation."""
 
 from datetime import date
+from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
+from backend.app.application.reports.report_service import ReportService
 from backend.app.application.telegram.report_contracts import (
     TelegramReportRequest,
     ReportContractValidator,
@@ -171,3 +173,87 @@ class TestReportContractValidator:
         # The Pydantic model enforces valid types at construction time
         result = validator.validate(req)
         assert result["ok"] is True  # workload is valid
+
+
+def _texto_del_pdf(pdf_bytes: bytes) -> str:
+    """Extrae el texto del PDF para poder afirmar sobre lo que el usuario ve."""
+    import io
+
+    import pdfplumber
+
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        return "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+
+class FakeRank:
+    def __init__(self, normalized_name: str) -> None:
+        self.name = normalized_name
+        self.normalized_name = normalized_name
+
+
+class FakeDepartment:
+    def __init__(self, normalized_name: str) -> None:
+        self.name = normalized_name
+        self.normalized_name = normalized_name
+
+
+class FakeDoctor:
+    def __init__(self, name, sex, rank=None, department=None) -> None:
+        self.id = name
+        self.name = name
+        self.sex = sex
+        self.rank = FakeRank(rank) if rank else None
+        self.department = FakeDepartment(department) if department else None
+
+
+class TestDoctorListReportDispatch:
+    """El listado de médicos en PDF tiene que salir, no explotar.
+
+    `("doctor_list", "pdf")` estaba mapeado a `generate_doctor_dossier`, que
+    exige UN médico concreto. El despachador le pasaba `doctor_id=None`, así que
+    toda exportación de un listado terminaba en «Médico no encontrado» — incluso
+    frases sin un solo nombre, como «Exporta en PDF los medicos activos».
+    """
+
+    @pytest.fixture
+    def report_service(self):
+        service = ReportService(
+            calendar_repo=MagicMock(),
+            notification_repo=MagicMock(),
+            doctor_repo=MagicMock(),
+            mission_repo=MagicMock(),
+            catalog_repo=MagicMock(),
+        )
+        # El repo real devuelve None cuando el id no existe; `None` no existe.
+        service.doctor_repo.get_by_id.return_value = None
+        service.doctor_repo.list_all.return_value = []
+        return service
+
+    def test_doctor_list_pdf_returns_a_pdf_not_a_missing_doctor_error(self, report_service):
+        request = TelegramReportRequest(report_type="doctor_list", output_format="pdf")
+
+        result = ReportContractValidator().generate_report(request, report_service)
+
+        assert result["ok"] is True, result.get("error")
+        assert result["document_bytes"][:4] == b"%PDF"
+
+    def test_the_listing_honours_the_sex_filter(self, report_service):
+        """El contrato declara `sex`; hoy el despachador lo tiraba a la basura.
+
+        «Exporta en PDF los medicos femeninos» tiene que dar un documento con
+        las femeninas, no con todos.
+        """
+        report_service.doctor_repo.list_all.return_value = [
+            FakeDoctor("ANA FEMENINA", "female", "pasante", "ensenanza"),
+            FakeDoctor("LUIS MASCULINO", "male", "pasante", "ensenanza"),
+        ]
+        request = TelegramReportRequest(
+            report_type="doctor_list", output_format="pdf", sex="female"
+        )
+
+        result = ReportContractValidator().generate_report(request, report_service)
+
+        assert result["ok"] is True, result.get("error")
+        texto = _texto_del_pdf(result["document_bytes"])
+        assert "ANA FEMENINA" in texto
+        assert "LUIS MASCULINO" not in texto

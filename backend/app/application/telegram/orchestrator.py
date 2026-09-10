@@ -373,12 +373,20 @@ class TelegramOrchestrator:
             report_type = "mission_ranking"
 
         if report_type is None:
-            self._bot_client.send_message(
-                chat_id,
-                "No reconocí el tipo de reporte. Los disponibles son: calendario, "
-                "listado de médicos, carga de trabajo, cobertura y ranking de misiones."
+            # No adivinar y no dejar al usuario sin salida. Si no se puede
+            # determinar QUÉ documento quiere, la consulta sigue su curso
+            # normal: el agente NLU la responde en el chat o pide aclaración.
+            # Antes se contestaba «No reconocí el tipo de reporte» y ahí moría
+            # — ni documento ni dato.
+            logger.info(
+                "Report type not recognized, falling through to the NLU agent",
+                extra={
+                    "telegram_event": "report_type_unresolved",
+                    "telegram_user_id": telegram_user_id,
+                    "requested_format": requested_format,
+                },
             )
-            return "No reconocí el tipo de reporte."
+            return None
 
         contract = TelegramReportRequest(
             report_type=report_type,

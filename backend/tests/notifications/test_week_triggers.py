@@ -2,6 +2,8 @@
 from datetime import date
 from unittest.mock import MagicMock, call, ANY
 
+from sqlalchemy.orm.exc import DetachedInstanceError
+
 from backend.app.application.notifications.triggers import NotificationTriggers
 
 
@@ -130,3 +132,86 @@ def test_on_week_approved_handles_missing_doctor():
     call_kwargs = notif_service.queue.call_args.kwargs
     assert call_kwargs["recipient_phone"] is None
     assert call_kwargs["recipient_doctor_id"] == "doc1"
+
+
+class UnusableAssignment:
+    """Asignación que queda inutilizable en cuanto falla el paso que la usa.
+
+    Es lo que pasa con una instancia ORM expirada: mientras la sesión sirve sus
+    atributos se leen; después, tocarlos lanza.
+    """
+
+    def __init__(self, id, doctor_id, service_date, service_area_id):
+        self._id = id
+        self._doctor_id = doctor_id
+        self._service_date = service_date
+        self._service_area_id = service_area_id
+        self.rota = False
+
+    def _leer(self, valor):
+        if self.rota:
+            raise DetachedInstanceError("la instancia quedó inutilizable")
+        return valor
+
+    @property
+    def id(self):
+        return self._leer(self._id)
+
+    @property
+    def doctor_id(self):
+        return self._leer(self._doctor_id)
+
+    @property
+    def service_date(self):
+        return self._leer(self._service_date)
+
+    @property
+    def service_area_id(self):
+        return self._leer(self._service_area_id)
+
+    @property
+    def service_start_at(self):
+        return None
+
+
+def test_week_trigger_survives_an_unusable_assignment():
+    """Un log que revienta no puede tumbar la aprobación de la semana entera.
+
+    `logger.warning(..., assignment.id)` dentro del `except` toca la instancia
+    justo cuando puede estar inutilizable. Si esa lectura lanza, la excepción
+    reemplaza a la original y `on_week_approved` propaga: un fallo al formatear
+    una línea de log se convierte en un 500 en la aprobación completa.
+    """
+    rota = UnusableAssignment("a1", "doc1", date(2026, 5, 5), "area1")
+    llamadas = []
+
+    def _queue(**kwargs):
+        llamadas.append(kwargs)
+        if len(llamadas) == 1:
+            # La instancia queda inutilizable justo cuando hay que loguear.
+            rota.rota = True
+            raise RuntimeError("el proveedor se cayó")
+        return FakeNotification("notif-2")
+
+    notif_service = MagicMock()
+    notif_service.queue.side_effect = _queue
+    doctor_repo = FakeDoctorRepo()
+    doctor_repo.doctors["doc1"] = FakeDoctor("doc1", "+18095551234", "111111111")
+
+    triggers = NotificationTriggers(
+        notification_service=notif_service,
+        doctor_repo=doctor_repo,
+    )
+    week = FakeWeek(
+        id="week1", calendar_id="cal1", calendar_version_id="ver1",
+        week_number=1, label="1RA SEMANA",
+        start_date=date(2026, 5, 4), end_date=date(2026, 5, 10),
+        status="approved",
+    )
+    sanas = [FakeAssignment("a2", "doc1", date(2026, 5, 6), "area1")]
+
+    result = triggers.on_week_approved(
+        actor_id="user1", assignments=[rota, *sanas], week=week,
+    )
+
+    assert result == 1, "la asignación sana tiene que procesarse igual"

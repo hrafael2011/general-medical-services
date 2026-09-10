@@ -167,7 +167,7 @@ class ReportContractValidator:
             ("calendar", "excel"): "generate_calendar_excel",
             ("calendar", "pdf"): "generate_weekly_schedule_pdf",
             ("doctor_list", "excel"): "generate_doctor_history_excel",
-            ("doctor_list", "pdf"): "generate_doctor_dossier",
+            ("doctor_list", "pdf"): "generate_doctor_list_pdf",
             ("workload", "excel"): "generate_workload",
             ("workload", "pdf"): "generate_workload",
             ("coverage", "excel"): "generate_coverage",
@@ -219,6 +219,17 @@ class ReportContractValidator:
                     params[p_name] = None  # Would need lookup
                 elif p_name == "doctor_id":
                     params[p_name] = None
+                # Los filtros que el contrato declara y que antes se perdían:
+                # «los medicos femeninos» generaba el listado completo porque
+                # nadie se los pasaba al método.
+                elif p_name == "sex":
+                    params[p_name] = request.sex
+                elif p_name == "rank":
+                    params[p_name] = request.rank
+                elif p_name == "department":
+                    params[p_name] = request.department
+                elif p_name == "service_area":
+                    params[p_name] = request.service_area
 
             result = method(**params) if params else method()
 

@@ -32,7 +32,14 @@ def build_system_context(session: Session) -> str:
     # Helper: safe query with error handling
     def _fetch(query: str) -> list[Any]:
         try:
-            return list(session.execute(text(query)).scalars().all())
+            # SAVEPOINT por consulta. En PostgreSQL una sentencia que falla no
+            # falla sola: aborta la transacción ENTERA y todo lo que venga
+            # después revienta con InFailedSqlTransaction. Sin el savepoint, el
+            # `except` de acá abajo mentía — decía "esta consulta falló" y en
+            # realidad se llevaba puestas a las 17 siguientes, dejando el
+            # contexto casi sin secciones dinámicas.
+            with session.begin_nested():
+                return list(session.execute(text(query)).scalars().all())
         except Exception as exc:
             logger.warning("System context query failed: %s", exc)
             return []
@@ -50,7 +57,7 @@ def build_system_context(session: Session) -> str:
         sections.append("DEPARTAMENTOS:\n" + ", ".join(depts))
 
     # 3. Service areas catalog
-    areas = _fetch("SELECT name FROM service_areas ORDER BY name")
+    areas = _fetch("SELECT display_name FROM service_areas ORDER BY display_name")
     if areas:
         sections.append("ÁREAS DE SERVICIO:\n" + ", ".join(areas))
 
@@ -74,13 +81,15 @@ def build_system_context(session: Session) -> str:
     if ver_statuses:
         sections.append("ESTADOS DE VERSIÓN DE CALENDARIO:\n" + ", ".join(ver_statuses))
 
-    # 8. Mission statuses
-    mission_statuses = _fetch("SELECT DISTINCT status FROM missions WHERE status IS NOT NULL ORDER BY status")
+    # 8. Mission statuses — la tabla es `mission_assignments`, no `missions`
+    mission_statuses = _fetch("SELECT DISTINCT status FROM mission_assignments WHERE status IS NOT NULL ORDER BY status")
     if mission_statuses:
         sections.append("ESTADOS DE MISIONES:\n" + ", ".join(mission_statuses))
 
-    # 9. Deactivation reasons
-    reasons = _fetch("SELECT reason FROM deactivation_reasons ORDER BY reason")
+    # 9. Deactivation reasons — no hay columna `reason`: es `display_name`
+    reasons = _fetch(
+        "SELECT display_name FROM deactivation_reasons ORDER BY display_name"
+    )
     if reasons:
         sections.append("RAZONES DE BAJA/INACTIVIDAD DE MÉDICOS:\n" + ", ".join(reasons))
 
