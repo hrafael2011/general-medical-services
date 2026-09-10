@@ -147,8 +147,15 @@ class DoctorQueryService:
             },
         )
 
-    def _filters_from_resolved(self, resolved: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _filters_from_resolved(resolved: dict[str, Any]) -> dict[str, Any]:
         filters: dict[str, Any] = {}
+
+        doctor = resolved.get("doctor") or resolved.get("doctor_name")
+        if isinstance(doctor, dict):
+            filters["doctor_name"] = doctor.get("name") or doctor.get("id")
+        elif isinstance(doctor, str) and doctor.strip():
+            filters["doctor_name"] = doctor.strip()
 
         rank = resolved.get("rank")
         if isinstance(rank, dict) and rank.get("normalized_name"):
