@@ -170,6 +170,14 @@ def run(cases: list[dict], session_factory, *, verbose: bool) -> dict:
             _ensure_link(session, tg_id, user_id)
             orchestrator = get_orchestrator(session)
 
+            # `use_real` (y con él el NLU) depende de que TELEGRAM_BOT_TOKEN
+            # esté puesto, pero eso también instancia el cliente REAL de
+            # Telegram. Se cambia por el fake para que la corrida no intente
+            # enviar 253 mensajes: se mide el NLU, no el transporte.
+            from backend.app.application.telegram.bot_client import FakeBotClient
+
+            orchestrator._bot_client = FakeBotClient()
+
             turns: list[dict] = []
             for segment in case["segments"]:
                 capture.last = None
