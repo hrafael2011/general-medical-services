@@ -540,6 +540,16 @@ class ConversationalAgent:
             domain = "missions"
             subject = "active_missions"
 
+        if (
+            subject is None
+            and result.tool_name == "doctor_query_service"
+            and len(rows) == 1
+            and isinstance(rows[0], dict)
+            and rows[0].get("name")
+        ):
+            # Un único médico en pantalla: es el sujeto de «dame su rango».
+            subject = str(rows[0]["name"])
+
         state = SessionState(
             last_query_type=query_type,
             last_params=params or {},
@@ -937,8 +947,28 @@ class ConversationalAgent:
         if nlu_result.tool == "reply":
             return self._handle_reply(text, nlu_result)
 
+        # Merge de follow-up: el mismo que ya aplicaba el camino legacy. Sin
+        # esto, «No, en agosto» volvía a contar julio.
+        #
+        # Sólo se copian los valores PLANOS (mes, año, nombre de médico):
+        # `rank`/`department`/`sex` llegan de la memoria como dict/lista y los
+        # tools del catálogo los esperan como string (sex es el enum M/F).
+        # Meterlos en crudo rompería el esquema del tool.
+        params = dict(nlu_result.params or {})
+        merged_followup, _hints, context_applied, _operation = self._merge_followup_context(
+            telegram_user_id, {}, "", text
+        )
+        if context_applied:
+            for key in ("month", "year"):
+                value = merged_followup.get(key)
+                if isinstance(value, int):
+                    params[key] = value
+            subject = merged_followup.get("doctor_name")
+            if isinstance(subject, str) and subject:
+                params.setdefault("doctor_name", subject)
+
         # Tool dispatch
-        tool_result = self._dispatch_tool(nlu_result.tool, nlu_result.params, text, user=user)
+        tool_result = self._dispatch_tool(nlu_result.tool, params, text, user=user)
 
         # Generate NL response
         response_text = self._generate_nl_response(text, nlu_result, tool_result, history)
@@ -954,7 +984,7 @@ class ConversationalAgent:
             response_text=response_text,
             agent_action="query",
             tool_name=nlu_result.tool,
-            tool_entities={"tool": nlu_result.tool, "params": nlu_result.params},
+            tool_entities={"tool": nlu_result.tool, "params": params},
             tool_result=tool_result,
             document_bytes=document_bytes,
             document_filename=document_filename,
@@ -964,7 +994,7 @@ class ConversationalAgent:
             telegram_user_id,
             agent_result,
             query_type=nlu_result.tool,
-            params=nlu_result.params,
+            params=params,
         )
         logger.info(
             "Agent resolved via LLM-first pipeline",
