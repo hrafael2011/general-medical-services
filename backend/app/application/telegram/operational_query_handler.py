@@ -24,6 +24,7 @@ from typing import Any
 from backend.app.application.telegram.entity_resolver import _MONTH_NAMES
 from backend.app.application.telegram.scope_gate import (
     CONVERSATIONAL_TOOLS,
+    DOCTOR_TOOLS,
     SCOPE_REFUSAL,
     check_scope,
 )
@@ -150,17 +151,18 @@ class OperationalQueryHandler:
                 fallback_reason=scope_reason,
             )
 
-        if nlu_tool in CONVERSATIONAL_TOOLS:
-            # No es una consulta de datos y no hay nada que rechazar: que lo
-            # conteste el agente, que tiene la respuesta conversacional armada.
-            return None
-
-        # 4. Doctor query service — solo si el NLU dijo que la consulta es de
-        #    médicos y no es una consulta de misión. Sin el gate de dominio
-        #    respondía CUALQUIER pregunta: su filtro vacío ({}) nunca devuelve
-        #    None, así que una consulta de calendario terminaba en la lista
-        #    completa de médicos.
-        if self._doctor_service and domain == "medicos" and not is_mission_query:
+        # 4. Doctor query service — sólo si el NLU eligió una tool DE MÉDICOS.
+        #    Antes miraba `domain == "medicos"`, pero `domain` es el valor por
+        #    defecto del orquestador cuando la tool no es de médicos: por eso
+        #    el servicio contestaba CUALQUIER pregunta con la lista completa
+        #    (su filtro vacío nunca devuelve None).
+        #
+        #    `nlu_tool is None` mantiene el camino sin NLU tal como estaba.
+        is_doctor_query = (
+            nlu_tool in DOCTOR_TOOLS
+            or (nlu_tool is None and domain == "medicos")
+        )
+        if self._doctor_service and is_doctor_query and not is_mission_query:
             agent_result = self._doctor_service.execute(user_text, entities)
             if agent_result is not None and agent_result.response_text:
                 return self._make_result(
@@ -203,8 +205,10 @@ class OperationalQueryHandler:
                         router_result, "intent_router", used_sql=True
                     )
 
-        # 7. SQL Agent fallback (last resort)
-        if self._sql_executor:
+        # 7. SQL Agent fallback (last resort). No corre para lo conversacional:
+        #    el agente SQL también contesta cualquier frase con la lista de
+        #    médicos, y un «Que me recomiendas?» no puede terminar ahí.
+        if self._sql_executor and nlu_tool not in CONVERSATIONAL_TOOLS:
             try:
                 sql_result = self._sql_executor.execute(
                     nl_query=user_text,

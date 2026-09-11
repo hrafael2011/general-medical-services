@@ -18,10 +18,13 @@ Las listas de abajo salen de medir el corpus, no de suponer:
   `DoctorQueryService` descarta en silencio. Verificado: 15 turnos
   («Dame un resumen por rango» → 41 médicos en vez de un desglose).
 
-Deliberadamente NO están acá `workload_ranking` ni `confirmation_status`
-pese a tener aciertos: esos aciertos se resuelven en la capa semántica, que
-corre ANTES de este gate. Lo que llega hasta acá con esos tools es siempre un
-volcado.
+Deliberadamente NO está acá `workload_ranking` pese a tener un acierto: ese
+acierto se resuelve en la capa semántica, que corre ANTES de este gate, y lo
+que llega hasta acá con esa tool es siempre un volcado.
+
+El chequeo de parámetros se aplica SÓLO a `DOCTOR_TOOLS`. Aplicarlo a todo
+rompía «Quienes estan en Pista en julio?»: `service_area` sí lo honra el
+servicio de calendario.
 
 ```
     from backend.app.application.telegram.scope_gate import check_scope
@@ -34,8 +37,11 @@ from __future__ import annotations
 
 from typing import Any
 
-# Tools que los servicios determinísticos SÍ saben responder.
-SUPPORTED_TOOLS: frozenset[str] = frozenset(
+# Tools que resuelve el servicio de médicos. Es una lista aparte porque el
+# chequeo de parámetros de abajo SÓLO vale para ellas: `service_area`, por
+# ejemplo, sí lo aplica el servicio de calendario, y rechazarlo en todas partes
+# rompía «Quienes estan en Pista en julio?».
+DOCTOR_TOOLS: frozenset[str] = frozenset(
     {
         "list_doctors",
         "count_doctors",
@@ -43,12 +49,21 @@ SUPPORTED_TOOLS: frozenset[str] = frozenset(
         "doctors_by_rank",
         "doctors_by_department",
         "doctor_info",
+    }
+)
+
+# Tools que los servicios determinísticos SÍ saben responder.
+OTHER_SUPPORTED_TOOLS: frozenset[str] = frozenset(
+    {
         "calendar_status",
         "calendar_assignments",
         "mission_list",
+        "confirmation_status",
         "generate_report",
     }
 )
+
+SUPPORTED_TOOLS: frozenset[str] = DOCTOR_TOOLS | OTHER_SUPPORTED_TOOLS
 
 # El NLU completa estos parámetros y `DoctorQueryService` no los mira: los
 # descarta y devuelve TODOS los médicos, así que la respuesta parece válida
@@ -85,6 +100,6 @@ def check_scope(tool: str | None, params: dict[str, Any] | None) -> str | None:
         return None
     if tool not in SUPPORTED_TOOLS:
         return "tool_fuera_de_alcance"
-    if UNHONORED_DOCTOR_PARAMS & set(params or {}):
+    if tool in DOCTOR_TOOLS and UNHONORED_DOCTOR_PARAMS & set(params or {}):
         return "filtro_no_soportado"
     return None

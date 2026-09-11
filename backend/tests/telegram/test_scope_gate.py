@@ -27,7 +27,6 @@ class TestToolFueraDeAlcance:
             "notification_status", # 1 volcado, 0 aciertos
             "doctor_restrictions", # 1 volcado, 0 aciertos
             "workload_ranking",    # 6 volcados, 0 aciertos en este paso
-            "confirmation_status", # 2 volcados, 0 aciertos en este paso
             "slot_recommendation",
             "system_config",
         ],
@@ -86,6 +85,32 @@ class TestFiltrosQueNadieAplica:
         assert check_scope(
             "list_doctors", {"sex": "F", "group_by": "rank"}
         ) == "filtro_no_soportado"
+
+
+class TestElChequeoDeFiltrosNoSePasaDeLaRaya:
+    """Regresiones medidas en la corrida, no supuestas.
+
+    La primera versión aplicaba `UNHONORED_DOCTOR_PARAMS` a **cualquier** tool.
+    `service_area` está en esa lista porque el servicio de médicos lo ignora,
+    pero el de calendario SÍ lo aplica: se rompieron «Quienes estan en Pista en
+    julio?» y «Quienes estan en Emergencia en julio?», que respondían bien.
+    """
+
+    def test_service_area_en_calendario_no_se_rechaza(self):
+        assert check_scope(
+            "calendar_assignments",
+            {"start_date": "2026-07-01", "end_date": "2026-07-31", "service_area": "Pista"},
+        ) is None
+
+    def test_service_area_en_medicos_si_se_rechaza(self):
+        assert check_scope("list_doctors", {"service_area": "Pista"}) == "filtro_no_soportado"
+
+    def test_confirmation_status_esta_soportado(self):
+        """«Exporta los pendientes de confirmacion» respondía 21 registros."""
+        assert check_scope("confirmation_status", {}) is None
+
+    def test_workload_ranking_sigue_fuera(self):
+        assert check_scope("workload_ranking", {"month": 7}) == "tool_fuera_de_alcance"
 
 
 class TestConversacional:
@@ -235,6 +260,105 @@ class TestResolveRechazaFueraDeAlcance:
 
         doctor_service.execute.assert_called_once()
         assert result is not None
+
+
+class TestElServicioDeMedicosSeGuiaPorLaTool:
+    """El paso de médicos miraba `domain`, que es el DEFAULT, no una decisión.
+
+    Devolver `None` temprano para lo conversacional arreglaba el volcado pero
+    además salteaba los pasos de calendario y router, que sí respondían bien
+    («Dame los calendarios pendientes de aprobacion»). La condición correcta
+    es por tool, no por dominio.
+    """
+
+    @staticmethod
+    def build(*, doctor_service=None, calendar_service=None, sql_executor=None):
+        from backend.app.application.telegram.operational_query_handler import (
+            OperationalQueryHandler,
+        )
+
+        return OperationalQueryHandler(
+            semantic_layer=None,
+            doctor_service=doctor_service,
+            calendar_service=calendar_service,
+            intent_router=None,
+            sql_executor=sql_executor,
+            llm_provider=None,
+        )
+
+    def test_reply_no_llega_al_servicio_de_medicos(self):
+        from unittest.mock import MagicMock
+
+        doctor_service = MagicMock()
+        handler = self.build(doctor_service=doctor_service)
+
+        handler.resolve(
+            user_text="Que me recomiendas?",
+            domain="medicos",
+            action="query",
+            entities={},
+            nlu_tool="reply",
+        )
+
+        doctor_service.execute.assert_not_called()
+
+    def test_reply_todavia_puede_resolver_calendario(self):
+        """El paso de calendario corre después: no hay que saltearlo."""
+        from unittest.mock import MagicMock
+
+        calendar_service = MagicMock()
+        calendar_service.execute.return_value = _DummyDoctorResult(
+            "El calendario de 09/2026 existe con estado: draft."
+        )
+        doctor_service = MagicMock()
+        handler = self.build(
+            doctor_service=doctor_service, calendar_service=calendar_service
+        )
+
+        result = handler.resolve(
+            user_text="Dame los calendarios pendientes de aprobacion.",
+            domain="medicos",
+            action="query",
+            entities={},
+            nlu_tool="reply",
+        )
+
+        doctor_service.execute.assert_not_called()
+        assert result is not None, "el calendario debe seguir respondiendo"
+        assert "draft" in result.response_text
+
+    def test_reply_no_cae_al_agente_sql(self):
+        from unittest.mock import MagicMock
+
+        sql_executor = MagicMock()
+        handler = self.build(sql_executor=sql_executor)
+
+        result = handler.resolve(
+            user_text="Cuentame un chiste",
+            domain="medicos",
+            action="query",
+            entities={},
+            nlu_tool="reply",
+        )
+
+        sql_executor.execute.assert_not_called()
+        assert result is None, "sin nada que responder, decide el agente"
+
+    def test_tool_de_otro_dominio_no_cae_al_servicio_de_medicos(self):
+        from unittest.mock import MagicMock
+
+        doctor_service = MagicMock()
+        handler = self.build(doctor_service=doctor_service)
+
+        handler.resolve(
+            user_text="Que medicos confirmaron servicio?",
+            domain="medicos",
+            action="query",
+            entities={},
+            nlu_tool="confirmation_status",
+        )
+
+        doctor_service.execute.assert_not_called()
 
 
 class TestAgenteRechazaFueraDeAlcance:
