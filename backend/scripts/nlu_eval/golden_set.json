@@ -1,0 +1,2994 @@
+{
+  "generated_at": "2026-09-11T01:05:59.807805+00:00",
+  "source": "docs/telegram_220_casos_prueba.md",
+  "cases": [
+    {
+      "id": 1,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos tengo en total?",
+          "expected": 40,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos tengo disponibles?",
+          "expected": 40,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan activos para servicio?",
+          "expected": 40,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos no estan activos para servicio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos activos para servicio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos inactivos para servicio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en PDF los medicos activos para servicio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en Excel los medicos activos para servicio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos masculinos tengo?",
+          "expected": 6,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos femeninos tengo?",
+          "expected": 34,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en PDF los medicos femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en Excel los medicos masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos hombres tengo disponibles?",
+          "expected": 6,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantas mujeres tengo disponibles?",
+          "expected": 34,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Y masculinos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Y femeninos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame un resumen de medicos por sexo.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta el resumen de medicos por sexo en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos pasantes tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos cabos tengo?",
+          "expected": 11,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos sargentos tengo?",
+          "expected": 8,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos sargentos mayores tengo?",
+          "expected": 0,
+          "matcher": "number",
+          "note": "'sargento mayor' existe en el catálogo de rangos; ningún médico lo tiene."
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos contrata tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El catálogo guarda el rango como 'empledo de contratacion temporal' (con typo) y no coincide con «contrata»: el bot responde 0 (o el conteo sin filtro de rango). Cuál es la respuesta correcta depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de pasantes.",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de cabos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos mayores.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de contrata.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en PDF los pasantes.",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en PDF los cabos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en PDF los sargentos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en Excel los sargentos mayores.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en Excel los contrata.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son cabo?",
+          "expected": 11,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son sargento?",
+          "expected": 8,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son pasante?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son sargento mayor?",
+          "expected": 0,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame un resumen por rango.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos pasantes femeninos tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos pasantes masculinos tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos cabos femeninos tengo?",
+          "expected": 9,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos cabos masculinos tengo?",
+          "expected": 2,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos femeninos tengo?",
+          "expected": 8,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos masculinos tengo?",
+          "expected": 0,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos mayores femeninos tengo?",
+          "expected": 0,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos mayores masculinos tengo?",
+          "expected": 0,
+          "matcher": "number",
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos contrata femeninos tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El catálogo guarda el rango como 'empledo de contratacion temporal' (con typo) y no coincide con «contrata»: el bot responde 0 (o el conteo sin filtro de rango). Cuál es la respuesta correcta depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos contrata masculinos tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El catálogo guarda el rango como 'empledo de contratacion temporal' (con typo) y no coincide con «contrata»: el bot responde 0 (o el conteo sin filtro de rango). Cuál es la respuesta correcta depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de pasantes femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de pasantes masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de cabos femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de cabos masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en PDF los pasantes femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 58,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en PDF los cabos masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en Excel los sargentos femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en PDF los sargentos mayores masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 61,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos masculino y femenino tienen rango pasante?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 62,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos hombres y mujeres son cabo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame el desglose por sexo de los sargentos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 64,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta el desglose por sexo de los cabos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 65,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Son 24 o 23 sargentos femeninos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 66,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "De esos sargentos femeninos, dame el listado.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 67,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "De esos, exportalo en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 68,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Ahora dame solo los masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 69,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta esos masculinos en Excel.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 70,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos cabos massulino tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "El rango 'pasante' no existe en el catálogo de rangos (sí hay departamentos de pasantía): la expectativa depende de producto."
+        }
+      ]
+    },
+    {
+      "id": 71,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay por departamento?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 72,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Licencias Medicas?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 73,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Ensenanza?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 74,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Evaluaciones Medicas?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 75,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Subdireccion?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 76,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Recurso Humanos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 77,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Licencias Medicas.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 78,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Ensenanza.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 79,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Evaluaciones Medicas.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 80,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Subdireccion.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 81,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Recurso Humanos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 82,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta en PDF los medicos de Licencias Medicas.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 83,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta en Excel los medicos de Ensenanza.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 84,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos cabos hay en Recurso Humanos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 85,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos sargentos femeninos hay en Evaluaciones Medicas?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 86,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame los pasantes masculinos de Subdireccion.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 87,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta los sargentos de Ensenanza.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 88,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame un resumen por departamento y sexo.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 89,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame un resumen por departamento y rango.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 90,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta el resumen por departamento en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 91,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Busca el medico Acosta.",
+          "expected": "ACOSTA CABRERA",
+          "matcher": "contains",
+          "note": "Único médico activo para servicio con apellido Acosta."
+        }
+      ]
+    },
+    {
+      "id": 92,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Busca medicos con apellido Ramos.",
+          "expected": "no encontré",
+          "matcher": "contains",
+          "note": "'Ramos' sólo lo tiene una médica con service_active=false."
+        }
+      ]
+    },
+    {
+      "id": 93,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame informacion de Acosta Ramos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 94,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame detalle del medico Miguelina.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 95,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Cual es el rango de Acosta Ramos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 96,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Cual es el sexo de Acosta Ramos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 97,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "En que departamento esta Acosta Ramos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 98,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico esta activo para servicio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 99,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico participa en misiones?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Exporta el perfil de ese medico en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame los dias de servicio de ese medico.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame las areas asignadas de ese medico.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame el historial de servicios de ese medico.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame el historial de misiones de ese medico.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico tiene restricciones?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico esta desactivado?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Por que esta desactivado ese medico?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 108,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame todos los medicos que se llamen igual.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Hay medicos duplicados por nombre?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 110,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Exporta la lista de posibles duplicados.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 111,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay calendario de junio 2026?",
+          "expected": "No existe",
+          "matcher": "contains",
+          "note": "No hay calendario para 06/2026 en la BD."
+        }
+      ]
+    },
+    {
+      "id": 112,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay calendario de julio 2026?",
+          "expected": "No existe",
+          "matcher": "contains",
+          "note": "No hay calendario para 07/2026 en la BD."
+        }
+      ]
+    },
+    {
+      "id": 113,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay calendario de agosto 2026?",
+          "expected": "partial",
+          "matcher": "contains",
+          "note": "El calendario de 08/2026 existe con estado partial."
+        }
+      ]
+    },
+    {
+      "id": 114,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cual es el estado del calendario de junio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 115,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cual es el estado del calendario de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 116,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cual es el estado del calendario de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 117,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "El calendario de julio esta aprobado?",
+          "expected": "No existe",
+          "matcher": "contains",
+          "note": "No hay calendario para 07/2026 en la BD."
+        }
+      ]
+    },
+    {
+      "id": 118,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "El calendario de agosto esta aprobado?",
+          "expected": "partial",
+          "matcher": "contains",
+          "note": "El calendario de 08/2026 existe con estado partial."
+        }
+      ]
+    },
+    {
+      "id": 119,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay borrador para agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 120,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cuantos calendarios hay para julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 121,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cuantos calendarios hay para agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 122,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame los calendarios pendientes de aprobacion.",
+          "expected": "draft",
+          "matcher": "contains",
+          "note": "El único calendario pendiente es el de 09/2026, en draft."
+        }
+      ]
+    },
+    {
+      "id": 123,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame los calendarios aprobados.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 124,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame el ultimo calendario generado.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 125,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame el calendario oficial de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 126,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Exporta el calendario aprobado de julio en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 127,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Exporta el calendario aprobado de julio en Excel.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 128,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Exporta el borrador de agosto en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 129,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame un resumen operativo de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 130,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame un resumen operativo de agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 131,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan incluidos en el calendario de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 132,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan incluidos en el calendario de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 133,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan de servicio en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 134,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan de servicio en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 135,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de servicio en julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 136,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de servicio en agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 137,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la primera semana de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 138,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la primera semana de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 139,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la segunda semana de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 140,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la tercera semana de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 141,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la cuarta semana de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 142,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Y el de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 143,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Y el de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 144,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el primer lunes de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 145,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el primer lunes de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 146,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el 4 de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 147,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el 15 de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 148,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Exporta los servicios de la primera semana de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 149,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Exporta los servicios de julio en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 150,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Exporta los servicios de agosto en Excel.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 151,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 152,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 153,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios tiene cada medico en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 154,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios tiene cada medico en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 155,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Quienes no fueron asignados en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 156,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Quienes no fueron asignados en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 157,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame los huecos sin cubrir de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 158,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame los huecos sin cubrir de agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 159,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Hay cobertura completa en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 160,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Hay cobertura completa en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 161,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay por area en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 162,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay por area en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 163,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en Emergencia en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 164,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en Pista en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 165,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en UCI en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 166,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en Consulta Externa en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 167,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Exporta los servicios por area de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 168,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cual medico tiene mas servicios en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 169,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cual medico tiene menos servicios en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 170,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la carga de trabajo de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 171,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la carga de trabajo de agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 172,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Exporta la carga de trabajo de julio en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 173,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Exporta la carga de trabajo de agosto en Excel.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 174,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes tienen 3 servicios en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 175,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes tienen menos de 3 servicios en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 176,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes exceden la meta mensual?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 177,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes no cumplen la meta mensual?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 178,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la distribucion por area y rango.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 179,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la distribucion por area y sexo.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 180,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame los medicos con servicio en las tres areas.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 181,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay ranking de misiones para julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 182,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay ranking de misiones para agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 183,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame el ranking de misiones de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 184,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame el ranking de misiones de agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 185,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Cuales son los 3 primeros del ranking de misiones de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 186,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Cuales son los 5 primeros del ranking de misiones de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 187,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame todos los candidatos de misiones de agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 188,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta el ranking de misiones de agosto en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 189,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta el ranking de misiones de julio en Excel.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 190,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quien es el candidato numero 1 para misiones en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 191,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes son elegibles para mision el 15 de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 192,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes no son elegibles para mision el 15 de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 193,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame los candidatos disponibles para mision el 20 de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 194,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame candidatos ordenados de menor carga a mayor carga.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 195,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Si el primero no puede, quien sigue?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 196,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay misiones creadas en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 197,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay misiones creadas en agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 198,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame las misiones de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 199,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame las misiones de agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 200,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta las misiones de agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 201,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes participan en la mision del 15 de agosto?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Esa mision esta confirmada?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 203,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes no han confirmado la mision?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 204,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes confirmaron recibido de la mision?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 205,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay advertencias en misiones?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 206,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay medicos desactivados dentro de misiones?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 207,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Que medicos debo reemplazar en misiones?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 208,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame las misiones pendientes de reemplazo.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 209,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta las misiones con advertencias.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 210,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame resumen de misiones por mes.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 211,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Hay notificaciones pendientes?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 212,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Hay alertas importantes?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 213,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que medicos no han confirmado servicio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 214,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que medicos confirmaron servicio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 215,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que medicos no han confirmado mision?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 216,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Exporta los pendientes de confirmacion.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 217,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Dame auditoria de cambios del calendario de julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 218,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Quien aprobo el calendario de julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 219,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que cambios se hicieron despues de aprobar el calendario?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 220,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Dame un reporte general operativo del sistema para julio.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 221,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Busca al medico Acostta.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 222,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Dame los medicos de Licencias Medicass.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 223,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Ensenansa?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 224,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Cuantos sargento mayores femeninos tengo?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 225,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Busca al medico Fulanito Perez.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 226,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Hay calendario de diciembre 2030?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 227,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Cuantos cabos femeninos hay en Subdireccion?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 228,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Dame las misiones de enero 2030.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 229,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Dame los medicos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 230,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Cuantos hay?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 231,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Como esta el sistema?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 232,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Que me recomiendas?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 233,
+      "category": "Fuera del dominio",
+      "turns": [
+        {
+          "text": "Que hora es?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 234,
+      "category": "Fuera del dominio",
+      "turns": [
+        {
+          "text": "Quien es el presidente?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 235,
+      "category": "Fuera del dominio",
+      "turns": [
+        {
+          "text": "Cuentame un chiste.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 236,
+      "category": "Ayuda y onboarding",
+      "turns": [
+        {
+          "text": "Que puedes hacer?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 237,
+      "category": "Ayuda y onboarding",
+      "turns": [
+        {
+          "text": "/start",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 238,
+      "category": "Ayuda y onboarding",
+      "turns": [
+        {
+          "text": "Ayuda",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 239,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Cuantos cabos hay?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "No, de sargentos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "Y de pasantes?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 240,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Dame los pasantes femeninos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "No, masculinos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "Y tambien los de Ensenanza.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 241,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en julio?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "No, en agosto.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "Los que estan en Emergencia.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 242,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Busca al medico Ramos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "No, al que se llama Miguelina Ramos.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "Dame su rango.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    },
+    {
+      "id": 243,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Cuantos sargentos hay?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "De esos, cuantos son femeninos?",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        },
+        {
+          "text": "Exportalos en PDF.",
+          "expected": null,
+          "matcher": "any",
+          "note": "Sin expectativa verificable contra la BD local."
+        }
+      ]
+    }
+  ],
+  "annotated_at": "2026-09-11T01:06:41.110155+00:00",
+  "ground_truth": {
+    "source": "BD local medical_shifts (puerto 5433), consultada directamente",
+    "total_activos_servicio": 40,
+    "por_rango": {
+      "cabo": 11,
+      "sargento": 8,
+      "sargento mayor": 0,
+      "empledo de contratacion temporal": 11,
+      "raso": 2
+    }
+  }
+}
