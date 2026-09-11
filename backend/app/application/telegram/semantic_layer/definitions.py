@@ -11,6 +11,7 @@ from datetime import date
 from typing import Any
 
 from .models import Dimension, Filter, Metric, SemanticQuery
+from backend.app.application.telegram.entity_resolver import normalize_sex_value
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,19 @@ def _build_where(
             )
         expr = dim.sql_expression
         key = f"{param_prefix}_{idx}"
+        if f.field == "sex" and f.operator == "eq":
+            # El filtro llega canónico ('M'/'F') y la BD guarda 'male'/'female'.
+            # Comparar en crudo no encuentra nada — y no avisa.
+            aliases = {"M": ("m", "male"), "F": ("f", "female")}.get(
+                normalize_sex_value(f.value)
+            ) or (str(f.value).lower(),)
+            placeholders = []
+            for alias_idx, alias in enumerate(aliases):
+                alias_key = f"{param_prefix}_{idx}_s{alias_idx}"
+                placeholders.append(f":{alias_key}")
+                params[alias_key] = alias
+            clauses.append(f"lower({expr}) IN ({', '.join(placeholders)})")
+            continue
         if f.operator == "eq":
             clauses.append(f"{expr} = :{key}")
             params[key] = f.value

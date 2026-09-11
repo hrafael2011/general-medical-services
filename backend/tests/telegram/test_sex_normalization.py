@@ -49,3 +49,44 @@ class TestSemanticLayerSexFilter:
         filters = self._resolver()._extract_common_filters({"sex": ["M", "female"]})
         assert len(filters) == 2
         assert {f.value for f in filters} == {"M", "F"}
+
+
+class TestSexWhereClause:
+    """La BD guarda 'male'/'female'; el filtro llega como 'M'/'F'.
+
+    Sin traducir en el WHERE, el filtro normalizado no encuentra nada: el
+    arreglo de arriba y éste son una sola unidad.
+    """
+
+    def _build(self, value):
+        from backend.app.application.telegram.semantic_layer.definitions import (
+            _build_where,
+        )
+        from backend.app.application.telegram.semantic_layer.models import Filter
+
+        return _build_where([Filter(field="sex", operator="eq", value=value)])
+
+    def test_female_covers_both_representations(self):
+        sql, params = self._build("F")
+        assert "lower(d.sex)" in sql.lower(), sql
+        assert set(params.values()) == {"f", "female"}, params
+
+    def test_male_covers_both_representations(self):
+        sql, params = self._build("M")
+        assert set(params.values()) == {"m", "male"}, params
+
+    def test_unknown_value_falls_back_to_literal(self):
+        """Un valor que no es de sexo no debe romper: se compara tal cual."""
+        sql, params = self._build("otro")
+        assert set(params.values()) == {"otro"}, params
+
+    def test_rank_where_uses_sql_expression_not_key(self):
+        """Protege el arreglo de 5950a0a: `r.name`, nunca la clave `rank`."""
+        from backend.app.application.telegram.semantic_layer.definitions import (
+            _build_where,
+        )
+        from backend.app.application.telegram.semantic_layer.models import Filter
+
+        sql, _ = _build_where([Filter(field="rank", operator="eq", value="Cabo")])
+        assert "r.name" in sql.lower(), sql
+        assert "rank =" not in sql.lower(), sql
