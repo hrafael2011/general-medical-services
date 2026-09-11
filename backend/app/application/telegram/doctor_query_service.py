@@ -182,13 +182,21 @@ class DoctorQueryService:
         elif isinstance(doctor, str) and doctor.strip():
             filters["doctor_name"] = doctor.strip()
 
+        # El NLU entrega `{"rank": "Cabo"}` — un string — mientras que el
+        # EntityResolver entrega un dict con `normalized_name`. Aceptar sólo el
+        # dict descartaba el filtro en silencio y el listado devolvía TODOS los
+        # médicos: «Dame la lista de cabos» respondía 41 en vez de 11.
         rank = resolved.get("rank")
-        if isinstance(rank, dict) and rank.get("normalized_name"):
-            filters["rank"] = rank["normalized_name"]
+        if isinstance(rank, dict):
+            rank = rank.get("normalized_name")
+        if isinstance(rank, str) and rank.strip():
+            filters["rank"] = rank.strip()
 
         department = resolved.get("department")
-        if isinstance(department, dict) and department.get("normalized_name"):
-            filters["department"] = department["normalized_name"]
+        if isinstance(department, dict):
+            department = department.get("normalized_name")
+        if isinstance(department, str) and department.strip():
+            filters["department"] = department.strip()
 
         sex = resolved.get("sex")
         values = sex if isinstance(sex, list) else ([sex] if sex else [])

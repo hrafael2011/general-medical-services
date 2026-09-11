@@ -26,6 +26,25 @@ class TestNameFilterFromResolved:
         assert filters["rank"] == "Cabo"
         assert filters["sex"] == ["F"]
 
+    def test_rank_as_plain_string_is_kept(self):
+        """El NLU entrega `{"rank": "Cabo"}`, no un dict con normalized_name.
+
+        Descartarlo en silencio devolvía la lista COMPLETA de médicos: «Dame la
+        lista de cabos» respondía 41 en vez de 11.
+        """
+        filters = DoctorQueryService._filters_from_resolved({"rank": "Cabo"})
+        assert filters["rank"] == "Cabo"
+
+    def test_department_as_plain_string_is_kept(self):
+        filters = DoctorQueryService._filters_from_resolved(
+            {"department": "Licencias Medicas"}
+        )
+        assert filters["department"] == "Licencias Medicas"
+
+    def test_blank_strings_are_ignored(self):
+        filters = DoctorQueryService._filters_from_resolved({"rank": "   "})
+        assert "rank" not in filters
+
 
 class TestNameCondition:
     def test_name_filter_adds_ilike_condition(self):
