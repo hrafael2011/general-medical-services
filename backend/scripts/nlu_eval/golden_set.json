@@ -320,9 +320,9 @@
       "turns": [
         {
           "text": "Dame la lista de cabos.",
-          "expected": null,
-          "matcher": "any",
-          "note": "Sin expectativa verificable contra la BD local."
+          "expected": 11,
+          "matcher": "number",
+          "note": "La BD tiene 11 médicos activos+servicio con rango 'cabo'."
         }
       ]
     },
@@ -332,9 +332,9 @@
       "turns": [
         {
           "text": "Dame la lista de sargentos.",
-          "expected": null,
-          "matcher": "any",
-          "note": "Sin expectativa verificable contra la BD local."
+          "expected": 8,
+          "matcher": "number",
+          "note": "La BD tiene 8 médicos activos+servicio con rango 'sargento'."
         }
       ]
     },

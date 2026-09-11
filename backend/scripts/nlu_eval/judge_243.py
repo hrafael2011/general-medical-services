@@ -118,6 +118,15 @@ def main() -> int:
     golden_by_id = {c["id"]: c for c in golden["cases"]}
     payload = _load_payload(args)
 
+    # Archivar la corrida: sin el crudo, un porcentaje no es auditable —
+    # no se puede volver a mirar qué respondió cada turno ni por qué pasó.
+    if not args.from_run:
+        raw_path = Path(args.out).with_suffix(".run.json")
+        raw_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"Corrida cruda archivada en {raw_path}")
+
     annotated_total = annotated_pass = 0
     all_total = all_pass = 0
     failures = []
