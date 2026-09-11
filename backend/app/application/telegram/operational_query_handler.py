@@ -132,7 +132,17 @@ class OperationalQueryHandler:
             if query_type:
                 params = self._calendar_params_for(query_type, entities, user_text)
                 if params is not None:
-                    agent_result = self._calendar_service.execute(query_type, params)
+                    try:
+                        agent_result = self._calendar_service.execute(query_type, params)
+                    except Exception as exc:
+                        # El detector ampliado manda al servicio frases que antes
+                        # nunca veía: un fallo suyo no puede dejar al usuario sin
+                        # respuesta ni abortar la transacción para el resto.
+                        logger.warning(
+                            "Calendar service error", extra={"error": str(exc)}
+                        )
+                        self._rollback_session()
+                        agent_result = None
                     if agent_result is not None and agent_result.response_text:
                         return self._make_result(
                             agent_result, "calendar_service", used_sql=False
@@ -234,7 +244,42 @@ class OperationalQueryHandler:
             )
         except Exception as exc:
             logger.warning("Semantic layer error", extra={"error": str(exc)})
+            self._rollback_session()
             return None
+
+    def _rollback_session(self) -> None:
+        """Deshace la transacción tras un paso que falló.
+
+        Una sentencia que falla deja la transacción de Postgres ABORTADA, y
+        cualquier consulta posterior revienta con «current transaction is
+        aborted, commands ignored until end of transaction block». Tragarse el
+        error sin deshacer convertía el fallo de un paso OPCIONAL en un error
+        opaco para el usuario: pasó con «Dame los calendarios pendientes de
+        aprobacion», donde el semantic layer fallaba por una columna inexistente
+        y el servicio de calendario reventaba después sobre la misma sesión.
+        """
+        seen: set[int] = set()
+        for service in (
+            self._semantic_layer,
+            self._doctor_service,
+            self._calendar_service,
+            self._intent_router,
+            self._sql_executor,
+        ):
+            session = (
+                getattr(getattr(service, "engine", None), "session", None)
+                or getattr(service, "session", None)
+                or getattr(service, "_session", None)
+            )
+            if session is None or id(session) in seen:
+                continue
+            seen.add(id(session))
+            try:
+                session.rollback()
+            except Exception:
+                logger.warning(
+                    "No se pudo deshacer la sesión tras el fallo", exc_info=True
+                )
 
     # ------------------------------------------------------------------
     # Helpers

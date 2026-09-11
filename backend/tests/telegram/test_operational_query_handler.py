@@ -327,3 +327,86 @@ class TestCalendarQueryWithoutDates:
             )
             is None
         )
+
+
+class TestFailedStepDoesNotPoisonTheSession:
+    """Una sentencia fallida deja la transacción de Postgres ABORTADA.
+
+    Tragarse el error sin deshacer la deja inservible: todo lo que venga después
+    falla en cascada con «current transaction is aborted», y el usuario recibe un
+    error opaco en vez de una respuesta. Pasó de verdad: el semantic layer
+    intentaba responder con una columna inexistente (`ca.confirmed`) y el
+    servicio de calendario, que corría después sobre la misma sesión, reventaba.
+    """
+
+    class _RecordingSession:
+        def __init__(self):
+            self.rollbacks = 0
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    class _ExplodingResolver:
+        def __init__(self, session):
+            self.engine = type("Engine", (), {"session": session})()
+
+        def is_semantic_query(self, domain, action, entities):
+            return True
+
+        def resolve(self, **kwargs):
+            raise RuntimeError('column ca.confirmed does not exist')
+
+    def _handler(self, semantic_layer):
+        return OperationalQueryHandler(
+            semantic_layer=semantic_layer,
+            doctor_service=None,
+            calendar_service=None,
+            intent_router=None,
+            sql_executor=None,
+        )
+
+    def test_semantic_layer_failure_rolls_the_session_back(self):
+        session = self._RecordingSession()
+        handler = self._handler(self._ExplodingResolver(session))
+
+        handler.resolve(
+            user_text="Dame los calendarios pendientes de aprobacion.",
+            domain="calendario",
+            action="query",
+            entities={},
+        )
+
+        assert session.rollbacks == 1, "la sesión quedó abortada y nadie la deshizo"
+
+    def test_calendar_failure_raises_nothing_and_rolls_back(self):
+        """El detector ampliado manda al calendario frases que antes no veía.
+
+        Si el servicio revienta, el usuario no puede quedarse sin respuesta ni la
+        transacción quedar abortada para el resto del pipeline.
+        """
+        session = self._RecordingSession()
+
+        class _ExplodingCalendar:
+            def __init__(self, session):
+                self._session = session
+
+            def execute(self, query_type, params):
+                raise RuntimeError("boom")
+
+        handler = OperationalQueryHandler(
+            semantic_layer=None,
+            doctor_service=None,
+            calendar_service=_ExplodingCalendar(session),
+            intent_router=None,
+            sql_executor=None,
+        )
+
+        result = handler.resolve(
+            user_text="¿Hay calendario de julio 2026?",
+            domain="calendario",
+            action="query",
+            entities={"month": 7, "year": 2026},
+        )
+
+        assert session.rollbacks == 1
+        assert result is None, "debe caer al siguiente paso, no propagar la excepción"
