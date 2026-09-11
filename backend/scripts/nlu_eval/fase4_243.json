@@ -1,0 +1,3234 @@
+{
+  "generated_at": "2026-09-11T00:48:07.458847+00:00",
+  "cases": [
+    {
+      "id": 1,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos tengo en total?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos tengo disponibles?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan activos para servicio?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos no estan activos para servicio?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos activos para servicio.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos inactivos para servicio.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en PDF los medicos activos para servicio.",
+          "response": "Listado de médicos en PDF generado y enviado.",
+          "route": "report_request",
+          "match_type": "report_contract",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en Excel los medicos activos para servicio.",
+          "response": "Listado de médicos en Excel generado y enviado.",
+          "route": "report_request",
+          "match_type": "report_contract",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos masculinos tengo?",
+          "response": "Resultado: sex: Masculino | total: 6",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos medicos femeninos tengo?",
+          "response": "Resultado: sex: Femenino | total: 34",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos masculinos.",
+          "response": "Se encontraron 7 resultados. Los primeros:\n1. ERICSON NUÑEZ | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n2. Hendrick Rafael |  | Masculino\n3. JORGE MIGUEL HEUREAUX | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n4. JOSE ACOSTA CABRERA | Cabo | Masculino\n5. JUAN GARCIA | EMPLEDO DE CONTRATACION TEMPORAL | Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos femeninos.",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en PDF los medicos femeninos.",
+          "response": "Aquí tienes el reporte solicitado. (34 registros, PDF).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta en Excel los medicos masculinos.",
+          "response": "Aquí tienes el reporte solicitado. (7 registros, EXCEL).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantos hombres tengo disponibles?",
+          "response": "Resultado: sex: Masculino | total: 6",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Cuantas mujeres tengo disponibles?",
+          "response": "Resultado: total: 34",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Y masculinos?",
+          "response": "Se encontraron 7 resultados. Los primeros:\n1. ERICSON NUÑEZ | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n2. Hendrick Rafael |  | Masculino\n3. JORGE MIGUEL HEUREAUX | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n4. JOSE ACOSTA CABRERA | Cabo | Masculino\n5. JUAN GARCIA | EMPLEDO DE CONTRATACION TEMPORAL | Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Y femeninos?",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Dame un resumen de medicos por sexo.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "category": "Medicos: totales, estado y filtros basicos",
+      "turns": [
+        {
+          "text": "Exporta el resumen de medicos por sexo en PDF.",
+          "response": "Listado de médicos en PDF generado y enviado.",
+          "route": "report_request",
+          "match_type": "report_contract",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos pasantes tengo?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos cabos tengo?",
+          "response": "Resultado: total: 11",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos sargentos tengo?",
+          "response": "Resultado: total: 8",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos sargentos mayores tengo?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos contrata tengo?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de pasantes.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de cabos.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos mayores.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame la lista de contrata.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en PDF los pasantes.",
+          "response": "No tengo esa información o esa acción se realiza en el panel web. Puedo consultar doctores, disponibilidad, guardias, misiones y reportes.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en PDF los cabos.",
+          "response": "Aquí tienes el reporte solicitado. (11 registros, PDF).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en PDF los sargentos.",
+          "response": "Aquí tienes el reporte solicitado. (8 registros, PDF).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en Excel los sargentos mayores.",
+          "response": "Aquí tienes el reporte solicitado. (8 registros, EXCEL).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Exporta en Excel los contrata.",
+          "response": "No tengo esa información o esa acción se realiza en el panel web. Puedo consultar doctores, disponibilidad, guardias, misiones y reportes.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son cabo?",
+          "response": "Resultado: total: 11",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son sargento?",
+          "response": "Resultado: total: 8",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son pasante?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Cuantos medicos son sargento mayor?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "category": "Medicos por rango",
+      "turns": [
+        {
+          "text": "Dame un resumen por rango.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos pasantes femeninos tengo?",
+          "response": "Resultado: sex: Femenino | total: 34",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos pasantes masculinos tengo?",
+          "response": "Resultado: sex: Masculino | total: 6",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos cabos femeninos tengo?",
+          "response": "Resultado: sex: Femenino | total: 9",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos cabos masculinos tengo?",
+          "response": "Resultado: sex: Masculino | total: 2",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos femeninos tengo?",
+          "response": "Resultado: sex: Femenino | total: 8",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos masculinos tengo?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos mayores femeninos tengo?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos sargentos mayores masculinos tengo?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos contrata femeninos tengo?",
+          "response": "Resultado: sex: Femenino | total: 34",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos contrata masculinos tengo?",
+          "response": "Resultado: sex: Masculino | total: 6",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de pasantes femeninos.",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de pasantes masculinos.",
+          "response": "Se encontraron 7 resultados. Los primeros:\n1. ERICSON NUÑEZ | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n2. Hendrick Rafael |  | Masculino\n3. JORGE MIGUEL HEUREAUX | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n4. JOSE ACOSTA CABRERA | Cabo | Masculino\n5. JUAN GARCIA | EMPLEDO DE CONTRATACION TEMPORAL | Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de cabos femeninos.",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de cabos masculinos.",
+          "response": "Se encontraron 7 resultados. Los primeros:\n1. ERICSON NUÑEZ | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n2. Hendrick Rafael |  | Masculino\n3. JORGE MIGUEL HEUREAUX | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n4. JOSE ACOSTA CABRERA | Cabo | Masculino\n5. JUAN GARCIA | EMPLEDO DE CONTRATACION TEMPORAL | Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos femeninos.",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame la lista de sargentos masculinos.",
+          "response": "Se encontraron 7 resultados. Los primeros:\n1. ERICSON NUÑEZ | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n2. Hendrick Rafael |  | Masculino\n3. JORGE MIGUEL HEUREAUX | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n4. JOSE ACOSTA CABRERA | Cabo | Masculino\n5. JUAN GARCIA | EMPLEDO DE CONTRATACION TEMPORAL | Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en PDF los pasantes femeninos.",
+          "response": "Aquí tienes el reporte solicitado. (34 registros, PDF).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 58,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en PDF los cabos masculinos.",
+          "response": "Aquí tienes el reporte solicitado. (2 registros, PDF).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en Excel los sargentos femeninos.",
+          "response": "Aquí tienes el reporte solicitado. (8 registros, EXCEL).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta en PDF los sargentos mayores masculinos.",
+          "response": "No se encontraron resultados para generar el reporte.",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 61,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos masculino y femenino tienen rango pasante?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 62,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos hombres y mujeres son cabo?",
+          "response": "Se encontraron 2 resultados:\n1. Femenino | Femenino | 9\n2. Masculino | Masculino | 2",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Dame el desglose por sexo de los sargentos.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 64,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta el desglose por sexo de los cabos.",
+          "response": "Aquí tienes el reporte solicitado. (11 registros, PDF).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 65,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Son 24 o 23 sargentos femeninos?",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 66,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "De esos sargentos femeninos, dame el listado.",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 67,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "De esos, exportalo en PDF.",
+          "response": "¿Qué reporte quieres en PDF: el calendario mensual o la lista semanal, y de qué mes y año?",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 68,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Ahora dame solo los masculinos.",
+          "response": "Se encontraron 7 resultados. Los primeros:\n1. ERICSON NUÑEZ | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n2. Hendrick Rafael |  | Masculino\n3. JORGE MIGUEL HEUREAUX | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n4. JOSE ACOSTA CABRERA | Cabo | Masculino\n5. JUAN GARCIA | EMPLEDO DE CONTRATACION TEMPORAL | Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 69,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Exporta esos masculinos en Excel.",
+          "response": "Aquí tienes el reporte solicitado. (7 registros, EXCEL).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 70,
+      "category": "Medicos por rango y sexo",
+      "turns": [
+        {
+          "text": "Cuantos cabos massulino tengo?",
+          "response": "Resultado: total: 2",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 71,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay por departamento?",
+          "response": "Se encontraron 14 resultados. Los primeros:\n1. ANÁLISIS INSTITUCIONAL | ANÁLISIS INSTITUCIONAL | 8\n2. PASANTÍA INTERNA | PASANTÍA INTERNA | 8\n3. PASANTÍA EXTERNA | PASANTÍA EXTERNA | 5\n4. SUB DIRECCION CIENTIFICA | SUB DIRECCION CIENTIFICA | 3\n5. DEPARTAMENTO DE LICENCIAS MÉDICAS | DEPARTAMENTO DE LICENCIAS MÉDICAS | 3",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 72,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Licencias Medicas?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 73,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Ensenanza?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 74,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Evaluaciones Medicas?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 75,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Subdireccion?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 76,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Recurso Humanos?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 77,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Licencias Medicas.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 78,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Ensenanza.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 79,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Evaluaciones Medicas.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 80,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Subdireccion.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 81,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de Recurso Humanos.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 82,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta en PDF los medicos de Licencias Medicas.",
+          "response": "Listado de médicos en PDF generado y enviado.",
+          "route": "report_request",
+          "match_type": "report_contract",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 83,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta en Excel los medicos de Ensenanza.",
+          "response": "Listado de médicos en Excel generado y enviado.",
+          "route": "report_request",
+          "match_type": "report_contract",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 84,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos cabos hay en Recurso Humanos?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 85,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Cuantos sargentos femeninos hay en Evaluaciones Medicas?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 86,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame los pasantes masculinos de Subdireccion.",
+          "response": "Se encontraron 7 resultados. Los primeros:\n1. ERICSON NUÑEZ | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n2. Hendrick Rafael |  | Masculino\n3. JORGE MIGUEL HEUREAUX | EMPLEDO DE CONTRATACION TEMPORAL | Masculino\n4. JOSE ACOSTA CABRERA | Cabo | Masculino\n5. JUAN GARCIA | EMPLEDO DE CONTRATACION TEMPORAL | Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 87,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta los sargentos de Ensenanza.",
+          "response": "Aquí tienes el reporte solicitado. (8 registros, PDF).",
+          "route": "report_request",
+          "match_type": "doctor_query_service",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 88,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame un resumen por departamento y sexo.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 89,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Dame un resumen por departamento y rango.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 90,
+      "category": "Medicos por departamento",
+      "turns": [
+        {
+          "text": "Exporta el resumen por departamento en PDF.",
+          "response": "¿De qué mes y año quieres el reporte?",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 91,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Busca el medico Acosta.",
+          "response": "Resultado: name: JOSE ACOSTA CABRERA | rank: Cabo | sex: Masculino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 92,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Busca medicos con apellido Ramos.",
+          "response": "No encontré ningún médico que coincida con «Ramos».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 93,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame informacion de Acosta Ramos.",
+          "response": "No encontré ningún médico que coincida con «Acosta Ramos».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 94,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame detalle del medico Miguelina.",
+          "response": "No encontré ningún médico que coincida con «Miguelina».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 95,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Cual es el rango de Acosta Ramos?",
+          "response": "No encontré ningún médico que coincida con «Acosta Ramos».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 96,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Cual es el sexo de Acosta Ramos?",
+          "response": "No encontré ningún médico que coincida con «Acosta Ramos».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 97,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "En que departamento esta Acosta Ramos?",
+          "response": "No encontré ningún médico que coincida con «Acosta Ramos».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 98,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico esta activo para servicio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 99,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico participa en misiones?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Exporta el perfil de ese medico en PDF.",
+          "response": "Listado de médicos en PDF generado y enviado.",
+          "route": "report_request",
+          "match_type": "report_contract",
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame los dias de servicio de ese medico.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame las areas asignadas de ese medico.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame el historial de servicios de ese medico.",
+          "response": "Se encontraron 32 resultados. Los primeros:\n1. 13 | ANDRY PINEDA MORA | 2026-08-07 | 16 | 2026-09-06\n2. 6 | ANDREINA RINCON SOSA | 2026-08-15 | 6 | 2026-09-06\n3. 5 | ELSA MORILLO FERRERAS | 2026-08-05 | 5 | 2026-08-26\n4. 5 | DENIS SOTO SOTO | 2026-08-14 | 5 | 2026-09-04\n5. 4 | PAOLA BIDO RUIZ | 2026-08-08 | 4 | 2026-08-29",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame el historial de misiones de ese medico.",
+          "response": "Se encontraron 32 resultados. Los primeros:\n1. 13 | ANDRY PINEDA MORA | 2026-08-07 | 16 | 2026-09-06\n2. 6 | ANDREINA RINCON SOSA | 2026-08-15 | 6 | 2026-09-06\n3. 5 | ELSA MORILLO FERRERAS | 2026-08-05 | 5 | 2026-08-26\n4. 5 | DENIS SOTO SOTO | 2026-08-14 | 5 | 2026-09-04\n5. 4 | PAOLA BIDO RUIZ | 2026-08-08 | 4 | 2026-08-29",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico tiene restricciones?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Ese medico esta desactivado?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Por que esta desactivado ese medico?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 108,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Dame todos los medicos que se llamen igual.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Hay medicos duplicados por nombre?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 110,
+      "category": "Busqueda y detalle de medico",
+      "turns": [
+        {
+          "text": "Exporta la lista de posibles duplicados.",
+          "response": "No tengo esa información o esa acción se realiza en el panel web. Puedo consultar doctores, disponibilidad, guardias, misiones y reportes.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 111,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay calendario de junio 2026?",
+          "response": "No existe un calendario para 06/2026. ¿Quieres crear uno desde el módulo de administración?",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 112,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay calendario de julio 2026?",
+          "response": "No existe un calendario para 07/2026. ¿Quieres crear uno desde el módulo de administración?",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 113,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay calendario de agosto 2026?",
+          "response": "El calendario de 08/2026 existe con estado: partial.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 114,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cual es el estado del calendario de junio?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 115,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cual es el estado del calendario de julio?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 116,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cual es el estado del calendario de agosto?",
+          "response": "Resultado: generation_mode: manual | medicos_distintos: 32 | status: partial | total_asignaciones: 105 | created_at: 2026-09-06 18:59:36.045483+00:00 | month: 8 | year: 2026",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 117,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "El calendario de julio esta aprobado?",
+          "response": "No existe un calendario para 07/2026. ¿Quieres crear uno desde el módulo de administración?",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 118,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "El calendario de agosto esta aprobado?",
+          "response": "El calendario de 08/2026 existe con estado: partial.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 119,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Hay borrador para agosto?",
+          "response": "Se encontraron 1 resultados. Los primeros:\n1. 1 | draft | 2026-09-06 18:59:36.045483+00:00",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 120,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cuantos calendarios hay para julio?",
+          "response": "Resultado: 0",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 121,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Cuantos calendarios hay para agosto?",
+          "response": "Resultado: 1",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 122,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame los calendarios pendientes de aprobacion.",
+          "response": "[ERROR] InternalError: (raised as a result of Query-invoked autoflush; consider using a session.no_autoflush block if this flush is occurring prematurely)\n(psycopg.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block\n[SQL: UPDATE telegram_user_links SET last_used_at=%(last_used_at)s::TIMESTAMP WITH TIME ZONE WHERE telegram_user_links.id = %(telegram_user_links_id)s::VARCHAR]\n[parameters: {'last_used_at': datetime.datetime(2026, 9, 11, 0, 42, 5, 646771, tzinfo=datetime.timezone.utc), 'telegram_user_links_id': 'fa1cd002-bed4-4803-a44c-3dec28a9419f'}]\n(Background on this error at: https://sqlalche.me/e/20/2j85)",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 123,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame los calendarios aprobados.",
+          "response": "El calendario de 09/2026 existe con estado: draft.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 124,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame el ultimo calendario generado.",
+          "response": "Se encontraron 1 resultados. Los primeros:\n1. 2026 | 9 | draft | manual",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 125,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame el calendario oficial de julio.",
+          "response": "No se encontraron servicios aprobados para ese periodo.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 126,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Exporta el calendario aprobado de julio en PDF.",
+          "response": "¿De qué año es el calendario de julio? Por favor indícame el año (ejemplo: 2026).",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 127,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Exporta el calendario aprobado de julio en Excel.",
+          "response": "¿De qué año es el calendario de julio? Por favor indícame el año (ejemplo: 2026).",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 128,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Exporta el borrador de agosto en PDF.",
+          "response": "No pude exportar el borrador de agosto en PDF: el sistema devolvió un error indicando que el método de reporte no está disponible.\n\nPosibles causas:\n- La función de exportación a PDF no está habilitada o configurada en este entorno.\n- El borrador de agosto aún no existe o no está en un estado exportable.\n\n¿Quieres que verifique si el calendario de agosto existe y si tiene guardias asignadas? También puedo intentar generar el reporte en otro formato si está disponible.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 129,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame un resumen operativo de julio.",
+          "response": "Resultado: active_doctors: 41 | total_assignments: 0 | unresolved_gaps: 0",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 130,
+      "category": "Calendarios: estado, existencia y aprobacion",
+      "turns": [
+        {
+          "text": "Dame un resumen operativo de agosto.",
+          "response": "Resultado: active_doctors: 41 | calendar_status: partial | total_assignments: 105 | unresolved_gaps: 0",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 131,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan incluidos en el calendario de julio?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 132,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan incluidos en el calendario de agosto?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 133,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan de servicio en julio?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 134,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos medicos estan de servicio en agosto?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 135,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de servicio en julio.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 136,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame la lista de medicos de servicio en agosto.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 137,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la primera semana de julio?",
+          "response": "No se encontraron servicios aprobados para ese periodo.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 138,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la primera semana de agosto?",
+          "response": "No se encontraron servicios aprobados para ese periodo.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 139,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la segunda semana de julio?",
+          "response": "No se encontraron servicios aprobados para ese periodo.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 140,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la tercera semana de julio?",
+          "response": "No se encontraron servicios aprobados para ese periodo.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 141,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales son los medicos de servicio la cuarta semana de julio?",
+          "response": "No se encontraron servicios aprobados para ese periodo.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 142,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Y el de agosto?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 143,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Y el de julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 144,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el primer lunes de agosto?",
+          "response": "El primer lunes de agosto de 2026 (día 3) tienen guardia:\n\n- **JHADIRA MEJIA** — Pista\n- **KAIRA SHEEN DE LA ROSA** — Emergencia\n- **YESENIA PEÑA POLANCO** — Disponible\n\n¿Quieres que revise otra fecha o el resto de la semana?",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 145,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el primer lunes de julio?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 146,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el 4 de julio?",
+          "response": "Entiendo tu consulta sobre qué médicos trabajan el 4 de julio. Revisé el calendario de asignaciones para esa fecha, pero no encontré ningún registro: el sistema devolvió la consulta como válida, aunque sin filas ni asignaciones cargadas para ese día.\n\nEsto puede deberse a que aún no se ha publicado o cargado el cronograma correspondiente a esa fecha, o a que las asignaciones se gestionan por otro medio (por ejemplo, una planilla interna o una orden verbal del servicio).\n\nTe sugiero confirmar con la jefatura médica o el área de personal de guardia si el cronograma de julio ya está disponible, o consultar nuevamente más cerca de la fecha. Si me indicas el servicio o la unidad específica, puedo intentar ayudarte a orientar la búsqueda.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 147,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuales medicos trabajan el 15 de agosto?",
+          "response": "El 15 de agosto de 2026 tienen guardia asignada:\n\n- **ANDREINA RINCON SOSA** — Emergencia\n- **PAOLA BIDO RUIZ** — Pista\n- **ANDRY PINEDA MORA** — Disponible\n\n¿Necesitas el detalle de otro día o del mes completo?",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 148,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Exporta los servicios de la primera semana de julio.",
+          "response": "Entendido, querías que exportara los servicios correspondientes a la primera semana de julio. Sin embargo, no pude generar el reporte porque no existe un calendario creado para ese mes, así que no hay datos de servicios que exportar.\n\nTe sugiero verificar si el calendario de julio ya fue cargado en el sistema o, si aún no lo está, crearlo primero con las asignaciones correspondientes. Una vez que el calendario esté disponible, puedo generar la exportación de la primera semana sin problema. Si crees que el calendario debería existir, revisa que estés consultando el mes y el año correctos.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 149,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Exporta los servicios de julio en PDF.",
+          "response": "Entiendo que quieres exportar los servicios de julio en PDF. Sin embargo, no puedo generarlo porque no existe un calendario creado para ese mes, así que no hay asignaciones que incluir en el reporte.\n\nPara poder ayudarte, primero habría que crear el calendario de julio con los servicios correspondientes. Una vez que esté cargado, puedo generar el PDF sin problema. Si crees que el calendario ya debería existir, verifica que estés seleccionando el mes y año correctos, o revisa si quedó guardado en otro periodo.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 150,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Exporta los servicios de agosto en Excel.",
+          "response": "No tengo esa información o esa acción se realiza en el panel web. Puedo consultar doctores, disponibilidad, guardias, misiones y reportes.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 151,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay en julio?",
+          "response": "Resultado: total_servicios: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 152,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay en agosto?",
+          "response": "Resultado: total_servicios: 105",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 153,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios tiene cada medico en julio?",
+          "response": "Resultado: total: 41",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 154,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Cuantos servicios tiene cada medico en agosto?",
+          "response": "Resultado: total: 41",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 155,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Quienes no fueron asignados en julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 156,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Quienes no fueron asignados en agosto?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 157,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame los huecos sin cubrir de julio.",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 158,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Dame los huecos sin cubrir de agosto.",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 159,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Hay cobertura completa en julio?",
+          "response": "No existe un calendario para 07/2026. ¿Quieres crear uno desde el módulo de administración?",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 160,
+      "category": "Calendarios: asignaciones por mes, semana y fecha",
+      "turns": [
+        {
+          "text": "Hay cobertura completa en agosto?",
+          "response": "El calendario de 08/2026 existe con estado: partial.",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 161,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay por area en julio?",
+          "response": "Resultado: total_servicios: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 162,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cuantos servicios hay por area en agosto?",
+          "response": "Resultado: total_servicios: 105",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 163,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en Emergencia en julio?",
+          "response": "Entiendo tu consulta sobre quiénes están en Emergencia durante el mes de julio.\n\nRevisé el calendario de asignaciones y el sistema confirma que la consulta se realizó correctamente, pero no encontró ningún registro: el calendario de julio aparece sin asignaciones (0 resultados). Es decir, el mes existe en el sistema, pero no hay personal asignado a Emergencia para ese período, o aún no se han cargado las asignaciones correspondientes.\n\nTe sugiero:\n- Verificar si las asignaciones de julio ya fueron publicadas o si aún están pendientes de carga.\n- Confirmar el mes o el servicio exacto, en caso de que la consulta corresponda a otro período.\n- Consultar directamente con la coordinación de guardias o el área encargada de la programación para obtener el listado actualizado.\n\nSi me indicas otro mes o servicio, puedo ayudarte a revisarlo nuevamente.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 164,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en Pista en julio?",
+          "response": "Entiendo tu consulta sobre quiénes están en Pista en julio. Revisé el calendario de asignaciones para ese mes y no encontré ningún registro: el calendario existe, pero está vacío, es decir, no hay personal asignado a Pista en julio hasta el momento.\n\nTe sugiero verificar si las asignaciones se cargan con otro nombre de mes o período, confirmar con el área de programación si el calendario de julio ya fue publicado, o consultar nuevamente más adelante cuando se hayan ingresado las asignaciones.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 165,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en UCI en julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 166,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes estan en Consulta Externa en julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 167,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Exporta los servicios por area de julio.",
+          "response": "Entendido, buscaste exportar los servicios por área correspondientes a julio. Sin embargo, no pude generar el reporte porque no existe un calendario creado para ese mes. Esto significa que aún no se han registrado asignaciones ni servicios para julio en el sistema.\n\nTe sugiero verificar que el calendario de julio haya sido creado y publicado antes de intentar la exportación. Si ya debería existir, revisa que estés seleccionando el mes y año correctos, o contacta al área encargada de la programación para que lo genere. Una vez que el calendario esté disponible, podré exportarte los servicios por área sin problema.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 168,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cual medico tiene mas servicios en julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 169,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Cual medico tiene menos servicios en julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 170,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la carga de trabajo de julio.",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 171,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la carga de trabajo de agosto.",
+          "response": "Se encontraron 32 resultados. Los primeros:\n1. 13 | ANDRY PINEDA MORA | 2026-08-07 | 16 | 2026-09-06\n2. 6 | ANDREINA RINCON SOSA | 2026-08-15 | 6 | 2026-09-06\n3. 5 | ELSA MORILLO FERRERAS | 2026-08-05 | 5 | 2026-08-26\n4. 5 | DENIS SOTO SOTO | 2026-08-14 | 5 | 2026-09-04\n5. 4 | PAOLA BIDO RUIZ | 2026-08-08 | 4 | 2026-08-29",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 172,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Exporta la carga de trabajo de julio en PDF.",
+          "response": "¿De qué año es el carga de trabajo de julio? Por favor indícame el año (ejemplo: 2026).",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 173,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Exporta la carga de trabajo de agosto en Excel.",
+          "response": "¿De qué año es el carga de trabajo de agosto? Por favor indícame el año (ejemplo: 2026).",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 174,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes tienen 3 servicios en julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 175,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes tienen menos de 3 servicios en julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 176,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes exceden la meta mensual?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 177,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Quienes no cumplen la meta mensual?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 178,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la distribucion por area y rango.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 179,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame la distribucion por area y sexo.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 180,
+      "category": "Areas de servicio y carga",
+      "turns": [
+        {
+          "text": "Dame los medicos con servicio en las tres areas.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 181,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay ranking de misiones para julio?",
+          "response": "No se encontraron resultados para esa consulta.",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 182,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay ranking de misiones para agosto?",
+          "response": "Se encontraron 20 resultados. Los primeros:\n1. LUISA MANUELA BALBUENA REYES | Sí | 0.0 | 8 | 1\n2. LUISA N. VIÑAS PEREZ | Sí | 0.0 | 8 | 2\n3. MACIEL REINOSO LORENZO | Sí | 0.0 | 8 | 3\n4. MARIELA E. PEREZ COLON | Sí | 0.0 | 8 | 4\n5. REYNA LOPEZ GERALDO | Sí | 0.0 | 8 | 5",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 183,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame el ranking de misiones de julio.",
+          "response": "No se encontraron resultados para esa consulta.",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 184,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame el ranking de misiones de agosto.",
+          "response": "Se encontraron 20 resultados. Los primeros:\n1. LUISA MANUELA BALBUENA REYES | Sí | 0.0 | 8 | 1\n2. LUISA N. VIÑAS PEREZ | Sí | 0.0 | 8 | 2\n3. MACIEL REINOSO LORENZO | Sí | 0.0 | 8 | 3\n4. MARIELA E. PEREZ COLON | Sí | 0.0 | 8 | 4\n5. REYNA LOPEZ GERALDO | Sí | 0.0 | 8 | 5",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 185,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Cuales son los 3 primeros del ranking de misiones de agosto?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 186,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Cuales son los 5 primeros del ranking de misiones de julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 187,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame todos los candidatos de misiones de agosto.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 188,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta el ranking de misiones de agosto en PDF.",
+          "response": "El reporte de ranking de misiones aún no está habilitado para generación automática. Estará disponible próximamente.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 189,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta el ranking de misiones de julio en Excel.",
+          "response": "El reporte de ranking de misiones aún no está habilitado para generación automática. Estará disponible próximamente.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 190,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quien es el candidato numero 1 para misiones en agosto?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 191,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes son elegibles para mision el 15 de agosto?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 192,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes no son elegibles para mision el 15 de agosto?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 193,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame los candidatos disponibles para mision el 20 de julio.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 194,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame candidatos ordenados de menor carga a mayor carga.",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 195,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Si el primero no puede, quien sigue?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 196,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay misiones creadas en julio?",
+          "response": "Resultado: False",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 197,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay misiones creadas en agosto?",
+          "response": "Resultado: False",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 198,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame las misiones de julio.",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 199,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame las misiones de agosto.",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 200,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta las misiones de agosto.",
+          "response": "El reporte de ranking de misiones aún no está habilitado para generación automática. Estará disponible próximamente.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 201,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes participan en la mision del 15 de agosto?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Esa mision esta confirmada?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 203,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes no han confirmado la mision?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 204,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Quienes confirmaron recibido de la mision?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 205,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay advertencias en misiones?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 206,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Hay medicos desactivados dentro de misiones?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 207,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Que medicos debo reemplazar en misiones?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 208,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame las misiones pendientes de reemplazo.",
+          "response": "No se encontraron resultados para esa consulta.",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 209,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Exporta las misiones con advertencias.",
+          "response": "El reporte de ranking de misiones aún no está habilitado para generación automática. Estará disponible próximamente.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 210,
+      "category": "Misiones y ranking",
+      "turns": [
+        {
+          "text": "Dame resumen de misiones por mes.",
+          "response": "No se encontraron resultados para esa consulta.",
+          "route": "operational_query",
+          "match_type": "intent_router",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 211,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Hay notificaciones pendientes?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 212,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Hay alertas importantes?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 213,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que medicos no han confirmado servicio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 214,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que medicos confirmaron servicio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 215,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que medicos no han confirmado mision?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 216,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Exporta los pendientes de confirmacion.",
+          "response": "Hay 21 registros de confirmación pendientes, todos con estado **expirado** (creados el 2026-09-07, vencidos el 2026-09-08). Algunos doctores aparecen repetidos (ANDRY PINEDA MORA, ELSA MORILLO FERRERAS y YESENIA PEÑA POLANCO figuran dos veces cada uno), por lo que corresponden a **18 doctores únicos**.\n\n¿Quieres que te detalle la lista completa o prefieres que la exporte en algún formato específico (CSV, PDF, etc.)?",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 217,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Dame auditoria de cambios del calendario de julio.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 218,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Quien aprobo el calendario de julio?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 219,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Que cambios se hicieron despues de aprobar el calendario?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 220,
+      "category": "Notificaciones, confirmaciones, auditoria y reportes generales",
+      "turns": [
+        {
+          "text": "Dame un reporte general operativo del sistema para julio.",
+          "response": "Entendido, solicitaste un reporte general operativo del sistema correspondiente a julio. Sin embargo, no fue posible generarlo porque no existe un calendario creado para ese mes, por lo que no hay datos operativos que consolidar en el reporte.\n\nPara poder emitir el reporte, primero es necesario crear el calendario de julio con sus asignaciones correspondientes. Una vez cargado, puedo generar el reporte general operativo sin problema. Como alternativa, si lo deseas, puedo ayudarte a revisar otro mes que ya tenga calendario registrado o apoyarte en la creación del calendario faltante.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 221,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Busca al medico Acostta.",
+          "response": "No encontré ningún médico que coincida con «Acostta».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 222,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Dame los medicos de Licencias Medicass.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 223,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en Ensenansa?",
+          "response": "Resultado: total: 0",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 224,
+      "category": "Errores de escritura y tolerancia",
+      "turns": [
+        {
+          "text": "Cuantos sargento mayores femeninos tengo?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 225,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Busca al medico Fulanito Perez.",
+          "response": "No encontré ningún médico que coincida con «Fulanito Perez».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 226,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Hay calendario de diciembre 2030?",
+          "response": "No existe un calendario para 12/2030. ¿Quieres crear uno desde el módulo de administración?",
+          "route": "operational_query",
+          "match_type": "calendar_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 227,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Cuantos cabos femeninos hay en Subdireccion?",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 228,
+      "category": "Consultas sin resultados",
+      "turns": [
+        {
+          "text": "Dame las misiones de enero 2030.",
+          "response": "No se encontraron resultados.",
+          "route": "operational_query",
+          "match_type": "sql_fallback",
+          "used_sql_agent": true
+        }
+      ]
+    },
+    {
+      "id": 229,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Dame los medicos.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 230,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Cuantos hay?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 231,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Como esta el sistema?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 232,
+      "category": "Ambigüedad",
+      "turns": [
+        {
+          "text": "Que me recomiendas?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 233,
+      "category": "Fuera del dominio",
+      "turns": [
+        {
+          "text": "Que hora es?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 234,
+      "category": "Fuera del dominio",
+      "turns": [
+        {
+          "text": "Quien es el presidente?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 235,
+      "category": "Fuera del dominio",
+      "turns": [
+        {
+          "text": "Cuentame un chiste.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 236,
+      "category": "Ayuda y onboarding",
+      "turns": [
+        {
+          "text": "Que puedes hacer?",
+          "response": "Puedo ayudarte con consultas sobre médicos, disponibilidad, calendarios, guardias, misiones y reportes disponibles en el sistema.\n\nPor ejemplo:\n• \"¿Cuántos médicos activos hay?\"\n• \"¿Quiénes están de guardia mañana?\"\n• \"Dame el calendario de julio en PDF\"\n• \"¿Cuáles son las misiones activas?\"",
+          "route": "chitchat",
+          "match_type": "chitchat_pattern",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 237,
+      "category": "Ayuda y onboarding",
+      "turns": [
+        {
+          "text": "/start",
+          "response": "Bienvenido al sistema de turnos médicos. Para vincular tu cuenta, usa el link de invitación que te proporcionó el administrador.",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    },
+    {
+      "id": 238,
+      "category": "Ayuda y onboarding",
+      "turns": [
+        {
+          "text": "Ayuda",
+          "response": "Puedo ayudarte con consultas sobre médicos, disponibilidad, calendarios, guardias, misiones y reportes disponibles en el sistema.\n\nPor ejemplo:\n• \"¿Cuántos médicos activos hay?\"\n• \"¿Quiénes están de guardia mañana?\"\n• \"Dame el calendario de julio en PDF\"\n• \"¿Cuáles son las misiones activas?\"",
+          "route": "chitchat",
+          "match_type": "chitchat_pattern",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 239,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Cuantos cabos hay?",
+          "response": "Resultado: total: 11",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        },
+        {
+          "text": "No, de sargentos.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        },
+        {
+          "text": "Y de pasantes?",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 240,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Dame los pasantes femeninos.",
+          "response": "Se encontraron 34 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        },
+        {
+          "text": "No, masculinos.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        },
+        {
+          "text": "Y tambien los de Ensenanza.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 241,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Cuantos medicos hay en julio?",
+          "response": "Resultado: total: 40",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        },
+        {
+          "text": "No, en agosto.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        },
+        {
+          "text": "Los que estan en Emergencia.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 242,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Busca al medico Ramos.",
+          "response": "No encontré ningún médico que coincida con «Ramos».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        },
+        {
+          "text": "No, al que se llama Miguelina Ramos.",
+          "response": "No encontré ningún médico que coincida con «Miguelina Ramos».",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        },
+        {
+          "text": "Dame su rango.",
+          "response": "Se encontraron 41 resultados. Los primeros:\n1. ANDREINA RINCON SOSA | ASIMILADO MILITAR | Femenino\n2. ANDRY PINEDA MORA | Sargento | Femenino\n3. ANGIE VEGA QUITERIO | ASIMILADO MILITAR | Femenino\n4. CORINA FRANCO BRETON | Cabo | Femenino\n5. DENIS SOTO SOTO | ASIMILADO MILITAR | Femenino",
+          "route": "operational_query",
+          "match_type": "doctor_service",
+          "used_sql_agent": false
+        }
+      ]
+    },
+    {
+      "id": 243,
+      "category": "Multi-turno con correcciones",
+      "turns": [
+        {
+          "text": "Cuantos sargentos hay?",
+          "response": "Resultado: total: 8",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        },
+        {
+          "text": "De esos, cuantos son femeninos?",
+          "response": "Resultado: sex: Femenino | total: 34",
+          "route": "operational_query",
+          "match_type": "semantic_layer",
+          "used_sql_agent": false
+        },
+        {
+          "text": "Exportalos en PDF.",
+          "response": "¿Qué deseas exportar en PDF: el reporte mensual del calendario o la lista semanal?",
+          "route": null,
+          "match_type": null,
+          "used_sql_agent": null
+        }
+      ]
+    }
+  ]
+}
