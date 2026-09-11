@@ -123,6 +123,9 @@ _MONTH_NAME_TO_NUMBER = {
     "diciembre": 12,
 }
 
+_POSSESSIVE_RE = re.compile(r"\b(su|sus)\b", re.IGNORECASE)
+
+
 def _looks_like_followup(text: str) -> bool:
     """Return True for short contextual follow-up requests."""
     return any(pattern.search(text) for pattern in _FOLLOWUP_PATTERNS)
@@ -794,11 +797,29 @@ class ConversationalAgent:
             return resolved_entities, entity_hints, False, None
 
         state = self._session_store.get(telegram_user_id)
-        if state is None or not state.last_filters:
+        if state is None:
             return resolved_entities, entity_hints, False, None
 
-        merged = self._resolved_from_filters(state.last_filters)
+        merged = self._resolved_from_filters(state.last_filters or {})
         merged.update(resolved_entities)
+
+        # Anáfora posesiva: «dame su rango» habla del médico del turno anterior.
+        if state.last_subject and _POSSESSIVE_RE.search(user_text):
+            merged.setdefault("doctor_name", state.last_subject)
+
+        # Corrección de período: «No, en agosto» reemplaza el mes heredado.
+        month_year = _extract_month_year(user_text)
+        if month_year is not None:
+            merged["month"], merged["year"] = month_year
+        elif state.last_period:
+            if merged.get("month") is None:
+                merged["month"] = state.last_period.get("month")
+            if merged.get("year") is None:
+                merged["year"] = state.last_period.get("year")
+
+        if not merged:
+            # No había nada que arrastrar: que el pipeline siga su curso.
+            return resolved_entities, entity_hints, False, None
 
         hints_parts = [part for part in entity_hints.split(", ") if part]
         if "rank" in merged and "rank_id" not in entity_hints and "rank='" not in entity_hints:
