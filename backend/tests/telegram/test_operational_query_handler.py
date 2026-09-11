@@ -276,7 +276,7 @@ class TestCalendarQueryWithoutDates:
             llm_provider=None,
         )
 
-    def test_question_about_a_month_does_not_crash(self, db_session):
+    def test_question_about_a_month_answers_status_without_crashing(self, db_session):
         from backend.app.application.telegram.calendar_query_service import (
             CalendarQueryService,
         )
@@ -290,9 +290,12 @@ class TestCalendarQueryWithoutDates:
             entities={"month": 6, "year": 2026},
         )
 
-        # Se abstiene: sin fechas no puede listar por rango, y sustituir otra
-        # consulta sería responder algo que nadie pidió. El pipeline sigue.
-        assert result is None
+        # Antes se abstenía para no reventar con el `params["start_date"]` sin
+        # defensa. La pregunta es de existencia, no de rango: se contesta con el
+        # estado del calendario (y sigue sin reventar).
+        assert result is not None
+        assert result.match_type == "calendar_service"
+        assert "calendario" in result.response_text.lower()
 
     def test_a_real_date_range_still_lists_assignments(self):
         """La contracara: con fechas de verdad, el listado por rango sigue vivo."""
