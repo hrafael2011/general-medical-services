@@ -13,6 +13,11 @@ import time
 from datetime import datetime
 from typing import Any
 
+from backend.app.application.telegram.entity_resolver import (
+    _FEMALE_WORDS,
+    _MALE_WORDS,
+    _normalize_text,
+)
 from backend.app.application.telegram.input_sanitizer import InputSanitizer
 from backend.app.application.telegram.intent_classifier import (
     ClassifiedIntent,
@@ -718,6 +723,43 @@ class ConversationalAgent:
         if query_type in {"count_by_specific_sex", "doctors_by_sex"} and params.get("sex"):
             filters["sex"] = [params["sex"]]
         return filters or None
+
+    _EXPORT_WORDS = ("exporta", "exportar", "excel", "pdf", "reporte")
+    _DOCTOR_SUBJECT_WORDS = (
+        "medic", "doctor", "pasante", "cabo", "sargento", "contrata",
+        "rango", "sexo", "departamento",
+    )
+
+    def _doctor_export_resolved(self, text: str) -> dict[str, Any] | None:
+        """Entidades para una exportación de médicos, o None si no lo es.
+
+        Opción B de la bifurcación de reportes: extracción determinista con
+        `EntityResolver` en vez de enseñarle los reportes al NLU (que obligaría
+        a tocar el prompt, la zona que el arreglo de multi-turno estabilizó).
+
+        Devuelve None ante cualquier duda: es preferible que la frase siga su
+        curso normal a que el camino de reportes se apropie de una consulta.
+        """
+        if self._entity_resolver is None:
+            return None
+        text_lower = text.lower()
+        if not any(word in text_lower for word in self._EXPORT_WORDS):
+            return None
+        subject_words = set(_normalize_text(text).split())
+        has_subject = any(word in text_lower for word in self._DOCTOR_SUBJECT_WORDS) or bool(
+            subject_words & (_FEMALE_WORDS | _MALE_WORDS)
+        )
+        if not has_subject:
+            return None
+        try:
+            pre = self._entity_resolver.pre_process(text)
+        except Exception:
+            logger.warning("pre_process falló en export de médicos", exc_info=True)
+            return None
+        resolved = pre.get("resolved") or {}
+        if not any(k in resolved for k in ("doctor", "rank", "department", "sex")):
+            return None
+        return resolved
 
     def _resolved_from_filters(self, filters: dict[str, Any]) -> dict[str, Any]:
         """Convert stored operational filters to EntityResolver-style data."""

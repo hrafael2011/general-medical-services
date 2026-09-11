@@ -329,10 +329,70 @@ class TelegramOrchestrator:
         )
         return response_text
 
+    def _doctor_export_result(self, text: str, chat_id: int) -> str | None:
+        """Genera y envía una exportación de médicos filtrada, o None.
+
+        Devuelve None ante cualquier duda para que la frase siga su curso: es
+        preferible a que el camino de reportes se apropie de una consulta que
+        no le corresponde.
+        """
+        agent = self._agent
+        resolve_export = getattr(agent, "_doctor_export_resolved", None)
+        doctor_service = getattr(agent, "_doctor_query_service", None)
+        if resolve_export is None or doctor_service is None:
+            return None
+        try:
+            resolved = resolve_export(text)
+        except Exception:
+            logger.warning("Export de médicos: falló la resolución", exc_info=True)
+            return None
+        if resolved is None:
+            return None
+        try:
+            result = doctor_service.execute(text, resolved)
+        except Exception:
+            logger.warning("Export de médicos: falló la ejecución", exc_info=True)
+            return None
+        if result is None or not result.response_text:
+            return None
+
+        if result.document_bytes:
+            self._bot_client.send_document(
+                chat_id,
+                result.document_bytes,
+                result.document_filename or "reporte.pdf",
+            )
+        self._bot_client.send_message(chat_id, result.response_text)
+        return result.response_text
+
     def _try_report_handler(self, text, decision, telegram_user_id, chat_id, user):
         """Handle a report request via ReportContractValidator + ReportService."""
         import time as _rhtime
         _rhstart = _rhtime.perf_counter()
+
+        # Exportación de médicos con filtros: camino determinista (opción B).
+        # «Exporta en PDF los sargentos» no nombra ningún tipo de reporte, así
+        # que la detección léxica de abajo no lo reconocía: la frase caía al
+        # agente NLU y éste respondía «esa acción se realiza en el panel web».
+        export = self._doctor_export_result(text, chat_id)
+        if export is not None:
+            _latency = round((_rhtime.perf_counter() - _rhstart) * 1000)
+            logger.info(
+                "Telegram interaction completed",
+                extra={
+                    "telegram_event": "route_completed",
+                    "telegram_user_id": telegram_user_id,
+                    "route": "report_request",
+                    "report_type": "doctor_list",
+                    "output_format": decision.requested_format or "pdf",
+                    "match_type": "doctor_query_service",
+                    "used_sql": False,
+                    "used_llm": False,
+                    "has_document": True,
+                    "latency_ms": _latency,
+                },
+            )
+            return export
 
         from backend.app.application.telegram.report_contracts import (
             TelegramReportRequest,
