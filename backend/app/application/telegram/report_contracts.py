@@ -38,6 +38,12 @@ _DEFINED_REPORT_TYPES: set[str] = {"coverage", "mission_ranking"}
 _SUPPORTED_REPORT_TYPES: set[str] = _ENABLED_REPORT_TYPES | _DEFINED_REPORT_TYPES
 
 # Human-readable report type names in Spanish
+_MONTH_LABELS: dict[int, str] = {
+    1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
+    5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
+    9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
+}
+
 _REPORT_TYPE_LABELS: dict[str, str] = {
     "calendar": "calendario",
     "doctor_list": "listado de médicos",
@@ -45,6 +51,29 @@ _REPORT_TYPE_LABELS: dict[str, str] = {
     "coverage": "cobertura",
     "mission_ranking": "ranking de misiones",
 }
+
+
+# Mapa (tipo, formato) → método de ReportService.
+#
+# Sólo entran métodos cuyos parámetros OBLIGATORIOS el despachador sabe llenar
+# con un valor real (ver `_DISPATCHABLE_PARAMS`). Un método que exige algo que
+# nadie le pasa revienta con TypeError dentro del `try`, y el usuario recibe un
+# «no se pudo generar» opaco en vez de un documento. Los que no cumplen quedan
+# fuera a propósito: sin mapeo, el contrato responde «método no encontrado»,
+# que es explícito.
+_REPORT_METHOD_MAP: dict[tuple[str, str], str] = {
+    ("doctor_list", "excel"): "generate_doctor_history_excel",
+    ("doctor_list", "pdf"): "generate_doctor_list_pdf",
+    ("workload", "excel"): "generate_workload",
+    ("workload", "pdf"): "generate_workload",
+    ("mission_ranking", "excel"): "generate_operational_summary",
+    ("mission_ranking", "pdf"): "generate_operational_summary",
+}
+
+# Parámetros que `generate_report` rellena con un valor REAL (no None).
+_DISPATCHABLE_PARAMS: frozenset[str] = frozenset(
+    {"month", "year", "date_from", "date_to", "sex", "rank", "department", "service_area"}
+)
 
 
 class TelegramReportRequest(BaseModel):
@@ -133,6 +162,18 @@ class ReportContractValidator:
         if missing:
             label = _REPORT_TYPE_LABELS.get(request.report_type, request.report_type)
             if "month" in missing or "year" in missing:
+                if "month" not in missing and request.month in _MONTH_LABELS:
+                    # El mes ya lo dijo («...de julio»): pedirlo otra vez es
+                    # hacerle repetir. Sólo falta el año.
+                    return {
+                        "ok": False,
+                        "needs": (
+                            f"¿De qué año es el {label} de "
+                            f"{_MONTH_LABELS[request.month]}? "
+                            "Por favor indícame el año (ejemplo: 2026)."
+                        ),
+                        "enabled": True,
+                    }
                 return {
                     "ok": False,
                     "needs": (
@@ -163,19 +204,7 @@ class ReportContractValidator:
 
     def get_report_service_method(self, request: TelegramReportRequest) -> str:
         """Map a validated request to the corresponding ReportService method name."""
-        mapping = {
-            ("calendar", "excel"): "generate_calendar_excel",
-            ("calendar", "pdf"): "generate_weekly_schedule_pdf",
-            ("doctor_list", "excel"): "generate_doctor_history_excel",
-            ("doctor_list", "pdf"): "generate_doctor_list_pdf",
-            ("workload", "excel"): "generate_workload",
-            ("workload", "pdf"): "generate_workload",
-            ("coverage", "excel"): "generate_coverage",
-            ("coverage", "pdf"): "generate_coverage",
-            ("mission_ranking", "excel"): "generate_operational_summary",
-            ("mission_ranking", "pdf"): "generate_operational_summary",
-        }
-        return mapping.get(
+        return _REPORT_METHOD_MAP.get(
             (request.report_type, request.output_format), ""
         )
 

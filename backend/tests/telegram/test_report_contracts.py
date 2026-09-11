@@ -257,3 +257,101 @@ class TestDoctorListReportDispatch:
         texto = _texto_del_pdf(result["document_bytes"])
         assert "ANA FEMENINA" in texto
         assert "LUIS MASCULINO" not in texto
+
+
+class TestReportMappingsAreDispatchable:
+    """Un mapeo a un método que exige datos que nadie le pasa es un TypeError.
+
+    El despachador rellena sólo ciertos parámetros (y con valor real, no None).
+    Si un método mapeado exige cualquier otro, el documento nunca se genera y el
+    usuario recibe un «no se pudo generar» opaco.
+    """
+
+    def test_every_mapped_method_is_callable_with_what_we_send(self):
+        import inspect
+
+        from backend.app.application.reports.report_service import ReportService
+        from backend.app.application.telegram.report_contracts import (
+            _DISPATCHABLE_PARAMS,
+            _REPORT_METHOD_MAP,
+        )
+
+        problemas = []
+        for (report_type, fmt), method_name in sorted(_REPORT_METHOD_MAP.items()):
+            method = getattr(ReportService, method_name, None)
+            if method is None:
+                problemas.append(f"{report_type}/{fmt}: ReportService no tiene {method_name}")
+                continue
+            required = [
+                p.name
+                for p in inspect.signature(method).parameters.values()
+                if p.name != "self"
+                and p.default is inspect.Parameter.empty
+                and p.kind
+                in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            ]
+            faltantes = [name for name in required if name not in _DISPATCHABLE_PARAMS]
+            if faltantes:
+                problemas.append(
+                    f"{report_type}/{fmt} -> {method_name}: exige {faltantes}, "
+                    "que el despachador no sabe llenar"
+                )
+        assert not problemas, "Mapeos rotos:\n" + "\n".join(problemas)
+
+    def test_calendar_has_no_broken_mapping(self):
+        """Sin mapeo, el contrato responde «método no encontrado» en vez de reventar."""
+        from backend.app.application.telegram.report_contracts import (
+            _REPORT_METHOD_MAP,
+            ReportContractValidator,
+            TelegramReportRequest,
+        )
+
+        for fmt in ("pdf", "excel"):
+            request = TelegramReportRequest(
+                report_type="calendar", output_format=fmt, month=8, year=2026
+            )
+            method_name = ReportContractValidator().get_report_service_method(request)
+            if method_name:
+                import inspect
+
+                from backend.app.application.reports.report_service import ReportService
+
+                required = [
+                    p.name
+                    for p in inspect.signature(
+                        getattr(ReportService, method_name)
+                    ).parameters.values()
+                    if p.name != "self" and p.default is inspect.Parameter.empty
+                ]
+                assert not required, (
+                    f"calendar/{fmt} mapea a {method_name}, que exige {required}"
+                )
+
+
+class TestPeriodQuestionDoesNotRepeatTheMonth:
+    """Re-preguntar el mes que el usuario ya dio es hacerle repetir."""
+
+    def _validate(self, **kw):
+        from backend.app.application.telegram.report_contracts import (
+            ReportContractValidator,
+            TelegramReportRequest,
+        )
+
+        request = TelegramReportRequest(
+            report_type="calendar", output_format="pdf", **kw
+        )
+        return ReportContractValidator().validate(request)
+
+    def test_year_only_missing_asks_only_for_the_year(self):
+        result = self._validate(month=7)
+        assert result["ok"] is False
+        needs = result["needs"].lower()
+        assert "julio" in needs, needs
+        assert "mes y año" not in needs, needs
+
+    def test_both_missing_still_asks_for_both(self):
+        result = self._validate()
+        assert "mes y año" in result["needs"].lower()
+
+    def test_complete_period_does_not_ask(self):
+        assert self._validate(month=7, year=2026)["ok"] is True
