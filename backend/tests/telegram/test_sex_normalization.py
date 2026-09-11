@@ -29,3 +29,23 @@ def test_mujer_is_not_read_as_masculino():
     """«mujer» empieza por 'm': un matcheo por prefijo lo contaría como masculino."""
     assert normalize_sex_value("mujer") == "F"
     assert normalize_sex_value("mujeres") == "F"
+
+
+class TestSemanticLayerSexFilter:
+    def _resolver(self):
+        from backend.app.application.telegram.semantic_layer.resolver import (
+            SemanticLayerResolver,
+        )
+
+        return object.__new__(SemanticLayerResolver)
+
+    def test_femenino_becomes_F_filter(self):
+        filters = self._resolver()._extract_common_filters({"sex": "femenino"})
+        assert len(filters) == 1
+        assert filters[0].field == "sex"
+        assert filters[0].value == "F"
+
+    def test_list_of_sex_values_normalizes_each(self):
+        filters = self._resolver()._extract_common_filters({"sex": ["M", "female"]})
+        assert len(filters) == 2
+        assert {f.value for f in filters} == {"M", "F"}

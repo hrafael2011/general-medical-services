@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .definitions import DIMENSIONS, METRICS
 from .engine import SemanticLayerEngine
 from .models import Filter, SemanticQuery, SemanticResult
+from backend.app.application.telegram.entity_resolver import normalize_sex_value
 from backend.app.application.telegram.sanitize import format_rows
 from backend.app.application.telegram.types import AgentResult
 
@@ -282,10 +283,15 @@ class SemanticLayerResolver:
         """Convert resolved entities into SemanticQuery filters."""
         filters: list[Filter] = []
 
-        # Sex
+        # Sex — normalizado: «femenino», «female» y «F» son el mismo filtro.
+        # En crudo, «femenino» viajaba hasta el WHERE y no coincidía con nada.
         sex = entities.get("sexo") or entities.get("sex")
         if sex:
-            filters.append(Filter(field="sex", operator="eq", value=sex))
+            values = sex if isinstance(sex, list) else [sex]
+            for value in values:
+                norm = normalize_sex_value(value)
+                if norm:
+                    filters.append(Filter(field="sex", operator="eq", value=norm))
 
         # Rank
         rank = entities.get("rango") or entities.get("rank")
