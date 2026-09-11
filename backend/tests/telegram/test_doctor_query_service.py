@@ -116,5 +116,37 @@ class TestExecuteResolvesName:
         assert "zzzz" in result.response_text.lower(), result.response_text
 
 
-# `TestSexValidationNormalized` vive en la Fase 2 (normalización de sexo):
-# hasta que el normalizador exista, esas dos pruebas fallan por diseño.
+class TestSexNormalizedInDoctorService:
+    def test_sex_values_normalize_and_dedupe(self):
+        filters = DoctorQueryService._filters_from_resolved(
+            {"sex": ["F", "femenino", "male"]}
+        )
+        assert filters["sex"] == ["F", "M"]
+
+    def test_single_sex_string_normalizes(self):
+        filters = DoctorQueryService._filters_from_resolved({"sex": "mujeres"})
+        assert filters["sex"] == ["F"]
+
+    def test_unusable_sex_value_is_dropped(self):
+        filters = DoctorQueryService._filters_from_resolved({"sex": "cualquiera"})
+        assert "sex" not in filters
+
+
+class TestSexValidationNormalized:
+    def test_male_rows_pass_validation_for_M_filter(self):
+        service = object.__new__(DoctorQueryService)
+        result = service._validate_result_filters(
+            rows=[{"sex": "male"}, {"sex": "M"}],
+            filters={"sex": ["M"]},
+            operation="list",
+        )
+        assert result["ok"] is True
+
+    def test_female_row_fails_validation_for_M_filter(self):
+        service = object.__new__(DoctorQueryService)
+        result = service._validate_result_filters(
+            rows=[{"sex": "female"}],
+            filters={"sex": ["M"]},
+            operation="list",
+        )
+        assert result["ok"] is False

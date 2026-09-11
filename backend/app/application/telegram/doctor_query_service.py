@@ -7,7 +7,10 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.application.telegram.entity_resolver import EntityResolver
+from backend.app.application.telegram.entity_resolver import (
+    EntityResolver,
+    normalize_sex_value,
+)
 from backend.app.application.telegram.sanitize import display_value, format_rows
 from backend.app.application.telegram.types import AgentResult
 from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
@@ -188,10 +191,14 @@ class DoctorQueryService:
             filters["department"] = department["normalized_name"]
 
         sex = resolved.get("sex")
-        if isinstance(sex, list):
-            filters["sex"] = sex
-        elif sex:
-            filters["sex"] = [sex]
+        values = sex if isinstance(sex, list) else ([sex] if sex else [])
+        normalized: list[str] = []
+        for value in values:
+            norm = normalize_sex_value(value)
+            if norm and norm not in normalized:
+                normalized.append(norm)
+        if normalized:
+            filters["sex"] = normalized
 
         return filters
 
@@ -330,8 +337,11 @@ class DoctorQueryService:
         expected_rank = str(filters.get("rank", "")).lower()
 
         for row in rows:
-            if sex_values and set(sex_values) != {"male", "female"}:
-                if row.get("sex") not in sex_values:
+            if sex_values:
+                # Las filas traen 'male'/'female' de la BD y el filtro ya viene
+                # canónico: comparar en crudo marcaba como fallo todo.
+                row_norm = normalize_sex_value(row.get("sex"))
+                if row_norm is not None and row_norm not in sex_values:
                     return {
                         "ok": False,
                         "error": "sex_filter_not_applied",
