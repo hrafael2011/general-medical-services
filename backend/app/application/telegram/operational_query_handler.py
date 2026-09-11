@@ -2,10 +2,11 @@
 
 Tries each service in order:
   1. SemanticLayerResolver (deterministic metrics)
-  2. DoctorQueryService (filtered doctor queries)
-  3. CalendarQueryService (calendar/assignment queries)
-  4. IntentRouter (predefined SQL queries)
-  5. SQL Agent fallback (controlled text-to-SQL)
+  2. Mission lexicon → IntentRouter (misiones nunca caen en el servicio de médicos)
+  3. DoctorQueryService (filtered doctor queries, sólo dominio «medicos»)
+  4. CalendarQueryService (calendar/assignment queries)
+  5. IntentRouter (predefined SQL queries)
+  6. SQL Agent fallback (controlled text-to-SQL)
 
 Logs match_type, used_sql, and fallback_reason for observability.
 """
@@ -97,18 +98,35 @@ class OperationalQueryHandler:
         if result is not None:
             return result
 
-        # 2. Doctor query service — solo si el NLU dijo que la consulta es de
-        #    médicos. Sin este gate respondía CUALQUIER pregunta: su filtro
-        #    vacío ({}) nunca devuelve None, así que una consulta de calendario
-        #    terminaba en la lista completa de médicos.
-        if self._doctor_service and domain == "medicos":
+        # 2. Misiones: la detección léxica gana sobre el servicio de médicos.
+        #    El NLU clasifica «Dame las misiones de agosto» como dominio
+        #    «medicos», y el servicio de médicos lo absorbía: 13 turnos del
+        #    corpus respondían «Se encontraron 41 resultados» (médicos) a
+        #    preguntas sobre misiones.
+        mission_query = (
+            self._detect_router_query(user_text, entities) if self._intent_router else None
+        )
+        is_mission_query = bool(mission_query) and mission_query != "operational_summary"
+        if is_mission_query:
+            router_result = self._intent_router.handle(
+                action="query", query_type=mission_query, params=entities,
+            )
+            if router_result is not None and router_result.response_text:
+                return self._make_result(router_result, "intent_router", used_sql=True)
+
+        # 3. Doctor query service — solo si el NLU dijo que la consulta es de
+        #    médicos y no es una consulta de misión. Sin el gate de dominio
+        #    respondía CUALQUIER pregunta: su filtro vacío ({}) nunca devuelve
+        #    None, así que una consulta de calendario terminaba en la lista
+        #    completa de médicos.
+        if self._doctor_service and domain == "medicos" and not is_mission_query:
             agent_result = self._doctor_service.execute(user_text, entities)
             if agent_result is not None and agent_result.response_text:
                 return self._make_result(
                     agent_result, "doctor_service", used_sql=False
                 )
 
-        # 3. Calendar query service
+        # 4. Calendar query service
         if self._calendar_service:
             query_type = self._detect_calendar_query(user_text, entities)
             if query_type:
@@ -120,7 +138,7 @@ class OperationalQueryHandler:
                             agent_result, "calendar_service", used_sql=False
                         )
 
-        # 4. Intent router (predefined SQL templates)
+        # 5. Intent router (predefined SQL templates)
         if self._intent_router:
             query_type = self._detect_router_query(user_text, entities)
             if query_type:
@@ -134,7 +152,7 @@ class OperationalQueryHandler:
                         router_result, "intent_router", used_sql=True
                     )
 
-        # 5. SQL Agent fallback (last resort)
+        # 6. SQL Agent fallback (last resort)
         if self._sql_executor:
             try:
                 sql_result = self._sql_executor.execute(
@@ -315,12 +333,23 @@ class OperationalQueryHandler:
         """Detect intent from text for the router's predefined queries."""
         text_lower = text.lower()
         if "mision" in text_lower or "misiones" in text_lower:
-            if "activa" in text_lower or "proxima" in text_lower or "lista" in text_lower:
-                return "list_active_missions"
-            if "confirmacion" in text_lower or "pendiente" in text_lower:
-                return "pending_mission_confirmation"
-            if "ranking" in text_lower:
+            # «resumen» primero: «resumen de misiones» es el resumen operativo,
+            # no el listado de misiones activas.
+            if "resumen" in text_lower or "summary" in text_lower:
+                return "operational_summary"
+            if "ranking" in text_lower or "candidato" in text_lower:
                 return "mission_ranking"
+            if (
+                "pendiente" in text_lower
+                or "reemplazo" in text_lower
+                or "confirmacion" in text_lower
+            ):
+                return "pending_mission_confirmation"
+            return "list_active_missions"
+        # «Dame candidatos ordenados de menor carga a mayor carga» no dice
+        # «misión» pero es exactamente el ranking de candidatos.
+        if "candidato" in text_lower or "ranking" in text_lower:
+            return "mission_ranking"
         if "summary" in text_lower or "resumen" in text_lower:
             return "operational_summary"
         return None
