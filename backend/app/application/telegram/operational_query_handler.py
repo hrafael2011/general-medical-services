@@ -13,12 +13,24 @@ Logs match_type, used_sql, and fallback_reason for observability.
 from __future__ import annotations
 
 import logging
+import re
 import time
+from calendar import monthrange
+from datetime import date, timedelta
 from typing import Any
 
+from backend.app.application.telegram.entity_resolver import _MONTH_NAMES
 from backend.app.application.telegram.types import AgentResult
 
 logger = logging.getLogger(__name__)
+
+_MONTH_RE = re.compile(
+    r"(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|"
+    r"octubre|noviembre|diciembre)"
+)
+_WEEK_RE = re.compile(r"(primera|segunda|tercera|cuarta|quinta)\s+semana")
+_WEEK_ORDINALS = {"primera": 1, "segunda": 2, "tercera": 3, "cuarta": 4, "quinta": 5}
+_YEAR_RE = re.compile(r"\b(20\d{2})\b")
 
 
 class OperationalResult:
@@ -100,11 +112,13 @@ class OperationalQueryHandler:
         if self._calendar_service:
             query_type = self._detect_calendar_query(user_text, entities)
             if query_type:
-                agent_result = self._calendar_service.execute(query_type, entities)
-                if agent_result is not None and agent_result.response_text:
-                    return self._make_result(
-                        agent_result, "calendar_service", used_sql=False
-                    )
+                params = self._calendar_params_for(query_type, entities, user_text)
+                if params is not None:
+                    agent_result = self._calendar_service.execute(query_type, params)
+                    if agent_result is not None and agent_result.response_text:
+                        return self._make_result(
+                            agent_result, "calendar_service", used_sql=False
+                        )
 
         # 4. Intent router (predefined SQL templates)
         if self._intent_router:
@@ -222,14 +236,78 @@ class OperationalQueryHandler:
         consulta sería contestar algo que nadie pidió — y el pipeline sigue.
         """
         text_lower = text.lower()
-        if "calendario" not in text_lower:
-            return None
-        if "estado" in text_lower or "status" in text_lower:
-            return "calendar_status"
         fechas = entities or {}
+
+        week_match = _WEEK_RE.search(text_lower)
+        habla_de_calendario = (
+            "calendario" in text_lower
+            or week_match is not None
+            or any(
+                word in text_lower
+                for word in ("hueco", "huecos", "sin cubrir", "cobertura")
+            )
+        )
+        if not habla_de_calendario:
+            return None
+
+        if any(
+            word in text_lower
+            for word in (
+                "estado", "status", "aprobad", "aprobacion", "pendiente",
+                "hueco", "huecos", "sin cubrir", "cobertura",
+                "hay calendario", "existe",
+            )
+        ):
+            return "calendar_status"
+
         if fechas.get("start_date") and fechas.get("end_date"):
             return "list_calendar_assignments_by_date_range"
+
+        if week_match:
+            return "calendar_assignments"
+
         return None
+
+    def _calendar_params_for(
+        self, query_type: str, entities: dict[str, Any], user_text: str
+    ) -> dict[str, Any] | None:
+        """Deriva los params que CalendarQueryService espera para el query_type.
+
+        Devuelve ``None`` cuando no se pueden derivar de verdad: el servicio
+        indexa ``params["start_date"]`` sin defensa, así que mandarlo sin fechas
+        es el KeyError que dejaba al usuario sin respuesta. Mejor abstenerse y
+        dejar que el pipeline siga.
+        """
+        params = dict(entities)
+        text_lower = user_text.lower()
+
+        if params.get("month") is None:
+            match = _MONTH_RE.search(text_lower)
+            if match:
+                params["month"] = _MONTH_NAMES[match.group(1)]
+        if params.get("year") is None:
+            match = _YEAR_RE.search(text_lower)
+            if match:
+                params["year"] = int(match.group(1))
+
+        if query_type != "calendar_assignments":
+            return params
+
+        month = params.get("month")
+        if month is None:
+            return None
+        year = int(params.get("year") or date.today().year)
+        order = 1
+        match = _WEEK_RE.search(text_lower)
+        if match:
+            order = _WEEK_ORDINALS[match.group(1)]
+        # Un mes corto no tiene día 29: se ancla al último día real.
+        last_day = monthrange(year, int(month))[1]
+        start = date(year, int(month), min((order - 1) * 7 + 1, last_day))
+        return {
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=6)).isoformat(),
+        }
 
     def _detect_router_query(
         self, text: str, entities: dict[str, Any]
