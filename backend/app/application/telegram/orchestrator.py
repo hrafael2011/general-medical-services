@@ -243,11 +243,28 @@ class TelegramOrchestrator:
         domain = "medicos"
         action = "query"
         entities: dict[str, Any] = {"user_text": text}
+        # El tool clasificado viaja hasta `resolve()` para el gate de alcance:
+        # `domain` por sí solo no alcanza, porque cae a "medicos" cuando el tool
+        # no es de médicos, y ahí el servicio de médicos contesta cualquier cosa.
+        nlu_tool: str | None = None
 
         if self._nlu_engine:
             try:
                 nlu_result = self._nlu_engine.classify(text)
                 if nlu_result:
+                    # Se registra acá porque este camino clasifica por su
+                    # cuenta, sin pasar por el agente: sin esta línea, qué
+                    # eligió el NLU es invisible justo donde más se desvía.
+                    nlu_tool = nlu_result.tool
+                    logger.info(
+                        "NLU classified",
+                        extra={
+                            "telegram_event": "nlu_classified",
+                            "tool": nlu_result.tool,
+                            "params": nlu_result.params,
+                            "source": "operational_handler",
+                        },
+                    )
                     # Map tool name to domain
                     tool = nlu_result.tool
                     if tool in ("list_doctors", "count_doctors", "doctors_by_sex",
@@ -280,6 +297,7 @@ class TelegramOrchestrator:
             action=action,
             entities=entities,
             telegram_user_id=telegram_user_id,
+            nlu_tool=nlu_tool,
         )
 
         if op_result is None:

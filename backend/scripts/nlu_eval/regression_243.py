@@ -80,15 +80,26 @@ def parse_corpus(path: Path) -> list[dict]:
 
 
 class _RouteCapture(logging.Handler):
-    """Captura el `match_type` que el orquestador registra por interacción."""
+    """Captura el `match_type` que el orquestador registra por interacción.
+
+    También guarda el tool que eligió el NLU (`nlu_classified`). Sin él, una
+    respuesta sólo se puede juzgar por su texto: no se distingue «el modelo
+    entendió mal» de «el modelo entendió bien y el enrutado lo ignoró», que
+    son dos bugs distintos y con arreglos opuestos.
+    """
 
     def __init__(self) -> None:
         super().__init__()
         self.last: dict | None = None
+        self.nlu_tool: str | None = None
 
     def emit(self, record: logging.LogRecord) -> None:
         extra = getattr(record, "__dict__", {})
-        if extra.get("telegram_event") == "route_completed":
+        event = extra.get("telegram_event")
+        if event == "nlu_classified":
+            self.nlu_tool = extra.get("tool")
+            return
+        if event == "route_completed":
             self.last = {
                 "route": extra.get("route"),
                 "match_type": extra.get("match_type"),
@@ -204,6 +215,7 @@ def run(cases: list[dict], session_factory, *, verbose: bool) -> dict:
             turns: list[dict] = []
             for segment in case["segments"]:
                 capture.last = None
+                capture.nlu_tool = None
                 try:
                     response = orchestrator.handle_message(
                         telegram_user_id=tg_id,
@@ -224,6 +236,7 @@ def run(cases: list[dict], session_factory, *, verbose: bool) -> dict:
                         "route": (capture.last or {}).get("route"),
                         "match_type": (capture.last or {}).get("match_type"),
                         "used_sql_agent": (capture.last or {}).get("used_sql_agent"),
+                        "nlu_tool": capture.nlu_tool,
                     }
                 )
         finally:
@@ -288,7 +301,11 @@ def main() -> int:
     parser.add_argument(
         "--compare", nargs=2, metavar=("ANTES", "DESPUES"), help="comparar dos corridas"
     )
-    parser.add_argument("--only", type=int, help="correr solo un caso (debug)")
+    parser.add_argument(
+        "--only",
+        type=str,
+        help="correr sólo estos casos (debug): id suelto o lista «12,34,56»",
+    )
     args = parser.parse_args()
 
     if args.compare:
@@ -313,7 +330,8 @@ def main() -> int:
 
     cases = parse_corpus(CORPUS)
     if args.only:
-        cases = [c for c in cases if c["id"] == args.only]
+        wanted = {int(part) for part in args.only.split(",") if part.strip()}
+        cases = [c for c in cases if c["id"] in wanted]
     print(f"Corriendo {len(cases)} casos contra el cableado de producción...")
 
     payload = run(cases, lambda: Session(engine), verbose=args.verbose)

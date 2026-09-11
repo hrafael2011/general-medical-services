@@ -31,6 +31,7 @@ from backend.app.application.telegram.memory import MemoryManager, SessionState,
 from backend.app.application.telegram.nl_response import generate_response
 from backend.app.application.telegram.query_executor import QueryExecutor
 from backend.app.application.telegram.sanitize import format_rows as shared_format_rows
+from backend.app.application.telegram.scope_gate import SCOPE_REFUSAL, check_scope
 from backend.app.application.telegram.semantic_layer import SemanticLayerResolver
 from backend.app.application.telegram.tool_registry import ToolRegistry
 from backend.app.application.telegram.types import AgentResult
@@ -966,6 +967,27 @@ class ConversationalAgent:
             subject = merged_followup.get("doctor_name")
             if isinstance(subject, str) and subject:
                 params.setdefault("doctor_name", subject)
+
+        # Gate de alcance: si el NLU pidió una capacidad que no existe —o un
+        # filtro que ningún servicio aplica— la respuesta honesta es decirlo.
+        # Sin esto, `_dispatch_tool` cae a su último recurso (el agente SQL),
+        # que contesta cualquier frase con la lista completa de médicos.
+        scope_reason = check_scope(nlu_result.tool, params)
+        if scope_reason is not None:
+            logger.info(
+                "Agent refused out-of-scope request",
+                extra={
+                    "telegram_event": "scope_refused",
+                    "tool": nlu_result.tool,
+                    "reason": scope_reason,
+                },
+            )
+            return AgentResult(
+                response_text=SCOPE_REFUSAL,
+                agent_action="unsupported",
+                tool_name=nlu_result.tool,
+                tool_entities={"tool": nlu_result.tool, "params": params},
+            )
 
         # Tool dispatch
         tool_result = self._dispatch_tool(nlu_result.tool, params, text, user=user)

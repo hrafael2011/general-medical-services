@@ -805,7 +805,13 @@ class TestAgentPipeline:
         assert "sex" in result.response_text.lower()
 
     def test_unknown_tool_returns_controlled_response(self, seeded_db) -> None:
-        """Tool desconocida del NLU → respuesta controlada, nunca excepción."""
+        """Tool desconocida del NLU → rechazo controlado, nunca excepción.
+
+        Antes esto terminaba en `agent_action == "query"`: la tool desconocida
+        caía al último recurso de `_dispatch_tool` (el agente SQL), que
+        contestaba cualquier frase con la lista completa de médicos. Desde el
+        gate de alcance, una capacidad que no existe se rechaza.
+        """
         llm = ScriptedAgentLLM(
             nlu_json='{"tool": "tool_inexistente", "params": {}, "confidence": 0.5}',
             format_response="Hubo un error al procesar tu consulta.",
@@ -813,8 +819,8 @@ class TestAgentPipeline:
         agent = _make_llm_first_agent(llm, seeded_db["session"])
         result = agent.process(text="rompe el sistema")
         assert isinstance(result, AgentResult)
-        assert result.agent_action == "query"
-        assert "Hubo un error" in result.response_text
+        assert result.agent_action == "unsupported"
+        assert "no forma parte" in result.response_text.lower()
 
     def test_agent_non_json_response_triggers_clarification(self, seeded_db) -> None:
         """LLM devuelve texto no-JSON → fallback conservador (reply/unknown

@@ -3,10 +3,11 @@
 Tries each service in order:
   1. SemanticLayerResolver (deterministic metrics)
   2. Mission lexicon → IntentRouter (misiones nunca caen en el servicio de médicos)
-  3. DoctorQueryService (filtered doctor queries, sólo dominio «medicos»)
-  4. CalendarQueryService (calendar/assignment queries)
-  5. IntentRouter (predefined SQL queries)
-  6. SQL Agent fallback (controlled text-to-SQL)
+  3. Scope gate (lo que no es una capacidad declarada se rechaza, no se adivina)
+  4. DoctorQueryService (filtered doctor queries, sólo dominio «medicos»)
+  5. CalendarQueryService (calendar/assignment queries)
+  6. IntentRouter (predefined SQL queries)
+  7. SQL Agent fallback (controlled text-to-SQL)
 
 Logs match_type, used_sql, and fallback_reason for observability.
 """
@@ -21,6 +22,11 @@ from datetime import date, timedelta
 from typing import Any
 
 from backend.app.application.telegram.entity_resolver import _MONTH_NAMES
+from backend.app.application.telegram.scope_gate import (
+    CONVERSATIONAL_TOOLS,
+    SCOPE_REFUSAL,
+    check_scope,
+)
 from backend.app.application.telegram.types import AgentResult
 
 logger = logging.getLogger(__name__)
@@ -87,8 +93,13 @@ class OperationalQueryHandler:
         action: str,
         entities: dict[str, Any],
         telegram_user_id: str = "",
+        nlu_tool: str | None = None,
     ) -> OperationalResult | None:
-        """Run the full pipeline, return the first successful result."""
+        """Run the full pipeline, return the first successful result.
+
+        `nlu_tool` es lo que el NLU creyó entender. Se usa sólo para el gate de
+        alcance (paso 3); `None` —camino sin NLU— no se juzga.
+        """
         start = time.perf_counter()
 
         # 1. Semantic layer (deterministic, no SQL except controlled templates)
@@ -114,7 +125,37 @@ class OperationalQueryHandler:
             if router_result is not None and router_result.response_text:
                 return self._make_result(router_result, "intent_router", used_sql=True)
 
-        # 3. Doctor query service — solo si el NLU dijo que la consulta es de
+        # 3. Alcance declarado. Corre DESPUÉS de la capa semántica a propósito:
+        #    ahí se resuelven los aciertos que sí tenemos, y sólo lo que ella no
+        #    pudo contestar llega hasta acá. Lo que llegue pidiendo una capacidad
+        #    que no existe —o un filtro que nadie aplica— se rechaza en vez de
+        #    caer al servicio de médicos, cuyo filtro vacío nunca devuelve None
+        #    y contesta CUALQUIER pregunta con los 41 médicos.
+        scope_reason = check_scope(nlu_tool, entities)
+        if scope_reason is not None:
+            logger.info(
+                "Consulta fuera de alcance",
+                extra={
+                    "telegram_event": "scope_refused",
+                    "nlu_tool": nlu_tool,
+                    "reason": scope_reason,
+                    "user_text": user_text,
+                },
+            )
+            return OperationalResult(
+                ok=True,
+                match_type="scope_refusal",
+                response_text=SCOPE_REFUSAL,
+                used_sql=False,
+                fallback_reason=scope_reason,
+            )
+
+        if nlu_tool in CONVERSATIONAL_TOOLS:
+            # No es una consulta de datos y no hay nada que rechazar: que lo
+            # conteste el agente, que tiene la respuesta conversacional armada.
+            return None
+
+        # 4. Doctor query service — solo si el NLU dijo que la consulta es de
         #    médicos y no es una consulta de misión. Sin el gate de dominio
         #    respondía CUALQUIER pregunta: su filtro vacío ({}) nunca devuelve
         #    None, así que una consulta de calendario terminaba en la lista
@@ -126,7 +167,7 @@ class OperationalQueryHandler:
                     agent_result, "doctor_service", used_sql=False
                 )
 
-        # 4. Calendar query service
+        # 5. Calendar query service
         if self._calendar_service:
             query_type = self._detect_calendar_query(user_text, entities)
             if query_type:
@@ -148,7 +189,7 @@ class OperationalQueryHandler:
                             agent_result, "calendar_service", used_sql=False
                         )
 
-        # 5. Intent router (predefined SQL templates)
+        # 6. Intent router (predefined SQL templates)
         if self._intent_router:
             query_type = self._detect_router_query(user_text, entities)
             if query_type:
@@ -162,7 +203,7 @@ class OperationalQueryHandler:
                         router_result, "intent_router", used_sql=True
                     )
 
-        # 6. SQL Agent fallback (last resort)
+        # 7. SQL Agent fallback (last resort)
         if self._sql_executor:
             try:
                 sql_result = self._sql_executor.execute(
