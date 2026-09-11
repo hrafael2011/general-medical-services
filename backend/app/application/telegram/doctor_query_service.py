@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app.application.telegram.entity_resolver import EntityResolver
 from backend.app.application.telegram.sanitize import display_value, format_rows
 from backend.app.application.telegram.types import AgentResult
 from backend.app.infrastructure.db.models.catalogs import DepartmentModel, RankModel
@@ -53,8 +54,16 @@ class DoctorQueryService:
     def execute(self, user_text: str, resolved: dict[str, Any]) -> AgentResult | None:
         """Return an AgentResult when the request is a supported doctor query."""
         filters = self._filters_from_resolved(resolved)
-        if filters is None:
-            return None
+        if "doctor_name" not in filters:
+            # El camino LLM-first no corre pre_process: resolver el nombre acá.
+            # Sin esto, «Busca al medico Acosta» devolvía los 41 médicos.
+            try:
+                pre = EntityResolver(self._session).pre_process(user_text)
+                doctor = (pre.get("resolved") or {}).get("doctor")
+                if doctor:
+                    filters["doctor_name"] = doctor.get("name") or doctor.get("id")
+            except Exception:
+                logger.warning("pre_process falló en DoctorQueryService", exc_info=True)
 
         is_export = self._is_export_request(user_text)
         operation = "list" if is_export else self._operation_from_text(user_text, filters)
@@ -75,6 +84,19 @@ class DoctorQueryService:
         else:
             rows, columns = self._list(filters)
         possible_duplicates = _possible_duplicate_names(rows)
+
+        if not rows and filters.get("doctor_name"):
+            # Pedir un médico concreto y no hallarlo no es lo mismo que un
+            # filtro sin resultados: se dice quién se buscó.
+            return AgentResult(
+                response_text=(
+                    f"No encontré ningún médico que coincida con «{filters['doctor_name']}»."
+                ),
+                agent_action="query",
+                tool_name="doctor_query_service",
+                tool_entities={"requested_filters": _sorted_filters(filters)},
+                tool_result={"ok": True, "row_count": 0},
+            )
 
         validation = self._validate_result_filters(rows, filters, operation)
         if not validation["ok"]:
