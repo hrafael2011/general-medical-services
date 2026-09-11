@@ -33,6 +33,47 @@ _MALE_WORDS = {
     "hombre", "hombres", "varon", "varones",
 }
 
+# Valores canónicos que NO son palabras del léxico castellano: el enum del NLU
+# (`tool_registry`) y lo que ya hay guardado en la BD.
+_SEX_CANONICAL: dict[str, str] = {
+    "f": "F", "female": "F",
+    "m": "M", "male": "M",
+}
+
+
+def normalize_sex_value(value: Any) -> str | None:
+    """Canonicaliza cualquier representación de sexo a ``"M"`` o ``"F"``.
+
+    El enum del NLU es ``M``/``F``, la BD puede guardar ``male``/``female`` y el
+    usuario escribe «femeninos». Los tres son el mismo filtro, y compararlos en
+    crudo hacía que el filtro no encontrara nada en silencio.
+
+    Se resuelve por conjuntos explícitos, nunca por prefijo: «mujer» empieza por
+    «m» y un matcheo por prefijo la contaría como masculino.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    key = _normalize_text(value)
+    if not key:
+        return None
+
+    if key in _SEX_CANONICAL:
+        return _SEX_CANONICAL[key]
+    if key in _FEMALE_WORDS:
+        return "F"
+    if key in _MALE_WORDS:
+        return "M"
+
+    # Plural no listado («femeninas» ya está, pero «masculinas» de un typo no):
+    # se reintenta sin la «s» final.
+    if key.endswith("s"):
+        singular = key[:-1]
+        if singular in _FEMALE_WORDS or _SEX_CANONICAL.get(singular) == "F":
+            return "F"
+        if singular in _MALE_WORDS or _SEX_CANONICAL.get(singular) == "M":
+            return "M"
+    return None
+
 
 def _normalize_text(text: str) -> str:
     """Lowercase, strip accents and collapse punctuation/whitespace."""
