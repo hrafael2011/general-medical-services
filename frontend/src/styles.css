@@ -32,6 +32,75 @@ body {
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
 }
 
+/* Single-field recovery screens: a 720px panel leaves the input absurdly wide. */
+.auth-panel--narrow {
+  width: min(100%, 440px);
+}
+
+/* Terminal states (sent / invalid / done) center their icon, heading and button. */
+.auth-panel--centered {
+  text-align: center;
+}
+
+.auth-panel--centered .btn-primary {
+  margin-top: 20px;
+}
+
+.auth-panel input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.auth-hint {
+  margin: 0;
+  padding-left: 18px;
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.auth-footnote {
+  margin: 16px 0 0;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.status-icon--success {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-icon--danger {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.status-icon--warning {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+/* Mirror of .password-wrapper, for an input with a leading decorative icon. */
+.input-icon-wrapper {
+  position: relative;
+  display: block;
+}
+
+.input-icon-wrapper .input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.input-icon-wrapper input {
+  padding-left: 36px;
+}
+
 .auth-header {
   display: flex;
   flex-direction: column;
@@ -204,10 +273,6 @@ button {
 }
 
 @media (max-width: 560px) {
-  .auth-header {
-    grid-template-columns: 1fr;
-  }
-
   .catalog-grid {
     grid-template-columns: 1fr;
   }
@@ -511,6 +576,7 @@ button {
   width: fit-content;
 }
 .btn-ghost:hover { background: #f1f5f9; }
+.btn-block { width: 100%; justify-content: center; }
 .btn-ghost.btn-green { color: #166534; border-color: #bbf7d0; }
 .btn-ghost.btn-green:hover { background: #dcfce7; }
 .btn-ghost.btn-danger { color: #991b1b; border-color: #fecaca; }

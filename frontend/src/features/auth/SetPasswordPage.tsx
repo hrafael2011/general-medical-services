@@ -1,10 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { authApi } from "../../api/auth";
 import { useToast } from "../../components/Toast";
 
-type PageState = "loading" | "invalid" | "valid" | "submitting" | "done" | "error";
+type PageState = "loading" | "invalid" | "valid" | "submitting" | "done";
+
+/** Shared shell for the states that only report an outcome, with no form. */
+function StatusPanel({
+  tone,
+  title,
+  children,
+  action,
+}: {
+  tone: "success" | "danger";
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <main className="app-shell">
+      <section className="auth-panel auth-panel--narrow auth-panel--centered">
+        <div className="auth-header">
+          <span className={`status-icon status-icon--${tone}`}>
+            <ShieldCheck size={24} />
+          </span>
+          <h2>{title}</h2>
+          {children}
+        </div>
+        {action}
+      </section>
+    </main>
+  );
+}
 
 export function SetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -62,120 +90,104 @@ export function SetPasswordPage() {
 
   if (state === "loading") {
     return (
-      <div className="login-page">
-        <div className="login-card">
+      <main className="app-shell">
+        <section className="auth-panel auth-panel--narrow auth-panel--centered">
           <p className="loading-text">Validando enlace…</p>
-        </div>
-      </div>
+        </section>
+      </main>
     );
   }
 
   if (state === "invalid") {
     return (
-      <div className="login-page">
-        <div className="login-card" style={{ textAlign: "center", padding: "40px" }}>
-          <ShieldCheck size={40} style={{ color: "#dc2626", marginBottom: 16 }} />
-          <h2 style={{ margin: "0 0 8px", color: "#1e293b" }}>Enlace inválido o expirado</h2>
-          <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 24px" }}>
-            Este enlace ya fue utilizado o ha expirado (48 horas de validez).
-          </p>
-          <p style={{ color: "#64748b", fontSize: 13 }}>
-            Contacta al administrador para que te envíe un nuevo enlace.
-          </p>
-          <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => navigate("/login")}>
+      <StatusPanel
+        tone="danger"
+        title="Enlace inválido o expirado"
+        action={
+          <button className="btn-primary" onClick={() => navigate("/login")}>
             Ir al inicio de sesión
           </button>
-        </div>
-      </div>
+        }
+      >
+        <p className="summary">Este enlace ya fue utilizado o ha expirado (48 horas de validez).</p>
+        <p className="summary">Contacta al administrador para que te envíe un nuevo enlace.</p>
+      </StatusPanel>
     );
   }
 
   if (state === "done") {
     return (
-      <div className="login-page">
-        <div className="login-card" style={{ textAlign: "center", padding: "40px" }}>
-          <ShieldCheck size={40} style={{ color: "#16a34a", marginBottom: 16 }} />
-          <h2 style={{ margin: "0 0 8px", color: "#1e293b" }}>Contraseña creada</h2>
-          <p style={{ color: "#64748b", fontSize: 14 }}>
-            Redirigiendo al inicio de sesión…
-          </p>
-        </div>
-      </div>
+      <StatusPanel tone="success" title="Contraseña creada">
+        <p className="summary">Redirigiendo al inicio de sesión…</p>
+      </StatusPanel>
     );
   }
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <ShieldCheck size={36} style={{ color: "#2563eb", marginBottom: 8 }} />
-          <h2 style={{ margin: 0, color: "#1e293b", fontSize: 20 }}>Crear contraseña</h2>
-          <p style={{ color: "#64748b", fontSize: 13, margin: "4px 0 0" }}>
+    <main className="app-shell">
+      <section className="auth-panel auth-panel--narrow">
+        <div className="auth-header">
+          <span className="status-icon">
+            <ShieldCheck size={24} />
+          </span>
+          <h2>Crear contraseña</h2>
+          <p className="summary">
             Bienvenido{name ? `, ${name}` : ""}. Establece tu contraseña para continuar.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Correo electrónico</label>
-            <input
-              type="email"
-              value={email}
-              disabled
-              className="form-input"
-              style={{ background: "#f1f5f9", color: "#64748b", cursor: "not-allowed" }}
-            />
-          </div>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            Correo electrónico
+            <input type="email" value={email} disabled autoComplete="username" />
+          </label>
 
-          <div className="form-group">
-            <label className="form-label">Nueva contraseña</label>
+          <label>
+            Nueva contraseña
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="form-input"
               placeholder="••••••••••"
+              autoComplete="new-password"
               minLength={10}
               required
             />
-            <ul className="form-hint">
+            <ul className="auth-hint">
               <li>Mínimo 10 caracteres</li>
               <li>Al menos una mayúscula y una minúscula</li>
               <li>Al menos un número y un carácter especial</li>
             </ul>
-          </div>
+          </label>
 
-          <div className="form-group">
-            <label className="form-label">Confirmar contraseña</label>
+          <label>
+            Confirmar contraseña
             <input
               type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="form-input"
               placeholder="••••••••••"
+              autoComplete="new-password"
               minLength={10}
               required
             />
-          </div>
+          </label>
 
-          {errorMessage && (
-            <p style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px" }}>{errorMessage}</p>
-          )}
+          {errorMessage && <p className="form-error">{errorMessage}</p>}
 
           <button
             type="submit"
-            className="btn-primary"
-            style={{ width: "100%" }}
+            className="btn-primary btn-block"
             disabled={state === "submitting"}
           >
             {state === "submitting" ? "Creando contraseña…" : "Crear contraseña y acceder"}
           </button>
         </form>
 
-        <p style={{ fontSize: 11, color: "#94a3b8", textAlign: "center", marginTop: 16 }}>
+        <p className="auth-footnote">
           Este enlace expira en 48 horas y solo puede usarse una vez.
         </p>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

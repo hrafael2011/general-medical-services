@@ -3,6 +3,7 @@ from hashlib import sha256
 from secrets import token_urlsafe
 from uuid import uuid4
 
+from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.set_password_token import SetPasswordTokenModel
 from backend.app.infrastructure.db.models.user import UserModel
@@ -23,8 +24,49 @@ def _hash_token(raw: str) -> str:
 
 
 class InvitationService:
-    def __init__(self, token_repo: SetPasswordTokenRepository) -> None:
+    def __init__(
+        self,
+        token_repo: SetPasswordTokenRepository,
+        action_alerts: ActionAlertService | None = None,
+    ) -> None:
         self.token_repo = token_repo
+        self.action_alerts = action_alerts
+
+    def _alert_if_delivery_failed(
+        self,
+        *,
+        delivered: bool,
+        token_record: SetPasswordTokenModel,
+        user: UserModel,
+        email_kind: str,
+    ) -> None:
+        """Record an admin-visible alert when a message could not be delivered.
+
+        Callers answer 200 regardless of what happened here (anti-enumeration), so this
+        alert is the only place a failed send becomes visible — without it, a broken mail
+        provider is indistinguishable from a delivered message.
+        """
+        if delivered or self.action_alerts is None:
+            return
+        self.action_alerts.create_if_missing(
+            alert_type="email_delivery_failed",
+            section="notifications",
+            severity="warning",
+            title="Correo no entregado",
+            message=(
+                f"No se pudo enviar el correo de {email_kind} a {user.name}. "
+                "Revisa la configuración del proveedor de correo."
+            ),
+            entity_type="set_password_token",
+            entity_id=token_record.id,
+            action_url="/notifications",
+            alert_metadata={
+                "email_kind": email_kind,
+                "user_id": user.id,
+                "user_name": user.name,
+            },
+            created_by=token_record.created_by,
+        )
 
     def create_invitation(self, *, user: UserModel, created_by: UserModel) -> str:
         """Generate token, store hash, send email. Returns the raw token."""
@@ -44,7 +86,15 @@ class InvitationService:
 
         link = f"{settings.frontend_origin}/set-password?token={raw_token}"
         html = render_invitation_email(name=user.name, link=link, origin=settings.frontend_origin)
-        send_email(to=user.email, subject="Invitación — Sistema de Turnos Médicos", html=html)
+        delivered = send_email(
+            to=user.email, subject="Invitación — Sistema de Turnos Médicos", html=html
+        )
+        self._alert_if_delivery_failed(
+            delivered=delivered,
+            token_record=token_record,
+            user=user,
+            email_kind="invitación",
+        )
 
         return raw_token
 
@@ -66,7 +116,15 @@ class InvitationService:
 
         link = f"{settings.frontend_origin}/set-password?token={raw_token}"
         html = render_reset_email(name=user.name, link=link, origin=settings.frontend_origin)
-        send_email(to=user.email, subject="Restablecer contraseña — Sistema de Turnos Médicos", html=html)
+        delivered = send_email(
+            to=user.email, subject="Restablecer contraseña — Sistema de Turnos Médicos", html=html
+        )
+        self._alert_if_delivery_failed(
+            delivered=delivered,
+            token_record=token_record,
+            user=user,
+            email_kind="restablecimiento de contraseña",
+        )
 
         return raw_token
 
@@ -88,10 +146,16 @@ class InvitationService:
 
         link = f"{settings.frontend_origin}/set-password?token={raw_token}"
         html = render_recovery_email(name=user.name, link=link, origin=settings.frontend_origin)
-        send_email(
+        delivered = send_email(
             to=user.email,
             subject="Recuperacion de contrasena — Sistema de Turnos Medicos",
             html=html,
+        )
+        self._alert_if_delivery_failed(
+            delivered=delivered,
+            token_record=token_record,
+            user=user,
+            email_kind="recuperación de contraseña",
         )
         return raw_token
 
