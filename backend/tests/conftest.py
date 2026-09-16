@@ -59,7 +59,12 @@ settings.database_url = TEST_DATABASE_URL
 # ── Blindaje de la limpieza entre tests ─────────────────────────────────────
 # Una sesión que quede abierta retiene locks y bloquearía el TRUNCATE para
 # siempre. Postgres la termina sola pasado el timeout de ociosidad.
-_TEST_CONNECT_ARGS = {"options": "-c idle_in_transaction_session_timeout=10000"}
+#
+# El valor debe SUPERAR con margen el máximo del solver CP-SAT
+# (cp_model.py: max_time_in_seconds = 15s): mientras el solver calcula, la
+# transacción del test queda ociosa y Postgres la mataría a mitad de camino
+# (fallo intermitente visto en CI con el valor anterior de 10s).
+_TEST_CONNECT_ARGS = {"options": "-c idle_in_transaction_session_timeout=30000"}
 _TRUNCATE_LOCK_TIMEOUT = "12s"
 _TRUNCATE_RETRIES = 3
 _TRUNCATE_RETRY_WAIT = 3.0
