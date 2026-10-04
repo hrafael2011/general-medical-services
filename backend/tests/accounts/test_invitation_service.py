@@ -18,8 +18,18 @@ def mock_token_repo():
 
 
 @pytest.fixture
+def mock_action_alerts():
+    return MagicMock()
+
+
+@pytest.fixture
 def service(mock_token_repo):
     return InvitationService(mock_token_repo)
+
+
+@pytest.fixture
+def alerting_service(mock_token_repo, mock_action_alerts):
+    return InvitationService(mock_token_repo, action_alerts=mock_action_alerts)
 
 
 @pytest.fixture
@@ -146,3 +156,61 @@ def test_hash_token_consistency():
 def test_hash_token_different():
     """Different tokens produce different hashes."""
     assert _hash_token("token-a") != _hash_token("token-b")
+
+
+@patch("backend.app.application.accounts.invitation_service.send_email", return_value=False)
+def test_failed_recovery_email_raises_admin_alert(
+    mock_send, alerting_service, mock_token_repo, mock_action_alerts, user
+):
+    """A recovery email that never went out must leave a trace an admin can see.
+
+    The endpoint answers 200 either way (anti-enumeration), so without this alert a
+    broken mail provider looks exactly like a delivered message.
+    """
+    alerting_service.create_self_service_recovery(user=user)
+
+    token_record = mock_token_repo.add.call_args[0][0]
+    mock_action_alerts.create_if_missing.assert_called_once()
+    kwargs = mock_action_alerts.create_if_missing.call_args.kwargs
+    assert kwargs["alert_type"] == "email_delivery_failed"
+    assert kwargs["section"] == "notifications"
+    assert kwargs["entity_type"] == "set_password_token"
+    assert kwargs["entity_id"] == token_record.id
+    assert kwargs["alert_metadata"]["user_id"] == user.id
+
+
+@patch("backend.app.application.accounts.invitation_service.send_email", return_value=True)
+def test_delivered_recovery_email_raises_no_alert(
+    mock_send, alerting_service, mock_action_alerts, user
+):
+    alerting_service.create_self_service_recovery(user=user)
+    mock_action_alerts.create_if_missing.assert_not_called()
+
+
+@patch("backend.app.application.accounts.invitation_service.send_email", return_value=False)
+def test_failed_invitation_email_raises_admin_alert(
+    mock_send, alerting_service, mock_token_repo, mock_action_alerts, user, admin
+):
+    alerting_service.create_invitation(user=user, created_by=admin)
+    token_record = mock_token_repo.add.call_args[0][0]
+    kwargs = mock_action_alerts.create_if_missing.call_args.kwargs
+    assert kwargs["alert_type"] == "email_delivery_failed"
+    assert kwargs["entity_id"] == token_record.id
+
+
+@patch("backend.app.application.accounts.invitation_service.send_email", return_value=False)
+def test_failed_reset_email_raises_admin_alert(
+    mock_send, alerting_service, mock_token_repo, mock_action_alerts, user, admin
+):
+    alerting_service.create_reset(user=user, created_by=admin)
+    token_record = mock_token_repo.add.call_args[0][0]
+    kwargs = mock_action_alerts.create_if_missing.call_args.kwargs
+    assert kwargs["alert_type"] == "email_delivery_failed"
+    assert kwargs["entity_id"] == token_record.id
+
+
+@patch("backend.app.application.accounts.invitation_service.send_email", return_value=False)
+def test_service_without_alert_collaborator_still_returns_token(mock_send, service, user):
+    """Alerting is optional — omitting it must not break the token flow."""
+    raw_token = service.create_self_service_recovery(user=user)
+    assert len(raw_token) > 0

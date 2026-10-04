@@ -12,8 +12,10 @@ from backend.app.application.accounts.errors import (
 )
 from backend.app.application.accounts.invitation_service import InvitationService
 from backend.app.application.accounts.service import AccountService
+from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
+from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
 from backend.app.infrastructure.repositories.set_password_tokens import (
     SetPasswordTokenRepository,
 )
@@ -27,6 +29,14 @@ from backend.app.schemas.accounts import (
 )
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
+
+
+def _invitation_service(session: Session) -> InvitationService:
+    """InvitationService wired with alerting, so a failed send reaches an admin."""
+    return InvitationService(
+        SetPasswordTokenRepository(session),
+        action_alerts=ActionAlertService(ActionAlertRepository(session)),
+    )
 
 
 def get_account_service(session: Annotated[Session, Depends(get_db_session)]) -> AccountService:
@@ -147,8 +157,7 @@ def invite_user(
             detail="Solo usuarios encargado pueden ser invitados.",
         )
 
-    token_repo = SetPasswordTokenRepository(session)
-    service = InvitationService(token_repo)
+    service = _invitation_service(session)
     service.create_invitation(user=user, created_by=admin)
     session.commit()
     return {"message": "Invitation sent", "email": user.email}
@@ -171,8 +180,7 @@ def send_reset_email(
             detail="Solo usuarios encargado pueden recibir restablecimiento.",
         )
 
-    token_repo = SetPasswordTokenRepository(session)
-    service = InvitationService(token_repo)
+    service = _invitation_service(session)
     service.create_reset(user=user, created_by=admin)
     session.commit()
     return {"message": "Reset email sent", "email": user.email}

@@ -442,14 +442,21 @@ def forgot_password(
     user = service.initiate_password_recovery(email=email)
 
     if user is not None:
+        from backend.app.application.action_alerts.service import ActionAlertService
         from backend.app.application.audit.service import AuditService
+        from backend.app.infrastructure.repositories.action_alerts import (
+            ActionAlertRepository,
+        )
         from backend.app.infrastructure.repositories.audit import AuditRepository
 
         audit = AuditService(AuditRepository(session))
         audit.log_password_recovery_requested(email=email)
 
         token_repo = SetPasswordTokenRepository(session)
-        invitation_service = InvitationService(token_repo)
+        invitation_service = InvitationService(
+            token_repo,
+            action_alerts=ActionAlertService(ActionAlertRepository(session)),
+        )
         invitation_service.create_self_service_recovery(user=user)
 
     session.commit()
