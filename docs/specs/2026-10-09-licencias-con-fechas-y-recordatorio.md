@@ -95,6 +95,16 @@ LICENCIAS MEDICAS · OTROS · PRESTADO BATALLAS DE LAS CARRERAS · VACACIONES
 **Consecuencia de diseño:** "indefinido" **no es un caso borde** — cubre dos de los ocho motivos
 reales, y son justo los de puesto permanente. Es una opción de primera clase.
 
+> ⚠️ **Esta tabla es un punto de partida, NO una regla.** El catálogo de motivos es **editable**:
+> los administradores pueden crear motivos nuevos y modificar los existentes, así que la
+> clasificación **no puede vivir en el código**. Va como **atributo de cada motivo**, editable
+> desde la pantalla de Catálogos; los ocho de arriba son solo los **valores iniciales** de la
+> carga, y un motivo nuevo nace con un valor por defecto que el admin ajusta.
+>
+> **Prohibido decidir por el `code` del motivo** (`if reason.code == "medical_license"`): se
+> rompería el día que alguien añada, renombre o desactive un motivo — que es justo para lo que
+> existe el catálogo.
+
 ### Los dos defectos encontrados
 
 **1. Hay DOS puertas para desactivar, y hacen cosas distintas.**
@@ -166,7 +176,7 @@ Eso solo lo hace bien el mecanismo con fechas.
 | 8 | **Sin migración** para las fechas | `doctor_restrictions` ya tiene todo; el re-armado usa la clave única de `notification_events` |
 | 9 | Los desactivados actuales **no se tocan** | Decisión explícita del usuario |
 | 10 | **Unificar las dos puertas** de desactivación | Hoy dejan datos distintos (motivo, misiones, auditoría); si no se unifican, esta spec duplicaría el problema |
-| 11 | **El motivo indica si espera regreso** | La pantalla acierta sola: DIRECCION ⇒ indefinido sin preguntar fecha. **Sí requiere migración** (una columna en el catálogo) |
+| 11 | **El motivo indica si espera regreso**, y es **editable en el catálogo** | La pantalla acierta sola: DIRECCION ⇒ indefinido sin preguntar fecha. **Nunca por `code`**: el catálogo es editable y un motivo nuevo debe funcionar sin tocar código. Requiere migración (una columna) **y** un campo en la pantalla de Catálogos |
 | 12 | **Solo el eje 2** entra al recordatorio | Las misiones (eje 3) son otro eje y se gestionan aparte |
 
 > **Nota sobre el punto 7:** si más adelante hace falta un plazo distinto por caso, eso sí
@@ -201,6 +211,9 @@ Eso solo lo hace bien el mecanismo con fechas.
   **el mismo resultado**: mismo motivo, mismas misiones, mismo evento de auditoría.
 - **R12** — El catálogo de motivos indica, por motivo, **si espera fecha de regreso**; la pantalla
   lo usa como valor inicial y no pregunta una fecha cuando no corresponde.
+- **R12b** — Ese atributo es **editable desde la pantalla de Catálogos**, como el resto del
+  catálogo: crear un motivo nuevo no debe requerir tocar código. **Ninguna regla puede depender
+  del `code` del motivo.**
 - **R13** — La pantalla muestra **solo el eje 2** (fuera de servicio). No ofrece tocar misiones,
   pool, disponibilidad, áreas ni borrado.
 - **R14** — El recordatorio **no** se dispara por cambios en el eje 3 (misiones): son ejes
@@ -293,7 +306,8 @@ el permiso correspondiente — el mismo mecanismo que ya usa la escalación de c
 | Un médico con licencia **y** desactivado a la vez | La pantalla lo muestra junto; el bloqueo es la unión de ambos |
 | **El catálogo manda y no siempre acierta**: un motivo marcado "indefinido" que sí vuelve | El encargado puede cambiarlo a mano; el motivo solo propone |
 | **Confundir el eje 2 con el 3**: creer que una licencia también saca de misiones | Se unifican las puertas (R11) para que el efecto sea el mismo y predecible |
-| La clasificación de los 8 motivos requiere criterio de negocio | Es una decisión del usuario, no del código; se propone y se confirma |
+| **Escribir reglas por el `code` del motivo** | El catálogo es editable: cualquier regla fija se rompe al añadir o renombrar un motivo. Todo se decide por el **atributo editable**, nunca por el código |
+| Un motivo nuevo sin clasificar | Nace con un valor por defecto; el admin lo ajusta y la pantalla siempre permite cambiarlo a mano |
 
 ## Changelog
 

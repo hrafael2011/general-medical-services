@@ -59,20 +59,27 @@ todavía en misiones**.
 **Archivos:** `backend/app/infrastructure/db/models/catalogs.py` (o `doctors.py`),
 migración nueva, `backend/app/domain/catalogs.py`
 
-- [ ] **Añadir** al catálogo de motivos un campo del tipo `expects_return` (booleano).
+- [ ] **Añadir** al catálogo de motivos un campo del tipo `expects_return` (booleano). **Es un
+      atributo editable del catálogo, no una regla de código**: nada puede decidir por el `code`.
 - [ ] **Migración** que lo agregue y **clasifique los 8 motivos de producción**:
       *con regreso* → LICENCIAS MEDICAS, LICENCIA PRE Y POST NATAL, VACACIONES,
       PRESTADO BATALLAS DE LAS CARRERAS; *sin regreso* → DIRECCION, GERENCIAS MEDICAS;
       *a decidir* → CONCURSO, OTROS.
 - [ ] **Exponerlo** en la API del catálogo.
+- [ ] **Añadirlo a la pantalla de Catálogos** (la pestaña de motivos ya existe) para que se pueda
+      cambiar al crear o editar un motivo, con un valor por defecto para los nuevos.
 
 > ⚠️ Es la **única migración** de esta spec. Si prefieres no migrar, se recorta: la pantalla
 > siempre pregunta y el encargado elige. Pierde comodidad, no funcionalidad.
 
-### Task 0.3 — Confirmar la clasificación con el usuario
+### Task 0.3 — Carga inicial de la clasificación
 
-- [ ] **Validar** la clasificación de los 8 motivos: **es criterio de negocio, no de código**.
-      En particular: ¿CONCURSO y OTROS esperan regreso?
+- [ ] **Cargar** los valores iniciales de los 8 motivos existentes (con regreso: LICENCIAS MEDICAS,
+      LICENCIA PRE Y POST NATAL, VACACIONES, PRESTADO BATALLAS; sin regreso: DIRECCION, GERENCIAS
+      MEDICAS; a decidir: CONCURSO, OTROS).
+- [ ] **Confirmar** con el usuario los dos que quedan a decidir — pero **sin bloquear**: si no hay
+      respuesta, se cargan como "con regreso" (más conservador: avisa de más, no de menos) y el
+      admin lo ajusta desde la pantalla.
 
 ---
 
