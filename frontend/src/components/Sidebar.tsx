@@ -193,7 +193,11 @@ export function Sidebar() {
                 )}
               </NavLink>
             )}
-            {featureFlags?.telegram && (
+            {/* Telegram es solo de admin porque **todos** sus endpoints lo son
+                (`require_admin` en /telegram/links, /link-tokens e /interactions). Mostrarlo a un
+                encargado era ofrecerle una pantalla que responde 403 en cada acción. Si algún día
+                el encargado debe gestionarlo, lo que hay que abrir es la API, no el menú. */}
+            {featureFlags?.telegram && currentUser?.role === "admin" && (
               <NavLink
                 to="/telegram"
                 className={({ isActive }) =>
@@ -204,7 +208,7 @@ export function Sidebar() {
                 <span className="sidebar-link-label">Telegram</span>
               </NavLink>
             )}
-            {featureFlags?.confirmations && (
+            {featureFlags?.confirmations && hasPermission("manage_confirmations") && (
               <NavLink
                 to="/confirmations"
                 className={({ isActive }) =>

@@ -6,7 +6,10 @@ import { Sidebar } from "./Sidebar";
 
 // Mutable so a test can switch roles; `vi.mock` is hoisted, hence vi.hoisted.
 const auth = vi.hoisted(() => ({
-  state: { currentUser: { name: "Dr. Admin", role: "admin" }, logout: vi.fn() },
+  state: {
+    currentUser: { name: "Dr. Admin", role: "admin", permissions: [] as string[] },
+    logout: vi.fn(),
+  },
 }));
 
 vi.mock("../context/AuthContext", () => ({
@@ -20,7 +23,9 @@ vi.mock("../api/actionAlerts", () => ({
 }));
 
 vi.mock("../api/featureFlags", () => ({
-  fetchFeatureFlags: vi.fn().mockResolvedValue({ notifications: true, telegram: true }),
+  fetchFeatureFlags: vi
+    .fn()
+    .mockResolvedValue({ notifications: true, telegram: true, confirmations: true }),
 }));
 
 function renderSidebar() {
@@ -50,7 +55,7 @@ function renderSidebarWithProfileRoute() {
 
 describe("Sidebar", () => {
   beforeEach(() => {
-    auth.state.currentUser = { name: "Dr. Admin", role: "admin" };
+    auth.state.currentUser = { name: "Dr. Admin", role: "admin", permissions: [] };
   });
   it("muestra el título del sistema", () => {
     renderSidebar();
@@ -99,10 +104,58 @@ describe("Sidebar", () => {
   });
 
   it("oculta Auditoría a los encargados", () => {
-    auth.state.currentUser = { name: "Encargado", role: "encargado" };
+    auth.state.currentUser = { name: "Encargado", role: "encargado", permissions: [] };
     renderSidebar();
 
     expect(screen.queryByRole("link", { name: /auditoría/i })).not.toBeInTheDocument();
+  });
+
+  // --- Las opciones del menú tienen que corresponder con lo que cada rol puede hacer -----
+  // El menú de Confirmaciones no comprobaba permiso y el de Telegram no comprobaba nada,
+  // aunque la API de Telegram es solo de admin: el encargado veía enlaces que respondían 403.
+
+  it("un encargado sin permisos no ve Notificaciones, Telegram ni Confirmaciones", async () => {
+    auth.state.currentUser = { name: "Encargado", role: "encargado", permissions: [] };
+    renderSidebar();
+
+    expect(await screen.findByText("NOTIFICACIONES")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /notificaciones/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /telegram/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /confirmaciones/i })).not.toBeInTheDocument();
+  });
+
+  it("un encargado con los permisos ve Notificaciones y Confirmaciones, pero no Telegram", async () => {
+    auth.state.currentUser = {
+      name: "Encargado",
+      role: "encargado",
+      permissions: ["view_notifications", "manage_confirmations"],
+    };
+    renderSidebar();
+
+    expect(await screen.findByRole("link", { name: /notificaciones/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /confirmaciones/i })).toBeInTheDocument();
+    // Telegram sigue siendo de admin: su API entera lo es.
+    expect(screen.queryByRole("link", { name: /telegram/i })).not.toBeInTheDocument();
+  });
+
+  it("un encargado con view_notifications pero sin manage_confirmations no ve Confirmaciones", async () => {
+    auth.state.currentUser = {
+      name: "Encargado",
+      role: "encargado",
+      permissions: ["view_notifications"],
+    };
+    renderSidebar();
+
+    expect(await screen.findByRole("link", { name: /notificaciones/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /confirmaciones/i })).not.toBeInTheDocument();
+  });
+
+  it("el admin ve las tres opciones sin necesitar permisos explícitos", async () => {
+    renderSidebar();
+
+    expect(await screen.findByRole("link", { name: /notificaciones/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /telegram/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /confirmaciones/i })).toBeInTheDocument();
   });
 
   it("muestra Auditoría al administrador", () => {
