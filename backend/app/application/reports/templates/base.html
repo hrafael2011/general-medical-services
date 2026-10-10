@@ -409,6 +409,11 @@
      =================================================================== */
   .page-break { page-break-before: always; }
 
+  {# Per-template style overrides. A template that needs different sizing overrides
+     this block and scopes its rules with the page class below, so the other reports
+     sharing this base keep their current layout untouched. #}
+  {% block extra_styles %}{% endblock %}
+
 </style>
 </head>
 <body>
@@ -416,7 +421,7 @@
 <div class="gold-stripe-top"></div>
 <div class="watermark">FARD</div>
 
-<div class="page">
+<div class="page {% block page_class %}{% endblock %}">
 
   <!-- HEADER -->
   <div class="header">

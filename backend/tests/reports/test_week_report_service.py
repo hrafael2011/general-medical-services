@@ -326,3 +326,39 @@ def test_weekly_template_renders_whatsapp_column():
     assert "DÍAS" in html
     assert "RANGO / NOMBRE" in html
     assert "LUGAR SERV." in html
+
+
+def test_weekly_sizing_is_scoped_and_does_not_leak_to_other_reports():
+    """The bigger weekly type is scoped to its own page class.
+
+    base.html is shared by coverage, workload and doctor_list, so a sizing rule
+    added unscoped there would silently resize the other three PDFs.
+    """
+    from pathlib import Path
+
+    from backend.app.application.reports.weasyprint_gen import _env
+
+    html = _env.get_template("weekly_schedule.html").render(
+        date_line="AGOSTO 9 , 2026",
+        month_name="Agosto",
+        year=2026,
+        week_label="1RA SEMANA",
+        schedule_data=[],
+    )
+
+    assert "page--weekly-list" in html
+    for rule in (
+        ".page--weekly-list table { font-size: 8.5pt; }",
+        ".page--weekly-list thead th { font-size: 8pt; padding: 4px 9px; }",
+        ".page--weekly-list tbody td { font-size: 8.5pt; padding: 4px 9px; }",
+        ".page--weekly-list .day-cell { font-size: 9pt; }",
+        ".page--weekly-list .signature-block { margin-top: 20px; }",
+        ".page--weekly-list .header-logo { height: 96px; }",
+    ):
+        assert rule in html, f"falta la regla: {rule}"
+
+    templates_dir = Path(_env.loader.searchpath[0])
+    for sibling in ("coverage.html", "workload.html", "doctor_list.html"):
+        source = (templates_dir / sibling).read_text(encoding="utf-8")
+        assert "extra_styles" not in source, f"{sibling} sobrescribe los estilos base"
+        assert "page_class" not in source, f"{sibling} usa la clase del semanal"
