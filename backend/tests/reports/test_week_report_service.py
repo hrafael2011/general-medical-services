@@ -350,9 +350,9 @@ def test_weekly_sizing_is_scoped_and_does_not_leak_to_other_reports():
     for rule in (
         ".page--weekly-list table { font-size: 8.5pt; }",
         ".page--weekly-list thead th { font-size: 8pt; padding: 4px 9px; }",
-        ".page--weekly-list tbody td { font-size: 8.5pt; padding: 4px 9px; }",
+        ".page--weekly-list tbody td { font-size: 8.5pt; padding: 3px 9px; }",
         ".page--weekly-list .day-cell { font-size: 9pt; }",
-        ".page--weekly-list .signature-block { margin-top: 20px; }",
+        ".page--weekly-list .signature-block { margin-top: 60px; }",
         ".page--weekly-list .header-logo { height: 96px; }",
     ):
         assert rule in html, f"falta la regla: {rule}"

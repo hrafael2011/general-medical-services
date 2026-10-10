@@ -3,20 +3,25 @@
 {% block page_class %}page--weekly-list{% endblock %}
 
 {% block extra_styles %}
-  /* Weekly list — bigger type (8.5pt, was 7.5pt) and roomier rows (4px, was 3px).
-     Scoped with .page--weekly-list so coverage, workload and doctor_list, which
-     share base.html, keep their current sizing.
+  /* Weekly list — bigger type (8.5pt, was 7.5pt). Scoped with .page--weekly-list so
+     coverage, workload and doctor_list, which share base.html, keep their sizing.
 
      The 21 rows of a week are the hard maximum (3 service areas x 7 days), so the
-     page has no room to spare: growing the table pushes the signature block onto a
-     second page. The space is reclaimed from the two elements that are oversized
-     for this document — the header logo (128px -> 96px, scaled by object-fit so it
-     never distorts) and the gap before the signatures (70px -> 20px). */
+     page has no room to spare: every point spent on the table pushes the signature
+     block towards a second page. The budget is spent in this order of priority:
+
+       1. legibility   — table 8.5pt, header 8pt, day column 9pt
+       2. signing room — 60px above the signatures (1.8cm on paper)
+       3. row padding  — back to the original 3px; at 4px the signatures lose
+                         their space, and signing is not optional
+
+     Room comes from the header logo (128px -> 96px, scaled by object-fit so it never
+     distorts), which is oversized for this document. */
   .page--weekly-list table { font-size: 8.5pt; }
   .page--weekly-list thead th { font-size: 8pt; padding: 4px 9px; }
-  .page--weekly-list tbody td { font-size: 8.5pt; padding: 4px 9px; }
+  .page--weekly-list tbody td { font-size: 8.5pt; padding: 3px 9px; }
   .page--weekly-list .day-cell { font-size: 9pt; }
-  .page--weekly-list .signature-block { margin-top: 20px; }
+  .page--weekly-list .signature-block { margin-top: 60px; }
   .page--weekly-list .header-logo { height: 96px; }
 {% endblock %}
 

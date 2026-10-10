@@ -23,10 +23,11 @@ sobredimensionados para un documento de 21 filas.
 | Comprobación | Comando | Resultado |
 |---|---|---|
 | Páginas con la semana real (21 filas) | `pdfinfo` sobre el PDF del endpoint en vivo | **1 página** |
-| Fin del contenido | `pdftotext -bbox` | **544.5 pt** de un límite de 555.6 (**mejor que antes**: 546.1) |
+| **Hueco para firmar** | `pdftotext -bbox` | **1.83 cm** (antes del cambio: 2.09 cm · 1ª versión: 0.21 cm) |
+| Fin del contenido | `pdftotext -bbox` | **543.0 pt** de un límite de 555.6 → 12.6 pt de holgura |
 | Sin deformación | `pdftotext -layout` | **21 filas de asignación**, igual que antes |
 | Aislamiento de los otros reportes | diff de tokens del CSS emitido | **0 diferencias de reglas** |
-| Endpoint en vivo | `curl` autenticado | `HTTP 200 · 93 726 bytes · application/pdf` |
+| Endpoint en vivo | `curl` autenticado | `HTTP 200 · 93 727 bytes · application/pdf` |
 | Tests | `pytest tests/reports -q` | **81 passed** |
 
 ---
@@ -60,9 +61,9 @@ sobredimensionados para un documento de 21 filas.
 ```css
 .page--weekly-list table { font-size: 8.5pt; }
 .page--weekly-list thead th { font-size: 8pt; padding: 4px 9px; }
-.page--weekly-list tbody td { font-size: 8.5pt; padding: 4px 9px; }
+.page--weekly-list tbody td { font-size: 8.5pt; padding: 3px 9px; }
 .page--weekly-list .day-cell { font-size: 9pt; }
-.page--weekly-list .signature-block { margin-top: 20px; }
+.page--weekly-list .signature-block { margin-top: 60px; }
 .page--weekly-list .header-logo { height: 96px; }
 ```
 
@@ -103,6 +104,40 @@ sobredimensionados para un documento de 21 filas.
 
 ---
 
+## Fase 4 — Corrección: el hueco de firmas
+
+**Motivo:** el usuario reportó que el área de firma quedó pegada a la tabla y **no había espacio
+para firmar**. Medido: quedaban **0.21 cm**. Reducir el hueco de 70px a 20px fue demasiado
+agresivo — se priorizó el aire de fila por encima de una necesidad funcional.
+
+### Task 4.1 — Devolver el espacio de firma
+
+**Archivo:** `backend/app/application/reports/templates/weekly_schedule.html`
+
+- [x] **Subir** `.signature-block` de `20px` a `60px` → **1.83 cm** de hueco (el original: 2.09 cm).
+- [x] **Bajar** el aire de fila (`tbody td`) de `4px` a `3px`, el valor original, para pagarlo.
+- [x] **Barrido de comprobación**: `60px` + logo 96px cabe con **12.6 pt** de holgura; `70px`
+      con logo 96px no cabe. Se eligió `60px`.
+
+> La letra **no** se toca: sigue en 8.5pt. Con la letra más grande las filas ya quedan ~9 % más
+> altas que en el documento original, así que se pierde poco al volver a 3px de padding.
+
+### Task 4.2 — Verificar la corrección
+
+- [x] **Medir** el hueco de firma con el mismo método antes/después → **0.21 cm → 1.83 cm**.
+- [x] **Confirmar** 1 página y 21 filas de asignación (sin nombres partidos).
+- [x] **Confirmar** que los otros tres reportes siguen sin cambios (los estilos siguen acotados).
+- [x] `pytest tests/reports -q` → **81 passed**.
+- [x] **Endpoint en vivo** → `HTTP 200 · 93 727 bytes`.
+
+### Task 4.3 — Ajustar el test
+
+- [x] **Actualizar** `test_weekly_sizing_is_scoped_and_does_not_leak_to_other_reports` a los
+      valores finales (`padding: 3px 9px`, `margin-top: 60px`) para que fije el hueco de firma y
+      no se pueda volver a romper sin que el test lo note.
+
+---
+
 ## Orden de ejecución resumido
 
 | Prioridad | Fase | Qué arregla | Riesgo | Estado |
@@ -110,6 +145,7 @@ sobredimensionados para un documento de 21 filas.
 | 🔴 1 | Fase 1 | Puntos de extensión sin efecto por defecto | Bajo | ✅ hecho |
 | 🔴 2 | Fase 2 | Los tamaños nuevos, acotados | Bajo | ✅ hecho |
 | 🟠 3 | Fase 3 | Verificación y no-regresión | Bajo | ✅ hecho |
+| 🟠 4 | Fase 4 | Corrección del hueco de firmas | Bajo | ✅ hecho |
 
 ## Archivos tocados
 
@@ -121,8 +157,9 @@ sobredimensionados para un documento de 21 filas.
 
 ## Casillas abiertas
 
-1. **Revisión visual del usuario** en el navegador — los números están verificados; falta su
-   visto bueno estético sobre el hueco de las firmas.
+1. **Revisión visual del usuario** en el navegador — el hueco de firma quedó en 1.83 cm (el
+   original 2.09 cm). Si lo quiere idéntico al original, hay que recortar el logo a 64px y
+   apretar los márgenes de página; ya está medido y cabe, pero es más cambio visual.
 2. **Cuarta área de servicio** (`[A VERIFICAR]`) — si algún día se agrega, el máximo pasa de 21 a
    28 filas y hay que rehacer la medición de página.
 3. **Merge a `master`** — pendiente de autorización explícita.
@@ -137,3 +174,5 @@ sobredimensionados para un documento de 21 filas.
 | 2026-10-09 | 3.1 | 1 página, contenido hasta 544.5 pt, 21 filas sin partir. |
 | 2026-10-09 | 3.2 / 3.3 | Aislamiento verificado (0 diferencias de reglas). 81 tests pasan. |
 | 2026-10-09 | 3.4 | Endpoint en vivo: HTTP 200, 93 726 bytes, 1 página. |
+| 2026-10-09 | 4.1 / 4.2 | **Corrección**: el hueco de firma estaba en 0.21 cm. Subido a 60px → 1.83 cm. Aire de fila de vuelta a 3px. 1 página, 21 filas, 81 tests. |
+| 2026-10-09 | 4.3 | Test actualizado para fijar el hueco de firma en 60px. |
