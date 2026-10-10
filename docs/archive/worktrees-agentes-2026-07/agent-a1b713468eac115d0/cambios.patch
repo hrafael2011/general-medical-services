@@ -1,0 +1,52 @@
+diff --git a/backend/app/domain/calendars/cp_model.py b/backend/app/domain/calendars/cp_model.py
+index 9335913..1609085 100644
+--- a/backend/app/domain/calendars/cp_model.py
++++ b/backend/app/domain/calendars/cp_model.py
+@@ -220,7 +220,7 @@ class OrToolsEngine:
+                         0, len(vars_in_week), f"wk_excess_{doc.id}_{w}"
+                     )
+                     model.add(excess_week >= count_week - 1)
+-                    objective_terms.append(excess_week * 30)
++                    objective_terms.append(excess_week * 200)
+ 
+             # Penalty 2: consecutive strong weeks
+             if allowed_strong:
+@@ -250,7 +250,7 @@ class OrToolsEngine:
+                     model.add(h_cur + h_next - 1 <= 2 * both_strong)
+                     model.add(both_strong <= h_cur)
+                     model.add(both_strong <= h_next)
+-                    objective_terms.append(both_strong * 40)
++                    objective_terms.append(both_strong * 300)
+ 
+             # Penalty 3: T4 missing week (target >= 4)
+             if target >= 4:
+diff --git a/backend/app/domain/calendars/engine.py b/backend/app/domain/calendars/engine.py
+index a421164..b009b50 100644
+--- a/backend/app/domain/calendars/engine.py
++++ b/backend/app/domain/calendars/engine.py
+@@ -56,6 +56,8 @@ class GenerationContext:
+     # Pattern violations tracker (fairness): {doctor_id: count}. Reset per month.
+     # Used by PatternRule to prefer doctors with fewer prior violations.
+     pattern_violations: dict[str, int] | None = None
++    # Fairness mode for CP-SAT solver: "strict" | "hybrid" | "lenient"
++    fairness_mode: str = "hybrid"
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/backend/app/domain/calendars/rules/rule_pattern.py b/backend/app/domain/calendars/rules/rule_pattern.py
+index cf5a454..b076806 100644
+--- a/backend/app/domain/calendars/rules/rule_pattern.py
++++ b/backend/app/domain/calendars/rules/rule_pattern.py
+@@ -19,9 +19,9 @@ is unavoidable.
+ """
+ from backend.app.domain.calendars.rules.interface import Rule, RuleContext, RuleResult
+ 
+-PATTERN_PENALTY_SAME_WEEK = 30.0
+-PATTERN_PENALTY_CONSECUTIVE_STRONG = 40.0
+-PATTERN_PENALTY_TIER_MISMATCH = 20.0
++PATTERN_PENALTY_SAME_WEEK = 200.0
++PATTERN_PENALTY_CONSECUTIVE_STRONG = 300.0
++PATTERN_PENALTY_TIER_MISMATCH = 150.0
+ PATTERN_PENALTY_PER_PRIOR_VIOLATION = 5.0
+ 
+ 

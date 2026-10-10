@@ -1,0 +1,102 @@
+diff --git a/backend/app/domain/calendars/cp_model.py b/backend/app/domain/calendars/cp_model.py
+index 9335913..0486b15 100644
+--- a/backend/app/domain/calendars/cp_model.py
++++ b/backend/app/domain/calendars/cp_model.py
+@@ -369,9 +369,43 @@ class OrToolsEngine:
+                         ends = ends.date()
+                     if slot.date <= ends:
+                         return False
++        # Monthly-mode doctors must have submitted availability for the current month
++        if getattr(doctor, "availability_mode", "") == "monthly":
++            month_records = ctx.availability.get(doctor.id, [])
++            has_submitted = any(
++                getattr(r, "availability_type", "") == "monthly_variable"
++                and getattr(r, "month", None) == ctx.month
++                and getattr(r, "year", None) == ctx.year
++                for r in month_records
++            )
++            if not has_submitted:
++                return False
+         records = ctx.availability.get(doctor.id, [])
+         if not records:
+             return True
++
++        # If the doctor has monthly_variable records for this specific month,
++        # ONLY evaluate monthly_variable, ignoring weekly_fixed/recurring.
++        # This prevents old/weekly_fixed records from overriding the doctor's
++        # explicit monthly availability choices.
++        monthly_records = [
++            r
++            for r in records
++            if r.availability_type == "monthly_variable"
++            and getattr(r, "month", None) == slot.date.month
++            and getattr(r, "year", None) == slot.date.year
++        ]
++        if monthly_records:
++            for record in monthly_records:
++                ad = (
++                    getattr(record, "available_days", None)
++                    or getattr(record, "available_dates", None)
++                    or []
++                )
++                if slot.date.day in ad:
++                    return True
++            return False
++
+         for record in records:
+             atype = record.availability_type
+             if atype == "monthly_variable":
+diff --git a/backend/app/domain/calendars/engine.py b/backend/app/domain/calendars/engine.py
+index a421164..5a51383 100644
+--- a/backend/app/domain/calendars/engine.py
++++ b/backend/app/domain/calendars/engine.py
+@@ -122,6 +122,18 @@ class CalendarEngine:
+             if self._has_hard_block(doctor.id, slot.date, ctx):
+                 continue
+ 
++            # 3b. Monthly-mode doctors must have submitted availability for the current month
++            if getattr(doctor, "availability_mode", "") == "monthly":
++                month_records = ctx.availability.get(doctor.id, [])
++                has_submitted = any(
++                    getattr(r, "availability_type", "") == "monthly_variable"
++                    and getattr(r, "month", None) == ctx.month
++                    and getattr(r, "year", None) == ctx.year
++                    for r in month_records
++                )
++                if not has_submitted:
++                    continue
++
+             # 4. Availability
+             if not self._has_availability(doctor.id, slot.date, ctx):
+                 continue
+@@ -205,6 +217,30 @@ class CalendarEngine:
+             # No availability submitted → treat as available (MVP behaviour)
+             return True
+ 
++        # If the doctor has monthly_variable records for this specific month,
++        # ONLY evaluate monthly_variable, ignoring weekly_fixed/recurring.
++        # This prevents old/weekly_fixed records from overriding the doctor's
++        # explicit monthly availability choices.
++        monthly_records = [
++            r
++            for r in records
++            if r.availability_type == "monthly_variable"
++            and getattr(r, "month", None) == target_date.month
++            and getattr(r, "year", None) == target_date.year
++        ]
++        if monthly_records:
++            for record in monthly_records:
++                available_days = (
++                    getattr(record, "available_days", None)
++                    or getattr(record, "available_dates", None)
++                    or []
++                )
++                if available_days is None:
++                    available_days = []
++                if target_date.day in available_days:
++                    return True
++            return False
++
+         for record in records:
+             availability_type = record.availability_type
+ 

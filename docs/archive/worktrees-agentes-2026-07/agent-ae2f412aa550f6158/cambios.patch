@@ -1,0 +1,123 @@
+diff --git a/backend/app/application/calendars/generation_service.py b/backend/app/application/calendars/generation_service.py
+index 5e30ac6..2abd91e 100644
+--- a/backend/app/application/calendars/generation_service.py
++++ b/backend/app/application/calendars/generation_service.py
+@@ -179,6 +179,7 @@ class GenerationService:
+             area_weights=AREA_WEIGHTS,
+             monthly_service_targets={d.id: d.monthly_service_target for d in doctors},
+             monthly_service_maxes={d.id: d.monthly_service_max for d in doctors},
++            area_rotation_modes={d.id: d.area_rotation_mode for d in doctors},
+         )
+ 
+         engine = CalendarEngine()
+@@ -369,6 +370,7 @@ class GenerationService:
+             area_weights=AREA_WEIGHTS,
+             monthly_service_targets={d.id: d.monthly_service_target for d in doctors},
+             monthly_service_maxes={d.id: d.monthly_service_max for d in doctors},
++            area_rotation_modes={d.id: d.area_rotation_mode for d in doctors},
+         )
+ 
+         engine = CalendarEngine()
+diff --git a/backend/app/domain/calendars/engine.py b/backend/app/domain/calendars/engine.py
+index a421164..02e0197 100644
+--- a/backend/app/domain/calendars/engine.py
++++ b/backend/app/domain/calendars/engine.py
+@@ -56,6 +56,9 @@ class GenerationContext:
+     # Pattern violations tracker (fairness): {doctor_id: count}. Reset per month.
+     # Used by PatternRule to prefer doctors with fewer prior violations.
+     pattern_violations: dict[str, int] | None = None
++    # Area rotation mode per doctor: {doctor_id: "fixed"|"auto"|"rotate"}.
++    # Used by AreaRotationRule to determine penalty magnitude.
++    area_rotation_modes: dict[str, str] | None = None
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/backend/app/domain/calendars/rules/interface.py b/backend/app/domain/calendars/rules/interface.py
+index 0fc2982..4226bb7 100644
+--- a/backend/app/domain/calendars/rules/interface.py
++++ b/backend/app/domain/calendars/rules/interface.py
+@@ -54,6 +54,11 @@ class RuleContext:
+     # proactively submit their dates.
+     submitted_availability: bool = False
+ 
++    # Area rotation mode: "fixed" (no penalty), "auto" (-3.0), "rotate" (-6.0)
++    # Determines how strongly AreaRotationRule penalises assigning the same area
++    # as the doctor's last assignment.
++    area_rotation_mode: str = "auto"
++
+ 
+ class Rule(ABC):
+     """Base class for all fairness/eligibility rules.
+diff --git a/backend/app/domain/calendars/rules/rule_area_rotation.py b/backend/app/domain/calendars/rules/rule_area_rotation.py
+index 9e6ccdc..aa81ef6 100644
+--- a/backend/app/domain/calendars/rules/rule_area_rotation.py
++++ b/backend/app/domain/calendars/rules/rule_area_rotation.py
+@@ -2,9 +2,22 @@ from backend.app.domain.calendars.rules.interface import Rule, RuleContext, Rule
+ 
+ AREA_PENALTY = 3.0
+ 
++# Multiplier per area_rotation_mode relative to AREA_PENALTY
++_MODE_MULTIPLIER = {
++    "fixed": 0.0,    # no penalty — stays in their area
++    "auto": 1.0,     # default — -3.0
++    "rotate": 2.0,   # double penalty — -6.0
++}
++
+ 
+ class AreaRotationRule(Rule):
+-    """Soft rule: penalty for assigning the same area as the last assignment."""
++    """Soft rule: penalty for assigning the same area as the last assignment.
++
++    The penalty magnitude depends on the doctor's ``area_rotation_mode``:
++    - "fixed": 0 penalty (the doctor stays in their area)
++    - "auto": -3.0 penalty (default)
++    - "rotate": -6.0 penalty (double, encourages rotation)
++    """
+ 
+     def __init__(self):
+         super().__init__(name="area_rotation", is_hard=False, weight=1.0)
+@@ -16,7 +29,8 @@ class AreaRotationRule(Rule):
+         if not my_assignments:
+             return RuleResult(rule_name=self.name)
+ 
++        multiplier = _MODE_MULTIPLIER.get(ctx.area_rotation_mode, 1.0)
+         last = max(my_assignments, key=lambda a: a["service_date"])
+-        penalty = -AREA_PENALTY if last["service_area_id"] == ctx.service_area_id else 0.0
++        penalty = -(AREA_PENALTY * multiplier) if last["service_area_id"] == ctx.service_area_id else 0.0
+ 
+         return RuleResult(rule_name=self.name, score_delta=penalty)
+diff --git a/backend/app/domain/calendars/scoring.py b/backend/app/domain/calendars/scoring.py
+index 3e34b69..bd59d62 100644
+--- a/backend/app/domain/calendars/scoring.py
++++ b/backend/app/domain/calendars/scoring.py
+@@ -45,6 +45,7 @@ def compute_candidate_score(
+     weekly_assignments: dict[int, list[dict]] | None = None,
+     pattern_violations_count: int = 0,
+     submitted_availability: bool = False,
++    area_rotation_mode: str = "auto",
+ ) -> CandidateScore:
+     """Compute a scheduling score for one doctor on one slot.
+ 
+@@ -88,6 +89,7 @@ def compute_candidate_score(
+         weekly_assignments=weekly_assignments or {},
+         pattern_violations_count=pattern_violations_count,
+         submitted_availability=submitted_availability,
++        area_rotation_mode=area_rotation_mode,
+     )
+ 
+     pipeline = RulePipeline(build_pipeline(hard_rules_only=False))
+diff --git a/backend/app/infrastructure/db/models/doctors.py b/backend/app/infrastructure/db/models/doctors.py
+index c34b012..e1f1d10 100644
+--- a/backend/app/infrastructure/db/models/doctors.py
++++ b/backend/app/infrastructure/db/models/doctors.py
+@@ -57,6 +57,10 @@ class DoctorModel(Base):
+     availability_mode: Mapped[str] = mapped_column(
+         String(20), nullable=False, default="monthly"
+     )
++    pool_active: Mapped[bool] = mapped_column(
++        Boolean, nullable=False, default=True
++    )
++    area_rotation_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="auto")
+     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

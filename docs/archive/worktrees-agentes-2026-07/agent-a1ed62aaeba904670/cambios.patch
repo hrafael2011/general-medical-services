@@ -1,0 +1,11 @@
+diff --git a/backend/app/infrastructure/db/models/__init__.py b/backend/app/infrastructure/db/models/__init__.py
+index 17b869a..e2574cc 100644
+--- a/backend/app/infrastructure/db/models/__init__.py
++++ b/backend/app/infrastructure/db/models/__init__.py
+@@ -1,5 +1,6 @@
+ """SQLAlchemy models."""
+ 
+ from backend.app.infrastructure.db.models.set_password_token import SetPasswordTokenModel
++from backend.app.infrastructure.db.models.substitution import SubstitutionRecordModel
+ from backend.app.infrastructure.db.models.telegram_session import TelegramSessionModel
+ 
