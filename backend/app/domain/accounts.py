@@ -17,7 +17,6 @@ class Permission(StrEnum):
     MANAGE_USERS = "manage_users"
     MANAGE_ADMINS = "manage_admins"
     MANAGE_TRASH = "manage_trash"
-    VIEW_AUDIT = "view_audit"
     VIEW_NOTIFICATIONS = "view_notifications"
     MANAGE_CONFIRMATIONS = "manage_confirmations"
     MANAGE_ALERTS = "manage_alerts"

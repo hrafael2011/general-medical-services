@@ -8,6 +8,7 @@ import { authApi } from "../../api/auth";
 
 vi.mock("../../api/auth", () => ({
   authApi: { validateSetPasswordToken: vi.fn(), setPassword: vi.fn() },
+  PASSWORD_MIN_LENGTH: 8,
 }));
 
 const mockValidate = vi.mocked(authApi.validateSetPasswordToken);

@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, CalendarDays, Stethoscope, Target,
@@ -42,6 +42,7 @@ function initials(name: string): string {
 
 export function Sidebar() {
   const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
 
   const { data: alertSummary } = useQuery({
     queryKey: ["action-alerts-summary"],
@@ -61,7 +62,8 @@ export function Sidebar() {
     return (currentUser?.permissions ?? []).includes(perm);
   };
 
-  const hasAnySecurityPerm = hasPermission("manage_users") || hasPermission("manage_catalogs") || hasPermission("view_audit") || hasPermission("manage_trash");
+  // Audit is admin-only now, so it is not part of this check.
+  const hasAnySecurityPerm = hasPermission("manage_users") || hasPermission("manage_catalogs") || hasPermission("manage_trash") || hasPermission("manage_calendars");
 
   return (
     <aside className="sidebar">
@@ -114,7 +116,7 @@ export function Sidebar() {
         {hasAnySecurityPerm && (
           <div className="sidebar-group">
             <span className="sidebar-group-label">SEGURIDAD</span>
-            {hasPermission("view_audit") && (
+            {currentUser?.role === "admin" && (
               <NavLink
                 to="/audit"
                 className={({ isActive }) =>
@@ -125,7 +127,7 @@ export function Sidebar() {
                 Auditoría
               </NavLink>
             )}
-            {hasPermission("view_audit") && (
+            {hasPermission("manage_calendars") && (
               <NavLink
                 to="/equilibrio-cargas"
                 className={({ isActive }) =>
@@ -219,24 +221,32 @@ export function Sidebar() {
 
       <div className="sidebar-footer">
         <div className="sidebar-user-card">
-          <div
-            className="sidebar-user-avatar"
-            style={{ backgroundColor: avatarColor(currentUser?.name ?? "") }}
+          <button
+            type="button"
+            className="sidebar-user-profile"
+            onClick={() => navigate("/profile")}
+            title="Ver mi perfil"
+            aria-label="Ver mi perfil"
           >
-            {initials(currentUser?.name ?? "")}
-          </div>
-          <span className="sidebar-user-name">{currentUser?.name}</span>
-          {currentUser?.role && ROLE_LABELS[currentUser.role] && (
-            <span
-              className="sidebar-user-role"
-              style={{
-                backgroundColor: ROLE_LABELS[currentUser.role].color + "1a",
-                color: ROLE_LABELS[currentUser.role].color,
-              }}
+            <div
+              className="sidebar-user-avatar"
+              style={{ backgroundColor: avatarColor(currentUser?.name ?? "") }}
             >
-              {ROLE_LABELS[currentUser.role].label}
-            </span>
-          )}
+              {initials(currentUser?.name ?? "")}
+            </div>
+            <span className="sidebar-user-name">{currentUser?.name}</span>
+            {currentUser?.role && ROLE_LABELS[currentUser.role] && (
+              <span
+                className="sidebar-user-role"
+                style={{
+                  backgroundColor: ROLE_LABELS[currentUser.role].color + "1a",
+                  color: ROLE_LABELS[currentUser.role].color,
+                }}
+              >
+                {ROLE_LABELS[currentUser.role].label}
+              </span>
+            )}
+          </button>
           <div className="sidebar-user-divider" />
           <button className="sidebar-logout-btn" onClick={logout}>
             <LogOut size={14} /> Cerrar sesión

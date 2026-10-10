@@ -208,12 +208,26 @@ class AuditService:
             after={"permissions": new_permissions},
         )
 
-    def log_user_updated(self, *, actor_id: str, user, changed_fields: dict) -> AuditEventModel:
+    def log_user_updated(
+        self,
+        *,
+        actor_id: str,
+        user,
+        changed_fields: dict,
+        previous: dict | None = None,
+    ) -> AuditEventModel:
+        """Record a change to a user account.
+
+        `previous` holds the values as they were, so the trail reads as "from X to Y"
+        instead of only what it became — which matters once the name ends up on the
+        signature of an official document.
+        """
         return self._create(
             actor_id=actor_id,
             action_type="user_updated",
             entity_type="user",
             entity_id=user.id,
+            before=previous,
             after=changed_fields,
         )
 

@@ -41,13 +41,24 @@ class LoginResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(min_length=10)
+    new_password: str
+
+
+class UpdateOwnProfileRequest(BaseModel):
+    """What a user may change about their own account.
+
+    Only the display name: the email is both the login identity and the password
+    recovery destination, so letting the owner edit it unverified would lock them
+    out. Role and permissions are never self-service.
+    """
+
+    name: str = Field(min_length=1, max_length=160)
 
 
 class CreateEncargadoRequest(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     email: EmailStr
-    temporary_password: str | None = Field(default=None, min_length=10)
+    temporary_password: str | None = None
     permissions: list[str] = Field(default=[])
 
     @field_validator("permissions")
@@ -66,7 +77,7 @@ class TemporaryPasswordResponse(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    temporary_password: str | None = Field(default=None, min_length=10)
+    temporary_password: str | None = None
 
 
 class UpdateUserRequest(BaseModel):

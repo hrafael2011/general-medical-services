@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
-import { authApi } from "../../api/auth";
+import { authApi, PASSWORD_MIN_LENGTH } from "../../api/auth";
 import { useToast } from "../../components/Toast";
 
 type PageState = "loading" | "invalid" | "valid" | "submitting" | "done";
@@ -150,11 +150,11 @@ export function SetPasswordPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••••"
               autoComplete="new-password"
-              minLength={10}
+              minLength={PASSWORD_MIN_LENGTH}
               required
             />
             <ul className="auth-hint">
-              <li>Mínimo 10 caracteres</li>
+              <li>Mínimo {PASSWORD_MIN_LENGTH} caracteres</li>
               <li>Al menos una mayúscula y una minúscula</li>
               <li>Al menos un número y un carácter especial</li>
             </ul>
@@ -168,7 +168,7 @@ export function SetPasswordPage() {
               onChange={(e) => setConfirm(e.target.value)}
               placeholder="••••••••••"
               autoComplete="new-password"
-              minLength={10}
+              minLength={PASSWORD_MIN_LENGTH}
               required
             />
           </label>

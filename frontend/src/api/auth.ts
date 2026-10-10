@@ -28,6 +28,18 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
 }
 
+/** Update your own account. Only the display name is accepted: the email, role and
+ *  permissions are never self-service. */
+export async function updateProfile(name: string): Promise<UserRead> {
+  return apiFetch<UserRead>("/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** Minimum the backend enforces. Kept in sync by hand — it is the only copy here. */
+export const PASSWORD_MIN_LENGTH = 8;
+
 export interface SetPasswordValidateResponse {
   valid: boolean;
   email?: string;

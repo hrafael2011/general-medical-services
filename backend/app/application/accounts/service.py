@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -18,6 +17,8 @@ from backend.app.application.accounts.errors import (
 from backend.app.application.audit.service import AuditService
 from backend.app.core.config import settings
 from backend.app.core.security import (
+    PasswordProblem,
+    check_password_strength,
     create_access_token,
     generate_temporary_password,
     hash_password,
@@ -83,6 +84,13 @@ class AccountService:
     ) -> TemporaryPasswordResult:
         self._require_admin(actor)
         password = temporary_password or generate_temporary_password()
+        # An admin-typed temporary password has to clear the same bar as any other:
+        # before this check it was hashed unvalidated, so "1234567890" was accepted
+        # here while the change-password flow would have refused it.
+        if temporary_password is not None:
+            problem = check_password_strength(temporary_password)
+            if problem is not None:
+                raise InvalidPasswordChangeError(problem)
         existing_user = self.users.get_by_email_including_deleted(email)
         if existing_user is not None:
             if existing_user.deleted_at is not None:
@@ -171,6 +179,10 @@ class AccountService:
         if user.role != UserRole.ENCARGADO.value:
             raise PermissionDeniedError
         password = temporary_password or generate_temporary_password()
+        if temporary_password is not None:
+            problem = check_password_strength(temporary_password)
+            if problem is not None:
+                raise InvalidPasswordChangeError(problem)
         now = datetime.now(UTC)
         new_hash = hash_password(password)
         user.password_hash = new_hash
@@ -194,27 +206,17 @@ class AccountService:
         if not user.active:
             raise InactiveUserError
         if not verify_password(current_password, user.password_hash):
-            raise InvalidPasswordChangeError
-        if verify_password(new_password, user.password_hash):
-            raise InvalidPasswordChangeError
+            raise InvalidPasswordChangeError(PasswordProblem.CURRENT_INCORRECT)
 
-        # Password complexity: at least 10 chars, 1 upper, 1 lower, 1 digit, 1 special
-        if len(new_password) < 10:
-            raise InvalidPasswordChangeError
-        if not re.search(r"[A-Z]", new_password):
-            raise InvalidPasswordChangeError
-        if not re.search(r"[a-z]", new_password):
-            raise InvalidPasswordChangeError
-        if not re.search(r"\d", new_password):
-            raise InvalidPasswordChangeError
-        if not re.search(r"[!@#$%^&*(),.\-:;<>?/\\[\]{}_~`|'\"]", new_password):
-            raise InvalidPasswordChangeError
+        # One policy for every flow — see backend/app/core/security.py
+        problem = check_password_strength(
+            new_password,
+            current_password=current_password,
+            recent_hashes=self.users.list_recent_password_hashes(user.id),
+        )
+        if problem is not None:
+            raise InvalidPasswordChangeError(problem)
 
-        # Check against password history (last 5)
-        recent_hashes = self.users.list_recent_password_hashes(user.id)
-        for old_hash in recent_hashes:
-            if verify_password(new_password, old_hash):
-                raise InvalidPasswordChangeError
         new_hash = hash_password(new_password)
 
         now = datetime.now(UTC)
@@ -302,18 +304,23 @@ class AccountService:
             raise PermissionDeniedError("Only superadmins can update admin users.")
 
         changed: dict[str, object] = {}
+        previous: dict[str, object] = {}
         if name is not None:
+            previous["name"] = user.name
             user.name = name.strip()
             changed["name"] = user.name
         if role is not None:
             if not actor.is_superadmin:
                 raise PermissionDeniedError("Solo el superadmin puede cambiar roles.")
+            previous["role"] = user.role
             user.role = role
             changed["role"] = role
         if active is not None:
+            previous["active"] = user.active
             user.active = active
             changed["active"] = active
         if permissions is not None:
+            previous["permissions"] = user.permissions
             user.permissions = permissions
             changed["permissions"] = permissions
 
@@ -322,7 +329,34 @@ class AccountService:
 
         self.users.update(user_id, **changed)
         if self.audit is not None:
-            self.audit.log_user_updated(actor_id=actor.id, user=user, changed_fields=changed)
+            self.audit.log_user_updated(
+                actor_id=actor.id, user=user, changed_fields=changed, previous=previous
+            )
+        return user
+
+    def update_own_profile(self, *, user: UserModel, name: str) -> UserModel:
+        """Let a user rename their own account.
+
+        The name is deliberately the only field here: it is what the weekly list PDF
+        prints as the left signature. The change is audited as their own action, and
+        the previous value is kept so the trail shows what the signature used to say.
+        """
+        cleaned = name.strip()
+        if not cleaned or cleaned == user.name:
+            return user
+
+        previous_name = user.name
+        user.name = cleaned
+        user.updated_at = datetime.now(UTC)
+        self.users.update(user.id, name=cleaned)
+
+        if self.audit is not None:
+            self.audit.log_user_updated(
+                actor_id=user.id,
+                user=user,
+                changed_fields={"name": cleaned},
+                previous={"name": previous_name},
+            )
         return user
 
     def make_superadmin(

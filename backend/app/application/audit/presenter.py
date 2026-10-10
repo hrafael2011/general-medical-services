@@ -38,6 +38,9 @@ ACTION_DETAIL_LABELS = {
 
 FIELD_LABELS = {
     "name": "nombre",
+    "role": "rol",
+    "permissions": "permisos",
+    "email": "correo",
     "sex": "sexo",
     "rank_id": "rango",
     "department_id": "departamento",
@@ -111,7 +114,9 @@ class AuditPresenter:
         snapshot = event.after_snapshot or event.before_snapshot or event.metadata_ or {}
         item.actor_display = self._actor_display(event.actor_id)
         item.entity_display = self._entity_display(event.entity_type, event.entity_id, snapshot)
-        item.detail_summary = self._detail_summary(event.action_type, snapshot)
+        item.detail_summary = self._detail_summary(
+            event.action_type, snapshot, event.before_snapshot
+        )
         return item
 
     def _cached_get(self, cache: dict, model, entity_id: str | None):
@@ -203,7 +208,38 @@ class AuditPresenter:
             return f"Ranking de misiones: {period}" if period else "Ranking de misiones"
         return entity_type.replace("_", " ").capitalize()
 
-    def _detail_summary(self, action_type: str, snapshot: dict) -> str:
+    def _user_updated_summary(self, after: dict, before: dict | None) -> str:
+        """Describe an account change, showing what it was when we know.
+
+        A user's name ends up on the signature of an official document, so "from X to
+        Y" is the part that matters; entries written before this existed only carry
+        the new value, and still read correctly.
+        """
+        parts: list[str] = []
+        for field, value in after.items():
+            label = FIELD_LABELS.get(field, field)
+            if field == "permissions":
+                parts.append("permisos actualizados")
+                continue
+            if before and field in before and before[field] != value:
+                parts.append(
+                    f"{label}: de «{self._field_value(field, before[field])}» "
+                    f"a «{self._field_value(field, value)}»"
+                )
+            else:
+                parts.append(f"{label}: {self._field_value(field, value)}")
+        if not parts:
+            return "Se actualizó el usuario."
+        return "Se actualizó — " + "; ".join(parts) + "."
+
+    def _detail_summary(
+        self,
+        action_type: str,
+        snapshot: dict,
+        before: dict | None = None,
+    ) -> str:
+        if action_type == "user_updated":
+            return self._user_updated_summary(snapshot, before)
         if action_type == "doctor_created":
             name = snapshot.get("name")
             sex = self._field_value("sex", snapshot.get("sex"))

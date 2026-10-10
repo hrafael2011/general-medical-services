@@ -36,7 +36,6 @@ const PERMISSION_GROUPS = [
   {
     category: "Monitoreo",
     permissions: [
-      { key: "view_audit", label: "Ver Auditoría" },
       { key: "view_notifications", label: "Ver Notificaciones" },
       { key: "manage_alerts", label: "Gestionar Alertas" },
       { key: "receive_escalation_alerts", label: "Recibir Alertas de Escalamiento" },

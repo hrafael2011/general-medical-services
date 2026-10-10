@@ -35,7 +35,15 @@ class UserNotFoundError(AccountError):
 
 
 class InvalidPasswordChangeError(AccountError):
-    """Raised when password change is invalid."""
+    """Raised when password change is invalid.
+
+    Carries the specific problem (when known) so the route can tell the user what to
+    fix, instead of blaming the current password for every possible cause.
+    """
+
+    def __init__(self, problem: object | None = None) -> None:
+        super().__init__(problem)
+        self.problem = problem
 
 
 class RecoveryRateLimitedError(AccountError):

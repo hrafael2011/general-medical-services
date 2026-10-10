@@ -2,7 +2,7 @@ import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { FormEvent, useState, useEffect } from "react";
 import { Eye, EyeOff, KeyRound, LogIn } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
-import { changePassword } from "./api/auth";
+import { changePassword, PASSWORD_MIN_LENGTH } from "./api/auth";
 import { ApiError } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { AlertBell } from "./components/AlertBell";
@@ -20,6 +20,7 @@ import { AuditLog } from "./features/audit/AuditLog";
 import { EquilibrioCargas } from "./features/equilibrio/EquilibrioCargas";
 import { UsersView } from "./features/users/UsersView";
 import { CatalogsPage } from "./features/catalogs/CatalogsPage";
+import { ProfilePage } from "./features/profile/ProfilePage";
 import { TrashPage } from "./features/trash/TrashPage";
 import { SetPasswordPage } from "./features/auth/SetPasswordPage";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
@@ -50,6 +51,7 @@ export function App() {
           <Route path="/users" element={<UsersView />} />
           <Route path="/catalogs" element={<CatalogsPage />} />
           <Route path="/trash" element={<TrashPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
@@ -132,8 +134,8 @@ function LoginPage() {
 
   async function handlePasswordChange(e: FormEvent) {
     e.preventDefault();
-    if (newPassword.length < 10) {
-      setMessage("La nueva contraseña debe tener al menos 10 caracteres.");
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      setMessage(`La nueva contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`);
       return;
     }
     setIsLoading(true);

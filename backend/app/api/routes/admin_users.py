@@ -7,12 +7,14 @@ from backend.app.api.dependencies import require_permission, require_superadmin
 from backend.app.application.accounts.errors import (
     DeletedEmailConflictError,
     DuplicateEmailError,
+    InvalidPasswordChangeError,
     PermissionDeniedError,
     UserNotFoundError,
 )
 from backend.app.application.accounts.invitation_service import InvitationService
 from backend.app.application.accounts.service import AccountService
 from backend.app.application.action_alerts.service import ActionAlertService
+from backend.app.core.security import password_error_detail
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.action_alerts import ActionAlertRepository
@@ -105,6 +107,11 @@ def create_encargado(
                 "message": "Este correo pertenece a un usuario eliminado. Usa otro correo o restaura el usuario eliminado.",
             },
         ) from exc
+    except InvalidPasswordChangeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=password_error_detail(exc.problem),
+        ) from exc
     session.commit()
     return TemporaryPasswordResponse(
         user=UserRead.model_validate(result.user),
@@ -132,6 +139,11 @@ def reset_encargado_password(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo usuarios encargado pueden ser restablecidos.",
+        ) from exc
+    except InvalidPasswordChangeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=password_error_detail(exc.problem),
         ) from exc
     session.commit()
     return TemporaryPasswordResponse(

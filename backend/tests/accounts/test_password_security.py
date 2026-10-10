@@ -260,7 +260,9 @@ def test_set_password_history_blocks_reuse(shared_db):
         "password": "HistoryTest99!",
     })
     assert resp2.status_code == 400
-    assert "reutilizar" in resp2.json()["detail"]
+    detail = resp2.json()["detail"]
+    assert detail["code"] == "password_reused"
+    assert "reutilizar" in detail["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

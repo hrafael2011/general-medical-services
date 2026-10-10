@@ -16,6 +16,10 @@ from backend.app.application.accounts.errors import (
 )
 from backend.app.application.accounts.service import AccountService
 from backend.app.core.config import settings
+from backend.app.core.security import (
+    check_password_strength,
+    password_error_detail,
+)
 from backend.app.infrastructure.db.models.user import (
     LoginAttemptModel,
     PasswordRecoveryAttemptModel,
@@ -28,9 +32,10 @@ from backend.app.schemas.accounts import (
     ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
+    UpdateOwnProfileRequest,
     UserRead,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,7 +52,7 @@ _SET_PASSWORD_WINDOW_SECONDS = 900  # 15 minutes
 
 class SetPasswordRequest(BaseModel):
     token: str
-    password: str = Field(min_length=10)
+    password: str
 
 
 class SetPasswordValidateResponse(BaseModel):
@@ -232,6 +237,23 @@ def me(current_user: Annotated[UserModel, Depends(get_current_user)]) -> UserRea
     return UserRead.model_validate(current_user)
 
 
+@router.patch("/me", response_model=UserRead)
+def update_me(
+    payload: UpdateOwnProfileRequest,
+    current_user: Annotated[UserModel, Depends(get_current_user)],
+    service: Annotated[AccountService, Depends(get_account_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> UserRead:
+    """Update your own account.
+
+    Only the display name is accepted: it is what the weekly list prints as the left
+    signature. The email, role and permissions stay out of reach on purpose.
+    """
+    updated = service.update_own_profile(user=current_user, name=payload.name)
+    session.commit()
+    return UserRead.model_validate(updated)
+
+
 @router.post("/change-password", response_model=UserRead)
 def change_password(
     payload: ChangePasswordRequest,
@@ -248,7 +270,7 @@ def change_password(
     except InvalidPasswordChangeError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se pudo cambiar la contraseña. Verifica que la contraseña actual sea correcta.",
+            detail=password_error_detail(exc.problem),
         ) from exc
     session.commit()
 
@@ -320,10 +342,8 @@ def set_password(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> dict[str, str]:
     """Set password using a valid token."""
-    import re
-
     from backend.app.application.accounts.invitation_service import InvitationService
-    from backend.app.core.security import hash_password, verify_password
+    from backend.app.core.security import hash_password
     from backend.app.infrastructure.repositories.set_password_tokens import (
         SetPasswordTokenRepository,
     )
@@ -351,36 +371,16 @@ def set_password(
             detail="Usuario no encontrado.",
         )
 
-    # Validate password complexity
-    if not re.search(r"[A-Z]", payload.password):
+    # Password policy — same function the change-password flow uses
+    problem = check_password_strength(
+        payload.password,
+        recent_hashes=user_repo.list_recent_password_hashes(user.id),
+    )
+    if problem is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La contraseña debe contener al menos una mayúscula",
+            detail=password_error_detail(problem),
         )
-    if not re.search(r"[a-z]", payload.password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La contraseña debe contener al menos una minúscula",
-        )
-    if not re.search(r"\d", payload.password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La contraseña debe contener al menos un número",
-        )
-    if not re.search(r"[!@#$%^&*(),.\-:;<>?/\\[\]{}_~`|'\"]", payload.password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La contraseña debe contener al menos un carácter especial",
-        )
-
-    # Check against password history (last 5)
-    recent_hashes = user_repo.list_recent_password_hashes(user.id)
-    for old_hash in recent_hashes:
-        if verify_password(payload.password, old_hash):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No puedes reutilizar una contraseña reciente. Elige una nueva.",
-            )
 
     # Set the password
     new_hash = hash_password(payload.password)

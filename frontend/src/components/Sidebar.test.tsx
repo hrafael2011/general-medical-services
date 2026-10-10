@@ -1,11 +1,16 @@
-import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 
+// Mutable so a test can switch roles; `vi.mock` is hoisted, hence vi.hoisted.
+const auth = vi.hoisted(() => ({
+  state: { currentUser: { name: "Dr. Admin", role: "admin" }, logout: vi.fn() },
+}));
+
 vi.mock("../context/AuthContext", () => ({
-  useAuth: () => ({ currentUser: { name: "Dr. Admin", role: "admin" }, logout: vi.fn() }),
+  useAuth: () => auth.state,
 }));
 
 vi.mock("../api/actionAlerts", () => ({
@@ -29,7 +34,24 @@ function renderSidebar() {
   );
 }
 
+function renderSidebarWithProfileRoute() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <MemoryRouter initialEntries={["/dashboard"]}>
+      <QueryClientProvider client={qc}>
+        <Routes>
+          <Route path="/dashboard" element={<Sidebar />} />
+          <Route path="/profile" element={<div>PANTALLA PERFIL</div>} />
+        </Routes>
+      </QueryClientProvider>
+    </MemoryRouter>
+  );
+}
+
 describe("Sidebar", () => {
+  beforeEach(() => {
+    auth.state.currentUser = { name: "Dr. Admin", role: "admin" };
+  });
   it("muestra el título del sistema", () => {
     renderSidebar();
     // El título visual es el logo del sidebar (imagen con alt accesible)
@@ -64,5 +86,28 @@ describe("Sidebar", () => {
   it("muestra badge de misiones con alertas pendientes", async () => {
     renderSidebar();
     expect(await screen.findByLabelText(/alertas en misiones/i)).toHaveTextContent("1");
+  });
+
+  it("abre Mi perfil al pulsar el bloque del usuario", async () => {
+    renderSidebarWithProfileRoute();
+
+    fireEvent.click(screen.getByRole("button", { name: /ver mi perfil/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("PANTALLA PERFIL")).toBeInTheDocument();
+    });
+  });
+
+  it("oculta Auditoría a los encargados", () => {
+    auth.state.currentUser = { name: "Encargado", role: "encargado" };
+    renderSidebar();
+
+    expect(screen.queryByRole("link", { name: /auditoría/i })).not.toBeInTheDocument();
+  });
+
+  it("muestra Auditoría al administrador", () => {
+    renderSidebar();
+
+    expect(screen.getByRole("link", { name: /auditoría/i })).toBeInTheDocument();
   });
 });

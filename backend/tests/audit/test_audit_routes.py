@@ -130,3 +130,62 @@ def test_list_audit_events_includes_presented_fields(client):
     item = resp.json()["items"][0]
     assert "Admin User" in item["actor_display"]
     assert item["action_type"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Admin only — the trail is a supervision tool
+# ---------------------------------------------------------------------------
+
+
+def _client_for(session_local, current_user):
+    app = create_app()
+
+    def _get_session():
+        s = session_local()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    app.dependency_overrides[get_db_session] = _get_session
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    return TestClient(app)
+
+
+def test_audit_is_rejected_for_a_non_admin(session_local, admin_user, seed_data):
+    """An encargado cannot read the trail, even carrying the retired permission."""
+    encargado = UserModel(
+        id="enc-user", email="enc@test.com", password_hash="hash", name="Encargado",
+        role="encargado", active=True, must_change_password=False, token_version=1,
+        permissions=["view_audit", "manage_calendars"],
+        created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+    )
+
+    assert _client_for(session_local, encargado).get("/api/audit").status_code == 403
+
+
+def test_user_update_summary_shows_the_previous_value(session_local, engine, admin_user, seed_data):
+    """A name change reads as "from X to Y" — the part that matters for a signature."""
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
+    sess = SessionLocal()
+    sess.add(
+        AuditEventModel(
+            id=str(uuid4()),
+            actor_id=admin_user.id,
+            action_type="user_updated",
+            entity_type="user",
+            entity_id=admin_user.id,
+            occurred_at=datetime.now(UTC),
+            before_snapshot={"name": "Alexandra"},
+            after_snapshot={"name": "DRA. ALEXANDRA ACOSTA RAMOS"},
+        )
+    )
+    sess.commit()
+    sess.close()
+
+    resp = _client_for(session_local, admin_user).get("/api/audit?action_type=user_updated")
+
+    assert resp.status_code == 200
+    summary = resp.json()["items"][0]["detail_summary"]
+    assert "de «Alexandra»" in summary
+    assert "a «DRA. ALEXANDRA ACOSTA RAMOS»" in summary
