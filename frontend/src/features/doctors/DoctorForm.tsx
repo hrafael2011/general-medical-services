@@ -20,7 +20,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
   const [sex, setSex] = useState(doctor?.sex ?? "male");
   const [phone, setPhone] = useState(doctor?.whatsapp_phone ?? "");
   const [participaMisiones, setParticipaMisiones] = useState(doctor?.participa_misiones ?? true);
-  const [doesService, setDoesService] = useState(doctor?.service_active ?? true);
   const [target, setTarget] = useState(String(doctor?.monthly_service_target ?? 3));
   const [max, setMax] = useState(String(doctor?.monthly_service_max ?? 3));
   const [limitMode, setLimitMode] = useState(doctor?.monthly_service_limit_mode ?? "warn_only");
@@ -112,10 +111,8 @@ export function DoctorForm({ doctor, onClose }: Props) {
     const m = parseInt(max, 10);
     if (isNaN(t) || isNaN(m)) { setError("Meta y máximo deben ser números."); return; }
 
-    if (doesService) {
-      if (avMode === "weekly" && selectedDays.length === 0) { setError("Selecciona al menos un día de la semana."); return; }
-      if (allowedAreaIds.length === 0) { setError("Selecciona al menos un área de servicio."); return; }
-    }
+    if (avMode === "weekly" && selectedDays.length === 0) { setError("Selecciona al menos un día de la semana."); return; }
+    if (allowedAreaIds.length === 0) { setError("Selecciona al menos un área de servicio."); return; }
 
     const availabilityMode = avMode === "monthly" ? "monthly" : "fixed";
 
@@ -135,12 +132,13 @@ export function DoctorForm({ doctor, onClose }: Props) {
       availability_mode: availabilityMode,
       monthly_service_target: t, monthly_service_max: m,
       monthly_service_limit_mode: limitMode,
-      service_active: doesService,
-      allowed_area_ids: doesService ? allowedAreaIds : [],
+      // `service_active` NO se manda: el estado de servicio se deriva de las ausencias
+      // (spec de licencias, extensión v1.3.0). Mandarlo aquí era la segunda puerta.
+      allowed_area_ids: allowedAreaIds,
     }, {
       onSuccess: async (savedDoctor) => {
         const doctorId = savedDoctor.id;
-        if (doesService) {
+        {
           try {
             if (avMode === "weekly" && selectedDays.length > 0) {
               await availabilityApi.setWeekly(doctorId, { days_of_week: selectedDays });
@@ -248,22 +246,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
             </label>
           </div>
 
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={doesService}
-              onChange={e => {
-                setDoesService(e.target.checked);
-                if (!e.target.checked) {
-                  setAllowedAreaIds([]);
-                }
-              }}
-            />
-            ¿Hace servicio?
-          </label>
-
-          {doesService && (
-          <>
           <div className="form-row">
             <label>
               Meta mensual
@@ -383,14 +365,6 @@ export function DoctorForm({ doctor, onClose }: Props) {
             />
             Participa en misiones
           </label>
-          </>
-          )}
-
-          {!doesService && (
-          <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "8px 0" }}>
-            El médico no estará disponible para turnos de servicio.
-          </p>
-          )}
 
           {error && <p className="form-error">{error}</p>}
 

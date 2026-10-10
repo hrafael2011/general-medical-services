@@ -107,6 +107,25 @@ class AvailabilityRepository:
         # filter ends_at in Python to avoid DB null comparison complexity
         return [r for r in results if r.ends_at is None or r.ends_at >= on_date]
 
+    def list_restrictions_overlapping(
+        self, doctor_id: str, start_date: date, end_date: date
+    ) -> list[DoctorRestrictionModel]:
+        """Restricciones sin levantar que **tocan** el rango [start_date, end_date].
+
+        `list_active_restrictions_for_doctor` responde "¿qué restricciones están activas **ese**
+        día?", que es lo correcto para evaluar un turno concreto. Para preparar un contexto que
+        va a evaluar **muchos** días (la generación de un mes entero) esa pregunta no sirve: hay
+        que traer todo lo que **solape** el rango, o las ausencias que empiezan después del primer
+        día se quedan fuera y el motor reparte turnos a un médico de licencia.
+        """
+        stmt = select(DoctorRestrictionModel).where(
+            DoctorRestrictionModel.doctor_id == doctor_id,
+            DoctorRestrictionModel.lifted_at.is_(None),
+            DoctorRestrictionModel.starts_at <= end_date,
+        ).order_by(DoctorRestrictionModel.starts_at)
+        results = list(self.session.scalars(stmt))
+        return [r for r in results if r.ends_at is None or r.ends_at >= start_date]
+
     def list_restrictions_for_doctor(self, doctor_id: str) -> list[DoctorRestrictionModel]:
         stmt = select(DoctorRestrictionModel).where(
             DoctorRestrictionModel.doctor_id == doctor_id

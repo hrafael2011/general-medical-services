@@ -2,13 +2,17 @@ import re
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
+from sqlalchemy import select
+
 from backend.app.application.action_alerts.service import ActionAlertService
 from backend.app.application.audit.service import AuditService
 from backend.app.application.catalogs.service import normalize_name
 from backend.app.application.doctors.errors import DoctorServiceError
+from backend.app.application.doctors.service_state import sync_service_state, today_utc
+from backend.app.infrastructure.db.models.availability import DoctorRestrictionModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
-from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 
@@ -296,22 +300,20 @@ class DoctorService:
                         )
 
         # --- Eje 2: "fuera de servicio" -------------------------------------------------
-        # Históricamente había DOS puertas para esto y dejaban estados distintos: el botón
-        # dedicado guardaba motivo y sacaba de misiones, mientras que editar el médico no
-        # guardaba motivo y lo dejaba en misiones —de ahí los médicos fuera de servicio sin
-        # motivo y los que seguían en misiones estando fuera—. Ahora las dos puertas hacen
-        # lo mismo. Ver docs/specs/2026-10-09-licencias-con-fechas-y-recordatorio.md (R11).
+        # Hay **una sola** forma de dejar a un médico sin servicio: la **ausencia**. Esta
+        # puerta (la del API de edición) escribe lo mismo que la pantalla de ausencias —una
+        # restricción— en vez de mover el flag a mano, y el flag se recalcula solo. Antes
+        # había dos puertas que dejaban motivo, misiones y auditoría distintos, y eso produjo
+        # los datos inconsistentes de producción.
+        # Ver la extensión v1.3.0 del spec 2026-10-09-licencias-con-fechas-y-recordatorio.
         deactivated = False
-        reactivated = False
         if service_active is not None:
             was_active = doctor.service_active
             deactivated = not service_active and was_active
-            reactivated = bool(service_active) and not was_active
 
-            # Se valida ANTES de mutar: así un motivo inválido no deja el objeto a medio
-            # cambiar si la petición termina en error.
-            reason_id: str | None = None
             if not service_active:
+                # Se valida ANTES de escribir nada: un motivo inválido no deja el médico a
+                # medio desactivar si la petición termina en error.
                 reason_id = service_inactive_reason_id or doctor.service_inactive_reason_id
                 if reason_id is None:
                     raise DoctorServiceError(
@@ -319,38 +321,22 @@ class DoctorService:
                         "Para dejar de prestar servicio hay que indicar el motivo.",
                     )
                 self._validate_service_reason(reason_id, doctor)
+                # El motivo y el detalle van a la ausencia; el flag y los campos de motivo se
+                # recalculan al final desde ella (una sola fuente de verdad).
+                detail = None if service_inactive_detail is _MISSING else service_inactive_detail
+                self._write_indefinite_absence(
+                    doctor, reason_id=reason_id, detail=detail, actor_id=actor_id
+                )
 
-            doctor.service_active = service_active
-            changed_fields["service_active"] = service_active
-
-            if not service_active:
-                doctor.service_inactive_reason_id = reason_id
-                if service_inactive_detail is not _MISSING:
-                    doctor.service_inactive_detail = _strip_html(service_inactive_detail)
-
-                # Fuera de servicio implica fuera de misiones: son ejes distintos, pero
-                # dejar a alguien fuera de servicio y dentro de misiones fue justo la
-                # inconsistencia que se encontró en producción.
+                # Fuera de servicio implica fuera de misiones: son ejes distintos, pero dejar
+                # a alguien fuera de servicio y dentro de misiones fue justo la inconsistencia
+                # que se encontró en producción.
                 doctor.participa_misiones = False
                 changed_fields["participa_misiones"] = False
-
-                AvailabilityRepository(self.doctors.session).delete_all_for_doctor(doctor_id)
-                self.doctors.set_allowed_areas(doctor_id, [])
-                changed_fields["allowed_area_ids"] = []
-                removed = self._cleanup_calendar_assignments(doctor_id)
-                if removed > 0:
-                    import logging
-                    _logger = logging.getLogger(__name__)
-                    _logger.info(
-                        "Cleaned up %d calendar assignments for deactivated doctor %s",
-                        removed, doctor_id,
-                    )
             else:
-                # Reactivar limpia el motivo: si no, quedaría pegado a un médico activo.
+                self._lift_indefinite_absences(doctor.id, actor_id=actor_id)
                 # `participa_misiones` solo se toca si el cliente no lo pidió explícitamente,
                 # porque volver al servicio no tiene por qué devolverlo a misiones (eje 3).
-                doctor.service_inactive_reason_id = None
-                doctor.service_inactive_detail = None
                 if participa_misiones is None:
                     doctor.participa_misiones = True
                     changed_fields["participa_misiones"] = True
@@ -361,23 +347,16 @@ class DoctorService:
             self.doctors.set_allowed_areas(doctor_id, allowed_area_ids)
             changed_fields["allowed_area_ids"] = allowed_area_ids
 
-        if self.audit is not None:
-            # El evento de desactivación/reactivación se emite siempre, venga de la puerta
-            # que venga: el historial no debe depender de por dónde se entró. El `update`
-            # genérico queda para los demás campos, si es que cambió alguno.
-            other_changes = {k: v for k, v in changed_fields.items() if k != "service_active"}
-            if other_changes:
-                self.audit.log_doctor_updated(
-                    actor_id=actor_id, doctor=doctor, changed_fields=other_changes
-                )
-            if deactivated:
-                self.audit.log_doctor_service_deactivated(actor_id=actor_id, doctor=doctor)
-            elif reactivated:
-                self.audit.log_doctor_service_reactivated(actor_id=actor_id, doctor=doctor)
-            elif not other_changes and changed_fields:
-                self.audit.log_doctor_updated(
-                    actor_id=actor_id, doctor=doctor, changed_fields=changed_fields
-                )
+        # El estado "activo para servicio" es un valor **calculado**: se recalcula desde las
+        # ausencias vigentes y, si cambió, deja su propio evento de auditoría (con actor
+        # "Sistema" cuando no lo provoca una persona). Aquí solo se auditan los demás campos.
+        if service_active is not None:
+            sync_service_state(self.doctors.session, doctor_ids=[doctor_id], actor_id=actor_id)
+
+        if self.audit is not None and changed_fields:
+            self.audit.log_doctor_updated(
+                actor_id=actor_id, doctor=doctor, changed_fields=changed_fields
+            )
 
         if deactivated:
             self._create_mission_replacement_alerts_for_deactivated_doctor(doctor, actor_id=actor_id)
@@ -586,15 +565,15 @@ class DoctorService:
 
         self._validate_service_reason(reason_id, doctor)
 
-        doctor.service_active = False
-        doctor.service_inactive_reason_id = reason_id
-        doctor.service_inactive_detail = _strip_html(detail)
+        # Desactivar el servicio ES registrar una ausencia **indefinida**: no hay una segunda
+        # forma de decirlo. El flag "activo para servicio" se recalcula solo, más abajo.
+        self._write_indefinite_absence(
+            doctor, reason_id=reason_id, detail=detail, actor_id=actor_id
+        )
         doctor.participa_misiones = False
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
-
-        if self.audit is not None:
-            self.audit.log_doctor_service_deactivated(actor_id=actor_id, doctor=doctor)
+        sync_service_state(self.doctors.session, doctor_ids=[doctor_id], actor_id=actor_id)
 
         self._create_mission_replacement_alerts_for_deactivated_doctor(doctor, actor_id=actor_id)
 
@@ -605,17 +584,93 @@ class DoctorService:
         if doctor is None:
             raise DoctorServiceError("doctor_not_found", f"Médico con id {doctor_id} no encontrado.")
 
-        doctor.service_active = True
-        doctor.service_inactive_reason_id = None
-        doctor.service_inactive_detail = None
+        # Volver al servicio es **levantar** la ausencia indefinida (las ausencias con fecha
+        # se levantan una a una desde la pantalla). El flag se recalcula solo.
+        self._lift_indefinite_absences(doctor_id, actor_id=actor_id)
         doctor.participa_misiones = True
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
-
-        if self.audit is not None:
-            self.audit.log_doctor_service_reactivated(actor_id=actor_id, doctor=doctor)
+        sync_service_state(self.doctors.session, doctor_ids=[doctor_id], actor_id=actor_id)
 
         return doctor
+
+    # --- La ausencia como única forma de decir "no está disponible" --------------------
+
+    def _indefinite_absence(self, doctor_id: str) -> DoctorRestrictionModel | None:
+        """La ausencia **sin fecha de regreso** sin levantar de ese médico, si existe."""
+        for restriction in self.doctors.session.scalars(
+            select(DoctorRestrictionModel).where(
+                DoctorRestrictionModel.doctor_id == doctor_id,
+                DoctorRestrictionModel.lifted_at.is_(None),
+                DoctorRestrictionModel.ends_at.is_(None),
+            )
+        ):
+            return restriction
+        return None
+
+    def _write_indefinite_absence(
+        self,
+        doctor: DoctorModel,
+        *,
+        reason_id: str,
+        detail: str | None,
+        actor_id: str,
+    ) -> DoctorRestrictionModel:
+        """Registra la ausencia indefinida del médico, o actualiza la que ya tuviera.
+
+        Reutilizarla evita acumular filas si alguien repite la operación, y deja el estado en
+        el mismo sitio que una ausencia creada desde la pantalla.
+        """
+        now = datetime.now(UTC)
+        existing = self._indefinite_absence(doctor.id)
+        if existing is not None:
+            existing.reason_id = reason_id
+            existing.description = _strip_html(detail)
+            existing.updated_at = now
+            self.doctors.session.flush()
+            return existing
+
+        record = DoctorRestrictionModel(
+            id=str(uuid4()),
+            doctor_id=doctor.id,
+            reason_id=reason_id,
+            restriction_type="license",
+            severity="hard_block",
+            description=_strip_html(detail),
+            starts_at=today_utc(),
+            ends_at=None,
+            source="manual",
+            review_status="approved",
+            created_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        self.doctors.session.add(record)
+        self.doctors.session.flush()
+        if self.audit is not None:
+            self.audit.log_restriction_added(actor_id=actor_id, restriction=record)
+        return record
+
+    def _lift_indefinite_absences(self, doctor_id: str, *, actor_id: str) -> int:
+        """Levanta las ausencias **sin fecha** del médico. Devuelve cuántas levantó."""
+        now = datetime.now(UTC)
+        lifted = 0
+        for restriction in self.doctors.session.scalars(
+            select(DoctorRestrictionModel).where(
+                DoctorRestrictionModel.doctor_id == doctor_id,
+                DoctorRestrictionModel.lifted_at.is_(None),
+                DoctorRestrictionModel.ends_at.is_(None),
+            )
+        ):
+            restriction.lifted_at = now
+            restriction.lifted_by = actor_id
+            restriction.updated_at = now
+            lifted += 1
+            if self.audit is not None:
+                self.audit.log_restriction_lifted(actor_id=actor_id, restriction=restriction)
+        if lifted:
+            self.doctors.session.flush()
+        return lifted
 
     def soft_delete_doctor(self, doctor_id: str, *, actor_id: str) -> None:
         doctor = self.doctors.get_by_id(doctor_id)

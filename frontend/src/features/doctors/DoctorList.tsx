@@ -1,4 +1,4 @@
-import { Ban, CalendarDays, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Trash2, Users, X, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, Edit, PlusCircle, Search, Trash2, Users, X, XCircle } from "lucide-react";
 import { QuickAvailabilityModal } from "./QuickAvailabilityModal";
 import { AbsenceSection } from "./AbsenceSection";
 import { useState } from "react";
@@ -23,8 +23,6 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [monthlyFilter, setMonthlyFilter] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorRead | null>(null);
-  const [reasonId, setReasonId] = useState("");
-  const [detail, setDetail] = useState("");
   const [actionError, setActionError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [avModalDoctor, setAvModalDoctor] = useState<{ id: string; name: string } | null>(null);
@@ -67,31 +65,6 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   );
   const reasonMap = Object.fromEntries((deactivationReasons ?? []).map(r => [r.id, r.display_name]));
 
-  const reactivate = useMutation({
-    mutationFn: (id: string) => doctorsApi.reactivateService(id),
-    onSuccess: (updated) => {
-      setSelectedDoctor(updated);
-      setReasonId("");
-      setDetail("");
-      setActionError("");
-      qc.invalidateQueries({ queryKey: ["doctors"] });
-    },
-    onError: (err: Error) => setActionError(err.message),
-  });
-
-  const deactivate = useMutation({
-    mutationFn: ({ id, reasonId, detail }: { id: string; reasonId: string; detail?: string }) =>
-      doctorsApi.deactivateService(id, reasonId, detail),
-    onSuccess: (updated) => {
-      setSelectedDoctor(updated);
-      setReasonId("");
-      setDetail("");
-      setActionError("");
-      qc.invalidateQueries({ queryKey: ["doctors"] });
-    },
-    onError: (err: Error) => setActionError(err.message),
-  });
-
   const [deleteTarget, setDeleteTarget] = useState<DoctorRead | null>(null);
 
   const deleteMutation = useMutation({
@@ -112,30 +85,9 @@ export function DoctorList({ onAdd, onEdit }: Props) {
   const filteredDoctors = normalizedSearch
     ? doctors.filter(doc => normalizeText(doc.name).includes(normalizedSearch))
     : doctors;
-  const selectedReason = (deactivationReasons ?? []).find(reason => reason.id === reasonId);
-
   function handleOpenProfile(doctor: DoctorRead) {
     setSelectedDoctor(doctor);
-    setReasonId("");
-    setDetail("");
     setActionError("");
-  }
-
-  function submitDeactivation() {
-    if (!selectedDoctor) return;
-    if (!reasonId) {
-      setActionError("Selecciona una razón para desactivar el servicio.");
-      return;
-    }
-    if (selectedReason?.requires_detail && detail.trim().length === 0) {
-      setActionError("Especifica el detalle de la razón seleccionada.");
-      return;
-    }
-    deactivate.mutate({
-      id: selectedDoctor.id,
-      reasonId,
-      detail: detail.trim() || undefined,
-    });
   }
 
   return (
@@ -284,24 +236,12 @@ export function DoctorList({ onAdd, onEdit }: Props) {
               : undefined
           }
           reasons={deactivationReasons ?? []}
-          selectedReasonId={reasonId}
-          detail={detail}
-          actionError={actionError}
-          isDeactivating={deactivate.isPending}
-          isReactivating={reactivate.isPending}
           onDelete={() => setDeleteTarget(selectedDoctor)}
           onClose={() => setSelectedDoctor(null)}
           onEdit={() => {
             onEdit(selectedDoctor);
             setSelectedDoctor(null);
           }}
-          onReasonChange={(nextReasonId) => {
-            setReasonId(nextReasonId);
-            setActionError("");
-          }}
-          onDetailChange={setDetail}
-          onDeactivate={submitDeactivation}
-          onReactivate={() => reactivate.mutate(selectedDoctor.id)}
         />
       )}
 
@@ -342,18 +282,9 @@ interface DoctorProfileModalProps {
   availability: AvailabilityRead[];
   inactiveReasonName?: string;
   reasons: DeactivationReasonRead[];
-  selectedReasonId: string;
-  detail: string;
-  actionError: string;
-  isDeactivating: boolean;
-  isReactivating: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onReasonChange: (reasonId: string) => void;
-  onDetailChange: (detail: string) => void;
-  onDeactivate: () => void;
-  onReactivate: () => void;
 }
 
 function DoctorProfileModal({
@@ -364,20 +295,10 @@ function DoctorProfileModal({
   availability,
   inactiveReasonName,
   reasons,
-  selectedReasonId,
-  detail,
-  actionError,
-  isDeactivating,
-  isReactivating,
   onClose,
   onEdit,
   onDelete,
-  onReasonChange,
-  onDetailChange,
-  onDeactivate,
-  onReactivate,
 }: DoctorProfileModalProps) {
-  const selectedReason = reasons.find(reason => reason.id === selectedReasonId);
   const availabilityLabels = normalizeAvailability(availability, doctor.availability_mode);
 
   return (
@@ -442,42 +363,9 @@ function DoctorProfileModal({
               <Trash2 size={16} />
               Eliminar médico
             </button>
-            {doctor.service_active ? (
-              <div className="deactivation-box">
-                <label>
-                  Razón para desactivar servicio
-                  <select value={selectedReasonId} onChange={event => onReasonChange(event.target.value)}>
-                    <option value="">Seleccionar razón</option>
-                    {reasons.filter(reason => reason.active).map(reason => (
-                      <option key={reason.id} value={reason.id}>{reason.display_name}</option>
-                    ))}
-                  </select>
-                </label>
-                {selectedReason?.requires_detail && (
-                  <label>
-                    Detalle
-                    <textarea
-                      value={detail}
-                      onChange={event => onDetailChange(event.target.value)}
-                      placeholder="Especifica la razón"
-                    />
-                  </label>
-                )}
-                {actionError && <p className="form-error">{actionError}</p>}
-                <button className="btn-ghost btn-danger" onClick={onDeactivate} disabled={isDeactivating}>
-                  <Ban size={16} />
-                  {isDeactivating ? "Desactivando…" : "Desactivar para servicio"}
-                </button>
-              </div>
-            ) : (
-              <div className="deactivation-box">
-                {actionError && <p className="form-error">{actionError}</p>}
-                <button className="btn-ghost btn-green" onClick={onReactivate} disabled={isReactivating}>
-                  <RefreshCw size={16} />
-                  {isReactivating ? "Reactivando…" : "Reactivar servicio"}
-                </button>
-              </div>
-            )}
+            {/* El estado de servicio no se pone a mano: se registra una ausencia arriba y
+                el sistema la aplica (y la levanta) por fecha. Ver la extensión v1.3.0 del
+                spec de licencias. */}
           </div>
         </section>
       </div>

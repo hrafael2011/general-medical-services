@@ -21,6 +21,14 @@ from backend.app.infrastructure.repositories.missions import MissionRepository
 
 REQUIRED_AREA_CODES = ["emergencia", "pista", "disponible"]
 
+
+def _month_bounds(year: int, month: int) -> tuple[date, date]:
+    """Primer y último día del mes: el rango que cubre un calendario que se va a generar."""
+    first = date(year, month, 1)
+    last = date(year + (month == 12), (month % 12) + 1, 1) - timedelta(days=1)
+    return first, last
+
+
 class _AreaMapper:
     """Maps between service area codes (domain) and UUIDs (persistence)."""
 
@@ -122,14 +130,16 @@ class GenerationService:
             records = self.availability_repo.list_availability_for_doctor(d.id)
             availability[d.id] = records
 
-        # Load active restrictions per doctor
+        # Load restrictions that OVERLAP the whole month, not just those active on day 1.
+        # Preguntar por el día 1 dejaba fuera cualquier ausencia que empezara después, y el
+        # motor le repartía turnos igual (el flag `service_active` lo tapaba). El contexto se
+        # evalúa después turno a turno, así que necesita ver el rango completo.
+        first_day, last_day = _month_bounds(calendar.year, calendar.month)
         restrictions: dict[str, list] = {}
-        first_day = date(calendar.year, calendar.month, 1)
         for d in doctors:
-            active_restrictions = self.availability_repo.list_active_restrictions_for_doctor(
-                d.id, on_date=first_day
+            restrictions[d.id] = self.availability_repo.list_restrictions_overlapping(
+                d.id, first_day, last_day
             )
-            restrictions[d.id] = active_restrictions
 
         # Load existing assignments — convert service_area_id UUIDs → codes
         existing = self.calendar_repo.list_assignments(version.id)
@@ -316,12 +326,12 @@ class GenerationService:
         for d in doctors:
             availability[d.id] = self.availability_repo.list_availability_for_doctor(d.id)
 
-        # Load active restrictions
-        first_day = date(calendar.year, calendar.month, 1)
+        # Load restrictions that OVERLAP the whole month (ver el otro sitio de este archivo).
+        first_day, last_day = _month_bounds(calendar.year, calendar.month)
         restrictions: dict[str, list] = {}
         for d in doctors:
-            restrictions[d.id] = self.availability_repo.list_active_restrictions_for_doctor(
-                d.id, on_date=first_day
+            restrictions[d.id] = self.availability_repo.list_restrictions_overlapping(
+                d.id, first_day, last_day
             )
 
         # Load existing assignments

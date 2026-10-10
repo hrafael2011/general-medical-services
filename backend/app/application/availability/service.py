@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.availability.errors import AvailabilityError
+from backend.app.application.doctors.service_state import sync_service_state
 from backend.app.infrastructure.db.models.availability import (
     DoctorAvailabilityModel,
     DoctorRestrictionModel,
@@ -263,6 +264,11 @@ class AvailabilityService:
         result = self.availability.add_restriction(record)
         if self.audit:
             self.audit.log_restriction_added(actor_id=actor_id, restriction=result)
+        # Registrar una ausencia cambia el estado del médico: se recalcula aquí mismo para que
+        # el tablero, el asistente y los reportes lo vean al instante.
+        sync_service_state(
+            self.availability.session, doctor_ids=[doctor_id], actor_id=actor_id
+        )
         return result
 
     def update_restriction(
@@ -309,6 +315,10 @@ class AvailabilityService:
                 restriction=restriction,
                 previous_ends_at=previous_ends_at,
             )
+        # Cambiar las fechas puede meter o sacar al médico de una ausencia vigente.
+        sync_service_state(
+            self.availability.session, doctor_ids=[restriction.doctor_id], actor_id=actor_id
+        )
         return restriction
 
     def lift_restriction(
@@ -328,6 +338,10 @@ class AvailabilityService:
         restriction.updated_at = now
         if self.audit:
             self.audit.log_restriction_lifted(actor_id=actor_id, restriction=restriction)
+        # Levantar la ausencia es lo que devuelve al médico al servicio.
+        sync_service_state(
+            self.availability.session, doctor_ids=[restriction.doctor_id], actor_id=actor_id
+        )
         return restriction
 
     def has_submitted_monthly_availability(

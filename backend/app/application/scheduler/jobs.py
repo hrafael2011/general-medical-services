@@ -331,6 +331,7 @@ def send_license_return_reminders() -> dict:
 
     from backend.app.application.action_alerts.service import ActionAlertService
     from backend.app.application.catalogs.service import CatalogService
+    from backend.app.application.doctors.service_state import sync_service_state
     from backend.app.application.notifications.providers import (
         FakeProvider,
         MetaCloudAPIProvider,
@@ -357,6 +358,17 @@ def send_license_return_reminders() -> dict:
 
     session = SessionLocal()
     try:
+        # Primero el estado, y **antes** de cualquier salida temprana: "activo para servicio" se
+        # deriva de las ausencias, así que este es el momento en que un médico sale solo el día
+        # que su ausencia empieza y vuelve solo el día que se cumple. Sin esto, el estado solo
+        # cambiaría cuando alguien abriera su ficha.
+        changed_state = sync_service_state(session)
+        if changed_state:
+            logger.info(
+                "Estado de servicio recalculado para %d médicos: %s",
+                len(changed_state), ", ".join(changed_state),
+            )
+
         days = CatalogService(CatalogRepository(session)).get_license_reminder_days()
         today = datetime.now(UTC).date()
         window_end = today + timedelta(days=days)
@@ -369,6 +381,7 @@ def send_license_return_reminders() -> dict:
         )
         restrictions = list(session.scalars(stmt))
         if not restrictions:
+            session.commit()  # el recálculo del estado también se guarda
             return {"reminders": 0, "alerts_created": 0}
 
         recipients = session.scalars(

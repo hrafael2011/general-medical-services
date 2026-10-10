@@ -195,7 +195,7 @@ export function AbsenceSection({
               <span className="absence-dates">
                 {formatDate(restriction.starts_at)} →{" "}
                 {restriction.ends_at === null ? (
-                  <em>Indefinido (no avisa)</em>
+                  <em>Indefinido (hasta levantarla)</em>
                 ) : (
                   <em>se reintegra el {formatDate(restriction.ends_at)}</em>
                 )}
@@ -302,7 +302,7 @@ export function AbsenceSection({
           </label>
           <p className="absence-hint">
             {indefinite
-              ? "Indefinido: el médico queda fuera desde esa fecha y no se avisa a nadie, porque no hay fecha de regreso."
+              ? "Indefinido: el médico queda fuera desde esa fecha hasta que alguien levante la ausencia. No se avisa a nadie, porque no hay fecha de regreso."
               : "Se avisará al encargado unos días antes de la fecha de regreso."}
           </p>
           {formError && <p className="form-error">{formError}</p>}

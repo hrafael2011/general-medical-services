@@ -470,3 +470,56 @@ def test_generate_with_partial_area_coverage(db_session) -> None:
     )
     assert disponible_gaps > 0, "Disponible should have gaps (no doctor covers it)"
     assert emergencia_assigned > 0, "Emergencia should have assignments"
+
+
+def test_generate_respects_hard_block_that_starts_mid_month(db_session) -> None:
+    """Una ausencia que empieza **después del día 1** también bloquea la generación.
+
+    El contexto cargaba las restricciones preguntando por el día 1 del mes, así que una
+    ausencia que empezara más tarde se quedaba fuera del contexto y el motor le repartía
+    turnos igual. Ese hueco lo tapaba el flag `service_active`, que bloquea el mes entero;
+    con la ausencia como única puerta, dejaría de taparlo.
+
+    Este test falla con el código anterior: el médico recibía asignaciones dentro del rango.
+    """
+    from backend.app.infrastructure.db.models.availability import DoctorRestrictionModel
+
+    _seed_service_areas(db_session)
+    calendar, _version = _create_calendar_and_version(db_session)
+
+    doctor = _create_doctor(
+        db_session, name="Dr. Licencia Mitad De Mes",
+        allowed_area_ids=[_AREA_EMERGENCIA, _AREA_PISTA, _AREA_DISPONIBLE],
+    )
+
+    # La semana del calendario va del 2 al 8 de febrero de 2026; la ausencia empieza el 3.
+    inicio, fin = datetime.date(_YEAR, _MONTH, 3), datetime.date(_YEAR, _MONTH, 6)
+    now = datetime.datetime.now(datetime.UTC)
+    db_session.add(DoctorRestrictionModel(
+        id=str(uuid4()),
+        doctor_id=doctor.id,
+        restriction_type="license",
+        severity="hard_block",
+        starts_at=inicio,
+        ends_at=fin,
+        lifted_at=None,
+        description="Licencia que empieza a mitad de mes",
+        source="manual",
+        created_by="actor-001",
+        created_at=now,
+        updated_at=now,
+    ))
+    db_session.flush()
+
+    service = _make_generation_service(db_session)
+    summary = service.generate(actor_id="actor-001", calendar_id=calendar.id)
+
+    suyas = [r for r in summary.slot_results if r.assigned_doctor_id == doctor.id]
+    dentro = [r for r in suyas if inicio <= r.slot.date <= fin]
+
+    assert dentro == [], (
+        f"No debería tener turnos dentro de la ausencia ({inicio} a {fin}), "
+        f"y tiene {len(dentro)}"
+    )
+    # Y fuera del rango sí se le asigna: prueba que el bloqueo es la ausencia y no otra cosa.
+    assert suyas, "Sin la ausencia de por medio debería recibir turnos fuera del rango"

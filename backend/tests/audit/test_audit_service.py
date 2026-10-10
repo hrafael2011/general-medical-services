@@ -177,11 +177,21 @@ def test_append_only_no_update_method(db_session, seeded_reasons) -> None:
     assert not hasattr(audit.repo, "delete")
 
     events = audit.repo.list()
-    assert len(events) == 3
-    # list() orders by occurred_at DESC — first item is the most recent
+    # Desactivar y reactivar ya no mueven el flag a mano: registran y levantan una **ausencia**
+    # indefinida, y el estado "activo para servicio" se deriva de ella (extensión v1.3.0 del
+    # spec de licencias). Por eso el historial cuenta ahora las dos cosas: la ausencia y el
+    # cambio de estado que provoca.
+    assert len(events) == 5
+    assert {e.action_type for e in events} == {
+        "doctor_created",
+        "restriction_added",
+        "doctor_service_deactivated",
+        "restriction_lifted",
+        "doctor_service_reactivated",
+    }
+    # list() orders by occurred_at DESC: lo último que pasó es la vuelta al servicio.
     assert events[0].action_type == "doctor_service_reactivated"
-    assert events[1].action_type == "doctor_service_deactivated"
-    assert events[2].action_type == "doctor_created"
+    assert events[-1].action_type == "doctor_created"
 
 
 # ---------------------------------------------------------------------------

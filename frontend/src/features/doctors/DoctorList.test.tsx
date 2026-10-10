@@ -142,7 +142,11 @@ describe("DoctorList", () => {
     expect(await screen.findByText("Activo en sistema")).toBeInTheDocument();
     expect(screen.getAllByText("Activo para servicio").length).toBeGreaterThan(0);
     expect(screen.getByText("Editar médico")).toBeInTheDocument();
-    expect(screen.getByText("Razón para desactivar servicio")).toBeInTheDocument();
+    // El estado de servicio ya no se pone a mano: la única entrada es la ausencia.
+    expect(screen.getByText("Registrar ausencia")).toBeInTheDocument();
+    expect(screen.queryByText("Razón para desactivar servicio")).not.toBeInTheDocument();
+    expect(screen.queryByText("Desactivar para servicio")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reactivar servicio")).not.toBeInTheDocument();
   });
 
   it("solicita solo activos al activar el filtro", async () => {
