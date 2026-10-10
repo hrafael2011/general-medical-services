@@ -386,3 +386,70 @@ def test_desactivar_dos_veces_no_acumula_ausencias(db_session, doctor, reason, a
 
     restrictions = AvailabilityRepository(db_session).list_restrictions_for_doctor(doctor.id)
     assert len(restrictions) == 1, "reutiliza la ausencia que ya tenía"
+
+
+def _service_without_audit(db_session) -> AvailabilityService:
+    """El servicio **sin auditoría**, que es lo que destapó el fallo.
+
+    Con auditoría, el `flush` del evento tapaba que el recálculo no veía los cambios
+    pendientes; sin ella, el estado se quedaba un paso por detrás. Estos tests fijan que el
+    recálculo haga su propio flush y no dependa de nadie.
+    """
+    return AvailabilityService(
+        availability_repo=AvailabilityRepository(db_session),
+        doctor_repo=DoctorRepository(db_session),
+        catalog_repo=CatalogRepository(db_session),
+    )
+
+
+def test_editar_las_fechas_recalcula_sin_depender_del_audit(db_session, doctor, reason) -> None:
+    service = _service_without_audit(db_session)
+    record = service.add_restriction(
+        doctor.id,
+        restriction_type="license",
+        severity="hard_block",
+        starts_at=_today() - timedelta(days=1),
+        ends_at=None,
+        description=None,
+        reason_id=reason.id,
+        actor_id="actor-1",
+    )
+    db_session.commit()
+    assert _reload(db_session, doctor).service_active is False
+
+    # Mover la ausencia al futuro tiene que devolverlo al servicio **ya**, no en la próxima.
+    service.update_restriction(
+        record.id,
+        starts_at=_today() + timedelta(days=10),
+        ends_at=_today() + timedelta(days=20),
+        reason_id=reason.id,
+        description=None,
+        severity="hard_block",
+        actor_id="actor-1",
+    )
+    db_session.commit()
+
+    assert _reload(db_session, doctor).service_active is True
+
+
+def test_levantar_recalcula_sin_depender_del_audit(db_session, doctor, reason) -> None:
+    service = _service_without_audit(db_session)
+    record = service.add_restriction(
+        doctor.id,
+        restriction_type="license",
+        severity="hard_block",
+        starts_at=_today() - timedelta(days=1),
+        ends_at=None,
+        description=None,
+        reason_id=reason.id,
+        actor_id="actor-1",
+    )
+    db_session.commit()
+    assert _reload(db_session, doctor).service_active is False
+
+    service.lift_restriction(record.id, actor_id="actor-1")
+    db_session.commit()
+
+    reactivated = _reload(db_session, doctor)
+    assert reactivated.service_active is True
+    assert reactivated.service_inactive_reason_id is None

@@ -349,9 +349,11 @@ médico de licencia**. La asignación manual no tiene el fallo porque consulta p
 - [x] **Verificado en base desechable** con el escenario de producción: convierte los que
       corresponde, deja al médico activo en paz, es idempotente (segunda corrida: 0) y no reactiva
       a nadie.
-- [ ] **Ejecutar** en producción (**antes** de desplegar, para que nadie se quede sin forma de
-      volver) y comprobar que no queda ningún médico "fuera de servicio sin ausencia" y que los 29
-      siguen fuera.
+- [x] **Ejecutado** en producción el 2026-10-10, **antes** de desplegar. Resultado: 29 convertidos,
+      **0 fuera de servicio sin ausencia**, **nadie reactivado** (43 activos / 29 fuera, igual que
+      antes). Las 29 quedan con fecha de inicio **2026-10-10** porque `deactivated_at` estaba vacío
+      en todas: es la fecha del **registro**, no la de la ausencia real, que el sistema nunca
+      guardó. Se puede corregir a mano desde la pantalla si la fecha importa.
 
 ## Fase 11 — Tests y verificación en vivo
 
@@ -362,6 +364,18 @@ médico de licencia**. La asignación manual no tiene el fallo porque consulta p
 - [x] **No destruye nada**: disponibilidad, áreas y misiones intactas (AC13).
 - [x] **Estado derivado**: con ausencia vigente queda inactivo, y al terminar o al levantar la
       ausencia vuelve solo (AC15).
+- [x] **En vivo contra producción** (2026-10-10, con el código local apuntando a la base real):
+      una ausencia de mitad de mes la ve la consulta nueva (1) y **no** la vieja (0); una ausencia
+      futura no lo saca; una vigente lo saca **y copia el motivo y el detalle**; al levantarla
+      vuelve solo y se limpia el motivo.
+- [x] **Fallo encontrado y corregido gracias a esa verificación**: el recálculo consultaba **antes**
+      de volcar los cambios pendientes, y la sesión de la aplicación trabaja con `autoflush`
+      apagado, así que el estado se quedaba **un paso por detrás** (editar o levantar una ausencia
+      no surtía efecto hasta la operación siguiente). Lo tapaba el `flush` del evento de auditoría,
+      por eso los tests con auditoría pasaban. Arreglado en `sync_service_state` (flush propio) con
+      dos tests que usan el servicio **sin** auditoría, comprobados por mutación.
+      *El estado que quedó torcido en producción se corrigió con el propio recálculo: 1 médico,
+      y volvió a 29 fuera / 43 activos.*
 - [ ] **En vivo**: registrar una ausencia que empiece **el 20** de un mes y generar ese mes para
       comprobar que no aparece; levantar una Indefinida y ver que vuelve a contar como activo.
 
@@ -441,4 +455,6 @@ médico de licencia**. La asignación manual no tiene el fallo porque consulta p
 | 2026-10-10 | Fase 6 | Verificación en vivo en producción con un médico real: solo bloquea dentro del rango, avisa 2 días antes en la campana, no se repite, re-arma al editar la fecha, Indefinido no genera nada, y se levantó todo al terminar. |
 | 2026-10-10 | Extensión v1.3.0 | El usuario decide **unificar las dos funcionalidades en una**: la ausencia es la única puerta y el estado "activo para servicio" se deriva de ella. Acepta que registrar una ausencia no borre disponibilidad/áreas/asignaciones ni toque misiones. Se documenta el **bug de la generación** como bloqueante previo. |
 | 2026-10-10 | Fases 7-9 | Implementadas. La generación respeta las ausencias de mitad de mes (test comprobado por mutación: antes le daba 4 turnos). Fuera el bloque de desactivación y la casilla del formulario. El estado se deriva de las ausencias, al escribir y al pasar la fecha, y las dos viejas puertas ahora escriben una ausencia. 14 tests nuevos. Suite: backend 1845, frontend 139. |
-| 2026-10-10 | Fase 10 | Script de conversión escrito y verificado en base desechable con el escenario de producción. **Falta ejecutarlo en producción, antes de desplegar.** |
+| 2026-10-10 | Fase 10 | Script de conversión escrito y verificado en base desechable, y **ejecutado en producción antes de desplegar**: 29 convertidos, 0 sin ausencia, nadie reactivado. |
+| 2026-10-10 | Decisión del usuario | La ausencia **sí** quita al médico de los calendarios **en borrador** dentro del rango (una asignación en un día que no puede servir es inválida, y dejarla crea un hueco que nadie arregla). La disponibilidad y las áreas siguen intactas. Implementado con `delete_assignments_for_doctor_in_range`, con aviso en la pantalla de los huecos que quedan. |
+| 2026-10-10 | Fase 11 | Verificación en vivo en producción: el generador ve la ausencia de mitad de mes, el estado se deriva al registrar/editar/levantar, y el recálculo se auto-corrige. **Encontró un fallo real** (el estado iba un paso por detrás por el `autoflush` apagado), corregido con dos tests de regresión. |

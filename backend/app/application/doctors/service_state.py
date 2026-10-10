@@ -80,6 +80,13 @@ def sync_service_state(
 
     Es idempotente: correrlo dos veces seguidas no cambia nada la segunda vez.
     """
+    # **Antes de consultar**, se vuelca lo que esté pendiente: quien llama acaba de registrar,
+    # editar o levantar una ausencia, y la consulta tiene que ver ese cambio. La sesión de la
+    # aplicación trabaja con `autoflush` apagado, así que sin este flush el recálculo leería el
+    # estado anterior y el flag se quedaría un paso por detrás. (Se destapó verificando en
+    # producción con un servicio sin auditoría: el flush del evento de auditoría lo tapaba.)
+    session.flush()
+
     stmt = select(DoctorModel).where(DoctorModel.deleted_at.is_(None))
     if doctor_ids is not None:
         if not doctor_ids:
