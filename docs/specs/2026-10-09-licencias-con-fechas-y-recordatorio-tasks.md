@@ -231,8 +231,9 @@ migración nueva, `backend/app/domain/catalogs.py`
 - [x] **Frontend**: 8 tests de la sección nueva —lista la ausencia con fechas, lista la que no
       tiene fecha, distingue programada de vigente, propone Indefinido según el motivo, valida el
       rango, guarda `ends_at: null`, levanta y edita sin crear otra. Comprobados por mutación.
-- [ ] **Elegibilidad**: dentro del rango se rechaza; fuera del rango se permite sin intervención
-      (AC2). **Ya estaba cubierto** por los tests de elegibilidad existentes, que siguen en verde.
+- [x] **Elegibilidad**: dentro del rango se rechaza; fuera del rango se permite sin intervención
+      (AC2). Cubierto por los tests de elegibilidad existentes (en verde) y comprobado **en vivo**
+      en producción: bloqueado el 11 y el 12, libre el 10 y el 13.
 
 ---
 
@@ -331,10 +332,11 @@ médico de licencia**. La asignación manual no tiene el fallo porque consulta p
 - [x] **Cubrirlo con tests** (14 nuevos): ausencia vigente lo saca, futura no, terminada lo
       devuelve, levantar lo devuelve, editar recalcula, motivo/detalle copiados, idempotencia,
       auditoría como "Sistema", y que **no se borra** disponibilidad ni áreas (AC13).
-- [ ] **Decidir** qué pasa con las **asignaciones ya existentes** en calendarios en borrador dentro
-      del rango: **no se quitan solas** (decisión 14) y, al unificar, el `PATCH` **dejó de
-      limpiarlas** (antes sí lo hacía). Quedan como hueco visible para reemplazar.
-      **Confirmar explícitamente.**
+- [x] **Decidido por el usuario (2026-10-10)**: la ausencia **sí** quita al médico de los
+      calendarios **en borrador** dentro del rango —una asignación en un día que no puede servir es
+      inválida, y dejarla crea un hueco que nadie más arregla—. La **disponibilidad y las áreas
+      siguen intactas**. Implementado (`delete_assignments_for_doctor_in_range`) con test
+      comprobado por mutación, y la pantalla avisa de cuántos turnos quedaron como hueco.
 
 > **Por qué así y no reescribiendo las consultas:** el flag se lee en **83 sitios del backend y 29
 > del frontend**, incluido el SQL del asistente. Mantenerlo como valor calculado deja esos sitios
@@ -376,8 +378,12 @@ médico de licencia**. La asignación manual no tiene el fallo porque consulta p
       dos tests que usan el servicio **sin** auditoría, comprobados por mutación.
       *El estado que quedó torcido en producción se corrigió con el propio recálculo: 1 médico,
       y volvió a 29 fuera / 43 activos.*
-- [ ] **En vivo**: registrar una ausencia que empiece **el 20** de un mes y generar ese mes para
-      comprobar que no aparece; levantar una Indefinida y ver que vuelve a contar como activo.
+- [x] **En vivo**: con una ausencia de mitad de mes, la consulta del generador la ve (**1**) y la
+      consulta anterior **no** (**0**) — que es exactamente el defecto de la Fase 7—; y levantar una
+      ausencia devuelve al médico a "activo para servicio" al instante. *No se generó un calendario
+      real en producción a propósito: habría creado un calendario de prueba en el sistema de
+      trabajo. La integración generador→restricciones está cubierta por el test de la Fase 7,
+      comprobado por mutación.*
 
 ---
 
