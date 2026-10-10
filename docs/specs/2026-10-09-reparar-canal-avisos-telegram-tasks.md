@@ -20,48 +20,79 @@ rastro visible en la campana en vez de morir en silencio.
 
 ## Fase 0 — Decisiones previas (bloquean el resto)
 
-### Task 0.1 — Qué bot notifica
+### Task 0.1 — Diseño de bots ✅ DECIDIDO
 
-- [ ] **Decidir** entre dos caminos:
-      **(a)** crear el bot de notificaciones (`@TurnosMedicosBot`) y su token; o
-      **(b)** permitir que el proveedor caiga al token del bot conversacional cuando el de
-      notificaciones no exista.
-- [ ] **Anotar** la decisión: afecta a los `chat_id` ya vinculados (cada bot tiene los suyos).
+**Decidido por el usuario (2026-10-09):** **dos bots con roles separados.**
 
-> El código hoy **exige** `telegram_notification_bot_token` (`providers.py:96-98`). La opción (b)
-> es un cambio pequeño y permite reutilizar el bot que ya funciona; la (a) es más limpia pero
-> implica crear y operar un segundo bot.
+| Bot | Quién lo usa | Para qué |
+|---|---|---|
+| `@TurnosMedicosBot` (notificaciones) | **Médicos + encargados + admins** | Avisos, confirmaciones por botón, escalaciones consolidadas |
+| `@MedicalSchedule_bot` (conversacional) | **Solo encargados y admins** | El asistente de consultas |
 
-### Task 0.2 — Verificar el webhook
+- [x] **Decidir** el diseño de bots.
+- [ ] **Crear o confirmar** el bot de notificaciones en BotFather y obtener su token.
+- [ ] **Confirmar** el nombre de usuario real de ese bot (para el deep link).
 
-- [ ] **Comprobar** si el webhook del bot de notificaciones está registrado en Telegram.
-      Sin él, el vínculo del médico es imposible aunque el token exista.
+> El asistente **ya** está restringido a staff (`_TELEGRAM_LINKABLE_ROLES`), así que este diseño
+> refleja la intención que el código ya tenía. Lo que falta es que exista el bot que envía.
+
+### Task 0.2 — Configuración nueva
+
+- [ ] **Añadir** `telegram_notification_bot_username` a `core/config.py`: hoy el deep link usa
+      `telegram_bot_username` (el asistente), que es justo el bot equivocado.
+- [ ] **Colocar** el token del bot de notificaciones en Railway (API **y** worker).
+- [ ] **Registrar** el webhook del bot de notificaciones.
+
+### Task 0.3 — Permiso de los avisos
+
+- [ ] **Confirmar** si los avisos de licencia reutilizan `receive_escalation_alerts` o llevan
+      permiso propio. *(propuesta: reutilizarlo)*
 
 ---
 
-## Fase 1 — Que el vínculo de usuario llegue al job
+## Fase 1 — Que el vínculo del staff llegue al job
 
-**El bug de raíz:** el job lee `users.telegram_chat_id` y **nadie escribe ese campo**; el vínculo
-vive en `telegram_user_links`.
+**El bug de raíz:** el job lee `users.telegram_chat_id` y **nadie escribe ese campo**.
 
-### Task 1.1 — Unificar el destino del vínculo
+**Con el diseño de dos bots, cada campo tiene un significado claro:**
 
-**Archivos:** `backend/app/api/routes/telegram.py` (`create_link`, ≈ línea 303),
-`backend/app/application/telegram/orchestrator.py` (≈ línea 864)
+| Dónde | Qué guarda | Para qué |
+|---|---|---|
+| `users.telegram_chat_id` | El chat del **bot de notificaciones** | **Recibir avisos** — es lo que el job lee |
+| `telegram_user_links` | El vínculo con el **asistente** | Consultar por el bot conversacional |
 
-- [ ] **Elegir** el arreglo: **(a)** que al crear el vínculo se escriba también
-      `users.telegram_chat_id`, o **(b)** que el job lea de `telegram_user_links`.
-- [ ] **Implementarlo** en **los dos** puntos que crean vínculos (endpoint manual y flujo del
-      bot), no en uno solo.
-- [ ] **Cubrir** el caso de desvincular: al desactivar el vínculo, el campo debe quedar limpio.
+> El campo `users.telegram_chat_id` **fue diseñado justo para esto**: el job ya lo lee. Lo que
+> falta es que **algo lo escriba**. No hay que cambiar el job.
 
-> **(a) es más simple** y no toca el job; **(b) es más correcto** si un usuario pudiera tener
-> varios vínculos. Decidir antes de implementar.
+### Task 1.1 — Que el bot de notificaciones atienda `/start <token>`
 
-### Task 1.2 — Test del vínculo
+**Archivo:** `backend/app/api/routes/telegram_notification_webhook.py`
 
-- [ ] **Test**: vincular un usuario y comprobar que el job de escalación **lo encuentra**.
-- [ ] **Test**: desvincular y comprobar que deja de encontrarlo.
+- [ ] **Detectar** un `/start <token>` de un usuario del sistema (hoy ese webhook solo espera
+      teléfonos de médicos y responde "escribe tu número").
+- [ ] **Validar** el token contra `telegram_link_tokens` (la tabla sirve igual: token, usuario,
+      caducidad; es agnóstica del bot).
+- [ ] **Escribir** `users.telegram_chat_id` con el `chat_id` de **ese** bot y marcar el token
+      como usado.
+- [ ] **Responder** confirmando la vinculación al canal de avisos.
+- [ ] **No romper** el flujo del médico: un `/start` **sin** token sigue pidiendo el teléfono.
+
+### Task 1.2 — El enlace apunta al bot correcto
+
+**Archivo:** `backend/app/api/routes/telegram.py` (`create_link_token`, ≈ línea 381)
+
+- [ ] **Construir** el deep link con `telegram_notification_bot_username` (configuración nueva,
+      Task 0.2) en vez de `telegram_bot_username`, que es el asistente.
+- [ ] **Decidir** si hacen falta **dos** enlaces distintos (uno por bot) o uno solo al canal de
+      avisos y el asistente se sigue vinculando como hoy. *(propuesta: dos botones en la
+      pantalla, "Vincular a avisos" y "Vincular al asistente")*
+
+### Task 1.3 — Tests
+
+- [ ] **Test**: un encargado abre el enlace del canal y `users.telegram_chat_id` queda escrito.
+- [ ] **Test**: el job de escalación **lo encuentra** y le encola el aviso.
+- [ ] **Test**: un médico que escribe su teléfono sigue vinculándose igual (no regresión).
+- [ ] **Test**: desvincular limpia el campo.
 
 ---
 
@@ -134,7 +165,7 @@ vive en `telegram_user_links`.
 | Prioridad | Fase | Qué resuelve | Riesgo | Estado |
 |---|---|---|---|---|
 | 🔴 0 | Fase 0 | Qué bot notifica | Bajo — decisión + secreto | ⬜ pendiente |
-| 🔴 1 | Fase 1 | El vínculo llega al job | Bajo | ⬜ pendiente |
+| 🔴 1 | Fase 1 | El vínculo del staff llega al job | Bajo | ⬜ pendiente |
 | 🔴 2 | Fase 2 | El médico puede vincularse | Bajo — verificación | ⬜ pendiente |
 | 🟠 3 | Fase 3 | El fallo deja de ser silencioso | Bajo | ⬜ pendiente |
 | 🟡 4 | Fase 4 | El atasco de un mes | Medio — toca datos | ⬜ pendiente |

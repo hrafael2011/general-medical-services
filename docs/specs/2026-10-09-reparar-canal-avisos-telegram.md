@@ -88,6 +88,15 @@ hay equivalente para las notificaciones**.
 | 3 | Los vínculos de usuario deben quedar donde el job los lea | Hoy se guardan en un sitio y se leen en otro |
 | 4 | Sin destinatario ⇒ **aviso visible**, no silencio | El fallo silencioso es la causa de que esto llevara un mes sin detectarse |
 | 5 | Las 92 filas atascadas **no se borran** | Son evidencia; se reprocesan o se marcan con criterio y quedan auditadas |
+| 6 | **Dos bots con roles separados** (confirmado por el usuario) | `@TurnosMedicosBot` = canal: lo comparten **médicos, encargados y admins**. `@MedicalSchedule_bot` = asistente: **solo encargados y admins** |
+| 7 | El **staff se vincula a los dos**: al canal para recibir avisos, al asistente para consultar | Hoy solo se vincula al asistente, que es justo el que **no** envía |
+| 8 | Se reutiliza el permiso **`receive_escalation_alerts`** | Los que ya reciben escalaciones son exactamente los que deben recibir estos avisos; crear un permiso nuevo no aporta *(pendiente de confirmar)* |
+
+> **Por qué dos bots y no uno.** El asistente ya está restringido a staff
+> (`_TELEGRAM_LINKABLE_ROLES = {"admin", "encargado"}`), y **un médico no es un usuario del
+> sistema**: `UserRole` solo tiene `admin` y `encargado`. Separar el canal transaccional de la
+> herramienta de consulta es el patrón correcto; un solo bot obligaría a los médicos a convivir
+> con un asistente que no pueden usar.
 
 ## Requisitos
 
@@ -106,6 +115,10 @@ hay equivalente para las notificaciones**.
 - **R7** — Las 92 notificaciones y 92 confirmaciones atascadas quedan en un estado coherente y
   auditable, con un criterio explícito (no un borrado masivo).
 - **R8** — Sin cambios en el comportamiento del bot conversacional.
+- **R9** — El enlace de vinculación del **staff** apunta al bot **de notificaciones**, no al
+  asistente. Requiere una configuración nueva con el nombre de usuario de ese bot
+  (`telegram_notification_bot_username`), que hoy no existe.
+- **R10** — El staff puede estar vinculado **a los dos bots a la vez**, sin que uno pise al otro.
 
 ## Criterios de aceptación
 
