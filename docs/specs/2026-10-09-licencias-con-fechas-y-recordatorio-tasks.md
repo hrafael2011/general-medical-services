@@ -21,10 +21,9 @@ re-arma el aviso sin columna nueva**.
 
 **Tech Stack:** FastAPI, SQLAlchemy, React + TanStack Query, scheduler del proyecto, pytest, vitest
 
-**Estado:** 🟡 **Implementado (Fases 0 a 5), pendiente de desplegar y verificar en vivo.** El canal
-de Telegram del que depende ya está reparado y desplegado; la campana funciona sin él. Falta
-aplicar la migración en producción (la corre el propio despliegue) y ejecutar la corrección de
-los 2 registros inconsistentes, que ya está escrita y probada contra una base desechable.
+**Estado:** Las **Fases 0 a 6** están hechas, desplegadas y verificadas en producción
+(2026-10-10). Las **Fases 7 a 11** son la **extensión v1.3.0** —*una sola funcionalidad*—:
+**aceptadas por el usuario y pendientes de autorización para implementar**.
 
 ---
 
@@ -272,6 +271,93 @@ consulta que usa (`list_active_restrictions_for_doctor`): nada de lógica parale
 
 ---
 
+## Extensión v1.3.0 — Una sola funcionalidad
+
+> **Decidido por el usuario (2026-10-10).** Hoy hay **dos** formas de decir "este médico no está
+> disponible" y dejan estados distintos: es lo que produjo los datos inconsistentes. Se unifican en
+> una sola: la **ausencia**. El estado "activo para servicio" deja de ponerse a mano y se **deriva**
+> de ella. **Nada de esta extensión está implementado todavía.**
+
+## Fase 7 — Arreglar la generación (BLOQUEANTE, va primero)
+
+**El bug:** `generation_service.py` carga las restricciones **una sola vez con la fecha del día 1**
+(`list_active_restrictions_for_doctor(d.id, on_date=first_day)`, en los dos sitios: ≈126 y ≈319).
+Esa consulta descarta lo que empiece después de esa fecha, así que una licencia del **3 al 10** no
+entra en el contexto, `CalendarEngine._has_hard_block` no la ve, y **el generador asigna turnos a un
+médico de licencia**. La asignación manual no tiene el fallo porque consulta por la fecha del turno.
+
+- [ ] **Cargar** las restricciones de forma que cubran **todo el mes** que se va a generar (o
+      consultar por día, como hacen `_run_eligibility`, `_run_eligibility_with_force` y
+      `get_eligible_doctors_for_slot`).
+- [ ] **Comprobar** los **dos** sitios, no solo uno.
+- [ ] **Test de regresión**: una ausencia del **20 al 25** → el generador **no** asigna dentro de
+      ese rango y **sí** puede asignar fuera. Comprobado por mutación (que falle sin el arreglo).
+- [ ] **Confirmar** que no se degrada el rendimiento de la generación (una consulta por médico, no
+      una por médico y día, si se puede evitar).
+
+> Es lo único de toda la spec que es un **defecto**, no una decisión. Hoy pasa desapercibido porque
+> el flag tapa el hueco; con una sola puerta, dejaría de taparlo.
+
+## Fase 8 — Una sola puerta en la interfaz
+
+- [ ] **Quitar** el bloque *"Razón para desactivar servicio"* del perfil del médico (el desplegable
+      de motivo y el botón "Desactivar para servicio").
+- [ ] **Quitar** el botón **"Reactivar servicio"**: su equivalente pasa a ser **levantar la
+      ausencia**, que ya existe en la sección *No disponible*.
+- [ ] **Quitar** la casilla *"¿Hace servicio?"* del formulario de edición y **dejar de mandar
+      `service_active`** en el `PATCH`. *(Hoy además está rota: al desmarcarla el backend responde
+      `reason_required` porque exige motivo y el formulario no lo manda.)*
+- [ ] **Dejar** la sección *No disponible* como **única entrada**, con su formulario cubriendo los
+      dos casos: **con fechas** y **Indefinido**.
+- [ ] **Revisar los textos** de la pantalla para que "Indefinido" explique que el médico queda fuera
+      hasta que se levante la ausencia (no que "no avisa" a secas).
+
+## Fase 9 — El estado derivado
+
+- [ ] **Recalcular** `service_active` como **valor calculado**: activo = **sin ausencia vigente
+      hoy** (no levantada, `starts_at <= hoy` y `ends_at` nulo o `>= hoy`).
+- [ ] **Hacerlo al escribir**: registrar, editar o levantar una ausencia recalcula ese médico.
+- [ ] **Hacerlo al pasar la fecha**: el job del recordatorio (que ya corre cada 30 minutos)
+      recalcula los médicos cuya ausencia **empieza o termina** ese día. Sin esto, el estado solo
+      cambiaría cuando alguien tocara la ficha.
+- [ ] **Copiar** el motivo y el detalle de la ausencia vigente a `service_inactive_reason_id` y
+      `service_inactive_detail`, para que la vista **por departamento** siga explicando por qué ese
+      médico no está (hoy esos campos solo los llena la desactivación manual).
+- [ ] **Revisar los consumidores visibles** y cubrirlos con tests: KPI del tablero, listado de
+      médicos, asistente de Telegram (22 consultas), resumen de reportes y vista por departamento.
+- [ ] **Decidir** qué pasa con las **asignaciones ya existentes** en calendarios en borrador dentro
+      del rango: **no se quitan solas** (decisión 14). Confirmar que se acepta que queden como hueco
+      visible para reemplazar.
+
+> **Por qué así y no reescribiendo las consultas:** el flag se lee en **83 sitios del backend y 29
+> del frontend**, incluido el SQL del asistente. Mantenerlo como valor calculado deja esos sitios
+> funcionando **sin tocarlos**; reescribirlos es mucho más caro para el mismo resultado.
+
+## Fase 10 — Convertir las ausencias actuales
+
+- [ ] **Script** con `--dry-run`, idempotente y auditado (como
+      `scripts/fix_absence_inconsistencies.py`): por cada médico fuera de servicio **sin ausencia
+      registrada** (hoy 29), crear una ausencia **Indefinida** con su motivo y detalle actuales
+      (`ends_at = None`), y dejarlo registrado en la auditoría como "Sistema".
+- [ ] **Verificar en simulación** contra producción: cuántos son, con qué motivo y detalle, y qué
+      quedaría después.
+- [ ] **Ejecutar** en producción y comprobar que **ningún** médico queda "fuera de servicio sin
+      ausencia" y que los 29 siguen fuera (no se reactiva a nadie por accidente).
+
+## Fase 11 — Tests y verificación en vivo
+
+- [ ] **Generación**: ausencia de mitad de mes respetada (Fase 7), con test de mutación.
+- [ ] **Una sola puerta**: no queda ningún control que ponga `service_active` a mano (test de
+      interfaz: el perfil no ofrece desactivar, y el formulario no manda el campo).
+- [ ] **Indefinido**: equivale a la desactivación de antes (AC12).
+- [ ] **No destruye nada**: disponibilidad, áreas, asignaciones y misiones intactas (AC13).
+- [ ] **Estado derivado**: con ausencia vigente, el tablero y el listado lo cuentan como no activo;
+      al cumplirse la fecha, vuelve solo (AC15).
+- [ ] **En vivo**: registrar una ausencia que empiece **el 20** de un mes y generar ese mes para
+      comprobar que no aparece; levantar una Indefinida y ver que vuelve a contar como activo.
+
+---
+
 ## Orden de ejecución resumido
 
 | Prioridad | Fase | Qué resuelve | Riesgo | Estado |
@@ -283,6 +369,11 @@ consulta que usa (`list_active_restrictions_for_doctor`): nada de lógica parale
 | 🟠 4 | Fase 4 | La pantalla | Medio — unifica dos representaciones | ✅ hecho |
 | 🟡 5 | Fase 5 | Cobertura | Bajo | ✅ hecho |
 | 🟡 6 | Fase 6 | Verificación en vivo | Bajo | ✅ hecha (salvo el envío real por Telegram: no hay nadie vinculado) |
+| 🔴 7 | Fase 7 | **La generación respeta la ausencia** | **Alto si se omite** — es un defecto en producción | ⬜ pendiente (bloqueante) |
+| 🔴 8 | Fase 8 | Una sola puerta en la interfaz | Bajo | ⬜ pendiente |
+| 🟠 9 | Fase 9 | El estado se deriva de la ausencia | Medio — cambia lo que cuentan los contadores | ⬜ pendiente |
+| 🟠 10 | Fase 10 | Convertir las 29 ausencias actuales | Medio — toca datos | ⬜ pendiente |
+| 🟡 11 | Fase 11 | Tests y verificación en vivo | Bajo | ⬜ pendiente |
 
 ## Archivos a tocar
 
@@ -293,6 +384,12 @@ consulta que usa (`list_active_restrictions_for_doctor`): nada de lógica parale
 | `backend/app/api/routes/availability.py` | añadir — `PATCH /restrictions/{id}` (editar la ausencia) |
 | `scripts/fix_absence_inconsistencies.py` | **nuevo** — cierra el hueco de datos, con `--dry-run` |
 | `frontend/src/features/doctors/AbsenceSection.tsx` | **nuevo** — sección "No disponible" |
+| `backend/app/application/calendars/generation_service.py` | **corregir** — el bug de la Fase 7 (dos sitios) |
+| `frontend/src/features/doctors/DoctorList.tsx` | quitar — bloque "Razón para desactivar servicio" y botón reactivar |
+| `frontend/src/features/doctors/DoctorForm.tsx` | quitar — casilla "¿Hace servicio?" y el `service_active` del `PATCH` |
+| `backend/app/application/doctors/service.py` | añadir — recalcular el estado desde las ausencias |
+| `backend/app/application/scheduler/jobs.py` | añadir — recalcular al empezar/terminar una ausencia |
+| `scripts/convert_deactivations_to_absences.py` | **nuevo** — convierte las 29, con `--dry-run` |
 | `migrations/versions/` | **nueva** — la única migración de esta spec |
 | `backend/app/api/routes/availability.py` | revisar — probablemente sin cambios |
 | `backend/app/application/availability/service.py` | revisar/ajustar — `add_restriction` |
@@ -333,3 +430,4 @@ consulta que usa (`list_active_restrictions_for_doctor`): nada de lógica parale
 | 2026-10-10 | Despliegue | `2592305` a producción: API y worker en verde, `/api/health` 200, migración `a2446a0123b3` aplicada (el propio despliegue la corre) y DIRECCION + GERENCIAS MEDICAS clasificados como "sin regreso". Frontend desplegado (bundle con la pantalla nueva). |
 | 2026-10-10 | Datos | Corregidos los **2** médicos inconsistentes en producción: ahora hay **0** fuera de servicio sin motivo y **0** fuera de servicio en misiones; los 29 desactivados siguen intactos. |
 | 2026-10-10 | Fase 6 | Verificación en vivo en producción con un médico real: solo bloquea dentro del rango, avisa 2 días antes en la campana, no se repite, re-arma al editar la fecha, Indefinido no genera nada, y se levantó todo al terminar. |
+| 2026-10-10 | Extensión v1.3.0 | El usuario decide **unificar las dos funcionalidades en una**: la ausencia es la única puerta y el estado "activo para servicio" se deriva de ella. Acepta que registrar una ausencia no borre disponibilidad/áreas/asignaciones ni toque misiones. Se documenta el **bug de la generación** como bloqueante previo. **Pendiente de autorización.** |

@@ -1,7 +1,7 @@
 ---
 spec: licencias-con-fechas-y-recordatorio
-version: 1.2.0
-status: implemented
+version: 1.3.0
+status: accepted
 created: 2026-10-09
 updated: 2026-10-10
 ---
@@ -16,6 +16,12 @@ encargado o administrador reciba un aviso: *"a la Dra. X se le acaba la licencia
 reintegra el día N"*.
 
 **Tareas de implementación:** [2026-10-09-licencias-con-fechas-y-recordatorio-tasks.md](2026-10-09-licencias-con-fechas-y-recordatorio-tasks.md)
+
+> **Estado (2026-10-10).** Las **Fases 0 a 6** están implementadas, desplegadas y verificadas en
+> producción (ausencias con fechas, "Indefinido", recordatorio y pantalla). La **extensión v1.3.0**
+> —*una sola funcionalidad*, más abajo— está **aceptada por el usuario y pendiente de
+> implementar**: unifica la desactivación y la ausencia en una única puerta y deriva de ella el
+> estado "activo para servicio".
 
 **Depende de:** [Reparar el canal de avisos por Telegram](2026-10-09-reparar-canal-avisos-telegram.md)
 — sin el canal, el aviso no llega a nadie.
@@ -193,6 +199,68 @@ Eso solo lo hace bien el mecanismo con fechas.
 > migración"**. Se puede recortar (que el encargado elija siempre) si prefieres no migrar; pierde
 > comodidad pero no funcionalidad.
 
+### Extensión v1.3.0 — Una sola funcionalidad (ACEPTADA, pendiente de implementar)
+
+> **Se lee junto con la decisión 10, no en su contra.** La decisión 10 unificó el *efecto* de las
+> dos puertas (mismo motivo, mismas misiones, misma auditoría). La decisión 13 va un paso más allá y
+> **elimina una de las dos puertas**: mantener dos controles distintos para el mismo eje fue
+> justamente lo que produjo las inconsistencias.
+
+**Decidido por el usuario (2026-10-10):** no debe haber **dos formas** de decir "este médico no
+está disponible". La **ausencia** —con fechas o Indefinida— es la **única puerta**, y el estado
+"activo para servicio" se **deduce** de ella.
+
+| # | Decisión | Razón |
+|---|---|---|
+| 13 | La **ausencia es la única puerta**. Desaparecen el bloque *"Razón para desactivar servicio"* y la casilla *"¿Hace servicio?"* del formulario | Tener dos puertas para lo mismo es lo que produjo los datos inconsistentes de producción; con una sola, el estado no puede divergir |
+| 14 | Registrar una ausencia **no** borra disponibilidad, ni áreas, ni asignaciones, y **no** saca de misiones | Lo que se borra hay que volver a cargarlo, y las misiones son el eje 3, que esta spec no toca. *(Aceptado por el usuario)* |
+| 15 | `service_active` **deja de ponerse a mano** y se **deriva**: "activo para servicio" = **sin ausencia vigente hoy** | Si nada apaga el flag, el tablero, el asistente y los reportes seguirían diciendo "activo" de un médico de licencia |
+| 16 | **Primero** se arregla la carga de restricciones de la generación automática | No es una decisión de diseño: es un **bug** que hoy tapa el flag y que con una sola puerta pasa a ser crítico |
+
+#### El defecto que obliga a arreglar la generación antes
+
+`generation_service.py` carga las restricciones **una sola vez, con la fecha del día 1** del mes
+(`list_active_restrictions_for_doctor(d.id, on_date=first_day)`, dos sitios: ≈línea 126 y ≈línea
+319), y esa consulta descarta lo que empiece **después** de esa fecha. Una licencia del **3 al 10**
+nunca entra en el contexto, así que `CalendarEngine._has_hard_block` no la ve y **el generador
+reparte turnos a un médico de licencia**.
+
+Las otras tres rutas de asignación (`_run_eligibility`, `_run_eligibility_with_force`,
+`get_eligible_doctors_for_slot`) sí consultan por la **fecha del turno**, y por eso **no** tienen el
+fallo: la asignación manual ya respeta la ausencia. El generador es el único que no.
+
+#### Cómo queda
+
+- Una sola entrada: **Registrar ausencia**, con **desde/hasta** o **Indefinido**.
+- **Con fecha**: fuera solo en el rango, vuelve solo, con aviso X días antes.
+- **Indefinido**: fuera desde la fecha **hasta que alguien levante la ausencia**, sin aviso. Es
+  exactamente lo que hoy hace "Desactivar para servicio".
+- **El motivo** sale del mismo catálogo (con `expects_return` proponiendo cuál corresponde).
+- **`service_active` se deriva**: deja de ser un botón y pasa a ser un cálculo.
+- Los **29** médicos que hoy están fuera por el flag pasan a ser ausencias **Indefinidas** con su
+  motivo, así que tampoco necesitan el botón "Reactivar": se levanta la ausencia.
+
+#### Cómo se deriva el estado (propuesta a confirmar al autorizar)
+
+El flag se mantiene como **valor calculado**, no manual:
+
+1. **Al escribir**: registrar, editar o levantar una ausencia recalcula el estado de ese médico.
+2. **Al pasar la fecha**: un job (el del recordatorio, que ya corre cada 30 minutos) recalcula los
+   médicos cuya ausencia empieza o termina ese día.
+
+Así los **83 sitios del backend y 29 del frontend** que hoy leen `service_active` siguen
+funcionando **sin tocarlos**, y dejan de mentir. La alternativa —reescribir cada consulta— toca
+también el SQL del asistente (22 consultas) y es mucho más cara para el mismo resultado.
+
+#### Consecuencias que hay que asumir (y una que conviene confirmar aparte)
+
+- Las asignaciones **ya existentes** en calendarios en **borrador** que caigan dentro del rango
+  **no se quitan solas** (decisión 14). Quedan visibles como hueco para que el encargado las
+  reemplace; el generador ya no las producirá. Es la contrapartida de no borrar nada
+  automáticamente y **conviene confirmarla explícitamente**.
+- Los contadores pasan a decir **"disponible ahora"**: al entrar en licencia el número de médicos
+  "activos para servicio" baja, y **sube solo** al cumplirse la fecha.
+
 ## Requisitos
 
 - **R1** — En la ficha del médico hay una sección **No disponible** que lista lo vigente y lo
@@ -227,6 +295,19 @@ Eso solo lo hace bien el mecanismo con fechas.
   independientes.
 - **R15** — Se corrige el **hueco de datos** detectado: hoy hay médicos fuera de servicio sin
   motivo registrado porque la puerta B no lo pedía.
+- **R16** — Existe **una sola** forma de registrar que un médico no está disponible: la
+  **ausencia** (con fechas o Indefinida). No queda ningún otro control que desactive el servicio.
+- **R17** — La ausencia **Indefinida** cubre el caso que hoy representa el flag: el médico queda
+  fuera desde la fecha indicada hasta que alguien levante la ausencia, y no genera recordatorio.
+- **R18** — Registrar una ausencia **no** borra la disponibilidad del médico, ni sus áreas
+  permitidas, ni sus asignaciones existentes, y **no** cambia su participación en misiones.
+- **R19** — "Activo para servicio" **se deriva**: un médico está activo para servicio si **no tiene
+  una ausencia vigente hoy**. Deja de ser un valor que se pone a mano.
+- **R20** — La **generación automática de calendario** respeta las ausencias **por la fecha del
+  turno**, igual que la asignación manual: una ausencia que empiece después del día 1 del mes
+  bloquea los días de su rango.
+- **R21** — Los médicos que hoy están fuera por el flag (29 en producción) quedan representados
+  como ausencias **Indefinidas** con su motivo y detalle, sin pérdida de información y auditado.
 
 ## Criterios de aceptación
 
@@ -276,6 +357,28 @@ Eso solo lo hace bien el mecanismo con fechas.
 - **Dado** un médico al que solo se le cambia la participación en misiones,
 - **entonces** **no** se dispara ningún aviso de reintegro de servicio.
 
+**AC11 — Una sola puerta**
+- **Dado** un médico activo, **entonces** la única forma de dejarlo sin servicio es registrar una
+  ausencia: no existe ningún otro control que lo desactive.
+
+**AC12 — Indefinido equivale a la desactivación de antes**
+- **Dado** un médico con una ausencia Indefinida, **entonces** queda fuera desde esa fecha, **no**
+  vuelve solo y **no** genera aviso, hasta que alguien levante la ausencia.
+
+**AC13 — Registrar una ausencia no destruye nada**
+- **Dado** un médico con disponibilidad, áreas y asignaciones, **cuando** se le registra una
+  ausencia, **entonces** conserva su disponibilidad, sus áreas y sus asignaciones, y su
+  participación en misiones no cambia.
+
+**AC14 — El generador respeta la ausencia de mitad de mes**
+- **Dado** un médico con una ausencia del 20 al 25, **cuando** se genera el calendario de ese mes,
+- **entonces** no se le asigna ningún turno dentro de ese rango, y sí puede recibir fuera de él.
+
+**AC15 — "Activo para servicio" dice la verdad**
+- **Dado** un médico con una ausencia vigente, **entonces** el tablero, el listado y las respuestas
+  del asistente lo cuentan como **no** activo para servicio, y vuelve a contarse como activo **solo**
+  al cumplirse la fecha o al levantar la ausencia.
+
 ## Contrato
 
 Se reutilizan los endpoints existentes de restricciones (`POST /doctors/{id}/restrictions`,
@@ -315,11 +418,16 @@ el permiso correspondiente — el mismo mecanismo que ya usa la escalación de c
 | **Confundir el eje 2 con el 3**: creer que una licencia también saca de misiones | Se unifican las puertas (R11) para que el efecto sea el mismo y predecible |
 | **Escribir reglas por el `code` del motivo** | El catálogo es editable: cualquier regla fija se rompe al añadir o renombrar un motivo. Todo se decide por el **atributo editable**, nunca por el código |
 | Un motivo nuevo sin clasificar | Nace con un valor por defecto; el admin lo ajusta y la pantalla siempre permite cambiarlo a mano |
+| **La generación ignoraba las ausencias de mitad de mes** | Fase 7, **antes que nada**: es el bug que hacía parecer imprescindible el flag |
+| Convertir 29 médicos a ausencias Indefinidas | Script con `--dry-run`, idempotente y auditado; se compara antes y después contra producción |
+| Las asignaciones ya hechas dentro del rango no se quitan solas | Decisión 14: quedan como hueco visible para reemplazar. **Confirmar aparte** |
+| Derivar el estado cambia lo que cuentan 83 lecturas del backend y 29 del frontend | Se mantiene como valor calculado en un solo sitio (no se reescriben las consultas) y se cubren con tests los consumidores visibles: tablero, asistente, reportes y vista por departamento |
 
 ## Changelog
 
 | Version | Date | Issue | Trigger | Resumen |
 |---|---|---|---|---|
 | 1.0.0 | 2026-10-09 | — | Nuevo requerimiento | Se añade fecha de inicio y de regreso (o **indefinido**) a la ausencia de un médico, reutilizando el mecanismo de restricciones que ya existe y ya bloquea asignaciones por rango, sin migración. Se programa un recordatorio X días antes del reintegro por Telegram y campana, con re-armado al editar la fecha. Depende de reparar el canal de avisos. |
+| 1.3.0 | 2026-10-10 | — | Decisión del usuario | **Una sola funcionalidad.** El usuario decide que no haya dos formas de decir "no está disponible": la **ausencia** (con fechas o Indefinida) es la única puerta, y "activo para servicio" se **deriva** de ella (sin ausencia vigente). Se acepta que registrar una ausencia no borre disponibilidad, áreas ni asignaciones, y que no toque misiones. Se documenta el **bug que obliga a arreglar la generación primero**: carga las restricciones con la fecha del día 1 del mes, así que una ausencia que empiece después no bloquea nada en la generación automática —el flag lo tapaba, y con una sola puerta pasa a ser crítico—. Se añaden R16-R21 y AC11-AC15. **Aceptada, pendiente de autorización para implementar.** |
 | 1.2.0 | 2026-10-10 | — | Implementación | Se implementan las Fases 0 a 5. **Las dos puertas de desactivación quedan unificadas**: desactivar exige motivo (validado contra el catálogo y contra el sexo del médico), saca de misiones, registra el mismo evento de auditoría y crea las mismas alertas, se entre por donde se entre. Se añade `expects_return` al catálogo de motivos (migración `a2446a0123b3`, verificada en base desechable con los 8 códigos reales) y se hace editable en la pantalla de Catálogos, para que la pantalla sepa proponer "Indefinido" sin que ninguna regla dependa del `code`. Se añade `PATCH /restrictions/{id}` —**el plan asumía que editar ya era posible y no lo era**— para poder editar la fecha, que es lo que re-arma el aviso. El recordatorio es el quinto job del worker, con alerta en la campana y aviso por Telegram, idempotente por restricción + fecha + destinatario. La pantalla "No disponible" unifica las dos representaciones del eje 2. Detalle en el archivo de tareas. |
 | 1.1.0 | 2026-10-09 | — | Investigación | Se descubre que **"inhabilitado" son ocho ejes independientes**, no uno, y se documenta el estado real de producción (73 médicos, 29 fuera de servicio, 32 fuera de misiones, catálogo real de 8 motivos todos `hard_block`). Se acota el alcance al eje 2 y se añaden dos correcciones de fondo: **unificar las dos puertas** de desactivación —que hoy dejan motivo, misiones y auditoría distintos, y que explican los datos inconsistentes— y que **el motivo indique si espera regreso**, para que "indefinido" deje de ser un caso borde. "Indefinido" pasa a ser de primera clase: cubre 2 de los 8 motivos reales. |
