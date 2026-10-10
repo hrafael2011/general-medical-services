@@ -4,8 +4,12 @@
 
 **Spec:** [2026-10-09-licencias-con-fechas-y-recordatorio.md](2026-10-09-licencias-con-fechas-y-recordatorio.md)
 
-**Goal:** Registrar la ausencia de un médico con fecha de inicio y de regreso (o **indefinido**), y
-avisar por Telegram y campana **X días antes** del reintegro.
+**Goal:** Registrar la ausencia de un médico —**eje 2, "fuera de servicio"**— con fecha de inicio
+y de regreso (o **indefinido**), y avisar por Telegram y campana **X días antes** del reintegro.
+
+> **"Inhabilitado" son ocho ejes independientes** (sistema, servicio, misiones, pool,
+> restricciones, disponibilidad, áreas, borrado). Esta spec trabaja **solo el eje 2**; los otros
+> siguen igual. La Fase 0 corrige los dos defectos que la investigación destapó.
 
 **Architecture:** Se reutiliza `doctor_restrictions`, que ya tiene `starts_at` / `ends_at` y que el
 motor de asignación **ya respeta** — así el médico queda fuera **solo en ese rango** y vuelve solo.
@@ -19,6 +23,56 @@ re-arma el aviso sin columna nueva**.
 
 **Estado:** 🔴 **Pendiente.** Depende de [reparar el canal de Telegram](2026-10-09-reparar-canal-avisos-telegram-tasks.md):
 sin canal, el aviso no llega a nadie.
+
+---
+
+## Fase 0 — Correcciones previas (antes de construir encima)
+
+> Estas dos correcciones salieron de investigar **los ocho ejes** de inhabilitación. Sin ellas, la
+> función nueva se apoyaría en una base que ya está inconsistente.
+
+### Task 0.1 — Unificar las dos puertas de desactivación
+
+**Archivos:** `backend/app/application/doctors/service.py` (`deactivate_service` ≈ línea 491 y
+`update` ≈ línea 296)
+
+Hoy hay **dos caminos** para lo mismo y dejan resultados distintos:
+
+| | Botón "Desactivar" | Editar el médico |
+|---|---|---|
+| Motivo | ✅ | ❌ |
+| Quita de misiones | ✅ | ❌ |
+| Auditoría | `doctor_service_deactivated` | `doctor_updated` |
+
+Eso explica los datos reales de producción: **2 médicos sin motivo** y **2 fuera de servicio pero
+todavía en misiones**.
+
+- [ ] **Decidir** cuál es el comportamiento correcto (propuesta: el de la puerta A, que es el más
+      completo).
+- [ ] **Hacer que `update`**, cuando recibe `service_active=False`, exija y guarde motivo y
+      sincronice misiones.
+- [ ] **Unificar el evento de auditoría** para que el historial no dependa de por dónde se entró.
+- [ ] **Revisar los datos existentes**: los 2 sin motivo y los 2 en misiones fuera de servicio.
+
+### Task 0.2 — Que el motivo diga si espera regreso
+
+**Archivos:** `backend/app/infrastructure/db/models/catalogs.py` (o `doctors.py`),
+migración nueva, `backend/app/domain/catalogs.py`
+
+- [ ] **Añadir** al catálogo de motivos un campo del tipo `expects_return` (booleano).
+- [ ] **Migración** que lo agregue y **clasifique los 8 motivos de producción**:
+      *con regreso* → LICENCIAS MEDICAS, LICENCIA PRE Y POST NATAL, VACACIONES,
+      PRESTADO BATALLAS DE LAS CARRERAS; *sin regreso* → DIRECCION, GERENCIAS MEDICAS;
+      *a decidir* → CONCURSO, OTROS.
+- [ ] **Exponerlo** en la API del catálogo.
+
+> ⚠️ Es la **única migración** de esta spec. Si prefieres no migrar, se recorta: la pantalla
+> siempre pregunta y el encargado elige. Pierde comodidad, no funcionalidad.
+
+### Task 0.3 — Confirmar la clasificación con el usuario
+
+- [ ] **Validar** la clasificación de los 8 motivos: **es criterio de negocio, no de código**.
+      En particular: ¿CONCURSO y OTROS esperan regreso?
 
 ---
 
@@ -155,6 +209,7 @@ sin canal, el aviso no llega a nadie.
 
 | Prioridad | Fase | Qué resuelve | Riesgo | Estado |
 |---|---|---|---|---|
+| 🔴 0 | Fase 0 | Unificar puertas + motivo con regreso | **Medio** — toca datos y trae la única migración | ⬜ pendiente |
 | 🔴 1 | Fase 1 | Fechas e indefinido en la API | Bajo — el mecanismo ya existe | ⬜ pendiente |
 | 🟠 2 | Fase 2 | Los días de aviso | Bajo | ⬜ pendiente |
 | 🟠 3 | Fase 3 | El recordatorio | **Medio** — idempotencia y re-armado | ⬜ pendiente |
@@ -166,6 +221,9 @@ sin canal, el aviso no llega a nadie.
 
 | Archivo | Tipo |
 |---|---|
+| `backend/app/application/doctors/service.py` | corregir — unificar las dos puertas |
+| `backend/app/infrastructure/db/models/doctors.py` | añadir — `expects_return` en el motivo |
+| `migrations/versions/` | **nueva** — la única migración de esta spec |
 | `backend/app/api/routes/availability.py` | revisar — probablemente sin cambios |
 | `backend/app/application/availability/service.py` | revisar/ajustar — `add_restriction` |
 | `backend/app/application/scheduler/jobs.py` | añadir — el job de recordatorio |
@@ -185,11 +243,17 @@ sin canal, el aviso no llega a nadie.
    por Telegram no llega.
 2. **Los días de aviso son globales**, no por registro (decisión 7). Si necesitas plazos distintos
    por caso, es una columna nueva + migración, en otro cambio.
-3. **Los 27 desactivados actuales** se quedan como están (decisión 9).
+3. **Los desactivados actuales** se quedan como están (decisión 9), pero la Fase 0 propone revisar
+   los 2 sin motivo y los 2 que siguen en misiones fuera de servicio.
+4. **La clasificación de los 8 motivos** (Task 0.3) es criterio de negocio: falta tu confirmación
+   para CONCURSO y OTROS.
+5. **La única migración** de esta spec es la del campo `expects_return` (decisión 11). Se puede
+   recortar si prefieres no migrar.
 4. **Nada implementado todavía.**
 
 ## Registro de avance
 
 | Fecha | Task | Nota |
 |---|---|---|
-| 2026-10-09 | — | Spec y tasks creadas. Decisiones confirmadas: fuera solo en el rango, aviso por ambos canales, indefinido entre las opciones, editar re-arma, los 27 no se tocan, solo Telegram, **2 días de aviso por defecto**. |
+| 2026-10-09 | — | Spec y tasks creadas. Decisiones confirmadas: fuera solo en el rango, aviso por ambos canales, indefinido entre las opciones, editar re-arma, los desactivados no se tocan, solo Telegram, **2 días de aviso por defecto**. |
+| 2026-10-09 | Investigación | Se descubren **8 ejes** de inhabilitación, el catálogo real de 8 motivos (todos `hard_block`) y el estado de los 73 médicos. Se añaden la Fase 0 (unificar puertas + `expects_return`) y los requisitos R11-R15. |
