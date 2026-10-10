@@ -236,15 +236,39 @@ migración nueva, `backend/app/domain/catalogs.py`
 
 ---
 
-## Fase 6 — Verificación en vivo
+## Fase 6 — Verificación en vivo ✅ HECHA (2026-10-10, en producción)
 
-- [ ] **Registrar** una licencia que empiece en el futuro y comprobar que el médico **sigue
-      asignable** antes de esa fecha.
-- [ ] **Intentar asignarlo** dentro del rango y comprobar el rechazo.
-- [ ] **Provocar** un aviso (fecha de regreso dentro de la ventana) y confirmar que **llega** por
-      Telegram y aparece en la campana.
-- [ ] **Editar** la fecha y confirmar que vuelve a avisar.
-- [ ] **Confirmar** que una ausencia **Indefinida** no genera nada.
+Se hizo con **un médico real** (ANGIE VEGA QUITERIO) y una ausencia real de 2 días
+(2026-10-11 → 2026-10-12), que se **levantó al terminar** y cuya alerta de prueba se descartó, para
+no dejar ruido en la campana. El bloqueo se comprobó llamando al **mismo método del motor de
+calendario** que decide en producción (`CalendarEngine._has_hard_block`), alimentado por la misma
+consulta que usa (`list_active_restrictions_for_doctor`): nada de lógica paralela.
+
+| # | Qué se comprobó | Resultado |
+|---|---|---|
+| 1 | Antes de la fecha de inicio el médico sigue asignable | ✅ sin bloqueo el 10, 11, 12 y 13 antes de crear la ausencia |
+| 2 | Dentro del rango se rechaza | ✅ bloqueado el 11 y el 12 |
+| 3 | Fuera del rango vuelve solo, sin reactivar nada | ✅ sin bloqueo el 10 (antes) y el 13 (después) |
+| 4 | El aviso aparece en la campana con quién, por qué y cuándo | ✅ alerta abierta: *"…se le acaba la ausencia el 2026-10-12. Motivo: LICENCIAS MEDICAS. Se reintegra en 2 días."* |
+| 5 | No se repite al correrlo otra vez | ✅ 2ª corrida: `alerts_created: 0`, una sola alerta |
+| 6 | Editar la fecha re-arma | ✅ la alerta se reescribió con la fecha nueva |
+| 7 | Una ausencia Indefinida no genera nada | ✅ `{'reminders': 0}` |
+| 8 | Levantarla la quita de en medio | ✅ sin bloqueo en ninguna de las 4 fechas |
+
+- [x] **Registrar** una licencia que empiece en el futuro y comprobar que el médico sigue asignable
+      antes de esa fecha (fila 1).
+- [x] **Intentar asignarlo** dentro del rango y comprobar el rechazo (fila 2, y fila 3 al salir).
+- [ ] ⚠️ **Provocar un aviso y confirmar que LLEGA por Telegram**: **no se pudo comprobar el envío**,
+      porque **sigue sin haber nadie con Telegram vinculado** (0 de 5 usuarios). Lo que sí está
+      comprobado es que el job **encola** el aviso cuando hay destinatario (tests con destinatario
+      real en base de datos) y que en producción quedó `0 encolados` justamente porque no hay
+      ninguno. **Este es el único punto del spec que queda abierto**, y no depende del código.
+- [x] **Editar** la fecha y confirmar que vuelve a avisar (fila 6).
+- [x] **Confirmar** que una ausencia Indefinida no genera nada (fila 7).
+
+> El cron del worker (18:30 UTC) ejecutó los **cinco** jobs, incluido
+> `send_license_return_reminders -> {'reminders': 0, 'alerts_created': 0}`, sin errores: el job
+> nuevo corre en producción.
 
 ---
 
@@ -258,7 +282,7 @@ migración nueva, `backend/app/domain/catalogs.py`
 | 🟠 3 | Fase 3 | El recordatorio | **Medio** — idempotencia y re-armado | ✅ hecho |
 | 🟠 4 | Fase 4 | La pantalla | Medio — unifica dos representaciones | ✅ hecho |
 | 🟡 5 | Fase 5 | Cobertura | Bajo | ✅ hecho |
-| 🟡 6 | Fase 6 | Verificación en vivo | Bajo | ⬜ pendiente de desplegar |
+| 🟡 6 | Fase 6 | Verificación en vivo | Bajo | ✅ hecha (salvo el envío real por Telegram: no hay nadie vinculado) |
 
 ## Archivos a tocar
 
@@ -306,3 +330,6 @@ migración nueva, `backend/app/domain/catalogs.py`
 | 2026-10-10 | Fases 1-2 | `PATCH /restrictions/{id}` (editar la ausencia, que no existía) con validación de fechas, motivo y sexo. Ajuste `notifications.license_reminder_days` (2 por defecto, con fallback) y pestaña "Avisos". |
 | 2026-10-10 | Fase 3 | Job `send_license_return_reminders` como quinto job del worker: alerta en la campana + aviso por Telegram, idempotente por `license_expiring:{restriccion}:{fecha}:{usuario}`. 9 tests; comprobados por mutación. |
 | 2026-10-10 | Fase 4 | Sección "No disponible" en la ficha del médico (`AbsenceSection.tsx`): lista las dos representaciones del eje 2, con formulario de alta/edición/levante y "Indefinido". 8 tests. |
+| 2026-10-10 | Despliegue | `2592305` a producción: API y worker en verde, `/api/health` 200, migración `a2446a0123b3` aplicada (el propio despliegue la corre) y DIRECCION + GERENCIAS MEDICAS clasificados como "sin regreso". Frontend desplegado (bundle con la pantalla nueva). |
+| 2026-10-10 | Datos | Corregidos los **2** médicos inconsistentes en producción: ahora hay **0** fuera de servicio sin motivo y **0** fuera de servicio en misiones; los 29 desactivados siguen intactos. |
+| 2026-10-10 | Fase 6 | Verificación en vivo en producción con un médico real: solo bloquea dentro del rango, avisa 2 días antes en la campana, no se repite, re-arma al editar la fecha, Indefinido no genera nada, y se levantó todo al terminar. |
