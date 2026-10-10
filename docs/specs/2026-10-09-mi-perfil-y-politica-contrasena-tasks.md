@@ -238,12 +238,25 @@ a ser exclusiva del rol administrador.
 
 **Sin migraciones de esquema.**
 
+## Estado del despliegue (2026-10-09, fin de jornada)
+
+| Paso | Estado |
+|---|---|
+| Limpieza de datos en **producción** | ✅ **Hecha** — 2 usuarios actualizados, quedan **0** con `view_audit` |
+| `master` local | ✅ Fast-forward a `bad361c` (6 commits), árbol idéntico a la rama |
+| Suites sobre el árbol de `master` | ✅ **1810 backend · 124 frontend** |
+| Esquema de producción | ✅ 4/4 objetos presentes · Alembic `aef16ccb2200` = local = head · **0 migraciones** |
+| Build de producción del frontend | ✅ compila |
+| **`git push origin master`** | 🔴 **PENDIENTE — no ejecutado a propósito** |
+
+> El push se dejó pendiente porque **dispara el despliegue a producción** (Railway + Vercel) y no
+> habría nadie despierto si algo falla al construir. Todo lo demás está verificado: es un comando.
+
 ## Casillas abiertas
 
-1. **Limpieza de datos en producción** — el script
-   `scripts/strip_view_audit_permission.py` debe correrse contra Neon junto con el despliegue.
-   Si no, guardar a los 2 encargados que tienen `view_audit` fallará con
-   `Permisos inválidos: view_audit`. **No se ejecutó contra producción.**
+1. **Limpieza de datos en producción** — ✅ **ya ejecutada** el 2026-10-09 (2 usuarios, quedan 0
+   con `view_audit`). Se hizo **antes** de desplegar a propósito: así no existe ninguna ventana en
+   la que la pantalla de Usuarios falle al guardar por un permiso retirado.
 2. **Cuentas dormidas** (`Alexandra`, `Rafael`, `Rafael Hendrick`) — decisión aparte, fuera de
    alcance. La de `Rafael` tiene el correo mal escrito (`hotmailc.om`).
 3. **El mínimo de 8 debilita** las contraseñas nuevas frente a 10. Se mantienen las otras cuatro
