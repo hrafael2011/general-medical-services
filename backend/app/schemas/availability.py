@@ -71,6 +71,9 @@ class RestrictionRead(BaseModel):
     review_status: str
     lifted_at: datetime | None
     lifted_by: str | None
+    # Turnos que la ausencia quitó de calendarios en borrador, para poder avisar de los huecos.
+    removed_assignments: int | None = None
+    affected_calendar_ids: list[str] | None = None
 
     model_config = {"from_attributes": True}
 

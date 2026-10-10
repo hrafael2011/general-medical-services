@@ -25,6 +25,8 @@ class AvailabilityService:
         self.doctors = doctor_repo
         self.audit = audit
         self.catalog_repo = catalog_repo
+        # Lo que la última operación limpió de los calendarios en borrador (lo lee la ruta).
+        self._last_cleanup_info: dict = {}
 
     # --- Ausencias con fechas (eje 2) -------------------------------------------------
     #
@@ -40,6 +42,26 @@ class AvailabilityService:
                 "invalid_date_range",
                 "La fecha de regreso no puede ser anterior a la fecha de inicio.",
             )
+
+    def _cleanup_draft_assignments(self, doctor_id: str, starts_at, ends_at) -> None:
+        """Quita al médico de los calendarios **en borrador** dentro del rango de la ausencia.
+
+        Una asignación en un día que no puede servir es una asignación inválida: dejarla
+        crearía un hueco de cobertura que nadie más va a arreglar. No toca los calendarios
+        aprobados (eso es una versión nueva, un acto deliberado) ni nada fuera del rango.
+        El resultado se deja en `_last_cleanup_info` para que la ruta pueda informarlo.
+        """
+        from backend.app.infrastructure.repositories.calendars import CalendarRepository
+
+        # Una ausencia Indefinida no tiene fecha de fin (`None` = sin límite): ningún turno
+        # futuro suyo en un borrador es válido, porque no se sabe cuándo vuelve.
+        count, calendar_ids = CalendarRepository(
+            self.availability.session
+        ).delete_assignments_for_doctor_in_range(doctor_id, starts_at, ends_at)
+        self._last_cleanup_info = {
+            "removed_assignments": count,
+            "affected_calendar_ids": calendar_ids,
+        }
 
     def _validate_restriction_reason(self, reason_id: str | None, doctor) -> None:
         """El motivo debe existir y aplicar al sexo del médico.
@@ -264,6 +286,8 @@ class AvailabilityService:
         result = self.availability.add_restriction(record)
         if self.audit:
             self.audit.log_restriction_added(actor_id=actor_id, restriction=result)
+        if severity == "hard_block":
+            self._cleanup_draft_assignments(doctor_id, starts_at, ends_at)
         # Registrar una ausencia cambia el estado del médico: se recalcula aquí mismo para que
         # el tablero, el asistente y los reportes lo vean al instante.
         sync_service_state(
@@ -315,7 +339,10 @@ class AvailabilityService:
                 restriction=restriction,
                 previous_ends_at=previous_ends_at,
             )
-        # Cambiar las fechas puede meter o sacar al médico de una ausencia vigente.
+        # Cambiar las fechas puede meter o sacar al médico de una ausencia vigente, y deja
+        # turnos de borrador dentro del rango nuevo que ya no puede cubrir.
+        if severity == "hard_block":
+            self._cleanup_draft_assignments(restriction.doctor_id, starts_at, ends_at)
         sync_service_state(
             self.availability.session, doctor_ids=[restriction.doctor_id], actor_id=actor_id
         )

@@ -334,6 +334,92 @@ class CalendarRepository:
         result = self.session.execute(stmt)
         return result.rowcount, list(affected)
 
+    def delete_assignments_for_doctor_in_range(
+        self,
+        doctor_id: str,
+        start_date: date,
+        end_date: date | None = None,
+    ) -> tuple[int, list[str]]:
+        """Borra los turnos de un médico **desde una fecha** (o dentro de un rango) en
+        calendarios en borrador o parciales.
+
+        `end_date = None` significa "sin límite superior", que es justo lo que hace falta para
+        una ausencia **Indefinida**: no se sabe cuándo vuelve, así que ningún turno futuro suyo
+        en un borrador es válido.
+
+        Es la contrapartida de registrar una ausencia: una asignación en un día que el médico
+        no puede servir no es una preferencia que haya que conservar, es una asignación
+        inválida, y dejarla crea un hueco de cobertura que nadie más va a arreglar.
+
+        No toca los calendarios **aprobados** (esos se corrigen con una versión nueva, que es
+        un acto deliberado) ni las asignaciones fuera del rango.
+
+        Returns (deleted_count, affected_calendar_ids).
+        """
+        from sqlalchemy import delete as sql_delete
+
+        active_calendar_ids = (
+            select(CalendarModel.id)
+            .where(
+                CalendarModel.status.in_(["draft", "partial"]),
+                CalendarModel.deleted_at.is_(None),
+            )
+        )
+        active_version_ids = (
+            select(CalendarVersionModel.id)
+            .where(
+                CalendarVersionModel.calendar_id.in_(active_calendar_ids),
+                CalendarVersionModel.deleted_at.is_(None),
+            )
+        )
+
+        conditions = [
+            CalendarAssignmentModel.doctor_id == doctor_id,
+            CalendarAssignmentModel.calendar_version_id.in_(active_version_ids),
+            CalendarAssignmentModel.service_date >= start_date,
+        ]
+        if end_date is not None:
+            conditions.append(CalendarAssignmentModel.service_date <= end_date)
+        assignment_ids_to_delete = self.session.execute(
+            select(CalendarAssignmentModel.id).where(*conditions)
+        ).scalars().all()
+
+        if not assignment_ids_to_delete:
+            return 0, []
+
+        affected = self.session.execute(
+            select(CalendarVersionModel.calendar_id)
+            .where(
+                CalendarVersionModel.id.in_(
+                    select(CalendarAssignmentModel.calendar_version_id)
+                    .where(CalendarAssignmentModel.id.in_(assignment_ids_to_delete))
+                )
+            )
+            .distinct()
+        ).scalars().all()
+
+        # Las notificaciones y confirmaciones de esos turnos se van con ellos: si no, el médico
+        # recibiría avisos de turnos que ya no tiene.
+        notification_ids = self.session.execute(
+            select(NotificationEventModel.id)
+            .where(NotificationEventModel.assignment_id.in_(assignment_ids_to_delete))
+        ).scalars().all()
+        if notification_ids:
+            self.session.execute(
+                sql_delete(ConfirmationRequestModel)
+                .where(ConfirmationRequestModel.notification_id.in_(notification_ids))
+            )
+            self.session.execute(
+                sql_delete(NotificationEventModel)
+                .where(NotificationEventModel.id.in_(notification_ids))
+            )
+
+        result = self.session.execute(
+            sql_delete(CalendarAssignmentModel)
+            .where(CalendarAssignmentModel.id.in_(assignment_ids_to_delete))
+        )
+        return result.rowcount, list(affected)
+
     # --- Calendar Assignment ---
 
     def add_assignment(self, assignment: CalendarAssignmentModel) -> CalendarAssignmentModel:

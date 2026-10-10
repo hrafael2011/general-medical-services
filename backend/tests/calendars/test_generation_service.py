@@ -523,3 +523,89 @@ def test_generate_respects_hard_block_that_starts_mid_month(db_session) -> None:
     )
     # Y fuera del rango sí se le asigna: prueba que el bloqueo es la ausencia y no otra cosa.
     assert suyas, "Sin la ausencia de por medio debería recibir turnos fuera del rango"
+
+
+def _create_assignment(db_session, version, doctor, area_id, service_date) -> None:
+    from backend.app.infrastructure.db.models.calendars import CalendarAssignmentModel
+
+    db_session.add(
+        CalendarAssignmentModel(
+            id=str(uuid4()),
+            calendar_version_id=version.id,
+            service_date=service_date,
+            service_area_id=area_id,
+            doctor_id=doctor.id,
+            assignment_source="manual",
+            created_at=datetime.datetime.now(datetime.UTC),
+        )
+    )
+    db_session.flush()
+
+
+def test_registrar_una_ausencia_quita_sus_turnos_de_borrador_dentro_del_rango(db_session) -> None:
+    """Una asignación en un día que el médico no puede servir es una asignación inválida.
+
+    Al registrar la ausencia se quitan de los calendarios **en borrador** los turnos que caen
+    dentro del rango (y solo esos): dejarlos crearía un hueco de cobertura que nadie más
+    arreglaría. Los de fuera del rango se quedan.
+    """
+    from backend.app.application.audit.service import AuditService
+    from backend.app.application.availability.service import AvailabilityService
+    from backend.app.infrastructure.db.models.catalogs import DeactivationReasonModel
+    from backend.app.infrastructure.repositories.audit import AuditRepository
+    from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+    from backend.app.infrastructure.repositories.calendars import CalendarRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+    from backend.app.infrastructure.repositories.doctors import DoctorRepository
+
+    _seed_service_areas(db_session)
+    calendar, version = _create_calendar_and_version(db_session)
+    doctor = _create_doctor(db_session, name="Dr. Licencia", allowed_area_ids=[_AREA_EMERGENCIA])
+
+    ahora = datetime.datetime.now(datetime.UTC)
+    db_session.add(
+        DeactivationReasonModel(
+            id="r-lic",
+            code="licencias_medicas",
+            display_name="LICENCIAS MEDICAS",
+            active=True,
+            requires_detail=False,
+            applies_to_sex=None,
+            severity="hard_block",
+            expects_return=True,
+            created_at=ahora,
+            updated_at=ahora,
+        )
+    )
+    db_session.flush()
+
+    dentro = datetime.date(_YEAR, _MONTH, 4)
+    fuera = datetime.date(_YEAR, _MONTH, 20)
+    _create_assignment(db_session, version, doctor, _AREA_EMERGENCIA, dentro)
+    _create_assignment(db_session, version, doctor, _AREA_EMERGENCIA, fuera)
+
+    service = AvailabilityService(
+        availability_repo=AvailabilityRepository(db_session),
+        doctor_repo=DoctorRepository(db_session),
+        catalog_repo=CatalogRepository(db_session),
+        audit=AuditService(AuditRepository(db_session)),
+    )
+    service.add_restriction(
+        doctor.id,
+        restriction_type="license",
+        severity="hard_block",
+        starts_at=datetime.date(_YEAR, _MONTH, 3),
+        ends_at=datetime.date(_YEAR, _MONTH, 6),
+        description=None,
+        reason_id="r-lic",
+        actor_id="actor-001",
+    )
+    db_session.flush()
+
+    restantes = [
+        a.service_date
+        for a in CalendarRepository(db_session).list_assignments(version.id)
+    ]
+    assert dentro not in restantes, "el turno dentro de la ausencia tenía que salir"
+    assert fuera in restantes, "el turno fuera del rango no se toca"
+    assert service._last_cleanup_info["removed_assignments"] == 1

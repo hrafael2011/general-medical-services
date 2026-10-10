@@ -233,6 +233,9 @@ export interface DoctorRestrictionRead {
   review_status: string;
   lifted_at: string | null;
   lifted_by: string | null;
+  /** Turnos que la ausencia quitó de calendarios en borrador: son huecos a reemplazar. */
+  removed_assignments?: number | null;
+  affected_calendar_ids?: string[] | null;
 }
 
 export interface RestrictionPayload {

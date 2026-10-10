@@ -39,6 +39,20 @@ def get_availability_service(session: Annotated[Session, Depends(get_db_session)
     )
 
 
+def _with_cleanup_info(service: AvailabilityService, record) -> RestrictionRead:
+    """Incluye en la respuesta los turnos que la ausencia quitó de calendarios en borrador.
+
+    Importa informarlo: significan huecos de cobertura que alguien tiene que reemplazar.
+    """
+    result = RestrictionRead.model_validate(record)
+    cleanup = getattr(service, "_last_cleanup_info", {}) or {}
+    if cleanup.get("removed_assignments", 0) > 0:
+        result.removed_assignments = cleanup["removed_assignments"]
+        result.affected_calendar_ids = cleanup.get("affected_calendar_ids", [])
+        service._last_cleanup_info = {}
+    return result
+
+
 def _availability_error_to_http(exc: AvailabilityError) -> HTTPException:
     status_code = (
         status.HTTP_404_NOT_FOUND
@@ -167,7 +181,7 @@ def add_restriction(
     except AvailabilityError as exc:
         raise _availability_error_to_http(exc) from exc
     session.commit()
-    return RestrictionRead.model_validate(record)
+    return _with_cleanup_info(service, record)
 
 
 @router.patch("/restrictions/{restriction_id}", response_model=RestrictionRead)
@@ -192,7 +206,7 @@ def update_restriction(
     except AvailabilityError as exc:
         raise _availability_error_to_http(exc) from exc
     session.commit()
-    return RestrictionRead.model_validate(record)
+    return _with_cleanup_info(service, record)
 
 
 @router.post("/restrictions/{restriction_id}/lift", response_model=RestrictionRead)

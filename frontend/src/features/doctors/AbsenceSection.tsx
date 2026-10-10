@@ -91,10 +91,20 @@ export function AbsenceSection({
             restriction_type: "license",
           });
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       addToast("success", editingId ? "Ausencia actualizada." : "Ausencia registrada.");
+      // Si la ausencia dejó turnos huérfanos en calendarios en borrador, hay que decirlo:
+      // son huecos de cobertura que alguien tiene que reemplazar.
+      const removed = saved?.removed_assignments ?? 0;
+      if (removed > 0) {
+        addToast(
+          "info",
+          `Se quitaron ${removed} turno(s) de calendarios en borrador. Revísalos: quedaron como huecos.`
+        );
+      }
       closeForm();
       invalidate();
+      void queryClient.invalidateQueries({ queryKey: ["calendars"] });
     },
     onError: (error: Error) => setFormError(error.message || "No se pudo guardar la ausencia."),
   });
