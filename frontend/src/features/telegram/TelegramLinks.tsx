@@ -8,7 +8,15 @@ import {
   LinkTokenRead,
 } from "../../api/telegram";
 import { adminApi, UserRead } from "../../api/admin";
+import { doctorsApi, DoctorRead } from "../../api/doctors";
 import { useToast } from "../../components/Toast";
+
+/** A doctor links himself: no admin can do it for him, so the useful thing to hand
+ *  over is the instruction. */
+const DOCTOR_INSTRUCTIONS =
+  "Para recibir tus avisos de turnos por Telegram: abre el chat del bot, "
+  + "escribe /start y luego tu numero de telefono sin guiones ni espacios "
+  + "(ejemplo: 8091234567). Te pedira confirmar el numero.";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -99,9 +107,30 @@ export function TelegramLinks() {
     queryFn: () => telegramApi.listLinkTokens(),
   });
 
+  // Telegram is the only notification channel, so knowing who is NOT linked is the
+  // difference between "the system informed them" and "nobody was told".
+  const { data: doctors } = useQuery({
+    queryKey: ["doctors", "all", "reachability"],
+    queryFn: () => doctorsApi.list("all"),
+  });
+
+  const [onlyUnreachable, setOnlyUnreachable] = useState(false);
+
   // Build user-id → name map for token table display
   const userMap = new Map<string, UserRead>();
   if (users) users.forEach((u) => userMap.set(u.id, u));
+
+  // --- Reachability: who can actually be notified ---
+  const allUsers = users ?? [];
+  const allDoctors = doctors?.items ?? [];
+  const linkedUsers = allUsers.filter((u) => u.telegram_chat_id);
+  const linkedDoctors = allDoctors.filter((d) => d.has_telegram);
+  const visibleUsers = onlyUnreachable
+    ? allUsers.filter((u) => !u.telegram_chat_id)
+    : allUsers;
+  const visibleDoctors = onlyUnreachable
+    ? allDoctors.filter((d) => !d.has_telegram)
+    : allDoctors;
 
   // --- Mutations ---
   const createMutation = useMutation({
@@ -178,6 +207,115 @@ export function TelegramLinks() {
           <h2>Telegram — Vinculos de usuario</h2>
           {links && <span className="count-badge">{links.length}</span>}
         </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Who can actually receive anything                                     */}
+      {/* ------------------------------------------------------------------ */}
+      <div
+        className="auth-form"
+        style={{ marginBottom: "24px", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "16px" }}
+      >
+        <h3 style={{ marginTop: 0 }}>¿Quién puede recibir avisos?</h3>
+        <p style={{ color: "#64748b", fontSize: "0.85rem", marginTop: 0 }}>
+          Telegram es el <strong>único canal</strong>. A quien no esté vinculado no le llega nada:
+          ni escalaciones, ni recordatorios, ni confirmaciones.
+        </p>
+
+        <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "12px", flexWrap: "wrap" }}>
+          <label className="toggle-label" style={{ margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={onlyUnreachable}
+              onChange={(e) => setOnlyUnreachable(e.target.checked)}
+            />
+            Ver solo los que NO reciben
+          </label>
+          <span style={{ fontSize: "0.85rem" }}>
+            Usuarios: <strong>{linkedUsers.length}</strong> de {allUsers.length} ·{" "}
+            Médicos: <strong>{linkedDoctors.length}</strong> de {allDoctors.length}
+          </span>
+        </div>
+
+        {allUsers.length === 0 && allDoctors.length === 0 && <p className="loading-text">Cargando…</p>}
+
+        {visibleUsers.length > 0 && (
+          <>
+            <h4 style={{ margin: "12px 0 6px", fontSize: "0.9rem" }}>Usuarios del sistema</h4>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr><th>Nombre</th><th>Rol</th><th>¿Recibe?</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {visibleUsers.map((u) => (
+                    <tr key={u.id}>
+                      <td>{u.name}</td>
+                      <td>{u.role}</td>
+                      <td>{u.telegram_chat_id ? "✅ Sí" : "❌ No"}</td>
+                      <td>
+                        {!u.telegram_chat_id && (
+                          <button
+                            className="btn-ghost"
+                            style={{ padding: "3px 8px", fontSize: "0.8rem" }}
+                            onClick={() => {
+                              setSelectedUserId(u.id);
+                              generateTokenMutation.mutate(u.id);
+                            }}
+                            disabled={generateTokenMutation.isPending}
+                          >
+                            Generar link
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {visibleDoctors.length > 0 && (
+          <>
+            <h4 style={{ margin: "16px 0 6px", fontSize: "0.9rem" }}>
+              Médicos
+              <span style={{ fontWeight: 400, color: "#64748b", fontSize: "0.8rem" }}>
+                {" "}— solo ellos pueden vincularse, enviando su teléfono al bot
+              </span>
+            </h4>
+            <div className="table-wrapper" style={{ maxHeight: "320px", overflowY: "auto" }}>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Nombre</th><th>¿Recibe?</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {visibleDoctors.map((d: DoctorRead) => (
+                    <tr key={d.id}>
+                      <td>{d.name}</td>
+                      <td>{d.has_telegram ? "✅ Sí" : "❌ No"}</td>
+                      <td>
+                        {!d.has_telegram && (
+                          <button
+                            className="btn-ghost"
+                            style={{ padding: "3px 8px", fontSize: "0.8rem" }}
+                            title="Copia las instrucciones para enviárselas al médico"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(DOCTOR_INSTRUCTIONS);
+                              addToast("success", "Instrucciones copiadas.");
+                            }}
+                          >
+                            <Copy size={13} /> Instrucciones
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ------------------------------------------------------------------ */}

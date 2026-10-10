@@ -16,6 +16,9 @@ class DoctorRead(BaseModel):
     service_inactive_detail: str | None
     participa_misiones: bool
     whatsapp_phone: str | None = None
+    # Telegram is the only notification channel, so this says whether the doctor can be
+    # reached at all. A boolean on purpose: the screens do not need the chat id itself.
+    has_telegram: bool = False
     monthly_service_target: int | None = None
     monthly_service_max: int | None = None
     monthly_service_limit_mode: str | None = None

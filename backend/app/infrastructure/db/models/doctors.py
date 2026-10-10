@@ -72,6 +72,16 @@ class DoctorModel(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
 
+    @property
+    def has_telegram(self) -> bool:
+        """Whether the doctor can receive anything at all.
+
+        Telegram is the only notification channel, so without a linked chat the system
+        has no way to reach this doctor. Exposed as a boolean rather than the chat id:
+        the screens only need to know whether the person is reachable.
+        """
+        return bool(self.telegram_chat_id)
+
 
 class DoctorAllowedAreaModel(Base):
     __tablename__ = "doctor_allowed_areas"

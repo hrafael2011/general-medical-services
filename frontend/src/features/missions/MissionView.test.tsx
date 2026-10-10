@@ -290,6 +290,7 @@ describe("MissionView", () => {
           service_inactive_detail: null,
           participa_misiones: true,
           whatsapp_phone: null,
+          has_telegram: false,
           monthly_service_target: 3,
           monthly_service_max: 3,
           monthly_service_limit_mode: "hard",

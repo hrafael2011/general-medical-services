@@ -10,6 +10,8 @@ export interface DoctorRead {
   service_inactive_detail: string | null;
   participa_misiones: boolean;
   whatsapp_phone: string | null;
+  /** Telegram is the only notification channel: without it the doctor cannot be reached. */
+  has_telegram: boolean;
   monthly_service_target: number; monthly_service_max: number;
   monthly_service_limit_mode: string; availability_mode: string;
   allowed_area_ids: string[];

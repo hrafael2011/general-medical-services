@@ -9,6 +9,8 @@ export interface UserRead {
   must_change_password: boolean;
   is_superadmin: boolean;
   permissions: string[];
+  /** Telegram is the only notification channel: without it the user cannot be reached. */
+  telegram_chat_id: string | null;
 }
 
 export const adminApi = {

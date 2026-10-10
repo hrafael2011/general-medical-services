@@ -1,9 +1,9 @@
 ---
 spec: reparar-canal-avisos-telegram
-version: 1.0.0
-status: draft
+version: 1.2.0
+status: implemented
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # Spec — Reparar el canal de avisos por Telegram
@@ -176,6 +176,12 @@ hay equivalente para las notificaciones**.
 - **Dada** la pantalla correspondiente,
 - **entonces** se distingue de un vistazo a los médicos y usuarios **sin** Telegram vinculado.
 
+> **Cumplido:** sección *"¿Quién puede recibir avisos?"* en la pantalla de Telegram, con ✅/❌ por
+> persona, contador de cuántos de cuántos, filtro "Ver solo los que NO reciben" y una acción útil
+> según quién sea (link de invitación para un usuario, instrucciones copiables para un médico).
+> Se apoya en `DoctorRead.has_telegram` y `UserRead.telegram_chat_id`. **No** expone el chat id
+> del médico; solo el booleano. 6 tests de interfaz, verificados por mutación.
+
 **AC6 — El acuse llega**
 - **Dado** un médico que responde a un aviso por Telegram,
 - **entonces** el encargado **recibe** el aviso de que respondió (hoy se crea con `skipped` y no sale).
@@ -199,3 +205,4 @@ hay equivalente para las notificaciones**.
 |---|---|---|---|---|
 | 1.0.0 | 2026-10-09 | — | Bug | Se documenta que el canal de avisos por Telegram está inoperante en producción por tres causas independientes —proveedor ausente, vínculo de usuario guardado donde el job no lo lee, y bot de notificaciones inexistente—, con 92 notificaciones y 92 confirmaciones atascadas desde septiembre. Se decide Telegram como único canal y se arregla antes de construir el recordatorio de licencias. |
 | 1.1.0 | 2026-10-10 | — | Implementación | **Causa raíz encontrada**: los jobs del scheduler reventaban con `NoReferencedTableError` porque `models/__init__.py` importaba 2 de 31 modelos y el worker no importa rutas; reportaban ceros, y eso ocultó el fallo durante un mes. Se corrige el registro de modelos y se añade un test de regresión en proceso limpio. Además: el webhook del bot se repunta de staging (404) a producción, el enlace del staff apunta al bot de avisos, el bot de avisos atiende `/start <token>`, el acuse al encargado deja de nacer `skipped`, y un aviso sin destinatario deja alerta visible. |
+| 1.2.0 | 2026-10-10 | — | Implementación | Se cierra el **AC5**: pantalla "¿Quién puede recibir avisos?", con ✅/❌ por usuario y por médico, contador, filtro de inalcanzables y la acción que sirve en cada caso (link de invitación para el staff, instrucciones copiables para el médico). Se expone `DoctorRead.has_telegram` derivado del chat id, sin filtrar el chat id. 6 tests de interfaz, verificados por mutación. Queda documentado un hueco no arreglado: desvincular **no** revoca la recepción de avisos. |

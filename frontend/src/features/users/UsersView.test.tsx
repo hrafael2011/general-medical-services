@@ -83,6 +83,7 @@ describe("UsersView", () => {
             must_change_password: false,
             is_superadmin: false,
             permissions: [],
+            telegram_chat_id: null,
           },
         ];
       }
@@ -97,6 +98,7 @@ describe("UsersView", () => {
             must_change_password: false,
             is_superadmin: false,
             permissions: [],
+            telegram_chat_id: null,
           },
         ];
       }
