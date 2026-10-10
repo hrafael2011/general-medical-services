@@ -10,7 +10,12 @@ sin forma de volver: este script les crea la ausencia que los representa.
 Qué hace, por cada médico fuera de servicio **sin ausencia registrada**:
 
 1. Le crea una ausencia **Indefinida** (`ends_at = NULL`) con **su motivo y su detalle actuales**,
-   empezando en la fecha en que se le desactivó (`deactivated_at`) para no inventar historia.
+   empezando en la fecha en que se le desactivó (`deactivated_at`).
+
+   **Ojo con la fecha de inicio:** en producción `deactivated_at` está vacío en los 29, así que
+   la ausencia se registra con la fecha de la conversión. Es una afirmación verdadera sobre el
+   **registro** (hoy se registró), pero no sobre cuándo empezó la ausencia real, que el sistema
+   nunca guardó. Se puede corregir a mano desde la pantalla si la fecha importa.
 2. Lo deja auditado como **Sistema**: no lo hizo una persona, es una conversión de datos.
 
 No reactiva a nadie, no toca misiones, no borra nada y no cambia ningún otro campo. Es
