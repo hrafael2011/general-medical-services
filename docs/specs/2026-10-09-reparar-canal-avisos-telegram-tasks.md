@@ -30,9 +30,28 @@ rastro visible en la campana en vez de morir en silencio.
 | `@MedicalSchedule_bot` (conversacional) | **Solo encargados y admins** | El asistente de consultas |
 
 - [x] **Decidir** el diseño de bots.
-- [x] **Confirmar** que el bot de notificaciones **ya existe** (respuesta del usuario).
-- [ ] **Recibir del usuario el nombre de usuario** de ese bot (para el deep link).
-- [ ] **Confirmar** que el token está colocado en Railway (API **y** worker).
+**Estado real medido consultando la API de Telegram (2026-10-09):**
+
+| Bot | Token | Estado |
+|---|---|---|
+| `@TurnosMedicosNotificaciones_bot` | el suyo | ✅ **vivo** — pero su webhook apunta a `…-staging-staging.up.railway.app`, que **devuelve 404** |
+| `@MedicalSchedule_bot` (asistente) | el suyo | ❌ **BORRADO** — `getMe` responde `Unauthorized` |
+| `TELEGRAM_BOT_TOKEN` de producción | otro distinto | ❌ **INVÁLIDO** — `Unauthorized` |
+
+- [x] **Confirmar** que el bot de notificaciones existe y está vivo.
+- [ ] **Recrear** `@MedicalSchedule_bot` (el asistente): está borrado, y el enlace de vínculo de
+      usuarios apunta a él, así que hoy **es imposible vincularse**. Telegram libera el nombre al
+      borrar, así que probablemente se pueda recuperar el mismo.
+- [ ] **Corregir** el webhook del bot de notificaciones: hoy apunta a un entorno **borrado**.
+      Debe apuntar a `https://general-medical-services-production.up.railway.app/api/webhooks/telegram-notification`
+      con `secret_token` = `TELEGRAM_WEBHOOK_SECRET`.
+- [ ] **Colocar** los cuatro valores en Railway, API **y** worker:
+      `TELEGRAM_BOT_TOKEN` (asistente, nuevo) · `TELEGRAM_BOT_USERNAME` ·
+      `TELEGRAM_NOTIFICATION_BOT_TOKEN` · `TELEGRAM_NOTIFICATION_BOT_USERNAME` (variable nueva).
+- [ ] **Registrar** también el webhook del asistente: `/api/telegram/webhook`.
+
+> ⚠️ **Los tokens se pegaron en el chat**, así que están expuestos: **rotarlos en BotFather**
+> antes de configurarlos, y que los secretos los coloque el usuario (no pasarlos por aquí).
 
 > El asistente **ya** está restringido a staff (`_TELEGRAM_LINKABLE_ROLES`), así que este diseño
 > refleja la intención que el código ya tenía. Lo que falta es que exista el bot que envía.
