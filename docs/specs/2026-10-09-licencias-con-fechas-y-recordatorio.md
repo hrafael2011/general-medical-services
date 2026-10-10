@@ -73,7 +73,7 @@ Eso solo lo hace bien el mecanismo con fechas.
 | 4 | Editar la fecha **re-arma** el aviso | Si se extiende la licencia, hay que volver a avisar |
 | 5 | **Nunca reactivar automáticamente** | Con la decisión 1 no hace falta: la restricción deja de aplicar y listo. No hay riesgo de devolver al servicio a quien no volvió |
 | 6 | **Una sola pantalla** que unifica las dos representaciones | El encargado ve *"no disponible"* con su motivo y fechas, sin saber de tablas |
-| 7 | Días de aviso: **5 por defecto**, configurables **a nivel global** (no por registro) | `doctor_restrictions` no tiene dónde guardar un número por registro; un valor global en `system_settings` es editable, no necesita migración y cubre el caso real |
+| 7 | Días de aviso: **2 por defecto**, configurables **a nivel global** (no por registro) | `doctor_restrictions` no tiene dónde guardar un número por registro; un valor global en `system_settings` es editable, no necesita migración y cubre el caso real. **2 días** por decisión del usuario: el aviso es para actuar ya, no un preaviso lejano |
 | 8 | **Sin migración** | `doctor_restrictions` ya tiene todo lo necesario; el re-armado usa la clave única de `notification_events`, y los días de aviso viven en `system_settings` |
 | 9 | Los 27 actuales **no se tocan** | Decisión explícita del usuario |
 
@@ -93,7 +93,7 @@ Eso solo lo hace bien el mecanismo con fechas.
   conservarlo).
 - **R5** — Con **Indefinido**, el médico queda fuera desde la fecha indicada y **no** se genera
   recordatorio.
-- **R6** — **X días antes** de la fecha de regreso —**5 por defecto**, ajustable en la
+- **R6** — **X días antes** de la fecha de regreso —**2 por defecto**, ajustable en la
   configuración del sistema— se avisa por **Telegram** a los encargados/administradores con ese
   permiso y se crea una alerta en la **campana**.
 - **R7** — El aviso se envía **una sola vez** por fecha de regreso. **Editar la fecha vuelve a
@@ -120,8 +120,8 @@ Eso solo lo hace bien el mecanismo con fechas.
   indicada y **no** se programa ningún aviso.
 
 **AC4 — El aviso llega antes**
-- **Dada** una licencia que termina el 15 de marzo y un aviso configurado a 5 días,
-- **cuando** llega el 10 de marzo, **entonces** el encargado **recibe** el aviso por Telegram y ve
+- **Dada** una licencia que termina el 15 de marzo y un aviso configurado a 2 días,
+- **cuando** llega el 13 de marzo, **entonces** el encargado **recibe** el aviso por Telegram y ve
   la alerta en la campana, con nombre, motivo y fecha.
 
 **AC5 — No se repite**

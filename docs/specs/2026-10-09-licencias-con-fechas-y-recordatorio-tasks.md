@@ -55,7 +55,7 @@ sin canal, el aviso no llega a nadie.
 
 ### Task 2.1 — Clave en `system_settings`
 
-- [ ] **Sembrar** `notifications.license_reminder_days` con valor **5**, reutilizando el patrón de
+- [ ] **Sembrar** `notifications.license_reminder_days` con valor **2**, reutilizando el patrón de
       `CatalogService.seed_initial_catalogs` y el `GET` con fallback que ya existe para las firmas.
 - [ ] **Exponerlo** en la pestaña de configuración correspondiente para que sea editable sin
       tocar la base.
@@ -192,4 +192,4 @@ sin canal, el aviso no llega a nadie.
 
 | Fecha | Task | Nota |
 |---|---|---|
-| 2026-10-09 | — | Spec y tasks creadas. Decisiones confirmadas: fuera solo en el rango, aviso por ambos canales, indefinido entre las opciones, editar re-arma, los 27 no se tocan, solo Telegram. Pendiente confirmar los 5 días por defecto. |
+| 2026-10-09 | — | Spec y tasks creadas. Decisiones confirmadas: fuera solo en el rango, aviso por ambos canales, indefinido entre las opciones, editar re-arma, los 27 no se tocan, solo Telegram, **2 días de aviso por defecto**. |
