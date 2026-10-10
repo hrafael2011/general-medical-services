@@ -48,7 +48,7 @@ rastro visible en la campana en vez de morir en silencio.
 - [ ] **Colocar** los cuatro valores en Railway, API **y** worker:
       `TELEGRAM_BOT_TOKEN` (asistente, nuevo) · `TELEGRAM_BOT_USERNAME` ·
       `TELEGRAM_NOTIFICATION_BOT_TOKEN` · `TELEGRAM_NOTIFICATION_BOT_USERNAME` (variable nueva).
-- [ ] **Registrar** también el webhook del asistente: `/api/telegram/webhook`.
+- [ ] **Registrar** también el webhook del asistente: `/api/telegram/webhook`. *(cuando se recree el bot)*
 
 > ⚠️ **Los tokens se pegaron en el chat**, así que están expuestos: **rotarlos en BotFather**
 > antes de configurarlos, y que los secretos los coloque el usuario (no pasarlos por aquí).
@@ -58,7 +58,7 @@ rastro visible en la campana en vez de morir en silencio.
 
 ### Task 0.2 — Configuración nueva
 
-- [ ] **Añadir** `telegram_notification_bot_username` a `core/config.py`: hoy el deep link usa
+- [x] **Añadir** `telegram_notification_bot_username` a `core/config.py`: hoy el deep link usa
       `telegram_bot_username` (el asistente), que es justo el bot equivocado.
 - [ ] **Colocar** el token del bot de notificaciones en Railway (API **y** worker).
 - [ ] **Registrar** el webhook del bot de notificaciones.
@@ -67,6 +67,23 @@ rastro visible en la campana en vez de morir en silencio.
 
 - [x] **Reutilizar** `receive_escalation_alerts`. Confirmado por el usuario: quien ya recibe las
       escalaciones es exactamente quien debe recibir estos avisos.
+
+---
+
+## Fase 0-bis — La causa raíz: los jobs reventaban ✅ HECHO
+
+**Archivos:** `backend/app/infrastructure/db/models/__init__.py`,
+`backend/app/infrastructure/db/session.py`
+
+- [x] **Importar los 31 modelos** en `models/__init__.py` (antes: 2 de 31).
+- [x] **Importar el paquete desde `session.py`**: así "poder hablar con la base" y "conocer todas
+      las tablas" son lo mismo, y el worker queda cubierto por construcción.
+- [x] **Test de regresión en proceso limpio** (`tests/infrastructure/test_model_registration.py`):
+      comprobado que **falla sin el arreglo** y pasa con él.
+- [x] **Verificar** ejecutando el worker en local: 0 tracebacks.
+
+> Sin esto, arreglar el token no habría servido de nada: los jobs morían antes de enviar y
+> reportaban ceros.
 
 ---
 

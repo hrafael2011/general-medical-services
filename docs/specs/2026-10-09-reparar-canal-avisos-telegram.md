@@ -33,7 +33,34 @@ dice "avisé" sin avisar — exactamente lo que ya pasa hoy.
 | `META_WHATSAPP_TOKEN` / `PHONE_NUMBER_ID` | **ausentes** |
 | `job_executions` / `scheduled_jobs` | **0 filas** |
 
-### Las tres causas, cualquiera de ellas basta
+### 🔴 La causa raíz, encontrada al mirar los logs del worker
+
+**Los jobs del scheduler reventaban.** Los logs de producción muestran:
+
+```
+NoReferencedTableError: 'notification_events.assignment_id' could not find table 'calendar_assignments'
+Job process_notification_queue    -> {'sent': 0, 'failed': 0, 'skipped': 0}   ← REVENTÓ
+Job check_unconfirmed_escalamiento -> {'escalations': 0}                      ← REVENTÓ (atrapado en silencio)
+Job process_overdue_confirmations  -> {'expired': 0}                          ← REVENTÓ
+```
+
+`models/__init__.py` importaba **2 de 31** modelos, y SQLAlchemy resuelve las claves
+foráneas por nombre de tabla. La API nunca lo notó porque importar las rutas arrastra todos
+los modelos; **el worker no importa rutas**, así que cada job importaba solo los suyos y moría
+en la primera clave foránea que apuntaba fuera.
+
+**Y reportaba ceros**, como si no hubiera nada que enviar. Eso es lo que hizo que 184 filas
+llevaran un mes atascadas sin que nadie lo notara — y significa que **el canal estaba roto por
+el crash, no solo por el token ausente**: con el token puesto, tampoco habría salido nada.
+
+**Arreglo:** `models/__init__.py` importa los 31 modelos y `session.py` importa el paquete, de
+modo que "poder hablar con la base" y "conocer todas las tablas" sean lo mismo. Verificado
+ejecutando el worker en local: antes 3 tracebacks, ahora ninguno.
+
+> El test de regresión corre en un **proceso limpio**, porque en el proceso de tests el conftest
+> ya importa los modelos y el test pasaría **con el bug puesto** (falso positivo comprobado).
+
+### Las tres causas restantes, cualquiera de ellas basta
 
 **1. Sin proveedor configurado.**
 La selección de proveedor es: `TELEGRAM_NOTIFICATION_BOT_TOKEN` → Meta/WhatsApp → `FakeProvider`.
@@ -171,3 +198,4 @@ hay equivalente para las notificaciones**.
 | Version | Date | Issue | Trigger | Resumen |
 |---|---|---|---|---|
 | 1.0.0 | 2026-10-09 | — | Bug | Se documenta que el canal de avisos por Telegram está inoperante en producción por tres causas independientes —proveedor ausente, vínculo de usuario guardado donde el job no lo lee, y bot de notificaciones inexistente—, con 92 notificaciones y 92 confirmaciones atascadas desde septiembre. Se decide Telegram como único canal y se arregla antes de construir el recordatorio de licencias. |
+| 1.1.0 | 2026-10-10 | — | Implementación | **Causa raíz encontrada**: los jobs del scheduler reventaban con `NoReferencedTableError` porque `models/__init__.py` importaba 2 de 31 modelos y el worker no importa rutas; reportaban ceros, y eso ocultó el fallo durante un mes. Se corrige el registro de modelos y se añade un test de regresión en proceso limpio. Además: el webhook del bot se repunta de staging (404) a producción, el enlace del staff apunta al bot de avisos, el bot de avisos atiende `/start <token>`, el acuse al encargado deja de nacer `skipped`, y un aviso sin destinatario deja alerta visible. |

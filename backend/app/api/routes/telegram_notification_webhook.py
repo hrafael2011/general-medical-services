@@ -3,6 +3,7 @@
 import json
 import logging
 import secrets
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -20,6 +21,10 @@ router = APIRouter(prefix="/webhooks", tags=["telegram-notification"])
 
 # Rate limiter: 20 req/min per telegram_user_id
 _notification_limiter = RateLimiter(max_requests=20, window_seconds=60)
+
+# Holders of this permission receive the operational alerts: escalations, the receipt
+# of a doctor's answer, and the licence reminders that reuse this same channel.
+_ALERT_PERMISSION = "receive_escalation_alerts"
 
 
 @router.post("/telegram-notification")
@@ -124,6 +129,15 @@ async def telegram_notification_webhook(
         chat_id = str(msg.get("chat", {}).get("id", ""))
         text = (msg.get("text") or "").strip()
 
+        # /start <token> — a system user linking to the ALERTS bot.
+        # Their chat id belongs to THIS bot, which is why it is handled here and not in
+        # the assistant: a chat id from one bot is not valid for another.
+        if text.startswith("/start ") and len(text) > len("/start "):
+            token = text.split(maxsplit=1)[1].strip()
+            return _send_telegram_message(
+                chat_id, _link_staff_by_token(session, chat_id=chat_id, token=token)
+            )
+
         # /start
         if text == "/start":
             existing = _get_linked_doctor(session, chat_id)
@@ -186,6 +200,93 @@ def _get_linked_doctor(session: Session, chat_id: str) -> DoctorModel | None:
     ).first()
 
 
+def _link_staff_by_token(session: Session, *, chat_id: str, token: str) -> str:
+    """Link a system user to the ALERTS bot with a single-use token.
+
+    Writes `users.telegram_chat_id`, which is the field the notification job reads.
+    The assistant keeps its own link in `telegram_user_links`; the two bots have
+    different chat ids, so the same person can be linked to both without collision.
+    """
+    from datetime import UTC, datetime
+
+    from backend.app.infrastructure.db.models.telegram import TelegramLinkTokenModel
+    from backend.app.infrastructure.db.models.user import UserModel
+
+    record = session.scalars(
+        select(TelegramLinkTokenModel).where(TelegramLinkTokenModel.token == token)
+    ).first()
+    if record is None or not record.active or record.used_at is not None:
+        return "Enlace invalido o ya utilizado. Pide uno nuevo al administrador."
+    if record.expires_at <= datetime.now(UTC):
+        return "El enlace expiro. Pide uno nuevo al administrador."
+
+    user = session.get(UserModel, record.user_id)
+    if user is None or not user.active:
+        return "La cuenta no esta disponible. Contacta al administrador."
+
+    taken = session.scalars(
+        select(UserModel).where(
+            UserModel.telegram_chat_id == chat_id, UserModel.id != user.id
+        )
+    ).first()
+    if taken is not None:
+        return "Este Telegram ya esta vinculado a otra cuenta."
+
+    user.telegram_chat_id = chat_id
+    user.updated_at = datetime.now(UTC)
+    record.used_at = datetime.now(UTC)
+    session.commit()
+    logger.info("System user %s linked to alert chat %s", user.id, chat_id)
+    return (
+        f"Listo, {user.name}.\n\n"
+        "Recibiras por este chat los avisos del sistema (escalaciones y licencias)."
+    )
+
+
+def _queue_receipt_for_encargados(
+    session: Session,
+    *,
+    confirmation_id: str,
+    message: str,
+    doctor_id: str,
+    now,
+) -> int:
+    """Queue one notice per alert recipient for a doctor's response.
+
+    The old code wrote a single event born with `status="skipped"` and no recipient, so
+    the encargado never learned that the doctor had answered. One event per recipient —
+    the same shape the escalation job uses — because a notification carries a single
+    destination. The key includes the recipient, so a replayed callback adds nothing.
+    """
+    from backend.app.infrastructure.db.models.notifications import NotificationEventModel
+    from backend.app.infrastructure.db.models.user import UserModel
+
+    recipients = session.scalars(
+        select(UserModel).where(
+            UserModel.active.is_(True),
+            UserModel.telegram_chat_id.is_not(None),
+            UserModel.permissions.contains([_ALERT_PERMISSION]),
+        )
+    ).all()
+
+    for user in recipients:
+        session.add(
+            NotificationEventModel(
+                id=str(uuid.uuid4()),
+                notification_type="confirmation_receipt",
+                idempotency_key=f"confirmed:{confirmation_id}:{user.id}",
+                recipient_doctor_id=doctor_id,
+                recipient_phone=user.telegram_chat_id,
+                payload={"message": message, "confirmation_request_id": confirmation_id},
+                status="pending",
+                created_by=doctor_id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    return len(recipients)
+
+
 def _looks_like_phone(text: str) -> bool:
     """Check if text looks like a phone number (digits, spaces, +)."""
     cleaned = text.replace(" ", "").replace("+", "").replace("-", "")
@@ -216,11 +317,6 @@ def _process_confirmation(
 ) -> None:
     """Mark a confirmation request as confirmed via Telegram."""
     from datetime import UTC, datetime
-    from uuid import uuid4
-
-    from backend.app.infrastructure.db.models.notifications import (
-        NotificationEventModel,
-    )
 
     req = session.get(ConfirmationRequestModel, confirmation_id)
     if not req or req.status not in ("pending", "received"):
@@ -236,26 +332,19 @@ def _process_confirmation(
     req.response_channel = "telegram"
     req.response_payload = {"telegram_chat_id": chat_id}
 
-    # Create notification event for admin visibility
-    event = NotificationEventModel(
-        id=str(uuid4()),
-        notification_type=f"{req.confirmation_type}_confirmed",
-        idempotency_key=f"confirmed:{confirmation_id}",
-        recipient_doctor_id=req.doctor_id,
-        recipient_phone=None,
-        payload={
-            "message": (
-                f"Dr. confirmó su {'servicio' if req.confirmation_type == 'service' else 'misión'}."
-            ),
-            "confirmation_request_id": confirmation_id,
-        },
-        status="skipped",
-        sent_at=now,
-        created_by=req.doctor_id,
-        created_at=now,
-        updated_at=now,
+    # Tell the encargados that the doctor answered. This used to be written with
+    # status="skipped" and no recipient, so the record existed but no message was ever
+    # sent — the encargado never learned that the doctor had replied.
+    message = (
+        f"Dr. confirmó su {'servicio' if req.confirmation_type == 'service' else 'misión'}."
     )
-    session.add(event)
+    _queue_receipt_for_encargados(
+        session,
+        confirmation_id=confirmation_id,
+        message=message,
+        doctor_id=req.doctor_id,
+        now=now,
+    )
 
     session.commit()
     logger.info(

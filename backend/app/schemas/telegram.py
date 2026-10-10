@@ -58,7 +58,12 @@ class LinkTokenRead(BaseModel):
 
 class CreateLinkTokenResponse(BaseModel):
     link_token: str
+    # Points at the ALERTS bot: that is the chat the notification job reads, so a link
+    # to the assistant would leave the person unable to receive anything.
     deep_link_url: str
+    # The assistant is a separate bot and a separate link. Optional because using the
+    # assistant is not required to receive alerts.
+    assistant_deep_link_url: str | None = None
     expires_at: datetime
 
 

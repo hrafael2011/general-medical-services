@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_webhook_secret: str | None = None
     telegram_notification_bot_token: str | None = None  # @TurnosMedicosBot
+    # Username of the notification bot. Needed to build the deep link that links staff
+    # to the ALERTS bot; without it the link points at the assistant, which is not the
+    # bot that sends anything.
+    telegram_notification_bot_username: str | None = None
 
     deepseek_api_key: str | None = None
     deepseek_base_url: str = "https://api.deepseek.com"

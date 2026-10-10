@@ -378,12 +378,30 @@ def create_link_token(
     repo.add_link_token(token_model)
     session.commit()
 
-    bot_username = settings.telegram_bot_username
-    deep_link_url = f"https://t.me/{bot_username}?start={token_str}"
+    # The alerts link must point at the NOTIFICATION bot: that is the chat id the
+    # notification job reads, so linking through the assistant would leave the person
+    # unable to receive anything.
+    alerts_username = settings.telegram_notification_bot_username
+    if not alerts_username:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Falta TELEGRAM_NOTIFICATION_BOT_USERNAME: sin el nombre del bot de avisos "
+                "no se puede generar un enlace que sirva para recibir notificaciones."
+            ),
+        )
+
+    deep_link_url = f"https://t.me/{alerts_username}?start={token_str}"
+    assistant_url = (
+        f"https://t.me/{settings.telegram_bot_username}?start={token_str}"
+        if settings.telegram_bot_username
+        else None
+    )
 
     return CreateLinkTokenResponse(
         link_token=token_str,
         deep_link_url=deep_link_url,
+        assistant_deep_link_url=assistant_url,
         expires_at=expires_at,
     )
 

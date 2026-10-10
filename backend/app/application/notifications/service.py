@@ -96,6 +96,7 @@ class NotificationService:
                 event.status = "skipped"
                 event.sent_at = now
                 event.updated_at = now
+                self._create_missing_recipient_alert(event)
                 skipped += 1
                 continue
 
@@ -172,5 +173,38 @@ class NotificationService:
                 "mission_id": event.mission_id,
                 "error_code": event.error_code,
             },
+            created_by=event.created_by,
+        )
+
+    def _create_missing_recipient_alert(self, event: NotificationEventModel) -> None:
+        """Make a silently skipped notification visible.
+
+        An event with no destination used to be marked `skipped` and forgotten, which is
+        how a month of undelivered notices went unnoticed: the system believed it had
+        informed people. The alert names the affected doctor so somebody can link their
+        Telegram. It is keyed by doctor, not by event, so a hundred queued notices for
+        the same person raise one alert instead of a hundred.
+        """
+        if self.action_alerts is None or event.recipient_doctor_id is None:
+            return
+
+        from backend.app.infrastructure.db.models.doctors import DoctorModel
+
+        doctor = self.repo.session.get(DoctorModel, event.recipient_doctor_id)
+        doctor_name = doctor.name if doctor is not None else "un médico"
+
+        self.action_alerts.create_if_missing(
+            alert_type="notification_without_recipient",
+            section="notifications",
+            severity="warning",
+            title="Aviso sin destinatario",
+            message=(
+                f"No se pudo avisar a {doctor_name}: no tiene Telegram vinculado. "
+                "Vincúlalo para que reciba los avisos."
+            ),
+            entity_type="doctor",
+            entity_id=event.recipient_doctor_id,
+            action_url="/doctors",
+            alert_metadata={"notification_type": event.notification_type},
             created_by=event.created_by,
         )

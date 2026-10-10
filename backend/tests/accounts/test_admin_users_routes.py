@@ -171,13 +171,41 @@ def test_telegram_link_token_allows_encargado(client, session):
     user = _create_user(session, role="encargado")
     session.commit()
 
-    response = client.post(
-        "/api/telegram/link-tokens",
-        json={"user_id": user.id},
-    )
+    original = settings.telegram_notification_bot_username
+    settings.telegram_notification_bot_username = "BotDeAvisos"
+    try:
+        response = client.post(
+            "/api/telegram/link-tokens",
+            json={"user_id": user.id},
+        )
+    finally:
+        settings.telegram_notification_bot_username = original
 
     assert response.status_code == 201
-    assert response.json()["deep_link_url"]
+    # The link must lead to the ALERTS bot: that is the chat the notification job
+    # reads, so a link to the assistant would leave the person unable to receive.
+    assert "BotDeAvisos" in response.json()["deep_link_url"]
+
+
+@pytest.mark.skipif(not settings.feature_telegram, reason="Telegram feature disabled")
+def test_telegram_link_token_fails_loudly_without_the_alerts_bot(client, session):
+    """Without the alerts bot name, no link is handed out.
+
+    Returning one anyway would send people to a bot that never messages them, which is
+    the silent failure this whole change exists to remove.
+    """
+    user = _create_user(session, role="encargado")
+    session.commit()
+
+    original = settings.telegram_notification_bot_username
+    settings.telegram_notification_bot_username = None
+    try:
+        response = client.post("/api/telegram/link-tokens", json={"user_id": user.id})
+    finally:
+        settings.telegram_notification_bot_username = original
+
+    assert response.status_code == 503
+    assert "TELEGRAM_NOTIFICATION_BOT_USERNAME" in response.json()["detail"]
 
 
 @pytest.mark.skipif(not settings.feature_telegram, reason="Telegram feature disabled")
