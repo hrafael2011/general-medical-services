@@ -174,9 +174,9 @@ Eso solo lo hace bien el mecanismo con fechas.
 | 6 | **Una sola pantalla** que unifica las representaciones del eje 2 | El encargado ve *"no disponible"* con motivo y fechas, sin saber de tablas |
 | 7 | Días de aviso: **2 por defecto**, configurables **a nivel global** | `doctor_restrictions` no tiene dónde guardar un número por registro; un valor global es editable y no necesita migración |
 | 8 | **Sin migración** para las fechas | `doctor_restrictions` ya tiene todo; el re-armado usa la clave única de `notification_events` |
-| 9 | Los desactivados actuales **no se tocan** | Decisión explícita del usuario |
+| 9 | Los desactivados actuales **no se tocan** en su estado ✅ confirmado | Decisión explícita del usuario. **Pero sí se corrigen los 4 datos inconsistentes** (2 sin motivo, 2 en misiones fuera de servicio), también confirmado |
 | 10 | **Unificar las dos puertas** de desactivación | Hoy dejan datos distintos (motivo, misiones, auditoría); si no se unifican, esta spec duplicaría el problema |
-| 11 | **El motivo indica si espera regreso**, y es **editable en el catálogo** | La pantalla acierta sola: DIRECCION ⇒ indefinido sin preguntar fecha. **Nunca por `code`**: el catálogo es editable y un motivo nuevo debe funcionar sin tocar código. Requiere migración (una columna) **y** un campo en la pantalla de Catálogos |
+| 11 | **El motivo indica si espera regreso**, y es **editable en el catálogo**. ✅ **Migración autorizada** | La pantalla acierta sola: DIRECCION ⇒ indefinido sin preguntar fecha. **Nunca por `code`**: el catálogo es editable y un motivo nuevo debe funcionar sin tocar código. Requiere migración (una columna) **y** un campo en la pantalla de Catálogos |
 | 12 | **Solo el eje 2** entra al recordatorio | Las misiones (eje 3) son otro eje y se gestionan aparte |
 
 > **Nota sobre el punto 7:** si más adelante hace falta un plazo distinto por caso, eso sí

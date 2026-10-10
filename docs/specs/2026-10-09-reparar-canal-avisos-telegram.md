@@ -90,7 +90,8 @@ hay equivalente para las notificaciones**.
 | 5 | Las 92 filas atascadas **no se borran** | Son evidencia; se reprocesan o se marcan con criterio y quedan auditadas |
 | 6 | **Dos bots con roles separados** (confirmado por el usuario) | `@TurnosMedicosBot` = canal: lo comparten **médicos, encargados y admins**. `@MedicalSchedule_bot` = asistente: **solo encargados y admins** |
 | 7 | El **staff se vincula a los dos**: al canal para recibir avisos, al asistente para consultar | Hoy solo se vincula al asistente, que es justo el que **no** envía |
-| 8 | Se reutiliza el permiso **`receive_escalation_alerts`** | Los que ya reciben escalaciones son exactamente los que deben recibir estos avisos; crear un permiso nuevo no aporta *(pendiente de confirmar)* |
+| 8 | Se reutiliza el permiso **`receive_escalation_alerts`** ✅ confirmado | Los que ya reciben escalaciones son exactamente los que deben recibir estos avisos; crear un permiso nuevo no aporta |
+| 9 | **El acuse al encargado entra en esta spec** ✅ confirmado | Cuando un médico responde por Telegram, el aviso al encargado se crea con `status="skipped"` (nace desactivado). Es el mismo tipo de bug —un aviso que no sale— y así el canal queda entero de una vez |
 
 > **Por qué dos bots y no uno.** El asistente ya está restringido a staff
 > (`_TELEGRAM_LINKABLE_ROLES = {"admin", "encargado"}`), y **un médico no es un usuario del
@@ -119,6 +120,8 @@ hay equivalente para las notificaciones**.
   asistente. Requiere una configuración nueva con el nombre de usuario de ese bot
   (`telegram_notification_bot_username`), que hoy no existe.
 - **R10** — El staff puede estar vinculado **a los dos bots a la vez**, sin que uno pise al otro.
+- **R11** — Cuando un médico responde a un aviso, el encargado **recibe el acuse**: hoy el evento
+  se crea con `status="skipped"` y nunca sale.
 
 ## Criterios de aceptación
 
@@ -146,7 +149,11 @@ hay equivalente para las notificaciones**.
 - **Dada** la pantalla correspondiente,
 - **entonces** se distingue de un vistazo a los médicos y usuarios **sin** Telegram vinculado.
 
-**AC6 — El atasco queda resuelto**
+**AC6 — El acuse llega**
+- **Dado** un médico que responde a un aviso por Telegram,
+- **entonces** el encargado **recibe** el aviso de que respondió (hoy se crea con `skipped` y no sale).
+
+**AC7 — El atasco queda resuelto**
 - **Dadas** las 92 notificaciones y 92 confirmaciones del 9-10 de septiembre,
 - **entonces** ninguna queda `pending` indefinidamente y el criterio aplicado queda documentado.
 

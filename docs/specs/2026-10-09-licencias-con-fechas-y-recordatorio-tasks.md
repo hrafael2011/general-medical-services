@@ -52,7 +52,9 @@ todavía en misiones**.
 - [ ] **Hacer que `update`**, cuando recibe `service_active=False`, exija y guarde motivo y
       sincronice misiones.
 - [ ] **Unificar el evento de auditoría** para que el historial no dependa de por dónde se entró.
-- [ ] **Revisar los datos existentes**: los 2 sin motivo y los 2 en misiones fuera de servicio.
+- [ ] **Corregir los datos existentes** ✅ confirmado por el usuario: los 2 sin motivo y los 2 en
+      misiones fuera de servicio. Son 4 registros; el criterio de cada uno lo confirma el usuario
+      antes de escribirlo.
 
 ### Task 0.2 — Que el motivo diga si espera regreso
 
@@ -69,8 +71,7 @@ migración nueva, `backend/app/domain/catalogs.py`
 - [ ] **Añadirlo a la pantalla de Catálogos** (la pestaña de motivos ya existe) para que se pueda
       cambiar al crear o editar un motivo, con un valor por defecto para los nuevos.
 
-> ⚠️ Es la **única migración** de esta spec. Si prefieres no migrar, se recorta: la pantalla
-> siempre pregunta y el encargado elige. Pierde comodidad, no funcionalidad.
+> ⚠️ Es la **única migración** de esta spec, y **está autorizada por el usuario** (2026-10-09).
 
 ### Task 0.3 — Carga inicial de la clasificación
 
@@ -252,10 +253,9 @@ migración nueva, `backend/app/domain/catalogs.py`
    por caso, es una columna nueva + migración, en otro cambio.
 3. **Los desactivados actuales** se quedan como están (decisión 9), pero la Fase 0 propone revisar
    los 2 sin motivo y los 2 que siguen en misiones fuera de servicio.
-4. **La clasificación de los 8 motivos** (Task 0.3) es criterio de negocio: falta tu confirmación
-   para CONCURSO y OTROS.
-5. **La única migración** de esta spec es la del campo `expects_return` (decisión 11). Se puede
-   recortar si prefieres no migrar.
+4. **CONCURSO y OTROS** quedan a decidir en la carga inicial; si no hay respuesta se cargan como
+   "con regreso" (avisa de más, no de menos) y el admin lo ajusta desde la pantalla.
+5. **La migración** del campo `expects_return` está **autorizada**.
 4. **Nada implementado todavía.**
 
 ## Registro de avance

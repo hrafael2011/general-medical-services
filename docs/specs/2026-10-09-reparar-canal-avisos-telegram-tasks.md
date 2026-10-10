@@ -30,8 +30,9 @@ rastro visible en la campana en vez de morir en silencio.
 | `@MedicalSchedule_bot` (conversacional) | **Solo encargados y admins** | El asistente de consultas |
 
 - [x] **Decidir** el diseño de bots.
-- [ ] **Crear o confirmar** el bot de notificaciones en BotFather y obtener su token.
-- [ ] **Confirmar** el nombre de usuario real de ese bot (para el deep link).
+- [x] **Confirmar** que el bot de notificaciones **ya existe** (respuesta del usuario).
+- [ ] **Recibir del usuario el nombre de usuario** de ese bot (para el deep link).
+- [ ] **Confirmar** que el token está colocado en Railway (API **y** worker).
 
 > El asistente **ya** está restringido a staff (`_TELEGRAM_LINKABLE_ROLES`), así que este diseño
 > refleja la intención que el código ya tenía. Lo que falta es que exista el bot que envía.
@@ -43,10 +44,10 @@ rastro visible en la campana en vez de morir en silencio.
 - [ ] **Colocar** el token del bot de notificaciones en Railway (API **y** worker).
 - [ ] **Registrar** el webhook del bot de notificaciones.
 
-### Task 0.3 — Permiso de los avisos
+### Task 0.3 — Permiso de los avisos ✅ DECIDIDO
 
-- [ ] **Confirmar** si los avisos de licencia reutilizan `receive_escalation_alerts` o llevan
-      permiso propio. *(propuesta: reutilizarlo)*
+- [x] **Reutilizar** `receive_escalation_alerts`. Confirmado por el usuario: quien ya recibe las
+      escalaciones es exactamente quien debe recibir estos avisos.
 
 ---
 
@@ -125,7 +126,18 @@ rastro visible en la campana en vez de morir en silencio.
 - [ ] **Crear** la alerta equivalente a `email_delivery_failed` para notificaciones
       (`notification_delivery_failed`), con el motivo y el destinatario.
 
-### Task 3.3 — Ver quién no puede recibir
+### Task 3.3 — El acuse al encargado (confirmado en esta spec)
+
+**Archivo:** `backend/app/api/routes/telegram_notification_webhook.py` (≈ línea 239)
+
+- [ ] **Quitar** el `status="skipped"` con el que nace el evento `{tipo}_confirmed`, y darle
+      **destinatarios reales**: los usuarios con `receive_escalation_alerts`.
+- [ ] **Verificar** que el acuse llega y que no se duplica (clave `confirmed:{id}` ya es única).
+
+> Es un aviso que hoy **nace desactivado a propósito**. Se arregla aquí y no en el spec B
+> porque es el mismo tipo de bug: un mensaje que nunca sale.
+
+### Task 3.4 — Ver quién no puede recibir
 
 - [ ] **Exponer** en la API ese dato para médicos y usuarios.
 - [ ] **Mostrarlo** en la interfaz: distinguir de un vistazo quién no tiene Telegram vinculado.
