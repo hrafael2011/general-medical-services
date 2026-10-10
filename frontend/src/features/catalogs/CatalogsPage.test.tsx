@@ -12,6 +12,7 @@ const mockCreateDeactivationReason = vi.fn().mockResolvedValue({
   requires_detail: false,
   applies_to_sex: null,
   severity: "hard_block",
+  expects_return: true,
 });
 const mockUpdateRank = vi.fn().mockResolvedValue({});
 const mockUpdateDeactivationReason = vi.fn().mockResolvedValue({});
@@ -52,6 +53,7 @@ vi.mock("../../api/doctors", () => ({
         requires_detail: false,
         applies_to_sex: null,
         severity: "hard_block",
+        expects_return: true,
       },
       {
         id: "reason-2",
@@ -61,6 +63,7 @@ vi.mock("../../api/doctors", () => ({
         requires_detail: false,
         applies_to_sex: null,
         severity: "hard_block",
+        expects_return: false,
       },
     ]),
     createDeactivationReason: (...args: unknown[]) => mockCreateDeactivationReason(...args),
@@ -123,6 +126,7 @@ describe("CatalogsPage", () => {
       expect(mockCreateDeactivationReason).toHaveBeenCalledWith({
         display_name: "Capacitación",
         applies_to_sex: null,
+        expects_return: true,
       });
     });
   });
@@ -144,9 +148,24 @@ describe("CatalogsPage", () => {
       expect(mockUpdateDeactivationReason).toHaveBeenCalledWith("reason-2", {
         display_name: "Vacaciones",
         applies_to_sex: null,
+        expects_return: false,
         active: true,
       });
     });
+  });
+
+  it("muestra si cada motivo espera fecha de regreso", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /Razones de desactivación/i }));
+    expect(await screen.findByText("Licencia médica")).toBeInTheDocument();
+
+    // La columna es la que gobierna la pantalla de "No disponible": un motivo que no espera
+    // regreso (como DIRECCION) hace que no se pida fecha.
+    const conRegreso = screen.getByText("Licencia médica").closest("tr") as HTMLTableRowElement;
+    const sinRegreso = screen.getByText("Vacaciones").closest("tr") as HTMLTableRowElement;
+    expect(within(conRegreso).getByText("Sí")).toBeInTheDocument();
+    expect(within(sinRegreso).getByText("No")).toBeInTheDocument();
   });
 
   it("shows both signatures in the signatures tab", async () => {

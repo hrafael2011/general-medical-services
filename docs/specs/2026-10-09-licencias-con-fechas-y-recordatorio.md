@@ -1,9 +1,9 @@
 ---
 spec: licencias-con-fechas-y-recordatorio
-version: 1.1.0
-status: draft
+version: 1.2.0
+status: implemented
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # Spec — Licencias con fechas y recordatorio de reintegro
@@ -64,6 +64,13 @@ El motor de asignación evalúa **1, 2, 5, 6 y 7** (`eligibility.py`), y el 3 ap
   2 médicos: fuera de servicio PERO todavía en misiones    ← inconsistencia
   2 médicos: fuera de servicio SIN motivo registrado       ← hueco de datos
 ```
+
+> **Corrección medida el 2026-10-10: son los MISMOS 2 médicos, no 4 registros.** Cada uno tiene
+> los dos problemas a la vez (fuera de servicio, sin motivo y todavía en misiones). La auditoría de
+> mayo lo confirma: ambos entraron por la puerta B (`doctor_updated` con `service_active: False`,
+> `participa_misiones: True`, `allowed_area_ids: []`) y **el motivo no quedó registrado en ninguna
+> parte**, así que no se puede recuperar: se elige. Decisión del usuario: motivo `OTROS` con una
+> nota de que fue una desactivación histórica, y fuera de misiones.
 
 ### El catálogo real de motivos (producción, no el del código)
 
@@ -314,4 +321,5 @@ el permiso correspondiente — el mismo mecanismo que ya usa la escalación de c
 | Version | Date | Issue | Trigger | Resumen |
 |---|---|---|---|---|
 | 1.0.0 | 2026-10-09 | — | Nuevo requerimiento | Se añade fecha de inicio y de regreso (o **indefinido**) a la ausencia de un médico, reutilizando el mecanismo de restricciones que ya existe y ya bloquea asignaciones por rango, sin migración. Se programa un recordatorio X días antes del reintegro por Telegram y campana, con re-armado al editar la fecha. Depende de reparar el canal de avisos. |
+| 1.2.0 | 2026-10-10 | — | Implementación | Se implementan las Fases 0 a 5. **Las dos puertas de desactivación quedan unificadas**: desactivar exige motivo (validado contra el catálogo y contra el sexo del médico), saca de misiones, registra el mismo evento de auditoría y crea las mismas alertas, se entre por donde se entre. Se añade `expects_return` al catálogo de motivos (migración `a2446a0123b3`, verificada en base desechable con los 8 códigos reales) y se hace editable en la pantalla de Catálogos, para que la pantalla sepa proponer "Indefinido" sin que ninguna regla dependa del `code`. Se añade `PATCH /restrictions/{id}` —**el plan asumía que editar ya era posible y no lo era**— para poder editar la fecha, que es lo que re-arma el aviso. El recordatorio es el quinto job del worker, con alerta en la campana y aviso por Telegram, idempotente por restricción + fecha + destinatario. La pantalla "No disponible" unifica las dos representaciones del eje 2. Detalle en el archivo de tareas. |
 | 1.1.0 | 2026-10-09 | — | Investigación | Se descubre que **"inhabilitado" son ocho ejes independientes**, no uno, y se documenta el estado real de producción (73 médicos, 29 fuera de servicio, 32 fuera de misiones, catálogo real de 8 motivos todos `hard_block`). Se acota el alcance al eje 2 y se añaden dos correcciones de fondo: **unificar las dos puertas** de desactivación —que hoy dejan motivo, misiones y auditoría distintos, y que explican los datos inconsistentes— y que **el motivo indique si espera regreso**, para que "indefinido" deje de ser un caso borde. "Indefinido" pasa a ser de primera clase: cubre 2 de los 8 motivos reales. |

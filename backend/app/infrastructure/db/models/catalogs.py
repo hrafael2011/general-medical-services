@@ -69,6 +69,11 @@ class DeactivationReasonModel(Base):
     requires_detail: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     applies_to_sex: Mapped[str | None] = mapped_column(String(20), nullable=True)
     severity: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Si la ausencia por este motivo espera una fecha de regreso. Es un atributo **editable**
+    # del catálogo: la pantalla lo usa para proponer "Indefinido" o pedir fechas, y nadie
+    # puede decidir por el `code`, porque los motivos se crean y se renombran desde la
+    # pantalla de Catálogos. Un motivo nuevo nace con regreso (avisar de más, no de menos).
+    expects_return: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(

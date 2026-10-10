@@ -28,8 +28,8 @@ vi.mock("../../api/doctors", () => ({
       { id: "dept-1", name: "Recursos Humanos", normalized_name: "recursos humanos", active: true },
     ]),
     listDeactivationReasons: vi.fn().mockResolvedValue([
-      { id: "reason-1", code: "medical_license", display_name: "Licencia médica", active: true, requires_detail: false, applies_to_sex: null, severity: "hard_block" },
-      { id: "reason-2", code: "other", display_name: "Otro", active: true, requires_detail: true, applies_to_sex: null, severity: "warn" },
+      { id: "reason-1", code: "medical_license", display_name: "Licencia médica", active: true, requires_detail: false, applies_to_sex: null, severity: "hard_block", expects_return: true },
+      { id: "reason-2", code: "other", display_name: "Otro", active: true, requires_detail: true, applies_to_sex: null, severity: "warn", expects_return: true },
     ]),
     reactivateService: vi.fn(),
     deactivateService: vi.fn(),
@@ -57,6 +57,11 @@ vi.mock("../../api/doctors", () => ({
       ]);
     }),
     setMonthly: vi.fn().mockResolvedValue({}),
+    // La sección "No disponible" consulta las ausencias con fechas al abrir la ficha.
+    listRestrictions: vi.fn().mockResolvedValue([]),
+    addRestriction: vi.fn().mockResolvedValue({}),
+    updateRestriction: vi.fn().mockResolvedValue({}),
+    liftRestriction: vi.fn().mockResolvedValue({}),
   },
 }));
 

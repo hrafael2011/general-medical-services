@@ -736,6 +736,89 @@ button {
   max-width: 430px;
 }
 
+/* ===== No disponible (ausencias del médico) ===== */
+.profile-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+.absence-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+.absence-row > div:first-child {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.absence-row--flag {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.absence-row--past {
+  opacity: 0.7;
+}
+.absence-dates {
+  font-size: 0.82rem;
+  color: #475569;
+}
+.absence-dates em {
+  font-style: normal;
+  font-weight: 600;
+  color: #0f172a;
+}
+.absence-detail {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+.absence-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.absence-badge--vigente { background: #fee2e2; color: #991b1b; }
+.absence-badge--programada { background: #dbeafe; color: #1e40af; }
+.absence-badge--finalizada { background: #e2e8f0; color: #475569; }
+.absence-actions {
+  display: flex;
+  gap: 6px;
+}
+.absence-form {
+  display: grid;
+  gap: 10px;
+  max-width: 430px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.absence-form h4 {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #334155;
+}
+.absence-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: #334155;
+}
+.absence-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
 /* ===== Doctor form ===== */
 .doctor-form { display: grid; gap: 14px; }
 

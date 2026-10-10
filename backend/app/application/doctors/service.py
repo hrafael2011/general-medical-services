@@ -148,6 +148,8 @@ class DoctorService:
         notes: str | None | object = _MISSING,
         participa_misiones: bool | None = None,
         service_active: bool | None = None,
+        service_inactive_reason_id: str | None = None,
+        service_inactive_detail: str | None | object = _MISSING,
         whatsapp_phone: str | None | object = _MISSING,
         monthly_service_target: int | None = None,
         monthly_service_max: int | None = None,
@@ -293,10 +295,45 @@ class DoctorService:
                             removed_avail, doctor_id, old_availability_mode, availability_mode,
                         )
 
+        # --- Eje 2: "fuera de servicio" -------------------------------------------------
+        # Históricamente había DOS puertas para esto y dejaban estados distintos: el botón
+        # dedicado guardaba motivo y sacaba de misiones, mientras que editar el médico no
+        # guardaba motivo y lo dejaba en misiones —de ahí los médicos fuera de servicio sin
+        # motivo y los que seguían en misiones estando fuera—. Ahora las dos puertas hacen
+        # lo mismo. Ver docs/specs/2026-10-09-licencias-con-fechas-y-recordatorio.md (R11).
+        deactivated = False
+        reactivated = False
         if service_active is not None:
+            was_active = doctor.service_active
+            deactivated = not service_active and was_active
+            reactivated = bool(service_active) and not was_active
+
+            # Se valida ANTES de mutar: así un motivo inválido no deja el objeto a medio
+            # cambiar si la petición termina en error.
+            reason_id: str | None = None
+            if not service_active:
+                reason_id = service_inactive_reason_id or doctor.service_inactive_reason_id
+                if reason_id is None:
+                    raise DoctorServiceError(
+                        "reason_required",
+                        "Para dejar de prestar servicio hay que indicar el motivo.",
+                    )
+                self._validate_service_reason(reason_id, doctor)
+
             doctor.service_active = service_active
             changed_fields["service_active"] = service_active
+
             if not service_active:
+                doctor.service_inactive_reason_id = reason_id
+                if service_inactive_detail is not _MISSING:
+                    doctor.service_inactive_detail = _strip_html(service_inactive_detail)
+
+                # Fuera de servicio implica fuera de misiones: son ejes distintos, pero
+                # dejar a alguien fuera de servicio y dentro de misiones fue justo la
+                # inconsistencia que se encontró en producción.
+                doctor.participa_misiones = False
+                changed_fields["participa_misiones"] = False
+
                 AvailabilityRepository(self.doctors.session).delete_all_for_doctor(doctor_id)
                 self.doctors.set_allowed_areas(doctor_id, [])
                 changed_fields["allowed_area_ids"] = []
@@ -308,6 +345,15 @@ class DoctorService:
                         "Cleaned up %d calendar assignments for deactivated doctor %s",
                         removed, doctor_id,
                     )
+            else:
+                # Reactivar limpia el motivo: si no, quedaría pegado a un médico activo.
+                # `participa_misiones` solo se toca si el cliente no lo pidió explícitamente,
+                # porque volver al servicio no tiene por qué devolverlo a misiones (eje 3).
+                doctor.service_inactive_reason_id = None
+                doctor.service_inactive_detail = None
+                if participa_misiones is None:
+                    doctor.participa_misiones = True
+                    changed_fields["participa_misiones"] = True
 
         doctor.updated_at = datetime.now(UTC)
         self.doctors.session.flush()
@@ -315,10 +361,48 @@ class DoctorService:
             self.doctors.set_allowed_areas(doctor_id, allowed_area_ids)
             changed_fields["allowed_area_ids"] = allowed_area_ids
 
-        if self.audit is not None and changed_fields:
-            self.audit.log_doctor_updated(actor_id=actor_id, doctor=doctor, changed_fields=changed_fields)
+        if self.audit is not None:
+            # El evento de desactivación/reactivación se emite siempre, venga de la puerta
+            # que venga: el historial no debe depender de por dónde se entró. El `update`
+            # genérico queda para los demás campos, si es que cambió alguno.
+            other_changes = {k: v for k, v in changed_fields.items() if k != "service_active"}
+            if other_changes:
+                self.audit.log_doctor_updated(
+                    actor_id=actor_id, doctor=doctor, changed_fields=other_changes
+                )
+            if deactivated:
+                self.audit.log_doctor_service_deactivated(actor_id=actor_id, doctor=doctor)
+            elif reactivated:
+                self.audit.log_doctor_service_reactivated(actor_id=actor_id, doctor=doctor)
+            elif not other_changes and changed_fields:
+                self.audit.log_doctor_updated(
+                    actor_id=actor_id, doctor=doctor, changed_fields=changed_fields
+                )
+
+        if deactivated:
+            self._create_mission_replacement_alerts_for_deactivated_doctor(doctor, actor_id=actor_id)
 
         return doctor
+
+    def _validate_service_reason(self, reason_id: str, doctor: DoctorModel) -> None:
+        """Comprueba que el motivo existe y aplica al sexo del médico.
+
+        Compartido por las dos puertas de desactivación: antes solo lo comprobaba el botón
+        dedicado, así que editar el médico podía dejar un motivo que no correspondía.
+        """
+        if self.catalog_repo is None:
+            return
+        reason = self.catalog_repo.get_deactivation_reason_by_id(reason_id)
+        if reason is None:
+            raise DoctorServiceError(
+                "reason_not_found",
+                f"El motivo de desactivación {reason_id} no existe.",
+            )
+        if reason.applies_to_sex is not None and doctor.sex != reason.applies_to_sex:
+            raise DoctorServiceError(
+                "reason_sex_mismatch",
+                "Este motivo de desactivación no aplica al sexo del médico.",
+            )
 
     def _cleanup_calendar_assignments(self, doctor_id: str) -> int:
         """Remove all assignments for a doctor in draft/partial calendars.
@@ -500,14 +584,7 @@ class DoctorService:
         if doctor is None:
             raise DoctorServiceError("doctor_not_found", f"Médico con id {doctor_id} no encontrado.")
 
-        if self.catalog_repo is not None:
-            reason = self.catalog_repo.get_deactivation_reason_by_id(reason_id)
-            if reason is not None and reason.applies_to_sex is not None:
-                if doctor.sex != reason.applies_to_sex:
-                    raise DoctorServiceError(
-                        "reason_sex_mismatch",
-                        "Este motivo de desactivación no aplica al sexo del médico.",
-                    )
+        self._validate_service_reason(reason_id, doctor)
 
         doctor.service_active = False
         doctor.service_inactive_reason_id = reason_id

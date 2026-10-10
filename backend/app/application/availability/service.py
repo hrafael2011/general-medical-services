@@ -8,6 +8,7 @@ from backend.app.infrastructure.db.models.availability import (
     DoctorRestrictionModel,
 )
 from backend.app.infrastructure.repositories.availability import AvailabilityRepository
+from backend.app.infrastructure.repositories.catalogs import CatalogRepository
 from backend.app.infrastructure.repositories.doctors import DoctorRepository
 
 
@@ -17,10 +18,46 @@ class AvailabilityService:
         availability_repo: AvailabilityRepository,
         doctor_repo: DoctorRepository,
         audit: AuditService | None = None,
+        catalog_repo: CatalogRepository | None = None,
     ) -> None:
         self.availability = availability_repo
         self.doctors = doctor_repo
         self.audit = audit
+        self.catalog_repo = catalog_repo
+
+    # --- Ausencias con fechas (eje 2) -------------------------------------------------
+    #
+    # Una ausencia es una `doctor_restriction`: el motor de asignación ya la respeta por
+    # rango, así que el médico queda fuera **solo** entre `starts_at` y `ends_at` y vuelve
+    # solo, sin que nadie lo reactive. `ends_at = None` es "indefinido": bloquea desde
+    # `starts_at` sin fecha de fin y **no** genera recordatorio.
+    # Ver `docs/specs/2026-10-09-licencias-con-fechas-y-recordatorio.md`.
+
+    def _validate_restriction_dates(self, starts_at: date, ends_at: date | None) -> None:
+        if ends_at is not None and ends_at < starts_at:
+            raise AvailabilityError(
+                "invalid_date_range",
+                "La fecha de regreso no puede ser anterior a la fecha de inicio.",
+            )
+
+    def _validate_restriction_reason(self, reason_id: str | None, doctor) -> None:
+        """El motivo debe existir y aplicar al sexo del médico.
+
+        Se decide por el **atributo** del motivo, nunca por su `code`: el catálogo es
+        editable y un motivo nuevo tiene que funcionar sin tocar código.
+        """
+        if reason_id is None or self.catalog_repo is None:
+            return
+        reason = self.catalog_repo.get_deactivation_reason_by_id(reason_id)
+        if reason is None:
+            raise AvailabilityError(
+                "reason_not_found", f"El motivo de ausencia {reason_id} no existe."
+            )
+        if reason.applies_to_sex is not None and doctor.sex != reason.applies_to_sex:
+            raise AvailabilityError(
+                "reason_sex_mismatch",
+                "Este motivo de ausencia no aplica al sexo del médico.",
+            )
 
     def set_weekly_availability(
         self,
@@ -204,6 +241,9 @@ class AvailabilityService:
         if doctor is None:
             raise AvailabilityError("doctor_not_found", f"Médico {doctor_id} no encontrado.")
 
+        self._validate_restriction_dates(starts_at, ends_at)
+        self._validate_restriction_reason(reason_id, doctor)
+
         now = datetime.now(UTC)
         record = DoctorRestrictionModel(
             id=str(uuid.uuid4()),
@@ -224,6 +264,52 @@ class AvailabilityService:
         if self.audit:
             self.audit.log_restriction_added(actor_id=actor_id, restriction=result)
         return result
+
+    def update_restriction(
+        self,
+        restriction_id: str,
+        *,
+        starts_at: date,
+        ends_at: date | None,
+        reason_id: str | None,
+        description: str | None,
+        severity: str,
+        actor_id: str,
+    ) -> DoctorRestrictionModel:
+        """Corrige una ausencia ya registrada.
+
+        Cambiar la fecha de regreso **re-arma el aviso**: la clave de idempotencia del
+        recordatorio incluye esa fecha, así que con una fecha nueva el aviso vuelve a estar
+        permitido y con la misma fecha no se repite. No hay que tocar nada más.
+        """
+        restriction = self.availability.get_restriction_by_id(restriction_id)
+        if restriction is None:
+            raise AvailabilityError(
+                "restriction_not_found", f"Restricción {restriction_id} no encontrada."
+            )
+        doctor = self.doctors.get_by_id(restriction.doctor_id)
+        if doctor is None:
+            raise AvailabilityError(
+                "doctor_not_found", f"Médico {restriction.doctor_id} no encontrado."
+            )
+
+        self._validate_restriction_dates(starts_at, ends_at)
+        self._validate_restriction_reason(reason_id, doctor)
+
+        previous_ends_at = restriction.ends_at
+        restriction.starts_at = starts_at
+        restriction.ends_at = ends_at
+        restriction.reason_id = reason_id
+        restriction.description = description
+        restriction.severity = severity
+        restriction.updated_at = datetime.now(UTC)
+        if self.audit:
+            self.audit.log_restriction_updated(
+                actor_id=actor_id,
+                restriction=restriction,
+                previous_ends_at=previous_ends_at,
+            )
+        return restriction
 
     def lift_restriction(
         self,

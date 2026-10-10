@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, PlusCircle, Pencil, Trash2, Check, X } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { doctorsApi, RankRead, DepartmentRead, DeactivationReasonRead, ReportSignatures } from "../../api/doctors";
 
-type Tab = "ranks" | "departments" | "deactivation-reasons" | "signatures";
+type Tab = "ranks" | "departments" | "deactivation-reasons" | "notifications" | "signatures";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "ranks", label: "Rangos" },
   { key: "departments", label: "Departamentos" },
   { key: "deactivation-reasons", label: "Razones de desactivación" },
+  { key: "notifications", label: "Avisos" },
   { key: "signatures", label: "Firmas" },
 ];
 
@@ -41,6 +42,7 @@ export function CatalogsPage() {
       {active === "ranks" && <RanksTab />}
       {active === "departments" && <DepartmentsTab />}
       {active === "deactivation-reasons" && <DeactivationReasonsTab />}
+      {active === "notifications" && <NotificationSettingsTab />}
       {active === "signatures" && <SignaturesTab />}
     </div>
   );
@@ -521,15 +523,83 @@ function DepartmentsTab() {
   );
 }
 
+/**
+ * Avisos: con cuántos días de antelación se avisa al encargado de que a un médico se le
+ * acaba la ausencia. Es un ajuste global —el recordatorio es uno por ausencia— y por eso
+ * vive aquí y no en la ficha de cada médico.
+ */
+function NotificationSettingsTab() {
+  const { addToast } = useToast();
+  const qc = useQueryClient();
+  const [days, setDays] = useState("2");
+
+  const { data } = useQuery({
+    queryKey: ["notification-settings"],
+    queryFn: () => doctorsApi.getNotificationSettings(),
+  });
+
+  useEffect(() => {
+    if (data) setDays(String(data.license_reminder_days));
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      doctorsApi.saveNotificationSettings({ license_reminder_days: Number(days) }),
+    onSuccess: saved => {
+      addToast("success", "Ajuste guardado.");
+      setDays(String(saved.license_reminder_days));
+      qc.invalidateQueries({ queryKey: ["notification-settings"] });
+    },
+    onError: () => addToast("error", "Error al guardar el ajuste."),
+  });
+
+  const parsed = Number(days);
+  const invalid = !Number.isInteger(parsed) || parsed < 1 || parsed > 60;
+
+  return (
+    <div style={{ maxWidth: "460px" }}>
+      <h4 style={{ margin: "0 0 6px", fontSize: "0.9rem" }}>Recordatorio de reintegro</h4>
+      <p style={{ color: "#64748b", fontSize: "0.85rem", marginTop: 0 }}>
+        Días de antelación con que se avisa al encargado de que a un médico se le acaba la
+        ausencia. Las ausencias <strong>indefinidas</strong> no avisan: no hay fecha de
+        regreso de la que avisar.
+      </p>
+      <label>
+        Días de aviso
+        <input
+          type="number"
+          min={1}
+          max={60}
+          value={days}
+          onChange={e => setDays(e.target.value)}
+        />
+      </label>
+      {invalid && <p className="form-error">Indica un número de días entre 1 y 60.</p>}
+      <button
+        className="btn-primary"
+        style={{ marginTop: "12px" }}
+        onClick={() => saveMutation.mutate()}
+        disabled={invalid || saveMutation.isPending}
+      >
+        <Check size={15} /> {saveMutation.isPending ? "Guardando…" : "Guardar"}
+      </button>
+    </div>
+  );
+}
+
 function DeactivationReasonsTab() {
   const { addToast } = useToast();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newAppliesToSex, setNewAppliesToSex] = useState("");
+  // Si el motivo espera fecha de regreso: es lo que la pantalla de "No disponible" usa para
+  // proponer "Indefinido" (un puesto como DIRECCION) o pedir fechas.
+  const [newExpectsReturn, setNewExpectsReturn] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editAppliesToSex, setEditAppliesToSex] = useState("");
+  const [editExpectsReturn, setEditExpectsReturn] = useState(true);
   const [editActive, setEditActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<DeactivationReasonRead | null>(null);
 
@@ -542,12 +612,14 @@ function DeactivationReasonsTab() {
     mutationFn: () => doctorsApi.createDeactivationReason({
       display_name: newName,
       applies_to_sex: newAppliesToSex || null,
+      expects_return: newExpectsReturn,
     }),
     onSuccess: () => {
       addToast("success", "Razón creada.");
       setShowCreate(false);
       setNewName("");
       setNewAppliesToSex("");
+      setNewExpectsReturn(true);
       qc.invalidateQueries({ queryKey: ["deactivation-reasons"] });
     },
     onError: () => addToast("error", "Error al crear razón."),
@@ -557,6 +629,7 @@ function DeactivationReasonsTab() {
     mutationFn: ({ id, payload }: { id: string; payload: Partial<{
       display_name: string;
       applies_to_sex: string | null;
+      expects_return: boolean;
       active: boolean;
     }> }) => doctorsApi.updateDeactivationReason(id, payload),
     onSuccess: () => {
@@ -581,6 +654,7 @@ function DeactivationReasonsTab() {
     setEditingId(reason.id);
     setEditName(reason.display_name);
     setEditAppliesToSex(reason.applies_to_sex ?? "");
+    setEditExpectsReturn(reason.expects_return);
     setEditActive(reason.active);
   }
 
@@ -606,6 +680,14 @@ function DeactivationReasonsTab() {
                 <option value="female">Femenino</option>
               </select>
             </label>
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={newExpectsReturn}
+                onChange={e => setNewExpectsReturn(e.target.checked)}
+              />
+              Espera fecha de regreso
+            </label>
             <button className="btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
               {createMutation.isPending ? "Creando…" : "Crear"}
             </button>
@@ -619,7 +701,7 @@ function DeactivationReasonsTab() {
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
-              <tr><th>Nombre</th><th>Aplica a</th><th>Activo</th><th></th></tr>
+              <tr><th>Nombre</th><th>Aplica a</th><th>¿Espera regreso?</th><th>Activo</th><th></th></tr>
             </thead>
             <tbody>
               {reasons.map(reason => (
@@ -634,6 +716,16 @@ function DeactivationReasonsTab() {
                         <option value="male">Masculino</option>
                         <option value="female">Femenino</option>
                       </select>
+                    </td>
+                    <td>
+                      <label className="toggle-label" style={{ margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={editExpectsReturn}
+                          onChange={e => setEditExpectsReturn(e.target.checked)}
+                        />
+                        {editExpectsReturn ? "Sí" : "No"}
+                      </label>
                     </td>
                     <td>
                       <label className="toggle-label" style={{ margin: 0 }}>
@@ -655,6 +747,7 @@ function DeactivationReasonsTab() {
                             payload: {
                               display_name: editName,
                               applies_to_sex: editAppliesToSex || null,
+                              expects_return: editExpectsReturn,
                               active: editActive,
                             },
                           })}
@@ -676,6 +769,7 @@ function DeactivationReasonsTab() {
                   <tr key={reason.id}>
                     <td>{reason.display_name}</td>
                     <td>{sexLabel(reason.applies_to_sex)}</td>
+                    <td>{reason.expects_return ? "Sí" : "No"}</td>
                     <td>{reason.active ? "Activo" : "Inactivo"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "6px" }}>

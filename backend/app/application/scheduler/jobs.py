@@ -304,3 +304,166 @@ def process_overdue_confirmations() -> dict:
         return {"expired": 0, "alerts_created": 0}
     finally:
         session.close()
+
+
+def send_license_return_reminders() -> dict:
+    """Avisa al encargado de que a un médico se le acaba la ausencia.
+
+    Busca las ausencias con fecha de regreso **dentro de la ventana** (`hoy` .. `hoy + N`,
+    con N configurable, 2 por defecto) y, por cada una, deja una alerta en la campana y
+    encola el aviso por Telegram a quien tenga el permiso de recibir escalaciones.
+
+    Dos cosas que NO hace, a propósito:
+
+    - **No reactiva a nadie.** No hace falta: la restricción deja de aplicar cuando pasa su
+      fecha de fin (decisión 5 del spec).
+    - **No incluye las ausencias indefinidas** (`ends_at` nulo): no hay fecha de la que
+      avisar.
+
+    La idempotencia la da la clave `license_expiring:{restriccion}:{fecha}`, que incluye la
+    fecha de regreso. Eso resuelve los tres casos del spec: la misma fecha avisa **una** vez,
+    cambiar la fecha **vuelve a permitir** el aviso, y volver a la fecha anterior **no**
+    re-avisa (esa clave ya existe).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from backend.app.application.action_alerts.service import ActionAlertService
+    from backend.app.application.catalogs.service import CatalogService
+    from backend.app.application.notifications.providers import (
+        FakeProvider,
+        MetaCloudAPIProvider,
+        TelegramNotificationProvider,
+    )
+    from backend.app.application.notifications.service import NotificationService
+    from backend.app.application.notifications.templates import (
+        render_license_return_reminder,
+    )
+    from backend.app.core.config import settings
+    from backend.app.infrastructure.db.models.availability import (
+        DoctorRestrictionModel,
+    )
+    from backend.app.infrastructure.db.models.doctors import DoctorModel
+    from backend.app.infrastructure.db.models.user import UserModel
+    from backend.app.infrastructure.db.session import SessionLocal
+    from backend.app.infrastructure.repositories.action_alerts import (
+        ActionAlertRepository,
+    )
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
+    from backend.app.infrastructure.repositories.notifications import (
+        NotificationRepository,
+    )
+
+    session = SessionLocal()
+    try:
+        days = CatalogService(CatalogRepository(session)).get_license_reminder_days()
+        today = datetime.now(UTC).date()
+        window_end = today + timedelta(days=days)
+
+        stmt = select(DoctorRestrictionModel).where(
+            DoctorRestrictionModel.lifted_at.is_(None),
+            DoctorRestrictionModel.ends_at.is_not(None),
+            DoctorRestrictionModel.ends_at >= today,
+            DoctorRestrictionModel.ends_at <= window_end,
+        )
+        restrictions = list(session.scalars(stmt))
+        if not restrictions:
+            return {"reminders": 0, "alerts_created": 0}
+
+        recipients = session.scalars(
+            select(UserModel).where(
+                UserModel.active.is_(True),
+                UserModel.telegram_chat_id.is_not(None),
+                UserModel.permissions.contains(["receive_escalation_alerts"]),
+            )
+        ).all()
+
+        if settings.telegram_notification_bot_token:
+            provider = TelegramNotificationProvider()
+        elif settings.meta_whatsapp_token and settings.meta_whatsapp_phone_number_id:
+            provider = MetaCloudAPIProvider()
+        else:
+            provider = FakeProvider()
+        svc = NotificationService(repo=NotificationRepository(session), provider=provider)
+        alert_svc = ActionAlertService(ActionAlertRepository(session))
+
+        catalog_repo = CatalogRepository(session)
+        reminders = 0
+        alerts_created = 0
+        for restriction in restrictions:
+            doctor = session.get(DoctorModel, restriction.doctor_id)
+            if doctor is None:
+                continue
+            ends_at = restriction.ends_at
+            assert ends_at is not None  # filtrado en la consulta
+            days_left = (ends_at - today).days
+            reason = (
+                catalog_repo.get_deactivation_reason_by_id(restriction.reason_id)
+                if restriction.reason_id
+                else None
+            )
+            reason_name = reason.display_name if reason is not None else None
+            message = render_license_return_reminder(
+                doctor.name, reason_name, ends_at.isoformat(), days_left
+            )
+
+            # Campana: una alerta abierta por ausencia, visible y resoluble. Si la fecha se
+            # editó y la alerta seguía abierta, se reescribe: no puede quedar mostrando una
+            # fecha de reintegro vieja.
+            before = alert_svc.repo.get_open_for_entity(
+                alert_type="license_return_due",
+                entity_type="restriction",
+                entity_id=restriction.id,
+            )
+            if before is not None:
+                if before.message != message:
+                    before.message = message
+                    before.alert_metadata = {
+                        "doctor_id": doctor.id,
+                        "doctor_name": doctor.name,
+                        "reason": reason_name,
+                        "return_date": ends_at.isoformat(),
+                    }
+                    before.updated_at = datetime.now(UTC)
+            else:
+                alerts_created += 1
+                alert_svc.create_if_missing(
+                    alert_type="license_return_due",
+                    section="doctors",
+                    severity="info",
+                    title="Se acerca el reintegro de un médico",
+                    message=message,
+                    entity_type="restriction",
+                    entity_id=restriction.id,
+                    action_url=f"/doctors?doctor={doctor.id}",
+                    alert_metadata={
+                        "doctor_id": doctor.id,
+                        "doctor_name": doctor.name,
+                        "reason": reason_name,
+                        "return_date": ends_at.isoformat(),
+                    },
+                )
+
+            # Telegram: un aviso por destinatario, con la fecha en la clave.
+            for recipient in recipients:
+                svc.queue(
+                    notification_type="license_return_reminder",
+                    idempotency_key=(
+                        f"license_expiring:{restriction.id}:{ends_at.isoformat()}:{recipient.id}"
+                    ),
+                    recipient_doctor_id=None,
+                    recipient_phone=recipient.telegram_chat_id,
+                    payload={"message": message},
+                    created_by=recipient.id,
+                )
+            reminders += 1
+
+        session.commit()
+        return {"reminders": reminders, "alerts_created": alerts_created}
+    except Exception:
+        session.rollback()
+        logger.exception("Failed license return reminder job")
+        return {"reminders": 0, "alerts_created": 0}
+    finally:
+        session.close()

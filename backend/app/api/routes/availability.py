@@ -20,6 +20,7 @@ from backend.app.schemas.availability import (
     SetMonthlyAvailabilityRequest,
     SetRecurringAvailabilityRequest,
     SetWeeklyAvailabilityRequest,
+    UpdateRestrictionRequest,
 )
 
 router = APIRouter(prefix="/availability", tags=["availability"])
@@ -28,10 +29,13 @@ router = APIRouter(prefix="/availability", tags=["availability"])
 def get_availability_service(session: Annotated[Session, Depends(get_db_session)]) -> AvailabilityService:
     from backend.app.application.audit.service import AuditService
     from backend.app.infrastructure.repositories.audit import AuditRepository
+    from backend.app.infrastructure.repositories.catalogs import CatalogRepository
     return AvailabilityService(
         availability_repo=AvailabilityRepository(session),
         doctor_repo=DoctorRepository(session),
         audit=AuditService(AuditRepository(session)),
+        # Para comprobar que el motivo de la ausencia aplica al sexo del médico.
+        catalog_repo=CatalogRepository(session),
     )
 
 
@@ -158,6 +162,31 @@ def add_restriction(
             ends_at=payload.ends_at,
             description=payload.description,
             reason_id=payload.reason_id,
+            actor_id=current_user.id,
+        )
+    except AvailabilityError as exc:
+        raise _availability_error_to_http(exc) from exc
+    session.commit()
+    return RestrictionRead.model_validate(record)
+
+
+@router.patch("/restrictions/{restriction_id}", response_model=RestrictionRead)
+def update_restriction(
+    restriction_id: str,
+    payload: UpdateRestrictionRequest,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_availability"))],
+    service: Annotated[AvailabilityService, Depends(get_availability_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> RestrictionRead:
+    """Corrige una ausencia. Cambiar la fecha de regreso re-arma el recordatorio."""
+    try:
+        record = service.update_restriction(
+            restriction_id,
+            starts_at=payload.starts_at,
+            ends_at=payload.ends_at,
+            reason_id=payload.reason_id,
+            description=payload.description,
+            severity=payload.severity,
             actor_id=current_user.id,
         )
     except AvailabilityError as exc:

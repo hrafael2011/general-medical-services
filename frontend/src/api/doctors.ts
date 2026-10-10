@@ -56,11 +56,14 @@ export interface DeactivationReasonRead {
   requires_detail: boolean;
   applies_to_sex: string | null;
   severity: string;
+  /** Si la ausencia por este motivo espera una fecha de regreso (un puesto no la espera). */
+  expects_return: boolean;
 }
 
 export interface DeactivationReasonPayload {
   display_name: string;
   applies_to_sex: string | null;
+  expects_return?: boolean;
   active?: boolean;
 }
 
@@ -139,6 +142,12 @@ export const doctorsApi = {
       { method: "DELETE" },
     ),
   getReportSignatures: () => apiFetch<ReportSignatures>("/catalogs/report-signatures"),
+  getNotificationSettings: () =>
+    apiFetch<NotificationSettings>("/catalogs/notification-settings"),
+  saveNotificationSettings: (payload: NotificationSettings) =>
+    apiFetch<NotificationSettings>("/catalogs/notification-settings", {
+      method: "PUT", body: JSON.stringify(payload),
+    }),
   saveReportSignatures: (payload: ReportSignatures) =>
     apiFetch<ReportSignatures>("/catalogs/report-signatures", {
       method: "PUT", body: JSON.stringify(payload),
@@ -210,6 +219,37 @@ export interface DoctorByDepartmentResponse {
   departments: Record<string, DepartmentGroup>;
 }
 
+export interface DoctorRestrictionRead {
+  id: string;
+  doctor_id: string;
+  reason_id: string | null;
+  restriction_type: string;
+  severity: string;
+  description: string | null;
+  starts_at: string;
+  /** `null` = **indefinido**: el médico queda fuera desde `starts_at` y no hay aviso. */
+  ends_at: string | null;
+  source: string;
+  review_status: string;
+  lifted_at: string | null;
+  lifted_by: string | null;
+}
+
+export interface RestrictionPayload {
+  restriction_type: string;
+  severity: string;
+  starts_at: string;
+  /** `null` = **indefinido**. */
+  ends_at: string | null;
+  description?: string | null;
+  reason_id?: string | null;
+}
+
+export interface NotificationSettings {
+  /** Con cuántos días de antelación se avisa de que a un médico se le acaba la ausencia. */
+  license_reminder_days: number;
+}
+
 export const availabilityApi = {
   setWeekly: (doctorId: string, body: { days_of_week: number[]; effective_from?: string; effective_to?: string }) =>
     apiFetch<unknown>(`/availability/doctors/${doctorId}/weekly`, { method: "POST", body: JSON.stringify(body) }),
@@ -221,4 +261,22 @@ export const availabilityApi = {
     apiFetch<AvailabilityRead[]>(`/availability/doctors/${doctorId}`),
   availableDoctors: (date: string) =>
     apiFetch<string[]>(`/availability/available-doctors?date=${date}`),
+
+  // --- Ausencias con fechas (eje 2: fuera de servicio) -------------------------------
+  listRestrictions: (doctorId: string) =>
+    apiFetch<DoctorRestrictionRead[]>(`/availability/doctors/${doctorId}/restrictions`),
+  addRestriction: (doctorId: string, body: RestrictionPayload) =>
+    apiFetch<DoctorRestrictionRead>(`/availability/doctors/${doctorId}/restrictions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateRestriction: (restrictionId: string, body: Omit<RestrictionPayload, "restriction_type">) =>
+    apiFetch<DoctorRestrictionRead>(`/availability/restrictions/${restrictionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  liftRestriction: (restrictionId: string) =>
+    apiFetch<DoctorRestrictionRead>(`/availability/restrictions/${restrictionId}/lift`, {
+      method: "POST",
+    }),
 };

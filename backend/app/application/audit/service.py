@@ -139,6 +139,24 @@ class AuditService:
             },
         )
 
+    def log_restriction_updated(
+        self, *, actor_id: str, restriction, previous_ends_at=None
+    ) -> AuditEventModel:
+        return self._create(
+            actor_id=actor_id,
+            action_type="restriction_updated",
+            entity_type="restriction",
+            entity_id=restriction.id,
+            before={"ends_at": str(previous_ends_at) if previous_ends_at else None},
+            after={
+                "doctor_id": restriction.doctor_id,
+                "restriction_type": restriction.restriction_type,
+                "severity": restriction.severity,
+                "starts_at": str(restriction.starts_at),
+                "ends_at": str(restriction.ends_at) if restriction.ends_at else None,
+            },
+        )
+
     def log_restriction_lifted(self, *, actor_id: str, restriction) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,

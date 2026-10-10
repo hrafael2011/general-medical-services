@@ -50,6 +50,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Licencia medica",
         "requires_detail": False,
         "applies_to_sex": None,
+        "expects_return": True,
         "severity": DeactivationSeverity.HARD_BLOCK.value,
     },
     {
@@ -57,6 +58,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Embarazo",
         "requires_detail": False,
         "applies_to_sex": Sex.FEMALE.value,
+        "expects_return": True,
         "severity": DeactivationSeverity.HARD_BLOCK.value,
     },
     {
@@ -64,6 +66,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "No realiza servicio",
         "requires_detail": False,
         "applies_to_sex": None,
+        "expects_return": False,
         "severity": DeactivationSeverity.HARD_BLOCK.value,
     },
     {
@@ -71,6 +74,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Vacaciones",
         "requires_detail": False,
         "applies_to_sex": None,
+        "expects_return": True,
         "severity": DeactivationSeverity.WARN.value,
     },
     {
@@ -78,6 +82,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Préstamo",
         "requires_detail": False,
         "applies_to_sex": None,
+        "expects_return": True,
         "severity": DeactivationSeverity.WARN.value,
     },
     {
@@ -85,6 +90,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Restriccion administrativa",
         "requires_detail": False,
         "applies_to_sex": None,
+        "expects_return": True,
         "severity": DeactivationSeverity.HARD_BLOCK.value,
     },
     {
@@ -92,6 +98,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Traslado / cambio de area",
         "requires_detail": False,
         "applies_to_sex": None,
+        "expects_return": True,
         "severity": DeactivationSeverity.WARN.value,
     },
     {
@@ -99,6 +106,7 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Suspendido temporalmente",
         "requires_detail": False,
         "applies_to_sex": None,
+        "expects_return": True,
         "severity": DeactivationSeverity.HARD_BLOCK.value,
     },
     {
@@ -106,6 +114,16 @@ INITIAL_DEACTIVATION_REASONS = [
         "display_name": "Otro",
         "requires_detail": True,
         "applies_to_sex": None,
+        "expects_return": True,
         "severity": DeactivationSeverity.WARN.value,
     },
 ]
+
+
+# --- Configuración de avisos (system_settings) ---
+#
+# Cuántos días antes del reintegro se avisa al encargado. Es global a propósito: el
+# recordatorio es uno por ausencia y no necesita un plazo distinto por caso (decisión 7 del
+# spec 2026-10-09-licencias-con-fechas-y-recordatorio).
+LICENSE_REMINDER_DAYS_KEY = "notifications.license_reminder_days"
+DEFAULT_LICENSE_REMINDER_DAYS = 2

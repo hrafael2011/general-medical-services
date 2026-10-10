@@ -4,9 +4,11 @@ import unicodedata
 from uuid import uuid4
 
 from backend.app.domain.catalogs import (
+    DEFAULT_LICENSE_REMINDER_DAYS,
     INITIAL_DEACTIVATION_REASONS,
     INITIAL_DEPARTMENTS,
     INITIAL_SERVICE_AREAS,
+    LICENSE_REMINDER_DAYS_KEY,
 )
 from backend.app.infrastructure.db.models.catalogs import (
     DeactivationReasonModel,
@@ -34,6 +36,12 @@ def normalize_reason_code(value: str) -> str:
 
 
 _MISSING = object()
+
+
+_LICENSE_REMINDER_DAYS_DESCRIPTION = (
+    "Días de antelación con que se avisa al encargado de que a un médico se le acaba la "
+    "ausencia y se reintegra."
+)
 
 
 class CatalogService:
@@ -68,6 +76,7 @@ class CatalogService:
                         requires_detail=bool(item["requires_detail"]),
                         applies_to_sex=item["applies_to_sex"],
                         severity=item["severity"],
+                        expects_return=bool(item.get("expects_return", True)),
                         created_at=now,
                         updated_at=now,
                     )
@@ -106,6 +115,48 @@ class CatalogService:
             self.catalogs.upsert_setting(
                 SystemSettingModel(key=key, value=value, description=description, updated_at=now)
             )
+
+        # Días de aviso antes del reintegro de una ausencia. Se siembra con el valor por
+        # defecto, pero la lectura tiene fallback: la pantalla nunca queda en blanco.
+        if self.catalogs.get_setting(LICENSE_REMINDER_DAYS_KEY) is None:
+            self.catalogs.upsert_setting(
+                SystemSettingModel(
+                    key=LICENSE_REMINDER_DAYS_KEY,
+                    value=str(DEFAULT_LICENSE_REMINDER_DAYS),
+                    description=_LICENSE_REMINDER_DAYS_DESCRIPTION,
+                    updated_at=now,
+                )
+            )
+
+    # ------------------------------------------------------------------
+    # Avisos de reintegro
+    # ------------------------------------------------------------------
+
+    def get_license_reminder_days(self) -> int:
+        """Días de aviso antes del reintegro, con fallback al valor por defecto.
+
+        Si lo guardado no es un entero positivo, se devuelve el valor por defecto: un dato
+        mal escrito en la base no debe tumbar el job que avisa.
+        """
+        setting = self.catalogs.get_setting(LICENSE_REMINDER_DAYS_KEY)
+        if setting is None:
+            return DEFAULT_LICENSE_REMINDER_DAYS
+        try:
+            days = int(setting.value)
+        except (TypeError, ValueError):
+            return DEFAULT_LICENSE_REMINDER_DAYS
+        return days if days >= 1 else DEFAULT_LICENSE_REMINDER_DAYS
+
+    def save_license_reminder_days(self, days: int) -> int:
+        self.catalogs.upsert_setting(
+            SystemSettingModel(
+                key=LICENSE_REMINDER_DAYS_KEY,
+                value=str(days),
+                description=_LICENSE_REMINDER_DAYS_DESCRIPTION,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        return days
 
     # ------------------------------------------------------------------
     # Report signatures (weekly list PDF)
@@ -209,6 +260,7 @@ class CatalogService:
         *,
         display_name: str,
         applies_to_sex: str | None,
+        expects_return: bool = True,
     ) -> DeactivationReasonModel:
         now = datetime.now(UTC)
         display_name = display_name.strip()
@@ -220,6 +272,7 @@ class CatalogService:
             requires_detail=False,
             applies_to_sex=applies_to_sex,
             severity="hard_block",
+            expects_return=expects_return,
             created_at=now,
             updated_at=now,
         )
@@ -266,6 +319,7 @@ class CatalogService:
         *,
         display_name: str | None = None,
         applies_to_sex: str | None | object = _MISSING,
+        expects_return: bool | None = None,
         active: bool | None = None,
     ) -> DeactivationReasonModel:
         reason = self.catalogs.get_deactivation_reason_by_id(reason_id)
@@ -280,6 +334,9 @@ class CatalogService:
         if applies_to_sex is not _MISSING:
             reason.applies_to_sex = applies_to_sex
             changed["applies_to_sex"] = applies_to_sex
+        if expects_return is not None:
+            reason.expects_return = expects_return
+            changed["expects_return"] = expects_return
         if active is not None:
             reason.active = active
             changed["active"] = active

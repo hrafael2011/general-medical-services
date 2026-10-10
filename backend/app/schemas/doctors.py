@@ -65,6 +65,11 @@ class UpdateDoctorRequest(BaseModel):
     department_id: str | None = None
     notes: str | None = Field(default=None, max_length=500)
     service_active: bool | None = None
+    # Al desactivar hay que decir por qué: sin motivo, la pantalla no puede explicar la
+    # ausencia. Se admiten aquí para que editar el médico y el botón "Desactivar" dejen
+    # exactamente el mismo estado.
+    service_inactive_reason_id: str | None = None
+    service_inactive_detail: str | None = Field(default=None, max_length=500)
     participa_misiones: bool | None = None
     whatsapp_phone: str | None = Field(default=None, max_length=40)
     monthly_service_target: int | None = Field(default=None, ge=0)

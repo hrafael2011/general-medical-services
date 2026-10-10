@@ -17,6 +17,8 @@ from backend.app.schemas.catalogs import (
     DeleteDepartmentResponse,
     DeleteRankResponse,
     DepartmentRead,
+    NotificationSettingsRead,
+    NotificationSettingsRequest,
     RankRead,
     ReportSignaturesRead,
     ReportSignaturesUpdate,
@@ -68,6 +70,30 @@ def save_report_signatures(
     saved = service.save_report_signatures(payload.model_dump())
     session.commit()
     return ReportSignaturesRead(**saved)
+
+
+@router.get("/notification-settings", response_model=NotificationSettingsRead)
+def get_notification_settings(
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+) -> NotificationSettingsRead:
+    """Ajustes de los avisos: hoy, los días de antelación del recordatorio de reintegro."""
+    return NotificationSettingsRead(
+        license_reminder_days=service.get_license_reminder_days()
+    )
+
+
+@router.put("/notification-settings", response_model=NotificationSettingsRead)
+def save_notification_settings(
+    payload: NotificationSettingsRequest,
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> NotificationSettingsRead:
+    """Guarda los días de antelación del recordatorio de reintegro."""
+    days = service.save_license_reminder_days(payload.license_reminder_days)
+    session.commit()
+    return NotificationSettingsRead(license_reminder_days=days)
 
 
 @router.get("/service-areas", response_model=list[ServiceAreaRead])

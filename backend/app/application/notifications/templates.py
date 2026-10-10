@@ -180,6 +180,27 @@ def render_escalamiento_consolidado(doctor_names: list[str]) -> str:
     return "\n".join(lines)
 
 
+def render_license_return_reminder(
+    doctor_name: str, reason_name: str | None, return_date: str, days_left: int
+) -> str:
+    """Aviso al encargado de que a un médico se le acaba la ausencia.
+
+    Lleva las tres cosas que el encargado necesita para actuar sin abrir el sistema:
+    **quién**, **por qué** y **cuándo vuelve**.
+    """
+    motivo = f" Motivo: {reason_name}." if reason_name else ""
+    cuando = (
+        "Se reintegra mañana."
+        if days_left == 1
+        else f"Se reintegra en {days_left} días."
+    )
+    return (
+        f"Dr./Dra. {doctor_name}: se le acaba la ausencia el {return_date}.{motivo} "
+        f"{cuando} A partir de esa fecha vuelve a estar disponible para servicios; "
+        "no hace falta reactivar nada."
+    )
+
+
 def with_telegram_buttons(message: str, confirmation_id: str) -> dict:
     """Build payload for Telegram message with inline confirmation button."""
     return {

@@ -29,6 +29,16 @@ class AddRestrictionRequest(BaseModel):
     reason_id: str | None = None
 
 
+class UpdateRestrictionRequest(BaseModel):
+    """Corrige una ausencia ya registrada. `ends_at = None` es "indefinido"."""
+
+    severity: str = Field(pattern="^(hard_block|warn|informational)$")
+    starts_at: date
+    ends_at: date | None = None
+    description: str | None = Field(default=None, max_length=500)
+    reason_id: str | None = None
+
+
 class AvailabilityRead(BaseModel):
     id: str
     doctor_id: str

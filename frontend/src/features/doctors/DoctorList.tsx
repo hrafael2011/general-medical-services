@@ -1,5 +1,6 @@
 import { Ban, CalendarDays, CheckCircle2, Edit, PlusCircle, RefreshCw, Search, Trash2, Users, X, XCircle } from "lucide-react";
 import { QuickAvailabilityModal } from "./QuickAvailabilityModal";
+import { AbsenceSection } from "./AbsenceSection";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -421,15 +422,14 @@ function DoctorProfileModal({
           </div>
         </section>
 
-        {!doctor.service_active && (
-          <section className="profile-section">
-            <h3>Estado de servicio</h3>
-            <div className="profile-grid">
-              <ProfileItem label="Razón" value={inactiveReasonName ?? "No especificada"} />
-              <ProfileItem label="Detalle" value={doctor.service_inactive_detail ?? "Sin detalle"} />
-            </div>
-          </section>
-        )}
+        {/* Eje 2 completo: la ausencia con fechas y la que no tiene fecha, juntas. */}
+        <AbsenceSection
+          doctorId={doctor.id}
+          reasons={reasons}
+          serviceActive={doctor.service_active}
+          inactiveReasonName={inactiveReasonName ?? null}
+          inactiveDetail={doctor.service_inactive_detail ?? null}
+        />
 
         <section className="profile-section">
           <h3>Acciones</h3>

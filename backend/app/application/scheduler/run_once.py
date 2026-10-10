@@ -30,6 +30,7 @@ _TASKS: list[tuple[str, object]] = [
     ("send_pre_service_reminders", jobs.send_pre_service_reminders),
     ("check_unconfirmed_escalamiento", jobs.check_unconfirmed_escalamiento),
     ("process_overdue_confirmations", jobs.process_overdue_confirmations),
+    ("send_license_return_reminders", jobs.send_license_return_reminders),
 ]
 
 
