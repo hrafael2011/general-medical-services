@@ -813,6 +813,14 @@ button {
   font-size: 0.85rem;
   color: #334155;
 }
+/* La casilla "Indefinido" va **en línea** con su texto, no una encima del otro: la regla de
+   arriba apila etiqueta y campo, que es lo correcto para un campo de texto pero no para una
+   casilla. Más específica a propósito. */
+.absence-form label.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .absence-hint {
   margin: 0;
   font-size: 0.78rem;
