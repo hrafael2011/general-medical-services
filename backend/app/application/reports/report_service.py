@@ -3,6 +3,7 @@ ReportService — generates Excel, JSON and PDF reports.
 Reads from existing repos; no writes to DB.
 """
 import io
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
@@ -42,11 +43,18 @@ class ReportService:
         self.mission_repo = mission_repo
         self.catalog_repo = catalog_repo
 
-    def _load_signatures(self):
-        """Load PDF signature config from system_settings, falling back to defaults."""
+    def _load_signatures(self, signer_name: str | None = None):
+        """Load PDF signature config from system_settings, falling back to defaults.
+
+        `signer_name` is the user exporting the document: whoever prints the weekly list
+        signs it, so their name wins over the stored value. Without one (a background or
+        bot export) the stored value is used, and finally the shipped default.
+        """
         from backend.app.application.reports.weasyprint_gen import DEFAULT_SIGNATURES, SignatureConfig
 
         if self.catalog_repo is None:
+            if signer_name:
+                return replace(DEFAULT_SIGNATURES, left_name=signer_name)
             return DEFAULT_SIGNATURES
 
         def _get(key: str, default: str) -> str:
@@ -55,7 +63,7 @@ class ReportService:
 
         d = DEFAULT_SIGNATURES
         return SignatureConfig(
-            left_name=_get("pdf.sig_left_name", d.left_name),
+            left_name=signer_name or _get("pdf.sig_left_name", d.left_name),
             left_title1=_get("pdf.sig_left_title1", d.left_title1),
             left_title2=_get("pdf.sig_left_title2", d.left_title2),
             left_title3=_get("pdf.sig_left_title3", d.left_title3),
@@ -637,11 +645,19 @@ class ReportService:
         month: int,
         year: int,
         date_str: str | None = None,
+        signer_name: str | None = None,
     ) -> bytes:
         """Return a PDF weekly schedule in the institutional SERVICIOS format."""
         from backend.app.application.reports.weasyprint_gen import generate_weekly_schedule_pdf
 
-        return generate_weekly_schedule_pdf(schedule_data, week_label, month, year, date_str, self._load_signatures())
+        return generate_weekly_schedule_pdf(
+            schedule_data,
+            week_label,
+            month,
+            year,
+            date_str,
+            self._load_signatures(signer_name),
+        )
 
     def build_weekly_schedule(
         self,
@@ -650,6 +666,7 @@ class ReportService:
         month: int,
         calendar_version_id: str | None = None,
         week_id: str | None = None,
+        signer_name: str | None = None,
     ) -> bytes:
         """Build a weekly schedule PDF from calendar data for the given period.
 
@@ -761,7 +778,9 @@ class ReportService:
 
         if not week_id:
             week_label = f"{month}/{year}"
-        return self.generate_weekly_schedule_pdf(schedule_data, week_label, month, year)
+        return self.generate_weekly_schedule_pdf(
+            schedule_data, week_label, month, year, signer_name=signer_name
+        )
 
     # ------------------------------------------------------------------
     # Full calendar grid data

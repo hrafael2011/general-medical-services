@@ -362,3 +362,31 @@ def test_weekly_sizing_is_scoped_and_does_not_leak_to_other_reports():
         source = (templates_dir / sibling).read_text(encoding="utf-8")
         assert "extra_styles" not in source, f"{sibling} sobrescribe los estilos base"
         assert "page_class" not in source, f"{sibling} usa la clase del semanal"
+
+
+def test_weekly_schedule_passes_the_exporting_user_to_the_signature():
+    """The signer travels from build_weekly_schedule down to the PDF generator."""
+    service, _ = _service_for_week_one(_doctor("doc1", "LOPEZ, JUAN", "809-555-1234"))
+    captured: dict = {}
+    service.generate_weekly_schedule_pdf = MagicMock(
+        side_effect=lambda *args, **kwargs: captured.update(kwargs) or b"%PDF-1.4 test"
+    )
+
+    service.build_weekly_schedule(
+        year=2026, month=5, week_id="week1", signer_name="Rafael Hendrick"
+    )
+
+    assert captured["signer_name"] == "Rafael Hendrick"
+
+
+def test_weekly_schedule_without_a_user_does_not_pass_a_signer():
+    """Background exports keep working: no signer means the stored/default name."""
+    service, _ = _service_for_week_one(_doctor("doc1", "LOPEZ, JUAN", "809-555-1234"))
+    captured: dict = {}
+    service.generate_weekly_schedule_pdf = MagicMock(
+        side_effect=lambda *args, **kwargs: captured.update(kwargs) or b"%PDF-1.4 test"
+    )
+
+    service.build_weekly_schedule(year=2026, month=5, week_id="week1")
+
+    assert captured["signer_name"] is None

@@ -35,6 +35,17 @@ export interface CreateDoctorPayload {
 export interface ServiceAreaRead { id: string; code: string; display_name: string; active: boolean; }
 export interface RankRead { id: string; name: string; abbreviation: string; active: boolean; }
 export interface DepartmentRead { id: string; name: string; normalized_name: string; active: boolean; }
+/** Editable lines of the weekly list PDF signatures. The left name is not here:
+ *  it is the user who exports the document. */
+export interface ReportSignatures {
+  left_title1: string;
+  left_title2: string;
+  left_title3: string;
+  right_name: string;
+  right_title1: string;
+  right_title2: string;
+  right_title3: string;
+}
 export interface DeactivationReasonRead {
   id: string;
   code: string;
@@ -125,6 +136,11 @@ export const doctorsApi = {
       `/catalogs/deactivation-reasons/${id}`,
       { method: "DELETE" },
     ),
+  getReportSignatures: () => apiFetch<ReportSignatures>("/catalogs/report-signatures"),
+  saveReportSignatures: (payload: ReportSignatures) =>
+    apiFetch<ReportSignatures>("/catalogs/report-signatures", {
+      method: "PUT", body: JSON.stringify(payload),
+    }),
   listByDay: () =>
     apiFetch<DoctorByDayResponse>("/doctors/by-day"),
   listByArea: () =>

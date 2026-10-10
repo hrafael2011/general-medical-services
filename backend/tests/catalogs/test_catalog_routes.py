@@ -388,3 +388,72 @@ def test_delete_department_not_found(client, mock_service):
 
     resp = client.delete("/api/catalogs/departments/nonexistent")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET/PUT /api/catalogs/report-signatures
+# ---------------------------------------------------------------------------
+
+SIGNATURE_PAYLOAD = {
+    "left_title1": "Título uno",
+    "left_title2": "Título dos",
+    "left_title3": "Título tres",
+    "right_name": "Fulano de Tal",
+    "right_title1": "Cargo uno",
+    "right_title2": "Cargo dos",
+    "right_title3": "Cargo tres",
+}
+
+
+def _client_with(session_local, current_user):
+    """TestClient with the real CatalogService — the mock would hide persistence."""
+    app = create_app()
+
+    def _get_session():
+        s = session_local()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    app.dependency_overrides[get_db_session] = _get_session
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    return TestClient(app)
+
+
+@pytest.fixture
+def signatures_client(session_local, user):
+    return _client_with(session_local, user)
+
+
+def test_report_signatures_fall_back_to_the_shipped_defaults(signatures_client):
+    """Nothing saved yet: the screen still receives usable values, no seed required."""
+    resp = signatures_client.get("/api/catalogs/report-signatures")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["left_title1"] == "Sargento Médico FARD."
+    assert body["right_name"] == "ING. CARLOS J. ENCARNACION GONZALEZ"
+    # The left name belongs to whoever exports, so it is never part of the payload.
+    assert "left_name" not in body
+
+
+def test_report_signatures_round_trip(signatures_client):
+    saved = signatures_client.put("/api/catalogs/report-signatures", json=SIGNATURE_PAYLOAD)
+
+    assert saved.status_code == 200
+    assert saved.json() == SIGNATURE_PAYLOAD
+    assert signatures_client.get("/api/catalogs/report-signatures").json() == SIGNATURE_PAYLOAD
+
+
+def test_report_signatures_require_the_catalogs_permission(session_local):
+    """An encargado without manage_catalogs can neither read nor write them."""
+    limited = UserModel(
+        id="enc-user", email="enc@test.com", password_hash="hash", name="Encargado",
+        role="encargado", active=True, must_change_password=False, token_version=1,
+        permissions=[], created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+    )
+    client = _client_with(session_local, limited)
+
+    assert client.get("/api/catalogs/report-signatures").status_code == 403
+    assert client.put("/api/catalogs/report-signatures", json=SIGNATURE_PAYLOAD).status_code == 403

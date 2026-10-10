@@ -107,6 +107,78 @@ class CatalogService:
                 SystemSettingModel(key=key, value=value, description=description, updated_at=now)
             )
 
+    # ------------------------------------------------------------------
+    # Report signatures (weekly list PDF)
+    # ------------------------------------------------------------------
+
+    # Editable signature lines. The left *name* is deliberately missing: it is the user
+    # who exports the document, so it is never stored — see ReportService._load_signatures.
+    _SIGNATURE_FIELDS = (
+        "left_title1",
+        "left_title2",
+        "left_title3",
+        "right_name",
+        "right_title1",
+        "right_title2",
+        "right_title3",
+    )
+
+    _SIGNATURE_DESCRIPTIONS = {
+        "left_title1": "Título 1 de la firma izquierda (el nombre lo pone quien exporta).",
+        "left_title2": "Título 2 de la firma izquierda.",
+        "left_title3": "Título 3 de la firma izquierda.",
+        "right_name": "Nombre del firmante derecho en la lista semanal.",
+        "right_title1": "Título 1 del firmante derecho.",
+        "right_title2": "Título 2 del firmante derecho.",
+        "right_title3": "Título 3 del firmante derecho.",
+    }
+
+    @staticmethod
+    def _signature_defaults() -> dict[str, str]:
+        from backend.app.application.reports.weasyprint_gen import DEFAULT_SIGNATURES
+
+        return {
+            "left_title1": DEFAULT_SIGNATURES.left_title1,
+            "left_title2": DEFAULT_SIGNATURES.left_title2,
+            "left_title3": DEFAULT_SIGNATURES.left_title3,
+            "right_name": DEFAULT_SIGNATURES.right_name,
+            "right_title1": DEFAULT_SIGNATURES.right_title1,
+            "right_title2": DEFAULT_SIGNATURES.right_title2,
+            "right_title3": DEFAULT_SIGNATURES.right_title3,
+        }
+
+    def get_report_signatures(self) -> dict[str, str]:
+        """Return the editable signature lines, falling back to the shipped defaults.
+
+        The fallback means the settings screen is never blank on a fresh database, so no
+        seeding step is required to make the feature usable.
+        """
+        defaults = self._signature_defaults()
+        return {
+            field: (
+                setting.value
+                if (setting := self.catalogs.get_setting(f"pdf.sig_{field}")) is not None
+                else default
+            )
+            for field, default in defaults.items()
+        }
+
+    def save_report_signatures(self, values: dict[str, str]) -> dict[str, str]:
+        """Store the editable signature lines and return the saved state."""
+        now = datetime.now(UTC)
+        for field in self._SIGNATURE_FIELDS:
+            if field not in values:
+                continue
+            self.catalogs.upsert_setting(
+                SystemSettingModel(
+                    key=f"pdf.sig_{field}",
+                    value=values[field].strip(),
+                    description=self._SIGNATURE_DESCRIPTIONS[field],
+                    updated_at=now,
+                )
+            )
+        return self.get_report_signatures()
+
     def create_rank(self, name: str, abbreviation: str) -> RankModel:
         now = datetime.now(UTC)
         rank = RankModel(

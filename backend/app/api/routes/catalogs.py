@@ -18,6 +18,8 @@ from backend.app.schemas.catalogs import (
     DeleteRankResponse,
     DepartmentRead,
     RankRead,
+    ReportSignaturesRead,
+    ReportSignaturesUpdate,
     ServiceAreaRead,
     UpdateDeactivationReasonRequest,
     UpdateDepartmentRequest,
@@ -39,6 +41,33 @@ def seed_catalogs(
 ) -> None:
     service.seed_initial_catalogs()
     session.commit()
+
+
+@router.get("/report-signatures", response_model=ReportSignaturesRead)
+def get_report_signatures(
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+) -> ReportSignaturesRead:
+    """Editable signature lines for the weekly list PDF.
+
+    Falls back to the shipped defaults when nothing has been saved, so the settings
+    screen is never blank. The left signature's name is not returned: it is the user
+    who exports the document.
+    """
+    return ReportSignaturesRead(**service.get_report_signatures())
+
+
+@router.put("/report-signatures", response_model=ReportSignaturesRead)
+def save_report_signatures(
+    payload: ReportSignaturesUpdate,
+    _current_user: Annotated[UserModel, Depends(require_permission("manage_catalogs"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> ReportSignaturesRead:
+    """Store the editable signature lines used by the weekly list PDF."""
+    saved = service.save_report_signatures(payload.model_dump())
+    session.commit()
+    return ReportSignaturesRead(**saved)
 
 
 @router.get("/service-areas", response_model=list[ServiceAreaRead])

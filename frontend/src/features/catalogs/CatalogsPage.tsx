@@ -3,14 +3,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, PlusCircle, Pencil, Trash2, Check, X } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { doctorsApi, RankRead, DepartmentRead, DeactivationReasonRead } from "../../api/doctors";
+import { doctorsApi, RankRead, DepartmentRead, DeactivationReasonRead, ReportSignatures } from "../../api/doctors";
 
-type Tab = "ranks" | "departments" | "deactivation-reasons";
+type Tab = "ranks" | "departments" | "deactivation-reasons" | "signatures";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "ranks", label: "Rangos" },
   { key: "departments", label: "Departamentos" },
   { key: "deactivation-reasons", label: "Razones de desactivación" },
+  { key: "signatures", label: "Firmas" },
 ];
 
 export function CatalogsPage() {
@@ -40,6 +41,118 @@ export function CatalogsPage() {
       {active === "ranks" && <RanksTab />}
       {active === "departments" && <DepartmentsTab />}
       {active === "deactivation-reasons" && <DeactivationReasonsTab />}
+      {active === "signatures" && <SignaturesTab />}
+    </div>
+  );
+}
+
+const EMPTY_SIGNATURES: ReportSignatures = {
+  left_title1: "",
+  left_title2: "",
+  left_title3: "",
+  right_name: "",
+  right_title1: "",
+  right_title2: "",
+  right_title3: "",
+};
+
+/** Signatures printed on the weekly list PDF.
+ *
+ *  The left signature's name is not edited here: it is the user who exports the
+ *  document, so it travels with each export instead of being stored. */
+function SignaturesTab() {
+  const { addToast } = useToast();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<ReportSignatures | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["report-signatures"],
+    queryFn: () => doctorsApi.getReportSignatures(),
+  });
+
+  const current = form ?? data ?? EMPTY_SIGNATURES;
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: ReportSignatures) => doctorsApi.saveReportSignatures(payload),
+    onSuccess: (saved) => {
+      setForm(null);
+      queryClient.setQueryData(["report-signatures"], saved);
+      addToast("success", "Firmas guardadas.");
+    },
+    onError: (err: Error) => addToast("error", err.message || "No se pudieron guardar las firmas."),
+  });
+
+  function set<K extends keyof ReportSignatures>(key: K, value: string) {
+    setForm({ ...current, [key]: value });
+  }
+
+  if (isLoading) return <p className="loading-text">Cargando firmas…</p>;
+
+  const sectionStyle = {
+    background: "#f9fafb",
+    padding: "16px",
+    borderRadius: "8px",
+    marginBottom: "20px",
+  } as const;
+  const fieldStyle = { display: "flex", flexDirection: "column", gap: "4px" } as const;
+  const inputStyle = { width: "100%", boxSizing: "border-box" } as const;
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <div style={sectionStyle}>
+        <h4 style={{ margin: "0 0 4px", fontSize: "0.9rem" }}>Firma izquierda</h4>
+        <p style={{ color: "#64748b", fontSize: "0.82rem", margin: "0 0 12px" }}>
+          El <strong>nombre</strong> lo pone el usuario que exporta el documento: es su firma.
+          Aquí solo se editan los títulos.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <label style={fieldStyle}>
+            Título 1
+            <input type="text" style={inputStyle} value={current.left_title1} onChange={e => set("left_title1", e.target.value)} />
+          </label>
+          <label style={fieldStyle}>
+            Título 2
+            <input type="text" style={inputStyle} value={current.left_title2} onChange={e => set("left_title2", e.target.value)} />
+          </label>
+          <label style={fieldStyle}>
+            Título 3
+            <input type="text" style={inputStyle} value={current.left_title3} onChange={e => set("left_title3", e.target.value)} />
+          </label>
+        </div>
+      </div>
+
+      <div style={sectionStyle}>
+        <h4 style={{ margin: "0 0 4px", fontSize: "0.9rem" }}>Firma derecha</h4>
+        <p style={{ color: "#64748b", fontSize: "0.82rem", margin: "0 0 12px" }}>
+          Se edita completa, porque cambia según quién esté en el puesto.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <label style={fieldStyle}>
+            Nombre
+            <input type="text" style={inputStyle} value={current.right_name} onChange={e => set("right_name", e.target.value)} />
+          </label>
+          <label style={fieldStyle}>
+            Título 1
+            <input type="text" style={inputStyle} value={current.right_title1} onChange={e => set("right_title1", e.target.value)} />
+          </label>
+          <label style={fieldStyle}>
+            Título 2
+            <input type="text" style={inputStyle} value={current.right_title2} onChange={e => set("right_title2", e.target.value)} />
+          </label>
+          <label style={fieldStyle}>
+            Título 3
+            <input type="text" style={inputStyle} value={current.right_title3} onChange={e => set("right_title3", e.target.value)} />
+          </label>
+        </div>
+      </div>
+
+      <button
+        className="btn-primary"
+        onClick={() => saveMutation.mutate(current)}
+        disabled={saveMutation.isPending || form === null}
+      >
+        <Check size={14} /> {saveMutation.isPending ? "Guardando…" : "Guardar firmas"}
+      </button>
     </div>
   );
 }

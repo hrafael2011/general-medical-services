@@ -185,10 +185,13 @@ def get_doctor_dossier(
 def export_weekly_list_pdf(
     calendar_id: str,
     week_id: str,
-    _current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
+    current_user: Annotated[UserModel, Depends(require_permission("export_reports"))],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> StreamingResponse:
-    """Export a weekly list as PDF with institutional branding."""
+    """Export a weekly list as PDF with institutional branding.
+
+    The user asking for the document signs it, so their name goes on the left signature.
+    """
     week = service.calendar_repo.get_week_by_id(week_id)
     if week is None:
         raise HTTPException(status_code=404, detail=f"Semana {week_id} no encontrada.")
@@ -201,6 +204,7 @@ def export_weekly_list_pdf(
             year=cal.year,
             month=cal.month,
             week_id=week_id,
+            signer_name=current_user.name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

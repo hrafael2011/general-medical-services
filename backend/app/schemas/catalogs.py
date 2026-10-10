@@ -87,3 +87,29 @@ class DeleteDepartmentResponse(BaseModel):
 class DeleteDeactivationReasonResponse(BaseModel):
     message: str
     affected_doctors: int = 0
+
+
+# --- Report signatures ---
+#
+# The left signature's *name* is deliberately absent: it is the user who exports the
+# document, so it travels with the request instead of being stored here.
+
+
+class ReportSignaturesRead(BaseModel):
+    left_title1: str
+    left_title2: str
+    left_title3: str
+    right_name: str
+    right_title1: str
+    right_title2: str
+    right_title3: str
+
+
+class ReportSignaturesUpdate(BaseModel):
+    left_title1: str = Field(max_length=200)
+    left_title2: str = Field(max_length=200)
+    left_title3: str = Field(max_length=200)
+    right_name: str = Field(max_length=200)
+    right_title1: str = Field(max_length=200)
+    right_title2: str = Field(max_length=200)
+    right_title3: str = Field(max_length=200)

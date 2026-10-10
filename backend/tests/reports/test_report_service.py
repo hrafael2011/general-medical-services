@@ -81,6 +81,37 @@ def test_load_signatures_custom_value(service, mock_catalog_repo):
     assert sig.left_name == "Dr. Custom"
 
 
+def test_load_signatures_uses_the_exporting_user(service):
+    """Whoever exports the document signs it on the left."""
+    service.catalog_repo = None
+
+    sig = service._load_signatures("Rafael Hendrick")
+
+    assert sig.left_name == "Rafael Hendrick"
+    # The stored/right side is untouched.
+    assert sig.right_name == "ING. CARLOS J. ENCARNACION GONZALEZ"
+
+
+def test_load_signatures_falls_back_without_an_exporting_user(service):
+    """A background export with no user keeps the previous behaviour."""
+    service.catalog_repo = None
+
+    sig = service._load_signatures()
+
+    assert sig.left_name == "Dra. MIGUELINA A. ACOSTA RAMOS"
+
+
+def test_exporting_user_wins_over_the_stored_left_name(service, mock_catalog_repo):
+    """The stored value is only a fallback: the person exporting takes precedence."""
+    stored = MagicMock()
+    stored.value = "Nombre Almacenado"
+    mock_catalog_repo.get_setting.return_value = stored
+
+    sig = service._load_signatures("Rafael Hendrick")
+
+    assert sig.left_name == "Rafael Hendrick"
+
+
 # ---------------------------------------------------------------------------
 # generate_calendar_excel
 # ---------------------------------------------------------------------------
