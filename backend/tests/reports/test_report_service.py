@@ -583,6 +583,7 @@ def test_build_weekly_schedule_pdf(service, mock_calendar_repo, mock_doctor_repo
     mock_doc = MagicMock()
     mock_doc.id = "doc-1"
     mock_doc.name = "Dr. Test"
+    mock_doc.whatsapp_phone = "809-555-1234"
     mock_doctor_repo.list_all.return_value = [mock_doc]
 
     mock_sa = MagicMock()

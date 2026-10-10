@@ -2,6 +2,8 @@
 from datetime import date
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def test_build_weekly_schedule_with_week_id():
     """build_weekly_schedule accepts week_id and filters to that week only."""
@@ -52,8 +54,8 @@ def test_build_weekly_schedule_with_week_id():
         MagicMock(id="area1", code="emergencia", display_name="Emergencia"),
     ]
     doctor_repo.list_all.return_value = [
-        MagicMock(id="doc1", name="LOPEZ, JUAN"),
-        MagicMock(id="doc2", name="CRUZ, MARIA"),
+        _doctor("doc1", "LOPEZ, JUAN", "809-555-1234"),
+        _doctor("doc2", "CRUZ, MARIA", "829-555-9876"),
     ]
 
     result = service.build_weekly_schedule(
@@ -185,3 +187,142 @@ def test_build_full_calendar_by_id():
     grid_data = service.build_full_calendar_by_id("cal1")
     assert grid_data["month"] == 5
     assert grid_data["year"] == 2026
+
+
+# ---------------------------------------------------------------------------
+# Weekly list — WHATSAPP / CEL column (spec 2026-10-09)
+# ---------------------------------------------------------------------------
+
+
+def _doctor(doctor_id: str, name: str, phone: str | None) -> MagicMock:
+    """Build a doctor double with a real `.name` attribute.
+
+    `name` has to be assigned after construction: passing `name=` to MagicMock sets the
+    mock's own name, so `doctor.name` would return a child mock and leak its repr into
+    the rendered PDF.
+    """
+    doctor = MagicMock(id=doctor_id)
+    doctor.name = name
+    doctor.whatsapp_phone = phone
+    return doctor
+
+
+def _service_for_week_one(doctor: MagicMock):
+    """ReportService wired to a single-assignment week (2026-05, week1)."""
+    from backend.app.application.reports.report_service import ReportService
+
+    calendar_repo = MagicMock()
+    doctor_repo = MagicMock()
+
+    week = MagicMock()
+    week.id = "week1"
+    week.label = "1RA SEMANA"
+    week.start_date = date(2026, 5, 4)
+    week.end_date = date(2026, 5, 10)
+    calendar_repo.get_week_by_id.return_value = week
+
+    cal = MagicMock()
+    cal.id = "cal1"
+    cal.month = 5
+    cal.year = 2026
+    calendar_repo.get_calendar_by_period.return_value = cal
+    calendar_repo.get_latest_version.return_value = MagicMock(id="ver1")
+
+    assignment = MagicMock()
+    assignment.doctor_id = "doc1"
+    assignment.service_date = date(2026, 5, 5)
+    assignment.service_area_id = "area1"
+    calendar_repo.list_assignments.return_value = [assignment]
+    calendar_repo.list_service_areas.return_value = [
+        MagicMock(id="area1", code="emergencia", display_name="Emergencia"),
+    ]
+
+    doctor_repo.list_all.return_value = [doctor]
+
+    service = ReportService(
+        calendar_repo=calendar_repo,
+        notification_repo=MagicMock(),
+        doctor_repo=doctor_repo,
+    )
+    return service, calendar_repo
+
+
+def _weekly_payload(doctor: MagicMock) -> dict:
+    """Run build_weekly_schedule with the generator mocked and return one assignment."""
+    service, _ = _service_for_week_one(doctor)
+    service.generate_weekly_schedule_pdf = MagicMock(return_value=b"%PDF-1.4 test")
+
+    service.build_weekly_schedule(year=2026, month=5, week_id="week1")
+
+    schedule_data = service.generate_weekly_schedule_pdf.call_args.args[0]
+    return schedule_data[0]["assignments"][0]
+
+
+def test_weekly_schedule_payload_includes_whatsapp_phone():
+    """The doctor's WhatsApp number reaches the template payload."""
+    assignment = _weekly_payload(_doctor("doc1", "LOPEZ, JUAN", "809-555-1234"))
+
+    assert assignment["whatsapp_phone"] == "809-555-1234"
+    assert assignment["rank_name"] == "LOPEZ, JUAN"
+    assert assignment["location"] == "Emergencia"
+
+
+@pytest.mark.parametrize("raw", ["0000000000", "", "   ", None])
+def test_weekly_schedule_blanks_unusable_phone(raw):
+    """The migration placeholder and empty values are printed as an empty cell."""
+    assignment = _weekly_payload(_doctor("doc1", "LOPEZ, JUAN", raw))
+
+    assert assignment["whatsapp_phone"] == ""
+
+
+def test_clean_phone_rejects_placeholder_and_non_strings():
+    """_clean_phone only lets a real, printable phone number through."""
+    from backend.app.application.reports.report_service import _clean_phone
+
+    assert _clean_phone("809-555-1234") == "809-555-1234"
+    assert _clean_phone("  809-555-1234  ") == "809-555-1234"
+    assert _clean_phone("0000000000") == ""
+    assert _clean_phone("") == ""
+    assert _clean_phone("   ") == ""
+    assert _clean_phone(None) == ""
+    # A test double must never leak its repr into the document.
+    assert _clean_phone(MagicMock()) == ""
+
+
+def test_weekly_template_renders_whatsapp_column():
+    """The weekly template renders the WHATSAPP / CEL column with the number."""
+    from backend.app.application.reports.weasyprint_gen import _env
+
+    html = _env.get_template("weekly_schedule.html").render(
+        date_line="MAYO 9 , 2026",
+        month_name="Mayo",
+        year=2026,
+        week_label="1RA SEMANA",
+        schedule_data=[
+            {
+                "day_name": "LUNES",
+                "day_number": 5,
+                "date_label": "mayo 5",
+                "assignments": [
+                    {
+                        "rank_name": "LOPEZ, JUAN",
+                        "whatsapp_phone": "809-555-1234",
+                        "location": "Emergencia",
+                    },
+                    {
+                        "rank_name": "CRUZ, MARIA",
+                        "whatsapp_phone": "",
+                        "location": "Pista",
+                    },
+                ],
+            }
+        ],
+    )
+
+    assert "WHATSAPP / CEL" in html
+    assert "809-555-1234" in html
+    assert "LOPEZ, JUAN" in html
+    # The old three columns must survive.
+    assert "DÍAS" in html
+    assert "RANGO / NOMBRE" in html
+    assert "LUGAR SERV." in html

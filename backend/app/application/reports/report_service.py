@@ -11,6 +11,21 @@ from backend.app.infrastructure.repositories.doctors import DoctorRepository
 from backend.app.infrastructure.repositories.missions import MissionRepository
 from backend.app.infrastructure.repositories.notifications import NotificationRepository
 
+_PHONE_PLACEHOLDER = "0000000000"
+
+
+def _clean_phone(value: object) -> str:
+    """Return a printable phone, or "" when there is nothing real to print.
+
+    Migration 20260527_0041 backfilled doctors without a phone using
+    `0000000000`, so that value must be blanked rather than printed as a number.
+    Non-strings are rejected too, so a test double can never leak a repr into the PDF.
+    """
+    if not isinstance(value, str):
+        return ""
+    cleaned = value.strip()
+    return "" if cleaned == _PHONE_PLACEHOLDER else cleaned
+
 
 class ReportService:
     def __init__(
@@ -673,8 +688,8 @@ class ReportService:
         if not assignments:
             raise ValueError("No hay asignaciones para el período")
 
-        # Load doctor names
-        doctors = {d.id: d.name for d in self.doctor_repo.list_all()}
+        # Load doctors (whole record: the weekly list prints the WhatsApp number)
+        doctors = {d.id: d for d in self.doctor_repo.list_all()}
 
         # Load service area display names if CatalogRepository is available
         areas: dict[str, str] = {}
@@ -691,8 +706,10 @@ class ReportService:
         day_assignments: dict[date, list[dict]] = {}
 
         for a in assignments:
+            doctor = doctors.get(a.doctor_id)
             day_assignments.setdefault(a.service_date, []).append({
-                "rank_name": doctors.get(a.doctor_id, a.doctor_id),
+                "rank_name": doctor.name if doctor else a.doctor_id,
+                "whatsapp_phone": _clean_phone(getattr(doctor, "whatsapp_phone", None)),
                 "location": areas.get(a.service_area_id, a.service_area_id),
                 "_area_id": a.service_area_id,
             })
