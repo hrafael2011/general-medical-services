@@ -14,10 +14,30 @@ Los agentes de exploración (`subagent_type: "Explore"`) siempre con `haiku`.
 
 ## Branch Protection
 
-- NUNCA trabajar directamente en `main`, `master`, o `production`
-- NUNCA hacer merge a `main`, `master`, o `production` sin permiso explícito
-- NUNCA hacer push a `main`, `master`, o `production` sin permiso explícito
-- SIEMPRE crear una feature branch antes de cualquier cambio: `git checkout -b <nombre>`
-- Si el usuario pide explícitamente trabajar en rama protegida, confirmar antes de proceder
+### Regla de oro: `master` no se toca sin autorización escrita
 
-### Protected branches: `main`, `master`, `production`, `release/*`
+`master` es **la rama de producción**: Railway (API y worker) y Vercel despliegan desde ella.
+Cualquier cosa que se escriba ahí sale publicada. Por eso:
+
+- **NUNCA** hacer `commit`, `merge` ni `push` sobre `master` sin la **autorización escrita** del
+  usuario en la conversación. Vale para los tres, no solo para el push: un commit en `master`
+  local ya es tocar la rama.
+- Pedirla **antes** de hacerlo, diciendo exactamente qué se va a tocar (qué archivos, qué
+  commits, qué comando) y esperar la respuesta. Una autorización anterior **no** sirve para
+  otra cosa: es por operación.
+- Si la respuesta no llega, **no se hace**. No hay autorización por defecto ni por silencio.
+- **Un `push` a `master` despliega a producción.** Decirlo al pedir la autorización.
+
+### Rama de trabajo: `development`
+
+- **Todo el trabajo va en `development`**: commits, pruebas y pushes a `origin/development`.
+- Nunca trabajar directamente en `master` (ni en `main`, `production` ni `release/*`).
+- `development` es la única rama de trabajo del repositorio, además de `master`. No crear ramas
+  nuevas sin pedirlo.
+- Cuando algo tenga que llegar a producción, se pide autorización y, con ella, se lleva a
+  `master` (merge de `development` → `master`, o el commit concreto que corresponda).
+
+### Otras ramas protegidas: `main`, `production`, `release/*`
+
+Para ellas rige lo mismo que para `master`: no se tocan sin autorización escrita del usuario.
+
