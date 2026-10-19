@@ -174,7 +174,7 @@ Access:
 Turnos medicos system/
 ├── backend/
 │   └── app/
-│       ├── api/routes/        # 25 FastAPI routers
+│       ├── api/routes/        # 22 FastAPI route modules
 │       │   ├── auth.py
 │       │   ├── calendars.py
 │       │   ├── doctors.py
