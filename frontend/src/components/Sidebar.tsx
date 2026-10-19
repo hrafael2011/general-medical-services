@@ -44,10 +44,18 @@ export function Sidebar() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
+  const hasPermission = (perm: string) => {
+    if (currentUser?.role === "admin") return true;
+    return (currentUser?.permissions ?? []).includes(perm);
+  };
+
+  // /action-alerts exige manage_alerts. Sin ese permiso la consulta respondía 403 y
+  // seguía repitiéndose cada minuto, y ese tráfico mantenía despierta la API.
   const { data: alertSummary } = useQuery({
     queryKey: ["action-alerts-summary"],
     queryFn: actionAlertsApi.summary,
     staleTime: 60 * 1000,
+    enabled: hasPermission("manage_alerts"),
   });
   const { data: featureFlags } = useQuery({
     queryKey: ["feature-flags"],
@@ -56,11 +64,6 @@ export function Sidebar() {
   });
 
   const alertCounts = alertSummary?.by_section ?? {};
-
-  const hasPermission = (perm: string) => {
-    if (currentUser?.role === "admin") return true;
-    return (currentUser?.permissions ?? []).includes(perm);
-  };
 
   // Audit is admin-only now, so it is not part of this check.
   const hasAnySecurityPerm = hasPermission("manage_users") || hasPermission("manage_catalogs") || hasPermission("manage_trash") || hasPermission("manage_calendars");

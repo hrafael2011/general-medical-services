@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
+import { actionAlertsApi } from "../api/actionAlerts";
 
 // Mutable so a test can switch roles; `vi.mock` is hoisted, hence vi.hoisted.
 const auth = vi.hoisted(() => ({
@@ -56,6 +57,7 @@ function renderSidebarWithProfileRoute() {
 describe("Sidebar", () => {
   beforeEach(() => {
     auth.state.currentUser = { name: "Dr. Admin", role: "admin", permissions: [] };
+    vi.mocked(actionAlertsApi.summary).mockClear();
   });
   it("muestra el título del sistema", () => {
     renderSidebar();
@@ -162,5 +164,28 @@ describe("Sidebar", () => {
     renderSidebar();
 
     expect(screen.getByRole("link", { name: /auditoría/i })).toBeInTheDocument();
+  });
+
+  // El resumen de alertas exige manage_alerts. Si se pide sin el permiso, la API
+  // responde 403 y el frontend lo reintentaba cada minuto, manteniendo despierto
+  // el backend (sleepApplication).
+  it("no consulta el resumen de alertas sin manage_alerts", async () => {
+    auth.state.currentUser = { name: "Encargado", role: "encargado", permissions: [] };
+    renderSidebar();
+
+    expect(await screen.findByText("NOTIFICACIONES")).toBeInTheDocument();
+    expect(actionAlertsApi.summary).not.toHaveBeenCalled();
+  });
+
+  it("consulta el resumen de alertas cuando el usuario tiene manage_alerts", async () => {
+    auth.state.currentUser = {
+      name: "Encargado",
+      role: "encargado",
+      permissions: ["manage_alerts"],
+    };
+    renderSidebar();
+
+    expect(await screen.findByLabelText(/alertas en misiones/i)).toHaveTextContent("1");
+    expect(actionAlertsApi.summary).toHaveBeenCalledTimes(1);
   });
 });

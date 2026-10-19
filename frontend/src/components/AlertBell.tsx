@@ -4,6 +4,7 @@ import { Bell, Check, Clock, ExternalLink, RefreshCw, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { actionAlertsApi, ActionAlertRead } from "../api/actionAlerts";
 import { confirmationsApi } from "../api/confirmations";
+import { useAuth } from "../context/AuthContext";
 import { useToast } from "./Toast";
 
 const SECTION_LABELS: Record<string, string> = {
@@ -30,17 +31,23 @@ export function AlertBell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const { currentUser } = useAuth();
+  const canManageAlerts =
+    currentUser?.role === "admin" || (currentUser?.permissions ?? []).includes("manage_alerts");
 
+  // Los cuatro endpoints de /action-alerts exigen manage_alerts. Consultarlos sin el
+  // permiso devuelve 403 cada minuto y eso impide que la API entre en reposo.
   const { data: summary } = useQuery({
     queryKey: ["action-alerts-summary"],
     queryFn: actionAlertsApi.summary,
     refetchInterval: 60_000,
+    enabled: canManageAlerts,
   });
 
   const { data: alerts, isLoading } = useQuery({
     queryKey: ["action-alerts", "open"],
     queryFn: () => actionAlertsApi.list("open", 10),
-    enabled: open,
+    enabled: open && canManageAlerts,
   });
 
   const refreshAlerts = () => {
@@ -86,6 +93,9 @@ export function AlertBell() {
       setOpen(false);
     }
   }
+
+  // Sin el permiso la campana solo podía mostrar un 403: no se ofrece.
+  if (!canManageAlerts) return null;
 
   return (
     <div className="alert-bell">
