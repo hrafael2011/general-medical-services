@@ -100,6 +100,26 @@ C4Container
 
 ---
 
+## 📸 Screenshots
+
+Captured from a local run seeded with `backend/scripts/seed_e2e.py` — the doctors shown
+(Dra. Ana E2E, Dr. Bruno E2E, Dr. Carlos E2E) are fixtures, not real people.
+
+| | |
+|---|---|
+| ![Login](docs/screenshots/turnos-login.png) | ![Panel](docs/screenshots/turnos-dashboard.png) |
+| **Login** | **Panel** — shift status for the month and active doctors |
+| ![Calendario](docs/screenshots/turnos-calendar-grid.png) | ![Asignación](docs/screenshots/turnos-asignacion.png) |
+| **Monthly calendar** — 7 days × 4 weeks, three service areas per cell | **Assignment** — rule check per doctor ("respects rotation order", "did not report availability") |
+| ![Médicos](docs/screenshots/turnos-doctors.png) | ![Login, móvil](docs/screenshots/turnos-login-mobile.png) |
+| **Doctors** — status, areas, availability | **Login on mobile** (390×844) |
+
+> The calendar shown is a draft: no doctor has been assigned, so the cells are empty. The
+> weekly approval rows at the bottom are the real workflow — nothing is published until an
+> admin approves the week.
+
+---
+
 ## 🛠️ Tech Stack
 
 | Layer | Technology | Version |
