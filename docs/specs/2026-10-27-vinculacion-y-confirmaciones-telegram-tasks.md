@@ -16,7 +16,7 @@ vuelve una acción explícita y auditada. La Fase 0 y la Fase 5 son operación, 
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0, pytest, React + TypeScript, Telegram Bot API.
 
-**Estado:** 🟡 En ejecución. Fases 0 y 1 cerradas; Fase 0 deja pendiente la vinculación de
+**Estado:** 🟡 En ejecución. Fases 0, 1, 2 y 3 cerradas; la Fase 0 deja pendiente la vinculación de
 personas reales (no es código).
 
 ---
@@ -1703,3 +1703,9 @@ git commit -m "docs(spec): mark Telegram linking and confirmations as implemente
 | 2026-10-27 | 0.1 / 0.2 / 0.3 | Verificado: bot `ok` (`TurnosMedicosNotificaciones_bot`), webhook de producción con `pending_update_count: 0`, 5 jobs sin traceback. Línea base: 92 `skipped`, 92 `expired`, 0 pendientes. **Sigue en 0 de 74 médicos y 0 de 6 usuarios vinculados**: falta que las personas abran el bot (operación, no código). |
 | 2026-10-27 | 1.1 | `phone_lookup.py` + 4 tests. Coincidencia exacta gana; últimos 8 dígitos solo si hay un único candidato; ambigüedad no vincula. Commit `4e69984`. |
 | 2026-10-27 | 1.2 | El bot muestra el nombre y pide `¿Es usted?`; el callback usa `link_phone:<doctor_id>`. 10 tests del webhook en verde. Commit `18ae777`. |
+| 2026-10-27 | 2.1 | `_process_confirmation` devuelve un resultado (`confirmed`, `already_confirmed`, `already_answered`, `expired`, `not_found`, `unauthorized`), verifica que el `chat_id` sea del médico dueño y el bot deja de decir “Asistencia confirmada” cuando no guardó nada. 13 tests del webhook. Commit `fe3312b`. |
+| 2026-10-27 | 3.1 | `_resolve_area` resuelve nombre y hora; la aprobación completa ya no envía el UUID. Commit `e1e9ef7`. |
+| 2026-10-27 | 3.2 | `deadlines.py` con `due_at_for_service`; `due_at = inicio − 4 h` (mínimo 1 h desde ahora, fallback 12 h si no hay hora). Nuevas variables `confirmation_due/escalation/reminder_hours_before_service`. Rutas de calendarios y misiones actualizadas. Commit `f292e52`. |
+| 2026-10-27 | 3.3 | El recordatorio T-12 h crea la confirmación si falta y **siempre** lleva botón; el texto deja de pedir “Responda 1”. Commit `710effa`. |
+| 2026-10-27 | 3.4 | La escalación se dispara para pendientes cuyo `due_at` cae en las próximas 4 h, no para las de más de 24 h. Commit `4ea24a8`. |
+| 2026-10-27 | — | Regresión de las áreas tocadas: **299 tests en verde** (calendars, missions, confirmations, notifications, scheduler, webhook). |
