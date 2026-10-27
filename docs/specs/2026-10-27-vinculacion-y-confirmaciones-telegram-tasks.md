@@ -1709,3 +1709,7 @@ git commit -m "docs(spec): mark Telegram linking and confirmations as implemente
 | 2026-10-27 | 3.3 | El recordatorio T-12 h crea la confirmación si falta y **siempre** lleva botón; el texto deja de pedir “Responda 1”. Commit `710effa`. |
 | 2026-10-27 | 3.4 | La escalación se dispara para pendientes cuyo `due_at` cae en las próximas 4 h, no para las de más de 24 h. Commit `4ea24a8`. |
 | 2026-10-27 | — | Regresión de las áreas tocadas: **299 tests en verde** (calendars, missions, confirmations, notifications, scheduler, webhook). |
+| 2026-10-27 | 4.1 | `POST /api/telegram/users/{id}/revoke-alerts`: vacía `users.telegram_chat_id` y deja evento `user_updated` con el valor anterior. Commit `cc2cc34`. |
+| 2026-10-27 | 4.2 | `POST /api/doctors/{id}/unlink-telegram`: vacía `doctors.telegram_chat_id`, auditado. Commit `0aee9d3`. |
+| 2026-10-27 | 4.3 | `telegramApi.revokeAlerts` y `doctorsApi.unlinkTelegram`; botón **Revocar avisos** en la tabla de usuarios y **Desvincular Telegram** en la ficha del médico. `tsc -b` limpio. Commit `f911340`. |
+| 2026-10-27 | — | Suite completa: **1870 passed, 1 xfailed** en backend (10:55) y **149 passed** en frontend. Nada en rojo. |
