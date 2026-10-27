@@ -7,10 +7,7 @@ import type { DoctorRead } from "../../api/doctors";
 
 vi.mock("../../api/telegram", () => ({
   telegramApi: {
-    listLinks: vi.fn(),
     listLinkTokens: vi.fn(),
-    createLink: vi.fn(),
-    deleteLink: vi.fn(),
     generateLinkToken: vi.fn(),
     revokeAlerts: vi.fn(),
   },
@@ -98,13 +95,11 @@ async function setupMocks(options: {
   admins?: UserRead[];
   encargados?: UserRead[];
   doctors?: DoctorRead[];
-  links?: Awaited<ReturnType<typeof import("../../api/telegram").telegramApi.listLinks>>;
 } = {}) {
   const { telegramApi } = await import("../../api/telegram");
   const { adminApi } = await import("../../api/admin");
   const { doctorsApi } = await import("../../api/doctors");
 
-  vi.mocked(telegramApi.listLinks).mockResolvedValue(options.links ?? []);
   vi.mocked(telegramApi.listLinkTokens).mockResolvedValue([]);
   vi.mocked(adminApi.listUsers).mockImplementation(async (role?: string) => {
     if (role === "admin") return options.admins ?? [];
@@ -129,44 +124,14 @@ describe("TelegramLinks", () => {
     currentUserMock = { ...ADMIN_LINKED, is_superadmin: true };
   });
 
-  it("muestra el título de la sección", async () => {
-    await setupMocks();
+  it("no muestra los campos del vínculo manual del asistente", async () => {
+    await setupMocks({ admins: [{ ...ADMIN_LINKED, id: "u-admin-2", name: "Otro Admin" }] });
 
     renderComponent();
 
-    const heading = await screen.findByRole("heading", { name: /telegram/i });
-    expect(heading).toBeInTheDocument();
-  });
-
-  it("muestra estado vacío cuando no hay vínculos", async () => {
-    await setupMocks();
-
-    renderComponent();
-
-    const emptyText = await screen.findByText(/no hay vinculos/i);
-    expect(emptyText).toBeInTheDocument();
-  });
-
-  it("muestra la tabla cuando hay vínculos", async () => {
-    await setupMocks({
-      links: [
-        {
-          id: "l1",
-          telegram_user_id: "123456",
-          telegram_username: "@test",
-          user_id: "u1",
-          linked_at: "2026-01-01T00:00:00",
-          linked_by: null,
-          last_used_at: null,
-          active: true,
-        },
-      ],
-    });
-
-    renderComponent();
-
-    const telegramUserId = await screen.findByText("123456");
-    expect(telegramUserId).toBeInTheDocument();
+    await screen.findByRole("heading", { name: /telegram/i });
+    expect(screen.queryByText(/vinculacion manual/i)).toBeNull();
+    expect(screen.queryByText(/telegram user id/i)).toBeNull();
   });
 
   // --- ¿Quién puede recibir avisos? ---------------------------------------

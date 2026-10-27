@@ -1,12 +1,7 @@
-import { Check, Copy, MessageCircle, Trash2 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { Check, Copy, MessageCircle } from "lucide-react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  telegramApi,
-  TelegramUserLinkRead,
-  CreateTelegramLinkRequest,
-  LinkTokenRead,
-} from "../../api/telegram";
+import { telegramApi, LinkTokenRead } from "../../api/telegram";
 import { adminApi, UserRead } from "../../api/admin";
 import { doctorsApi, DoctorRead } from "../../api/doctors";
 import { useToast } from "../../components/Toast";
@@ -77,11 +72,6 @@ export function TelegramLinks() {
   const { currentUser } = useAuth();
   const isSuperadmin = currentUser?.is_superadmin ?? false;
 
-  // --- Manual-link form state ---
-  const [telegramUserId, setTelegramUserId] = useState("");
-  const [telegramUsername, setTelegramUsername] = useState("");
-  const [userId, setUserId] = useState("");
-
   // --- Invite-link state ---
   const [selectedUserId, setSelectedUserId] = useState("");
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
@@ -89,11 +79,6 @@ export function TelegramLinks() {
   const [showTokenSection, setShowTokenSection] = useState(false);
 
   // --- Queries ---
-  const { data: links, isLoading, error } = useQuery({
-    queryKey: ["telegram-links"],
-    queryFn: () => telegramApi.listLinks(),
-  });
-
   const { data: users } = useQuery({
     queryKey: ["telegram-linkable-users", isSuperadmin],
     queryFn: async () => {
@@ -145,32 +130,6 @@ export function TelegramLinks() {
     : allDoctors;
 
   // --- Mutations ---
-  const createMutation = useMutation({
-    mutationFn: (payload: CreateTelegramLinkRequest) =>
-      telegramApi.createLink(payload),
-    onSuccess: () => {
-      setTelegramUserId("");
-      setTelegramUsername("");
-      setUserId("");
-      addToast("success", "Vínculo creado.");
-      void queryClient.invalidateQueries({ queryKey: ["telegram-links"] });
-    },
-    onError: (err: Error) => {
-      addToast("error", err.message);
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => telegramApi.deleteLink(id),
-    onSuccess: () => {
-      addToast("success", "Vínculo eliminado.");
-      void queryClient.invalidateQueries({ queryKey: ["telegram-links"] });
-    },
-    onError: (err: Error) => {
-      addToast("error", err.message || "Error al eliminar el vínculo.");
-    },
-  });
-
   const generateTokenMutation = useMutation({
     mutationFn: (uid: string) => telegramApi.generateLinkToken(uid),
     onSuccess: (data) => {
@@ -198,19 +157,6 @@ export function TelegramLinks() {
   });
 
   // --- Handlers ---
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!telegramUserId.trim() || !userId.trim()) {
-      addToast("error", "Los campos Telegram User ID y User ID son obligatorios.");
-      return;
-    }
-    createMutation.mutate({
-      telegram_user_id: telegramUserId.trim(),
-      telegram_username: telegramUsername.trim() || null,
-      user_id: userId.trim(),
-    });
-  }
-
   function handleGenerateLink() {
     if (!selectedUserId) return;
     generateTokenMutation.mutate(selectedUserId);
@@ -230,7 +176,6 @@ export function TelegramLinks() {
         <div className="feature-title">
           <MessageCircle size={20} />
           <h2>Telegram — Vinculos de usuario</h2>
-          {links && <span className="count-badge">{links.length}</span>}
         </div>
       </div>
 
@@ -465,105 +410,6 @@ export function TelegramLinks() {
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Manual-link form                                                      */}
-      {/* ------------------------------------------------------------------ */}
-      <details style={{ marginBottom: "24px" }}>
-        <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.9rem" }}>
-          Vinculacion manual (admin)
-        </summary>
-        <form className="auth-form" onSubmit={handleSubmit} style={{ marginTop: "12px" }}>
-          <label>
-            ID Telegram
-            <input
-              type="text"
-              value={telegramUserId}
-              onChange={(e) => setTelegramUserId(e.target.value)}
-              placeholder="Ej: 123456789"
-            />
-          </label>
-          <label>
-            Usuario Telegram{" "}
-            <span style={{ fontWeight: 400, color: "#6b7280" }}>(opcional)</span>
-            <input
-              type="text"
-              value={telegramUsername}
-              onChange={(e) => setTelegramUsername(e.target.value)}
-              placeholder="Ej: @usuario"
-            />
-          </label>
-          <label>
-            ID Usuario
-            <input
-              type="text"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              placeholder="UUID del usuario del sistema"
-            />
-          </label>
-
-          <button type="submit" disabled={createMutation.isPending}>
-            <MessageCircle size={16} />
-            {createMutation.isPending ? "Vinculando…" : "Agregar vinculo"}
-          </button>
-        </form>
-      </details>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Status / errors                                                      */}
-      {/* ------------------------------------------------------------------ */}
-      {isLoading && <p className="loading-text">Cargando vinculos…</p>}
-      {error && <p className="error-text">Error al cargar los vinculos de Telegram.</p>}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Links table                                                          */}
-      {/* ------------------------------------------------------------------ */}
-      {links && links.length === 0 && (
-        <p className="empty-text">No hay vinculos de Telegram registrados.</p>
-      )}
-
-      {links && links.length > 0 && (
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Telegram User ID</th>
-                <th>Usuario</th>
-                <th>User ID</th>
-                <th>Vinculado el</th>
-                <th>Activo</th>
-                <th>Accion</th>
-              </tr>
-            </thead>
-            <tbody>
-              {links.map((item: TelegramUserLinkRead) => (
-                <tr key={item.id}>
-                  <td className="cell-id">{item.telegram_user_id}</td>
-                  <td>{item.telegram_username ?? "—"}</td>
-                  <td className="cell-id">{item.user_id}</td>
-                  <td className="cell-date">{formatDate(item.linked_at)}</td>
-                  <td>
-                    <span style={activeBadgeStyle(item.active)}>
-                      {item.active ? "Activo" : "Inactivo"}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      className="btn-ghost"
-                      onClick={() => deleteMutation.mutate(item.telegram_user_id)}
-                      disabled={deleteMutation.isPending}
-                      title="Eliminar vinculo"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>
