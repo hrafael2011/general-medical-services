@@ -51,7 +51,8 @@ TEST_HOURS_TO_DUE = 2
 
 
 def _today_tag() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%d")
+    """Con la hora, para poder repetir la prueba el mismo día sin chocar con la clave."""
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M")
 
 
 def _test_key(doctor_id: str, tag: str) -> str:
@@ -108,8 +109,9 @@ def cmd_enviar(args: argparse.Namespace) -> int:
 
         print(f"Médicos vinculados: {len(doctors)}")
         for doctor in doctors:
+            # "service" es el valor real: el acuse elige la palabra a partir de él.
             request = confirmations.create_request(
-                confirmation_type="servicio",
+                confirmation_type="service",
                 idempotency_key=_test_key(doctor.id, tag),
                 doctor_id=doctor.id,
                 due_at=datetime.now(UTC) + timedelta(hours=TEST_HOURS_TO_DUE),
