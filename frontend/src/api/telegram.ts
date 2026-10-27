@@ -62,4 +62,11 @@ export const telegramApi = {
   listLinkTokens(): Promise<LinkTokenRead[]> {
     return apiFetch<LinkTokenRead[]>("/telegram/link-tokens");
   },
+
+  /** Clears `users.telegram_chat_id` — the field the notification job reads. */
+  revokeAlerts(userId: string): Promise<void> {
+    return apiFetch<void>(`/telegram/users/${userId}/revoke-alerts`, {
+      method: "POST",
+    });
+  },
 };

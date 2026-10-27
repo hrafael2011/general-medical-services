@@ -77,6 +77,16 @@ export function DoctorList({ onAdd, onEdit }: Props) {
     onError: (err: Error) => setActionError(err.message),
   });
 
+  // Un vínculo hecho al médico equivocado no tenía vuelta atrás desde el sistema.
+  const unlinkMutation = useMutation({
+    mutationFn: (id: string) => doctorsApi.unlinkTelegram(id),
+    onSuccess: () => {
+      setSelectedDoctor(null);
+      qc.invalidateQueries({ queryKey: ["doctors"] });
+    },
+    onError: (err: Error) => setActionError(err.message),
+  });
+
   if (isLoading) return <p className="loading-text">Cargando medicos…</p>;
   if (error) return <p className="error-text">Error al cargar medicos.</p>;
 
@@ -237,6 +247,7 @@ export function DoctorList({ onAdd, onEdit }: Props) {
           }
           reasons={deactivationReasons ?? []}
           onDelete={() => setDeleteTarget(selectedDoctor)}
+          onUnlinkTelegram={() => unlinkMutation.mutate(selectedDoctor.id)}
           onClose={() => setSelectedDoctor(null)}
           onEdit={() => {
             onEdit(selectedDoctor);
@@ -285,6 +296,7 @@ interface DoctorProfileModalProps {
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onUnlinkTelegram: () => void;
 }
 
 function DoctorProfileModal({
@@ -298,6 +310,7 @@ function DoctorProfileModal({
   onClose,
   onEdit,
   onDelete,
+  onUnlinkTelegram,
 }: DoctorProfileModalProps) {
   const availabilityLabels = normalizeAvailability(availability, doctor.availability_mode);
 
@@ -363,6 +376,12 @@ function DoctorProfileModal({
               <Trash2 size={16} />
               Eliminar médico
             </button>
+            {doctor.has_telegram && (
+              <button className="btn-secondary" onClick={onUnlinkTelegram}>
+                <Trash2 size={16} />
+                Desvincular Telegram
+              </button>
+            )}
             {/* El estado de servicio no se pone a mano: se registra una ausencia arriba y
                 el sistema la aplica (y la levanta) por fecha. Ver la extensión v1.3.0 del
                 spec de licencias. */}

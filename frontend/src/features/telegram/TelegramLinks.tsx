@@ -172,6 +172,19 @@ export function TelegramLinks() {
     },
   });
 
+  // Revocar el canal de avisos es distinto de borrar el vínculo del asistente: este
+  // escribe en `users.telegram_chat_id`, que es lo que lee el job de notificaciones.
+  const revokeMutation = useMutation({
+    mutationFn: (uid: string) => telegramApi.revokeAlerts(uid),
+    onSuccess: () => {
+      addToast("success", "Canal de avisos revocado.");
+      void queryClient.invalidateQueries({ queryKey: ["telegram-linkable-users"] });
+    },
+    onError: (err: Error) => {
+      addToast("error", err.message || "No se pudo revocar el canal.");
+    },
+  });
+
   // --- Handlers ---
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -254,7 +267,7 @@ export function TelegramLinks() {
                       <td>{u.role}</td>
                       <td>{u.telegram_chat_id ? "✅ Sí" : "❌ No"}</td>
                       <td>
-                        {!u.telegram_chat_id && (
+                        {!u.telegram_chat_id ? (
                           <button
                             className="btn-ghost"
                             style={{ padding: "3px 8px", fontSize: "0.8rem" }}
@@ -265,6 +278,15 @@ export function TelegramLinks() {
                             disabled={generateTokenMutation.isPending}
                           >
                             Generar link
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-ghost"
+                            style={{ padding: "3px 8px", fontSize: "0.8rem" }}
+                            onClick={() => revokeMutation.mutate(u.id)}
+                            disabled={revokeMutation.isPending}
+                          >
+                            Revocar avisos
                           </button>
                         )}
                       </td>

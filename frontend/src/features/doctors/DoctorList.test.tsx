@@ -33,6 +33,7 @@ vi.mock("../../api/doctors", () => ({
     ]),
     reactivateService: vi.fn(),
     deactivateService: vi.fn(),
+    unlinkTelegram: vi.fn(),
   },
   availabilityApi: {
     list: vi.fn().mockImplementation((doctorId: string) => {
@@ -221,6 +222,47 @@ describe("DoctorList", () => {
         month: prev.getMonth() + 1,
         available_dates: [2, 10],
       });
+    });
+  });
+});
+
+describe("DoctorList — Telegram", () => {
+  it("desvincula el Telegram de un médico desde el perfil", async () => {
+    mockListDoctors.mockResolvedValue({
+      items: [
+        {
+          id: "d1",
+          name: "Dr. García",
+          sex: "male",
+          service_active: true,
+          active: true,
+          participa_misiones: true,
+          monthly_service_target: 4,
+          monthly_service_max: 6,
+          monthly_service_limit_mode: "warn_only",
+          availability_mode: "weekly",
+          rank_id: null,
+          department_id: "dept-1",
+          notes: null,
+          service_inactive_reason_id: null,
+          service_inactive_detail: null,
+          whatsapp_phone: "8091234567",
+          has_telegram: true,
+          allowed_area_ids: ["area-1"],
+        },
+      ],
+      total: 1,
+    });
+
+    const { doctorsApi } = await import("../../api/doctors");
+    vi.mocked(doctorsApi.unlinkTelegram).mockResolvedValue();
+
+    renderList();
+    fireEvent.click(await screen.findByText("Dr. García"));
+    fireEvent.click(await screen.findByRole("button", { name: /desvincular telegram/i }));
+
+    await waitFor(() => {
+      expect(doctorsApi.unlinkTelegram).toHaveBeenCalledWith("d1");
     });
   });
 });

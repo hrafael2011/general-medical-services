@@ -12,6 +12,7 @@ vi.mock("../../api/telegram", () => ({
     createLink: vi.fn(),
     deleteLink: vi.fn(),
     generateLinkToken: vi.fn(),
+    revokeAlerts: vi.fn(),
   },
 }));
 
@@ -274,5 +275,20 @@ describe("TelegramLinks", () => {
     const copied = writeText.mock.calls[0][0] as string;
     expect(copied).toContain("/start");
     expect(copied).toContain("8091234567");
+  });
+
+  it("revoca el canal de avisos de un usuario vinculado", async () => {
+    const { telegramApi } = await import("../../api/telegram");
+    vi.mocked(telegramApi.revokeAlerts).mockResolvedValue();
+    await setupMocks({ admins: [ADMIN_LINKED] });
+
+    renderComponent();
+
+    const row = (await screen.findByText("Admin Vinculado")).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: /revocar avisos/i }));
+
+    await waitFor(() => {
+      expect(telegramApi.revokeAlerts).toHaveBeenCalledWith("u-admin");
+    });
   });
 });
