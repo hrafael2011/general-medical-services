@@ -322,6 +322,25 @@ class TestCheckUnconfirmedEscalamiento:
 
         assert result["escalations"] == 0
 
+    def test_escalation_only_targets_requests_closing_in(self):
+        """A pending confirmation far in the future must not be escalated."""
+        from backend.app.application.scheduler.jobs import check_unconfirmed_escalamiento
+
+        mock_session = MagicMock()
+        mock_session.scalars.return_value = _make_scalars_result([])
+
+        with patch(
+            "backend.app.infrastructure.db.session.SessionLocal",
+            return_value=mock_session,
+        ):
+            result = check_unconfirmed_escalamiento()
+
+        assert result["escalations"] == 0
+        # La condición se mide contra `due_at`; `created_at` ya no decide la escalación.
+        where = str(mock_session.scalars.call_args.args[0].whereclause)
+        assert "due_at" in where
+        assert "created_at" not in where
+
 
 class TestProcessOverdueConfirmations:
     """Tests for process_overdue_confirmations() job."""

@@ -233,12 +233,24 @@ def check_unconfirmed_escalamiento() -> dict:
 
     session = SessionLocal()
     try:
-        cutoff = datetime.now(UTC) - timedelta(hours=24)
+        # La ventana se mide contra el vencimiento, no contra la creación. Antes se
+        # buscaban confirmaciones de más de 24 h, pero vencían a las 12 h: la escalación
+        # no se disparaba nunca porque para entonces ya no había nada pendiente.
+        now = datetime.now(UTC)
+        lead_hours = max(
+            settings.confirmation_escalation_hours_before_service
+            - settings.confirmation_due_hours_before_service,
+            1,
+        )
+        horizon = now + timedelta(hours=lead_hours)
+
         stmt = (
             select(ConfirmationRequestModel)
             .where(
                 ConfirmationRequestModel.status.in_(["pending", "received"]),
-                ConfirmationRequestModel.created_at <= cutoff,
+                ConfirmationRequestModel.due_at.is_not(None),
+                ConfirmationRequestModel.due_at > now,
+                ConfirmationRequestModel.due_at <= horizon,
                 ConfirmationRequestModel.escalated_at.is_(None),
             )
         )
