@@ -16,8 +16,8 @@ vuelve una acción explícita y auditada. La Fase 0 y la Fase 5 son operación, 
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0, pytest, React + TypeScript, Telegram Bot API.
 
-**Estado:** 🟡 En ejecución. Fases 0, 1, 2 y 3 cerradas; la Fase 0 deja pendiente la vinculación de
-personas reales (no es código).
+**Estado:** 🟡 Código completo (Fases 0–5), mergeado en `master` (`433cb14`). Pendiente: que
+Railway despliegue y la prueba real con personas vinculadas.
 
 ---
 
@@ -1713,3 +1713,7 @@ git commit -m "docs(spec): mark Telegram linking and confirmations as implemente
 | 2026-10-27 | 4.2 | `POST /api/doctors/{id}/unlink-telegram`: vacía `doctors.telegram_chat_id`, auditado. Commit `0aee9d3`. |
 | 2026-10-27 | 4.3 | `telegramApi.revokeAlerts` y `doctorsApi.unlinkTelegram`; botón **Revocar avisos** en la tabla de usuarios y **Desvincular Telegram** en la ficha del médico. `tsc -b` limpio. Commit `f911340`. |
 | 2026-10-27 | — | Suite completa: **1870 passed, 1 xfailed** en backend (10:55) y **149 passed** en frontend. Nada en rojo. |
+| 2026-10-27 | 5.1 | `_with_telegram_confirmation` recibe la confirmación y añade el link público con `response_token`; `_build_confirmation_message` propaga el objeto en las 5 llamadas. Commit `7e769d5`. |
+| 2026-10-27 | 5.2 | Worker: `FEATURE_NOTIFICATIONS=true` (verificado) y cron `*/30` → `*/10`. Confirmado por las corridas: 20:32:03 y 20:40:35 (8 min). |
+| 2026-10-27 | 5.3 | Suite completa tras 5.1: **1871 passed, 1 xfailed**. Merge `development` → `master` (`433cb14`) empujado a `origin/master`. Railway no disparó el despliegue: su fuente seguía en `hrafael2011/general-medical-services` (repo renombrado). Reconectada la fuente de **API y worker** a `rafenixcore/general-medical-services@master`. |
+| 2026-10-27 | — | **Desplegado**: API `9c4c6728` y worker `19c97b11`, ambos `SUCCESS` sobre `433cb14`. `/api/health` → 200; los endpoints nuevos responden **401** sin sesión (antes 404). El worker corrió a las **21:21:39** con los 5 jobs en cero y sin traceback. **AC9 sigue pendiente**: 0 de 74 médicos y 0 de 6 usuarios vinculados. |

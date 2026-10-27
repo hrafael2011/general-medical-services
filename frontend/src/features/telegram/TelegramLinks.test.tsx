@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TelegramLinks } from "./TelegramLinks";
 import type { UserRead } from "../../api/admin";
@@ -7,10 +7,7 @@ import type { DoctorRead } from "../../api/doctors";
 
 vi.mock("../../api/telegram", () => ({
   telegramApi: {
-    listLinks: vi.fn(),
     listLinkTokens: vi.fn(),
-    createLink: vi.fn(),
-    deleteLink: vi.fn(),
     generateLinkToken: vi.fn(),
     revokeAlerts: vi.fn(),
   },
@@ -30,6 +27,12 @@ vi.mock("../../api/doctors", () => ({
 
 vi.mock("../../components/Toast", () => ({
   useToast: () => ({ addToast: vi.fn() }),
+}));
+
+let currentUserMock: UserRead | null = null;
+
+vi.mock("../../context/AuthContext", () => ({
+  useAuth: () => ({ currentUser: currentUserMock }),
 }));
 
 function renderComponent() {
@@ -92,13 +95,11 @@ async function setupMocks(options: {
   admins?: UserRead[];
   encargados?: UserRead[];
   doctors?: DoctorRead[];
-  links?: Awaited<ReturnType<typeof import("../../api/telegram").telegramApi.listLinks>>;
 } = {}) {
   const { telegramApi } = await import("../../api/telegram");
   const { adminApi } = await import("../../api/admin");
   const { doctorsApi } = await import("../../api/doctors");
 
-  vi.mocked(telegramApi.listLinks).mockResolvedValue(options.links ?? []);
   vi.mocked(telegramApi.listLinkTokens).mockResolvedValue([]);
   vi.mocked(adminApi.listUsers).mockImplementation(async (role?: string) => {
     if (role === "admin") return options.admins ?? [];
@@ -117,44 +118,20 @@ function rowOf(name: string): HTMLTableRowElement {
 }
 
 describe("TelegramLinks", () => {
-  it("muestra el título de la sección", async () => {
-    await setupMocks();
-
-    renderComponent();
-
-    const heading = await screen.findByRole("heading", { name: /telegram/i });
-    expect(heading).toBeInTheDocument();
+  // Por defecto un superadmin: ve a los admins y ya viene en la lista, así que no se
+  // duplica como "Yo". Los tests de la política fijan su propio usuario.
+  beforeEach(() => {
+    currentUserMock = { ...ADMIN_LINKED, is_superadmin: true };
   });
 
-  it("muestra estado vacío cuando no hay vínculos", async () => {
-    await setupMocks();
+  it("no muestra los campos del vínculo manual del asistente", async () => {
+    await setupMocks({ admins: [{ ...ADMIN_LINKED, id: "u-admin-2", name: "Otro Admin" }] });
 
     renderComponent();
 
-    const emptyText = await screen.findByText(/no hay vinculos/i);
-    expect(emptyText).toBeInTheDocument();
-  });
-
-  it("muestra la tabla cuando hay vínculos", async () => {
-    await setupMocks({
-      links: [
-        {
-          id: "l1",
-          telegram_user_id: "123456",
-          telegram_username: "@test",
-          user_id: "u1",
-          linked_at: "2026-01-01T00:00:00",
-          linked_by: null,
-          last_used_at: null,
-          active: true,
-        },
-      ],
-    });
-
-    renderComponent();
-
-    const telegramUserId = await screen.findByText("123456");
-    expect(telegramUserId).toBeInTheDocument();
+    await screen.findByRole("heading", { name: /telegram/i });
+    expect(screen.queryByText(/vinculacion manual/i)).toBeNull();
+    expect(screen.queryByText(/telegram user id/i)).toBeNull();
   });
 
   // --- ¿Quién puede recibir avisos? ---------------------------------------
@@ -214,6 +191,33 @@ describe("TelegramLinks", () => {
     await waitFor(() => expect(telegramApi.generateLinkToken).toHaveBeenCalledWith("u-enc"));
     const url = await screen.findByText("https://t.me/BotDeAvisos?start=tok-123");
     expect(url).toBeInTheDocument();
+  });
+
+  it("muestra a los encargados aunque la lista de admins falle", async () => {
+    const { adminApi } = await import("../../api/admin");
+    const self = { ...ADMIN_LINKED, id: "u-self", name: "Yo Admin", telegram_chat_id: null };
+    currentUserMock = self;
+    vi.mocked(adminApi.listUsers).mockImplementation(async (role?: string) => {
+      if (role === "admin") throw new Error("403");
+      return [ENCARGADO_UNLINKED];
+    });
+
+    renderComponent();
+
+    expect(await screen.findByText("Encargado Sin Telegram")).toBeInTheDocument();
+  });
+
+  it("incluye al propio usuario en la lista de destinatarios", async () => {
+    const { adminApi } = await import("../../api/admin");
+    const self = { ...ADMIN_LINKED, id: "u-self", name: "Yo Admin", telegram_chat_id: null };
+    currentUserMock = self;
+    vi.mocked(adminApi.listUsers).mockResolvedValue([]);
+
+    renderComponent();
+
+    const select = await screen.findByLabelText(/usuario del sistema/i);
+    // El `<select>` existe antes de que la consulta resuelva: hay que esperar la opción.
+    expect(await within(select).findByText(/Yo Admin/)).toBeInTheDocument();
   });
 
   it("resume cuántos usuarios y médicos pueden recibir avisos", async () => {

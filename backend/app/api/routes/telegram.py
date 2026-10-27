@@ -86,6 +86,25 @@ def _get_linkable_user(session: Session, user_id: str) -> UserModel:
         )
     return user
 
+
+def _ensure_can_link(admin: UserModel, target: UserModel) -> None:
+    """Un admin solo reparte enlaces entre encargados y para sí mismo.
+
+    El listado de admins ya era solo-superadmin; sin esta comprobación la regla
+    vivía únicamente en la pantalla y el endpoint aceptaba cualquier `user_id`.
+    """
+    if admin.is_superadmin:
+        return
+    if target.role == "admin" and target.id != admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Solo un superadministrador puede generar enlaces para otros "
+                "administradores."
+            ),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Dependency factory
 # ---------------------------------------------------------------------------
@@ -360,7 +379,8 @@ def create_link_token(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CreateLinkTokenResponse:
     """Generate a single-use deep-link token for a user."""
-    _get_linkable_user(session, payload.user_id)
+    target = _get_linkable_user(session, payload.user_id)
+    _ensure_can_link(admin, target)
     token_str = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     expires_at = now + timedelta(hours=24)

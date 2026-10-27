@@ -48,6 +48,7 @@ describe("AuthContext", () => {
       must_change_password: false,
       is_superadmin: false,
       permissions: [],
+      telegram_chat_id: null,
     });
 
     render(<AuthProvider><Consumer /></AuthProvider>);
