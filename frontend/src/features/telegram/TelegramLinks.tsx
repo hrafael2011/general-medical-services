@@ -10,6 +10,7 @@ import {
 import { adminApi, UserRead } from "../../api/admin";
 import { doctorsApi, DoctorRead } from "../../api/doctors";
 import { useToast } from "../../components/Toast";
+import { useAuth } from "../../context/AuthContext";
 
 /** A doctor links himself: no admin can do it for him, so the useful thing to hand
  *  over is the instruction. */
@@ -73,6 +74,8 @@ function tokenLabel(token: LinkTokenRead): string {
 export function TelegramLinks() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const { currentUser } = useAuth();
+  const isSuperadmin = currentUser?.is_superadmin ?? false;
 
   // --- Manual-link form state ---
   const [telegramUserId, setTelegramUserId] = useState("");
@@ -92,13 +95,22 @@ export function TelegramLinks() {
   });
 
   const { data: users } = useQuery({
-    queryKey: ["telegram-linkable-users"],
+    queryKey: ["telegram-linkable-users", isSuperadmin],
     queryFn: async () => {
-      const [admins, encargados] = await Promise.all([
-        adminApi.listUsers("admin"),
+      // `allSettled`: un 403 al listar admins no debe vaciar también los encargados.
+      const [admins, encargados] = await Promise.allSettled([
+        isSuperadmin ? adminApi.listUsers("admin") : Promise.resolve([] as UserRead[]),
         adminApi.listUsers("encargado"),
       ]);
-      return [...admins, ...encargados].sort((a, b) => a.name.localeCompare(b.name));
+      const ok = (r: PromiseSettledResult<UserRead[]>) =>
+        r.status === "fulfilled" ? r.value : [];
+
+      const list = [...ok(admins), ...ok(encargados)];
+      // El propio usuario siempre, porque un admin normal no puede listar admins.
+      if (currentUser && !list.some((u) => u.id === currentUser.id)) {
+        list.push({ ...currentUser });
+      }
+      return list.sort((a, b) => a.name.localeCompare(b.name));
     },
   });
 
@@ -358,7 +370,7 @@ export function TelegramLinks() {
             <option value="">-- Seleccionar usuario --</option>
             {users?.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.name} ({u.email})
+                {u.name} ({u.email}){u.id === currentUser?.id ? " — Yo" : ""}
               </option>
             ))}
           </select>
