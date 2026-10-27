@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from backend.app.application.confirmations.service import ConfirmationRequestService
 from backend.app.application.notifications.service import NotificationService
@@ -37,7 +37,7 @@ def _resolve_recipient_phone(doctor) -> str | None:
     return getattr(doctor, "telegram_chat_id", None) or None
 
 
-def _build_confirmation_message(message: str, doctor, confirmation_id: str) -> str | dict:
+def _build_confirmation_message(message: str, doctor, confirmation) -> str | dict:
     """Build confirmation message payload — Telegram buttons or WhatsApp text.
 
     Returns a dict with inline keyboard button when the doctor has
@@ -46,7 +46,7 @@ def _build_confirmation_message(message: str, doctor, confirmation_id: str) -> s
     """
     chat_id = getattr(doctor, "telegram_chat_id", None)
     if chat_id:
-        return _with_telegram_confirmation(message, confirmation_id)
+        return _with_telegram_confirmation(message, confirmation)
     return _with_whatsapp_confirmation(message)
 
 
@@ -58,12 +58,40 @@ class NotificationTriggers:
         notification_service: NotificationService,
         doctor_repo: DoctorRepository,
         confirmation_service: ConfirmationRequestService | None = None,
-        confirmation_due_hours: int = 12,
+        due_hours_before_service: int = 4,
     ) -> None:
         self.notification_service = notification_service
         self.doctor_repo = doctor_repo
         self.confirmation_service = confirmation_service
-        self.confirmation_due_hours = confirmation_due_hours
+        self.due_hours_before_service = due_hours_before_service
+
+    def _resolve_area(self, assignment) -> tuple[str, datetime | None]:
+        """Return the area display name and the service start time.
+
+        The full-calendar approval used to send the area **UUID** and no time, so the
+        doctor read something like "turno en d89219b3-…". The session is optional
+        because week-trigger tests use a fake repo without one; in that case the area
+        id is the best available label.
+        """
+        from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
+
+        session = getattr(self.doctor_repo, "session", None)
+        area = session.get(ServiceAreaModel, assignment.service_area_id) if session else None
+        area_name = area.display_name if area is not None else str(assignment.service_area_id)
+
+        start = getattr(assignment, "service_start_at", None)
+        if start is None and getattr(assignment, "service_date", None) is not None:
+            hour = area.start_hour if area is not None else 7
+            start = datetime(
+                assignment.service_date.year,
+                assignment.service_date.month,
+                assignment.service_date.day,
+                hour,
+                0,
+                0,
+                tzinfo=UTC,
+            )
+        return area_name, start
 
     def on_calendar_approved(
         self,
@@ -82,10 +110,13 @@ class NotificationTriggers:
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
                 phone = _resolve_recipient_phone(doctor)
+                area_name, service_start = self._resolve_area(assignment)
                 message = render_initial_assignment(
                     service_date=str(assignment.service_date),
-                    service_area=assignment.service_area_id,
-                    service_start=None,
+                    service_area=area_name,
+                    service_start=(
+                        service_start.strftime("%I:%M %p") if service_start else None
+                    ),
                 )
                 notification = self.notification_service.queue(
                     notification_type="initial_assignment",
@@ -103,12 +134,12 @@ class NotificationTriggers:
                         doctor_id=assignment.doctor_id,
                         notification_id=notification.id,
                         assignment_id=assignment.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(service_start),
                         created_by=actor_id,
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -133,8 +164,6 @@ class NotificationTriggers:
         Follows the same pattern as on_calendar_approved but scoped
         to one week's assignments.
         """
-        from backend.app.infrastructure.db.models.catalogs import ServiceAreaModel
-
         count = 0
         for assignment in assignments:
             # El id se lee ANTES del try: dentro del `except` la instancia puede
@@ -143,18 +172,11 @@ class NotificationTriggers:
             try:
                 doctor = self.doctor_repo.get_by_id(assignment.doctor_id)
                 phone = _resolve_recipient_phone(doctor)
-                # Resolver display_name del área — el repo puede tener .session (prod) o no (test)
-                db_session = getattr(self.doctor_repo, 'session', None)
-                if db_session:
-                    area = db_session.get(ServiceAreaModel, assignment.service_area_id)
-                    area_name = area.display_name if area else assignment.service_area_id
-                else:
-                    area_name = assignment.service_area_id
-                service_start = assignment.service_start_at.strftime("%I:%M %p") if getattr(assignment, 'service_start_at', None) else None
+                area_name, start_dt = self._resolve_area(assignment)
                 message = render_initial_assignment(
                     service_date=str(assignment.service_date),
                     service_area=area_name,
-                    service_start=service_start,
+                    service_start=start_dt.strftime("%I:%M %p") if start_dt else None,
                 )
                 notification = self.notification_service.queue(
                     notification_type="initial_assignment",
@@ -172,12 +194,12 @@ class NotificationTriggers:
                         doctor_id=assignment.doctor_id,
                         notification_id=notification.id,
                         assignment_id=assignment.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(start_dt),
                         created_by=actor_id,
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -197,10 +219,11 @@ class NotificationTriggers:
         assignment,
         service_area_name: str,
     ) -> int:
+        resolved_name, start_dt = self._resolve_area(assignment)
         message = render_service_assignment_added(
             service_date=str(assignment.service_date),
-            service_area=service_area_name,
-            service_start=None,
+            service_area=service_area_name or resolved_name,
+            service_start=start_dt.strftime("%I:%M %p") if start_dt else None,
         )
         return self._queue_service_change(
             actor_id=actor_id,
@@ -239,10 +262,11 @@ class NotificationTriggers:
         assignment,
         service_area_name: str,
     ) -> int:
+        resolved_name, start_dt = self._resolve_area(assignment)
         message = render_service_assignment_updated(
             service_date=str(assignment.service_date),
-            service_area=service_area_name,
-            service_start=None,
+            service_area=service_area_name or resolved_name,
+            service_start=start_dt.strftime("%I:%M %p") if start_dt else None,
         )
         return self._queue_service_change(
             actor_id=actor_id,
@@ -282,12 +306,14 @@ class NotificationTriggers:
                     doctor_id=assignment.doctor_id,
                     notification_id=notification.id,
                     assignment_id=assignment.id,
-                    due_at=self._confirmation_due_at(),
+                    due_at=self._confirmation_due_at(
+                        self._resolve_area(assignment)[1]
+                    ),
                     created_by=actor_id,
                 )
                 notification.payload = {
                     **(notification.payload or {}),
-                    "message": _build_confirmation_message(message, doctor, confirmation.id),
+                    "message": _build_confirmation_message(message, doctor, confirmation),
                     "confirmation_request_id": confirmation.id,
                 }
             return 1
@@ -340,12 +366,14 @@ class NotificationTriggers:
                         doctor_id=participant_id,
                         notification_id=notification.id,
                         mission_id=mission.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(
+                            getattr(mission, "mission_start_at", None)
+                        ),
                         created_by=actor_id,
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -447,12 +475,14 @@ class NotificationTriggers:
                         doctor_id=participant.doctor_id,
                         notification_id=notification.id,
                         mission_id=mission.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(
+                            getattr(mission, "mission_start_at", None)
+                        ),
                         created_by=actor_id,
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -502,5 +532,10 @@ class NotificationTriggers:
                 )
         return count
 
-    def _confirmation_due_at(self):
-        return datetime.now(UTC) + timedelta(hours=self.confirmation_due_hours)
+    def _confirmation_due_at(self, service_start: datetime | None) -> datetime:
+        from backend.app.application.confirmations.deadlines import due_at_for_service
+
+        return due_at_for_service(
+            service_start,
+            hours_before=self.due_hours_before_service,
+        )

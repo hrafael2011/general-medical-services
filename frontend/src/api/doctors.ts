@@ -101,6 +101,9 @@ export const doctorsApi = {
     }),
   reactivateService: (id: string) =>
     apiFetch<DoctorRead>(`/doctors/${id}/reactivate-service`, { method: "POST" }),
+  /** Clears `doctors.telegram_chat_id` so the next notice reports "sin destinatario". */
+  unlinkTelegram: (id: string) =>
+    apiFetch<void>(`/doctors/${id}/unlink-telegram`, { method: "POST" }),
   listServiceAreas: () => apiFetch<ServiceAreaRead[]>("/catalogs/service-areas"),
   listRanks: () => apiFetch<RankRead[]>("/catalogs/ranks"),
   createRank: (name: string, abbreviation: string) =>

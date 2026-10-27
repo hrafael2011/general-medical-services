@@ -215,3 +215,36 @@ def delete_doctor(
             detail={"code": exc.code, "message": exc.message},
         ) from exc
     session.commit()
+
+
+@router.post("/{doctor_id}/unlink-telegram", status_code=status.HTTP_204_NO_CONTENT)
+def unlink_doctor_telegram(
+    doctor_id: str,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_doctors"))],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Forget the chat id so the next notice reports "sin destinatario".
+
+    A link made to the wrong doctor had no way back from the system: the only fix was
+    to edit `doctors.telegram_chat_id` by hand.
+    """
+    from datetime import UTC, datetime
+
+    from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
+
+    doctor = DoctorRepository(session).get_by_id(doctor_id)
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Médico no encontrado.",
+        )
+
+    doctor.telegram_chat_id = None
+    doctor.updated_at = datetime.now(UTC)
+    AuditService(AuditRepository(session)).log_doctor_updated(
+        actor_id=current_user.id,
+        doctor=doctor,
+        changed_fields={"telegram_chat_id": None},
+    )
+    session.commit()

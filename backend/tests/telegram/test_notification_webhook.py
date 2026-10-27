@@ -242,3 +242,158 @@ def test_no_receipt_is_queued_for_a_user_without_telegram(client, session):
     assert session.query(NotificationEventModel).filter_by(
         notification_type="confirmation_receipt"
     ).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Linking a doctor: the name is shown and an ambiguous phone is refused
+# ---------------------------------------------------------------------------
+
+
+def _doctor_without_chat(session, *, id: str, phone: str) -> DoctorModel:
+    doctor = DoctorModel(
+        id=id,
+        name="DRA. NUEVA",
+        normalized_name=f"dra nueva {id}",
+        sex="female",
+        whatsapp_phone=phone,
+        telegram_chat_id=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    session.add(doctor)
+    session.commit()
+    return doctor
+
+
+def test_the_phone_step_shows_the_doctor_name(client, session, monkeypatch):
+    _doctor_without_chat(session, id="doc-name", phone="8091234567")
+    sent: list[tuple[str, str, dict]] = []
+
+    monkeypatch.setattr(
+        "backend.app.api.routes.telegram_notification_webhook._send_telegram_message",
+        lambda chat_id, text, **kwargs: sent.append((chat_id, text, kwargs)) or {"ok": True},
+    )
+
+    _post(client, _message("321", "8091234567"))
+
+    assert "DRA. NUEVA" in sent[0][1]
+    assert "¿Es usted?" in sent[0][1]
+
+
+def test_an_ambiguous_phone_is_refused(client, session, monkeypatch):
+    _doctor_without_chat(session, id="doc-a", phone="+18091234567")
+    _doctor_without_chat(session, id="doc-b", phone="+18291234567")
+    sent: list[tuple[str, str, dict]] = []
+
+    monkeypatch.setattr(
+        "backend.app.api.routes.telegram_notification_webhook._send_telegram_message",
+        lambda chat_id, text, **kwargs: sent.append((chat_id, text, kwargs)) or {"ok": True},
+    )
+
+    _post(client, _message("322", "8091234567"))
+
+    assert "más de un médico" in sent[0][1]
+    assert session.get(DoctorModel, "doc-a").telegram_chat_id is None
+    assert session.get(DoctorModel, "doc-b").telegram_chat_id is None
+
+
+def test_the_confirmation_callback_links_the_doctor(client, session):
+    doctor = _doctor_without_chat(session, id="doc-link", phone="8091234567")
+
+    _post(
+        client,
+        {
+            "callback_query": {
+                "id": "cb-link",
+                "from": {"id": 333},
+                "data": f"link_phone:{doctor.id}",
+                "message": {"message_id": 10, "chat": {"id": 333}},
+            }
+        },
+    )
+
+    session.refresh(doctor)
+    assert doctor.telegram_chat_id == "333"
+
+
+# ---------------------------------------------------------------------------
+# Confirming: only the owning doctor, and an honest outcome
+# ---------------------------------------------------------------------------
+
+
+def test_a_foreign_chat_cannot_confirm(client, session):
+    owner = _make_doctor(session, chat_id="123")
+    _make_confirmation(session, owner)
+    session.add(
+        DoctorModel(
+            id="doc-other",
+            name="DR. OTRO",
+            normalized_name="dr otro",
+            sex="male",
+            whatsapp_phone="8090000000",
+            telegram_chat_id="999",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    session.commit()
+
+    _post(
+        client,
+        {
+            "callback_query": {
+                "id": "cb-foreign",
+                "from": {"id": 999},
+                "data": "confirm:conf-1",
+                "message": {"message_id": 10, "chat": {"id": 999}},
+            }
+        },
+    )
+
+    assert session.get(ConfirmationRequestModel, "conf-1").status == "pending"
+
+
+def test_an_expired_confirmation_is_not_confirmed(client, session):
+    doctor = _make_doctor(session)
+    request = _make_confirmation(session, doctor)
+    request.status = "expired"
+    session.commit()
+
+    _post(
+        client,
+        {
+            "callback_query": {
+                "id": "cb-expired",
+                "from": {"id": 123},
+                "data": "confirm:conf-1",
+                "message": {"message_id": 10, "chat": {"id": 123}},
+            }
+        },
+    )
+
+    session.refresh(request)
+    assert request.status == "expired"
+
+
+def test_an_already_confirmed_request_does_not_queue_a_second_receipt(client, session):
+    doctor = _make_doctor(session)
+    request = _make_confirmation(session, doctor)
+    request.status = "confirmed"
+    session.commit()
+    _make_user(session, telegram_chat_id="555")
+
+    _post(
+        client,
+        {
+            "callback_query": {
+                "id": "cb-twice",
+                "from": {"id": 123},
+                "data": "confirm:conf-1",
+                "message": {"message_id": 10, "chat": {"id": 123}},
+            }
+        },
+    )
+
+    assert session.query(NotificationEventModel).filter_by(
+        notification_type="confirmation_receipt"
+    ).count() == 0

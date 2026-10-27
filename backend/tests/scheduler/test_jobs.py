@@ -69,8 +69,14 @@ class TestSendPreServiceReminders:
         area = self.make_area("emergencia", "Emergencia", start_hour)
         assignment = self.make_assignment("d1", "emergencia", tomorrow, start_hour)
 
+        pending = MagicMock()
+        pending.id = "conf-reminder"
+
         mock_session = MagicMock()
-        mock_session.scalars.return_value = _make_scalars_result([assignment])
+        mock_session.scalars.side_effect = [
+            _make_scalars_result([assignment]),  # assignments
+            _make_scalars_result([pending]),  # pending confirmation
+        ]
         mock_session.get.side_effect = lambda model, pk: {
             "d1": doctor, "emergencia": area,
         }.get(pk)
@@ -101,6 +107,63 @@ class TestSendPreServiceReminders:
         assert call_kwargs["notification_type"] == "reminder_12h"
         assert call_kwargs["recipient_doctor_id"] == "d1"
         assert call_kwargs["assignment_id"] == 99
+        # El recordatorio siempre sale con botón.
+        assert call_kwargs["payload"]["message"]["reply_markup"]["inline_keyboard"][0][0][
+            "callback_data"
+        ] == "confirm:conf-reminder"
+
+    def test_reminder_creates_a_confirmation_when_none_is_pending(self):
+        """Sin confirmación pendiente el aviso salía sin botón y decía "Responda 1"."""
+        from backend.app.application.scheduler.jobs import send_pre_service_reminders
+
+        tomorrow = date.today() + timedelta(days=1)
+        start_hour = 8
+        start_dt = datetime(
+            tomorrow.year, tomorrow.month, tomorrow.day, start_hour, 0, 0, tzinfo=UTC
+        )
+        reminder_time = start_dt - timedelta(hours=12)
+
+        doctor = self.make_doctor("d1", "Dr. Test", "+18091234567")
+        area = self.make_area("emergencia", "Emergencia", start_hour)
+        assignment = self.make_assignment("d1", "emergencia", tomorrow, start_hour)
+
+        mock_session = MagicMock()
+        mock_session.scalars.side_effect = [
+            _make_scalars_result([assignment]),  # assignments
+            _make_scalars_result([]),  # no pending confirmation
+        ]
+        mock_session.get.side_effect = lambda model, pk: {
+            "d1": doctor, "emergencia": area,
+        }.get(pk)
+
+        mock_svc = MagicMock()
+        mock_svc.queue.return_value = MagicMock(id="notif-001")
+        created = MagicMock(id="conf-new")
+
+        with patch(
+            "backend.app.infrastructure.db.session.SessionLocal",
+            return_value=mock_session,
+        ), patch(
+            "backend.app.application.notifications.service.NotificationService",
+            return_value=mock_svc,
+        ), patch(
+            "backend.app.infrastructure.repositories.notifications.NotificationRepository",
+        ), patch(
+            "backend.app.application.confirmations.service.ConfirmationRequestService.create_request",
+            return_value=created,
+        ) as mock_create, patch(
+            "datetime.datetime",
+        ) as mock_dt_cls:
+            mock_dt_cls.now.return_value = reminder_time
+
+            result = send_pre_service_reminders()
+
+        assert result["reminders_sent"] == 1
+        mock_create.assert_called_once()
+        payload = mock_svc.queue.call_args.kwargs["payload"]
+        assert payload["message"]["reply_markup"]["inline_keyboard"][0][0][
+            "callback_data"
+        ] == "confirm:conf-new"
 
     def test_skips_doctor_without_whatsapp_phone(self):
         """Doctors without a whatsapp_phone should be skipped."""
@@ -258,6 +321,25 @@ class TestCheckUnconfirmedEscalamiento:
             result = check_unconfirmed_escalamiento()
 
         assert result["escalations"] == 0
+
+    def test_escalation_only_targets_requests_closing_in(self):
+        """A pending confirmation far in the future must not be escalated."""
+        from backend.app.application.scheduler.jobs import check_unconfirmed_escalamiento
+
+        mock_session = MagicMock()
+        mock_session.scalars.return_value = _make_scalars_result([])
+
+        with patch(
+            "backend.app.infrastructure.db.session.SessionLocal",
+            return_value=mock_session,
+        ):
+            result = check_unconfirmed_escalamiento()
+
+        assert result["escalations"] == 0
+        # La condición se mide contra `due_at`; `created_at` ya no decide la escalación.
+        where = str(mock_session.scalars.call_args.args[0].whereclause)
+        assert "due_at" in where
+        assert "created_at" not in where
 
 
 class TestProcessOverdueConfirmations:

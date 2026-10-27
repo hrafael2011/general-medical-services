@@ -417,6 +417,39 @@ def list_link_tokens(
     return [LinkTokenRead.model_validate(t) for t in tokens]
 
 
+@router.post("/users/{user_id}/revoke-alerts", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_alerts_channel(
+    user_id: str,
+    admin: Annotated[UserModel, Depends(require_admin)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Remove the chat id that the notification job reads.
+
+    Deleting the assistant link does not touch this field; without this action
+    an admin cannot revoke someone's alerts.
+    """
+    from backend.app.application.audit.service import AuditService
+    from backend.app.infrastructure.repositories.audit import AuditRepository
+
+    user = UserRepository(session).get_by_id(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado.",
+        )
+
+    previous = {"telegram_chat_id": user.telegram_chat_id}
+    user.telegram_chat_id = None
+    user.updated_at = datetime.now(UTC)
+    AuditService(AuditRepository(session)).log_user_updated(
+        actor_id=admin.id,
+        user=user,
+        changed_fields={"telegram_chat_id": None},
+        previous=previous,
+    )
+    session.commit()
+
+
 # ---------------------------------------------------------------------------
 # Interactions (admin only)
 # ---------------------------------------------------------------------------
