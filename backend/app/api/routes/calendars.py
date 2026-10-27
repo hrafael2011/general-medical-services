@@ -117,7 +117,7 @@ def get_calendar_service(
         confirmation_service=ConfirmationRequestService(
             ConfirmationRequestRepository(session),
         ),
-        confirmation_due_hours=settings.confirmation_overdue_hours,
+        due_hours_before_service=settings.confirmation_due_hours_before_service,
     )
     mission_ranking_service = MissionRankingService(
         MissionRepository(session),
@@ -197,7 +197,7 @@ def get_assignment_service(
         confirmation_service=ConfirmationRequestService(
             ConfirmationRequestRepository(session),
         ),
-        confirmation_due_hours=settings.confirmation_overdue_hours,
+        due_hours_before_service=settings.confirmation_due_hours_before_service,
     )
 
     mission_ranking_service = MissionRankingService(

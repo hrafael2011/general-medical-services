@@ -118,7 +118,7 @@ def get_candidate_service(
         confirmation_service=ConfirmationRequestService(
             ConfirmationRequestRepository(session),
         ),
-        confirmation_due_hours=settings.confirmation_overdue_hours,
+        due_hours_before_service=settings.confirmation_due_hours_before_service,
     )
 
     return MissionCandidateService(

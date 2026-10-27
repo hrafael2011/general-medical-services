@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from backend.app.application.confirmations.service import ConfirmationRequestService
 from backend.app.application.notifications.service import NotificationService
@@ -58,12 +58,12 @@ class NotificationTriggers:
         notification_service: NotificationService,
         doctor_repo: DoctorRepository,
         confirmation_service: ConfirmationRequestService | None = None,
-        confirmation_due_hours: int = 12,
+        due_hours_before_service: int = 4,
     ) -> None:
         self.notification_service = notification_service
         self.doctor_repo = doctor_repo
         self.confirmation_service = confirmation_service
-        self.confirmation_due_hours = confirmation_due_hours
+        self.due_hours_before_service = due_hours_before_service
 
     def _resolve_area(self, assignment) -> tuple[str, datetime | None]:
         """Return the area display name and the service start time.
@@ -134,7 +134,7 @@ class NotificationTriggers:
                         doctor_id=assignment.doctor_id,
                         notification_id=notification.id,
                         assignment_id=assignment.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(service_start),
                         created_by=actor_id,
                     )
                     notification.payload = {
@@ -194,7 +194,7 @@ class NotificationTriggers:
                         doctor_id=assignment.doctor_id,
                         notification_id=notification.id,
                         assignment_id=assignment.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(start_dt),
                         created_by=actor_id,
                     )
                     notification.payload = {
@@ -306,7 +306,9 @@ class NotificationTriggers:
                     doctor_id=assignment.doctor_id,
                     notification_id=notification.id,
                     assignment_id=assignment.id,
-                    due_at=self._confirmation_due_at(),
+                    due_at=self._confirmation_due_at(
+                        self._resolve_area(assignment)[1]
+                    ),
                     created_by=actor_id,
                 )
                 notification.payload = {
@@ -364,7 +366,9 @@ class NotificationTriggers:
                         doctor_id=participant_id,
                         notification_id=notification.id,
                         mission_id=mission.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(
+                            getattr(mission, "mission_start_at", None)
+                        ),
                         created_by=actor_id,
                     )
                     notification.payload = {
@@ -471,7 +475,9 @@ class NotificationTriggers:
                         doctor_id=participant.doctor_id,
                         notification_id=notification.id,
                         mission_id=mission.id,
-                        due_at=self._confirmation_due_at(),
+                        due_at=self._confirmation_due_at(
+                            getattr(mission, "mission_start_at", None)
+                        ),
                         created_by=actor_id,
                     )
                     notification.payload = {
@@ -526,5 +532,10 @@ class NotificationTriggers:
                 )
         return count
 
-    def _confirmation_due_at(self):
-        return datetime.now(UTC) + timedelta(hours=self.confirmation_due_hours)
+    def _confirmation_due_at(self, service_start: datetime | None) -> datetime:
+        from backend.app.application.confirmations.deadlines import due_at_for_service
+
+        return due_at_for_service(
+            service_start,
+            hours_before=self.due_hours_before_service,
+        )

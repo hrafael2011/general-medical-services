@@ -13,7 +13,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 8
     failed_login_lock_threshold: int = 5
     failed_login_lock_minutes: int = 15
-    confirmation_overdue_hours: int = 12
+    confirmation_overdue_hours: int = 12  # DEPRECATED: usar los tres valores de abajo
+    # El ciclo de confirmación se mide respecto al inicio del servicio, no respecto a la
+    # aprobación: recordatorio a T-12 h, escalación a T-8 h, vencimiento a T-4 h.
+    confirmation_due_hours_before_service: int = 4
+    confirmation_escalation_hours_before_service: int = 8
+    confirmation_reminder_hours_before_service: int = 12
     token_audience: str = "medical-shifts-app"
     token_issuer: str = "medical-shifts-system"
 
