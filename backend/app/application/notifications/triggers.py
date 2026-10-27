@@ -37,7 +37,7 @@ def _resolve_recipient_phone(doctor) -> str | None:
     return getattr(doctor, "telegram_chat_id", None) or None
 
 
-def _build_confirmation_message(message: str, doctor, confirmation_id: str) -> str | dict:
+def _build_confirmation_message(message: str, doctor, confirmation) -> str | dict:
     """Build confirmation message payload — Telegram buttons or WhatsApp text.
 
     Returns a dict with inline keyboard button when the doctor has
@@ -46,7 +46,7 @@ def _build_confirmation_message(message: str, doctor, confirmation_id: str) -> s
     """
     chat_id = getattr(doctor, "telegram_chat_id", None)
     if chat_id:
-        return _with_telegram_confirmation(message, confirmation_id)
+        return _with_telegram_confirmation(message, confirmation)
     return _with_whatsapp_confirmation(message)
 
 
@@ -139,7 +139,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -199,7 +199,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -313,7 +313,7 @@ class NotificationTriggers:
                 )
                 notification.payload = {
                     **(notification.payload or {}),
-                    "message": _build_confirmation_message(message, doctor, confirmation.id),
+                    "message": _build_confirmation_message(message, doctor, confirmation),
                     "confirmation_request_id": confirmation.id,
                 }
             return 1
@@ -373,7 +373,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1
@@ -482,7 +482,7 @@ class NotificationTriggers:
                     )
                     notification.payload = {
                         **(notification.payload or {}),
-                        "message": _build_confirmation_message(message, doctor, confirmation.id),
+                        "message": _build_confirmation_message(message, doctor, confirmation),
                         "confirmation_request_id": confirmation.id,
                     }
                 count += 1

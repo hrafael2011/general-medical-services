@@ -216,13 +216,21 @@ def with_telegram_buttons(message: str, confirmation_id: str) -> dict:
     }
 
 
-def _with_telegram_confirmation(message: str, confirmation_id: str) -> dict:
+def _with_telegram_confirmation(message: str, confirmation) -> dict:
     """Build Telegram message dict with inline confirmation button.
 
     Returns a dict suitable for TelegramNotificationProvider.send():
         {"text": "...", "reply_markup": {"inline_keyboard": [[...]]}}
 
-    This is a thin alias for with_telegram_buttons() following the same
-    naming convention as _with_whatsapp_confirmation().
+    Also carries the public confirmation link. The page and the endpoints by
+    `response_token` already existed; nobody ever received the URL, so it was a door
+    without a key. It is the fallback for when the inline keyboard does not render.
     """
-    return with_telegram_buttons(message, confirmation_id)
+    from backend.app.core.config import settings
+
+    url = (
+        f"{settings.frontend_origin.rstrip('/')}"
+        f"/confirmacion-medica?token={confirmation.response_token}"
+    )
+    text = f"{message}\n\nSi el botón no funciona, abra: {url}"
+    return with_telegram_buttons(text, confirmation.id)

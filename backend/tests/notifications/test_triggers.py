@@ -481,7 +481,8 @@ def test_build_confirmation_message_returns_dict_for_telegram_doctor():
     )
 
     doctor = SimpleNamespace(telegram_chat_id="12345")
-    result = _build_confirmation_message("Test message", doctor, "conf-abc")
+    confirmation = SimpleNamespace(id="conf-abc", response_token="tok-abc")
+    result = _build_confirmation_message("Test message", doctor, confirmation)
 
     assert isinstance(result, dict)
     assert "text" in result
@@ -492,6 +493,24 @@ def test_build_confirmation_message_returns_dict_for_telegram_doctor():
     assert keyboard[0][0]["callback_data"] == "confirm:conf-abc"
 
 
+def test_build_confirmation_message_includes_the_public_link():
+    """La página pública existía pero nadie recibía el link."""
+    from types import SimpleNamespace
+
+    from backend.app.application.notifications.triggers import (
+        _build_confirmation_message,
+    )
+    from backend.app.core.config import settings
+
+    doctor = SimpleNamespace(telegram_chat_id="12345")
+    confirmation = SimpleNamespace(id="conf-link", response_token="tok-publico")
+
+    result = _build_confirmation_message("Test message", doctor, confirmation)
+
+    assert "/confirmacion-medica?token=tok-publico" in result["text"]
+    assert settings.frontend_origin.rstrip("/") in result["text"]
+
+
 def test_build_confirmation_message_returns_string_for_whatsapp_doctor():
     """When a doctor has no telegram_chat_id, returns a plain string."""
     from types import SimpleNamespace
@@ -500,7 +519,8 @@ def test_build_confirmation_message_returns_string_for_whatsapp_doctor():
     )
 
     doctor = SimpleNamespace(telegram_chat_id=None, whatsapp_phone="+18095559999")
-    result = _build_confirmation_message("Test message", doctor, "conf-xyz")
+    confirmation = SimpleNamespace(id="conf-xyz", response_token="tok-xyz")
+    result = _build_confirmation_message("Test message", doctor, confirmation)
 
     assert isinstance(result, str)
     assert "Responda 1" in result
@@ -509,11 +529,14 @@ def test_build_confirmation_message_returns_string_for_whatsapp_doctor():
 
 def test_build_confirmation_message_handles_none_doctor():
     """None doctor should still work (fallback to WhatsApp text)."""
+    from types import SimpleNamespace
+
     from backend.app.application.notifications.triggers import (
         _build_confirmation_message,
     )
 
-    result = _build_confirmation_message("Test message", None, "conf-null")
+    confirmation = SimpleNamespace(id="conf-null", response_token="tok-null")
+    result = _build_confirmation_message("Test message", None, confirmation)
 
     assert isinstance(result, str)
     assert "Responda 1" in result
