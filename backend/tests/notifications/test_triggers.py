@@ -517,3 +517,19 @@ def test_build_confirmation_message_handles_none_doctor():
 
     assert isinstance(result, str)
     assert "Responda 1" in result
+
+
+def test_calendar_approval_uses_area_name_and_time(db_session, actor_user):
+    """La aprobación completa mostraba el UUID del área y ninguna hora."""
+    from backend.app.infrastructure.db.models.notifications import NotificationEventModel
+
+    doctor = _create_doctor(db_session)
+    assignment = _make_assignment(db_session, doctor_id=doctor.id)
+    triggers = _make_triggers(db_session)
+
+    triggers.on_calendar_approved(actor_id=_ACTOR, assignments=[assignment])
+
+    event = db_session.query(NotificationEventModel).one()
+    assert "Emergencia" in event.payload["message"]
+    assert "07:00 AM" in event.payload["message"]
+    assert str(assignment.service_area_id) not in event.payload["message"]
