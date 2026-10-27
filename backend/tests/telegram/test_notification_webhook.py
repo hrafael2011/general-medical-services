@@ -314,3 +314,86 @@ def test_the_confirmation_callback_links_the_doctor(client, session):
 
     session.refresh(doctor)
     assert doctor.telegram_chat_id == "333"
+
+
+# ---------------------------------------------------------------------------
+# Confirming: only the owning doctor, and an honest outcome
+# ---------------------------------------------------------------------------
+
+
+def test_a_foreign_chat_cannot_confirm(client, session):
+    owner = _make_doctor(session, chat_id="123")
+    _make_confirmation(session, owner)
+    session.add(
+        DoctorModel(
+            id="doc-other",
+            name="DR. OTRO",
+            normalized_name="dr otro",
+            sex="male",
+            whatsapp_phone="8090000000",
+            telegram_chat_id="999",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    session.commit()
+
+    _post(
+        client,
+        {
+            "callback_query": {
+                "id": "cb-foreign",
+                "from": {"id": 999},
+                "data": "confirm:conf-1",
+                "message": {"message_id": 10, "chat": {"id": 999}},
+            }
+        },
+    )
+
+    assert session.get(ConfirmationRequestModel, "conf-1").status == "pending"
+
+
+def test_an_expired_confirmation_is_not_confirmed(client, session):
+    doctor = _make_doctor(session)
+    request = _make_confirmation(session, doctor)
+    request.status = "expired"
+    session.commit()
+
+    _post(
+        client,
+        {
+            "callback_query": {
+                "id": "cb-expired",
+                "from": {"id": 123},
+                "data": "confirm:conf-1",
+                "message": {"message_id": 10, "chat": {"id": 123}},
+            }
+        },
+    )
+
+    session.refresh(request)
+    assert request.status == "expired"
+
+
+def test_an_already_confirmed_request_does_not_queue_a_second_receipt(client, session):
+    doctor = _make_doctor(session)
+    request = _make_confirmation(session, doctor)
+    request.status = "confirmed"
+    session.commit()
+    _make_user(session, telegram_chat_id="555")
+
+    _post(
+        client,
+        {
+            "callback_query": {
+                "id": "cb-twice",
+                "from": {"id": 123},
+                "data": "confirm:conf-1",
+                "message": {"message_id": 10, "chat": {"id": 123}},
+            }
+        },
+    )
+
+    assert session.query(NotificationEventModel).filter_by(
+        notification_type="confirmation_receipt"
+    ).count() == 0

@@ -68,10 +68,10 @@ async def telegram_notification_webhook(
         # Confirmation from notification message
         if data.startswith("confirm:") and not data.startswith("confirm:link"):
             confirmation_id = data.split(":", 1)[1]
-            _process_confirmation(session, chat_id, confirmation_id)
-            _answer_callback(cb_id)
+            result = _process_confirmation(session, chat_id, confirmation_id)
+            _answer_callback(cb_id, _CONFIRMATION_TOAST[result])
             return _edit_telegram_message(
-                chat_id, message_id, "✅ Asistencia confirmada. Gracias.",
+                chat_id, message_id, _CONFIRMATION_TEXT[result],
             )
 
         # Doctor linking: confirm phone number
@@ -311,19 +311,55 @@ def _looks_like_phone(text: str) -> bool:
 
 # ── Confirmation helpers ─────────────────────────────────────────────────────
 
-def _process_confirmation(
-    session: Session, chat_id: str, confirmation_id: str
-) -> None:
-    """Mark a confirmation request as confirmed via Telegram."""
+# One message per outcome. The button used to answer "Asistencia confirmada" whatever
+# happened — an expired request, somebody else's chat — while nothing was saved.
+_CONFIRMATION_TEXT = {
+    "confirmed": "✅ Asistencia confirmada. Gracias.",
+    "already_confirmed": "Esta confirmación ya fue respondida.",
+    "already_answered": "Esta confirmación ya fue respondida.",
+    "expired": "⏰ Esta confirmación ya venció. Contacte al encargado.",
+    "not_found": "No encontramos esa confirmación.",
+    "unauthorized": "No autorizado para responder esta confirmación.",
+}
+
+_CONFIRMATION_TOAST = {
+    "confirmed": "Asistencia confirmada",
+    "already_confirmed": "Ya estaba confirmada",
+    "already_answered": "Ya fue respondida",
+    "expired": "La confirmación venció",
+    "not_found": "Confirmación no encontrada",
+    "unauthorized": "No autorizado",
+}
+
+
+def _process_confirmation(session: Session, chat_id: str, confirmation_id: str) -> str:
+    """Confirm a request only when the chat belongs to its doctor.
+
+    Returns one of: confirmed, already_confirmed, already_answered, expired,
+    not_found, unauthorized.
+    """
     from datetime import UTC, datetime
 
     req = session.get(ConfirmationRequestModel, confirmation_id)
-    if not req or req.status not in ("pending", "received"):
-        logger.info(
-            "Confirmation %s not found or already processed (chat=%s)",
-            confirmation_id, chat_id,
+    if req is None:
+        return "not_found"
+
+    doctor = session.scalars(
+        select(DoctorModel).where(DoctorModel.telegram_chat_id == chat_id)
+    ).first()
+    if doctor is None or doctor.id != req.doctor_id:
+        logger.warning(
+            "Chat %s tried to confirm request %s owned by doctor %s",
+            chat_id, confirmation_id, req.doctor_id,
         )
-        return
+        return "unauthorized"
+
+    if req.status == "confirmed":
+        return "already_confirmed"
+    if req.status == "expired":
+        return "expired"
+    if req.status not in {"pending", "received"}:
+        return "already_answered"
 
     now = datetime.now(UTC)
     req.status = "confirmed"
@@ -350,6 +386,7 @@ def _process_confirmation(
         "Confirmation %s confirmed via Telegram (chat=%s)",
         confirmation_id, chat_id,
     )
+    return "confirmed"
 
 
 # ── Telegram Bot API helpers ─────────────────────────────────────────────────
