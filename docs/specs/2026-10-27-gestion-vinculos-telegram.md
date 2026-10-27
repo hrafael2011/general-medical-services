@@ -1,7 +1,7 @@
 ---
 spec: gestion-vinculos-telegram
 version: 1.0.0
-status: accepted
+status: implemented
 created: 2026-10-27
 updated: 2026-10-27
 ---
@@ -115,3 +115,4 @@ Tres defectos concretos:
 | Version | Fecha | Issue | Trigger | Resumen |
 |---|---|---|---|---|
 | 1.0.0 | 2026-10-27 | — | Pantalla con desplegable vacío | Se formaliza la política de generación por rol, se corrige la lista que se vaciaba por un 403 y se retira la administración del vínculo del bot asistente. |
+| 1.1.0 | 2026-10-27 | — | Implementación | R1–R8 implementados con tests. Backend **1875 passed + 1 xfailed**; frontend **149 passed**. Commits `b9fbd81` (política), `baefa75` (lista de destinatarios y propio usuario), `cea7f8f` (retiro del bloque manual y de la tabla del asistente). |

@@ -13,7 +13,7 @@ regla y deja de administrar el vínculo del asistente, que no entrega avisos.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0, pytest, React + TypeScript, vitest.
 
-**Estado:** ⬜ Propuesto. No implementado.
+**Estado:** ✅ Implementado. Backend 1875 passed + 1 xfailed; frontend 149 passed.
 
 ---
 
@@ -25,7 +25,7 @@ regla y deja de administrar el vínculo del asistente, que no entrega avisos.
 - Modify: `backend/app/api/routes/telegram.py`
 - Test: `backend/tests/telegram/test_link_token_policy.py`
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 ```python
 """Quién puede generar un enlace de vínculo al bot de avisos.
@@ -126,7 +126,7 @@ def test_a_superadmin_can_generate_a_link_for_another_admin(session):
     assert response.status_code == 201
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 ```bash
 ./.venv/bin/python -m pytest backend/tests/telegram/test_link_token_policy.py -q
@@ -134,7 +134,7 @@ def test_a_superadmin_can_generate_a_link_for_another_admin(session):
 
 Expected: `test_an_admin_cannot_generate_a_link_for_another_admin` falla (hoy devuelve 201).
 
-- [ ] **Step 3: Añadir la comprobación**
+- [x] **Step 3: Añadir la comprobación**
 
 En `backend/app/api/routes/telegram.py`, junto a `_get_linkable_user`:
 
@@ -164,7 +164,7 @@ Y en `create_link_token`, sustituir la primera línea del cuerpo:
     _ensure_can_link(admin, target)
 ```
 
-- [ ] **Step 4: Ejecutar y ver que pasa**
+- [x] **Step 4: Ejecutar y ver que pasa**
 
 ```bash
 ./.venv/bin/python -m pytest backend/tests/telegram/test_link_token_policy.py -q
@@ -172,7 +172,7 @@ Y en `create_link_token`, sustituir la primera línea del cuerpo:
 
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/telegram.py backend/tests/telegram/test_link_token_policy.py
@@ -190,7 +190,7 @@ git commit -m "feat(telegram): only superadmins can generate links for other adm
 - Modify: `frontend/src/api/auth.ts`
 - Test: `frontend/src/features/telegram/TelegramLinks.test.tsx`
 
-- [ ] **Step 1: Añadir `telegram_chat_id` al tipo del usuario autenticado**
+- [x] **Step 1: Añadir `telegram_chat_id` al tipo del usuario autenticado**
 
 En `frontend/src/api/auth.ts`, dentro de `UserRead`:
 
@@ -200,7 +200,7 @@ En `frontend/src/api/auth.ts`, dentro de `UserRead`:
 
 `/auth/login` ya devuelve el campo (usa el mismo `UserRead` del backend); solo faltaba en el tipo.
 
-- [ ] **Step 2: Escribir los tests que fallan**
+- [x] **Step 2: Escribir los tests que fallan**
 
 En `TelegramLinks.test.tsx`, añadir la variable y el mock antes de los `describe`:
 
@@ -244,7 +244,7 @@ Y estos dos tests dentro de `describe("TelegramLinks", ...)`:
   });
 ```
 
-- [ ] **Step 3: Ejecutar y ver que fallan**
+- [x] **Step 3: Ejecutar y ver que fallan**
 
 ```bash
 npm --prefix frontend run test -- --run TelegramLinks
@@ -252,7 +252,7 @@ npm --prefix frontend run test -- --run TelegramLinks
 
 Expected: los dos fallan (hoy la lista queda vacía y no existe “Yo Admin”).
 
-- [ ] **Step 4: Cambiar la consulta**
+- [x] **Step 4: Cambiar la consulta**
 
 En `TelegramLinks.tsx`, añadir el import y leer el usuario:
 
@@ -289,7 +289,7 @@ Y sustituir el `useQuery` de usuarios por:
   });
 ```
 
-- [ ] **Step 5: Marcar “Yo” en el desplegable**
+- [x] **Step 5: Marcar “Yo” en el desplegable**
 
 En el `<option>` del selector de usuario:
 
@@ -301,7 +301,7 @@ En el `<option>` del selector de usuario:
             ))}
 ```
 
-- [ ] **Step 6: Ejecutar**
+- [x] **Step 6: Ejecutar**
 
 ```bash
 npm --prefix frontend run test -- --run TelegramLinks
@@ -309,7 +309,7 @@ npm --prefix frontend run test -- --run TelegramLinks
 
 Expected: todos pasan.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/api/auth.ts frontend/src/features/telegram/TelegramLinks.tsx \
@@ -323,7 +323,7 @@ git commit -m "fix(telegram): keep the recipient list usable and include the cur
 - Modify: `frontend/src/features/telegram/TelegramLinks.tsx`
 - Test: `frontend/src/features/telegram/TelegramLinks.test.tsx`
 
-- [ ] **Step 1: Quitar el bloque “Vinculación manual”**
+- [x] **Step 1: Quitar el bloque “Vinculación manual”**
 
 Eliminar el `<details>` completo cuyo `<summary>` dice `Vinculacion manual (admin)`, y con él el
 estado y el manejador que solo usa ese formulario:
@@ -337,14 +337,14 @@ estado y el manejador que solo usa ese formulario:
   function handleSubmit(e: FormEvent<HTMLFormElement>) { ... }
 ```
 
-- [ ] **Step 2: Quitar la tabla de vínculos del asistente**
+- [x] **Step 2: Quitar la tabla de vínculos del asistente**
 
 Eliminar el `useQuery` de `telegramApi.listLinks`, el `deleteMutation`, el contador `{links && ...}`
 de la cabecera, el bloque de estado vacío y la tabla final. El archivo deja de importar
 `TelegramUserLinkRead`, `Trash2`, `Check`, `FormEvent` y `CreateTelegramLinkRequest` si quedan sin
 uso.
 
-- [ ] **Step 3: Quitar los tests del bloque retirado**
+- [x] **Step 3: Quitar los tests del bloque retirado**
 
 En `TelegramLinks.test.tsx`, eliminar los tres tests que solo cubren la tabla vieja:
 
@@ -357,7 +357,7 @@ En `TelegramLinks.test.tsx`, eliminar los tres tests que solo cubren la tabla vi
 Y quitar del mock de `../../api/telegram` las funciones `listLinks`, `createLink` y `deleteLink` si
 ya no se usan.
 
-- [ ] **Step 4: Añadir el test que fija la ausencia**
+- [x] **Step 4: Añadir el test que fija la ausencia**
 
 ```tsx
   it("no muestra los campos del vínculo manual del asistente", async () => {
@@ -371,7 +371,7 @@ ya no se usan.
   });
 ```
 
-- [ ] **Step 5: Ejecutar**
+- [x] **Step 5: Ejecutar**
 
 ```bash
 npm --prefix frontend run test -- --run TelegramLinks
@@ -380,7 +380,7 @@ npx --prefix frontend tsc -b
 
 Expected: tests en verde y `tsc` sin errores.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/features/telegram/TelegramLinks.tsx \
@@ -397,7 +397,7 @@ git commit -m "refactor(telegram): drop the assistant-link admin from the alerts
 **Files:**
 - Modify: `docs/specs/2026-10-27-gestion-vinculos-telegram.md` (estado y registro)
 
-- [ ] **Step 1: Suite completa**
+- [x] **Step 1: Suite completa**
 
 ```bash
 ./.venv/bin/python -m pytest backend/tests -q
@@ -406,11 +406,11 @@ npm --prefix frontend run test -- --run
 
 Expected: todo en verde.
 
-- [ ] **Step 2: Actualizar el spec**
+- [x] **Step 2: Actualizar el spec**
 
 Cambiar `status: accepted` por `status: implemented` y añadir al changelog la fecha y el resultado.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/specs/2026-10-27-gestion-vinculos-telegram.md
@@ -432,3 +432,7 @@ git commit -m "docs(spec): mark the Telegram link policy as implemented"
 | Fecha | Task | Nota |
 |---|---|---|
 | 2026-10-27 | — | Spec y tasks creadas. Sin implementar. |
+| 2026-10-27 | 1.1 | Hecho en `b9fbd81`. 4 tests nuevos; el de “otro admin” fallaba con 201 y pasa a 403. |
+| 2026-10-27 | 2.1 | Hecho en `baefa75`. Se añadió `telegram_chat_id` al tipo del frontend y hubo que completar la fixture de `AuthContext.test.tsx`, que quedó corta. El test de “incluye al propio usuario” tenía una carrera (`findByLabelText` resuelve antes de que la consulta llene las opciones): se cambió a `findByText` dentro del `<select>`. |
+| 2026-10-27 | 2.2 | Hecho en `cea7f8f`. Se retiraron el bloque manual, la tabla del asistente y su consulta; con ellos el contador de la cabecera y los estados de carga/error que dependían de `listLinks`. `tsc -b` y eslint limpios. |
+| 2026-10-27 | 3.1 | Backend **1875 passed + 1 xfailed** (14:01); frontend **149 passed**. Spec a `implemented`. |
