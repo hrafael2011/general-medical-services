@@ -59,7 +59,7 @@ def render_twelve_hour_reminder(
     return (
         f"Recordatorio: mañana tiene turno de servicio "
         f"en {service_area} el día {service_date}{time_part}.\n\n"
-        "Responda 1 para confirmar su asistencia."
+        "Por favor confirme su asistencia con el botón de abajo."
     )
 
 

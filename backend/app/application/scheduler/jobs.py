@@ -92,9 +92,16 @@ def send_pre_service_reminders() -> dict:
                 )
             )
         )
+        from backend.app.application.confirmations.deadlines import due_at_for_service
+        from backend.app.application.confirmations.service import (
+            ConfirmationRequestService,
+        )
         from backend.app.application.notifications.templates import with_telegram_buttons
         from backend.app.infrastructure.db.models.confirmations import (
             ConfirmationRequestModel,
+        )
+        from backend.app.infrastructure.repositories.confirmations import (
+            ConfirmationRequestRepository,
         )
 
         sent = 0
@@ -115,7 +122,9 @@ def send_pre_service_reminders() -> dict:
                     tomorrow.year, tomorrow.month, tomorrow.day, start_hour, 0, 0, tzinfo=UTC
                 )
 
-            reminder_target = start_dt - timedelta(hours=12)
+            reminder_target = start_dt - timedelta(
+                hours=settings.confirmation_reminder_hours_before_service
+            )
             window_start = reminder_target - timedelta(minutes=30)
             window_end = reminder_target + timedelta(minutes=30)
 
@@ -134,20 +143,35 @@ def send_pre_service_reminders() -> dict:
                 service_start=start_str,
             )
 
-            # Build payload — use Telegram inline button when possible
-            msg_payload: str | dict = message
-            if doctor.telegram_chat_id:
-                confirmation = session.scalars(
-                    sa_select(ConfirmationRequestModel)
-                    .where(
-                        ConfirmationRequestModel.assignment_id == a.id,
-                        ConfirmationRequestModel.status == "pending",
-                    )
-                    .order_by(ConfirmationRequestModel.created_at.desc())
-                    .limit(1)
-                ).first()
-                if confirmation:
-                    msg_payload = with_telegram_buttons(message, confirmation.id)
+            # The reminder must always carry a button. It used to fall back to plain text
+            # whenever no pending confirmation existed — and with the old deadline most
+            # of them had already expired — so the doctor got "Responda 1", which the
+            # bot does not understand.
+            confirmation = session.scalars(
+                sa_select(ConfirmationRequestModel)
+                .where(
+                    ConfirmationRequestModel.assignment_id == a.id,
+                    ConfirmationRequestModel.status == "pending",
+                )
+                .order_by(ConfirmationRequestModel.created_at.desc())
+                .limit(1)
+            ).first()
+
+            if confirmation is None:
+                confirmation = ConfirmationRequestService(
+                    ConfirmationRequestRepository(session)
+                ).create_request(
+                    confirmation_type="service",
+                    idempotency_key=f"reminder:{a.id}:{doctor.id}:{tomorrow.isoformat()}",
+                    doctor_id=doctor.id,
+                    assignment_id=a.id,
+                    due_at=due_at_for_service(
+                        start_dt,
+                        hours_before=settings.confirmation_due_hours_before_service,
+                    ),
+                )
+
+            msg_payload: str | dict = with_telegram_buttons(message, confirmation.id)
 
             if settings.telegram_notification_bot_token:
                 provider = TelegramNotificationProvider()
