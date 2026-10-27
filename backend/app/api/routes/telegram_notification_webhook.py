@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.application.doctors.phone_lookup import find_doctor_by_phone
 from backend.app.core.config import settings
 from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
 from backend.app.infrastructure.db.models.doctors import DoctorModel
@@ -75,18 +76,14 @@ async def telegram_notification_webhook(
 
         # Doctor linking: confirm phone number
         if data.startswith("link_phone:"):
-            phone = data.split(":", 1)[1]
-            doctor = _find_doctor_by_phone(session, phone)
+            doctor_id = data.split(":", 1)[1]
+            doctor = session.get(DoctorModel, doctor_id)
 
-            if not doctor:
-                _answer_callback(cb_id, "Numero no encontrado en el sistema")
+            if doctor is None:
+                _answer_callback(cb_id, "Médico no encontrado")
                 return _edit_telegram_message(
                     chat_id, message_id,
-                    f"❌ No se encontro un medico registrado con el numero "
-                    f"+{phone}.\n\n"
-                    "Verifique que sea el mismo numero registrado en el sistema "
-                    "y contacte al encargado si el problema persiste.\n\n"
-                    "Use /start para intentar de nuevo.",
+                    "❌ No se encontró el médico. Use /start para intentar de nuevo.",
                 )
 
             # Check if another chat already linked this doctor
@@ -164,16 +161,35 @@ async def telegram_notification_webhook(
                 "Recibira sus notificaciones de turnos por este medio.",
             )
 
-        # Phone number entered — show confirmation
+        # Phone number entered — show the doctor's name and ask for confirmation
         if text and _looks_like_phone(text):
-            phone = _normalize_phone(text)
+            normalized = _normalize_phone(text)
+            lookup = find_doctor_by_phone(session, normalized)
+
+            if lookup.reason == "ambiguous":
+                return _send_telegram_message(
+                    chat_id,
+                    "Hay más de un médico registrado con ese número. "
+                    "Contacte al encargado para vincular su Telegram.",
+                )
+            if lookup.doctor is None:
+                return _send_telegram_message(
+                    chat_id,
+                    f"No se encontró un médico registrado con el número +{normalized}.\n\n"
+                    "Verifique que sea el mismo número registrado en el sistema "
+                    "y contacte al encargado si el problema persiste.\n\n"
+                    "Use /start para intentar de nuevo.",
+                )
+
             return _send_telegram_message(
                 chat_id,
-                f"Verifique su numero: +{phone}\n\n"
-                "Confirme que este numero es correcto para vincularse.",
+                f"Teléfono +{normalized} — {lookup.doctor.name}\n\n¿Es usted?",
                 inline_keyboard=[
                     [
-                        {"text": "✅ Confirmar", "callback_data": f"link_phone:{phone}"},
+                        {
+                            "text": "✅ Sí, soy yo",
+                            "callback_data": f"link_phone:{lookup.doctor.id}",
+                        },
                         {"text": "🔄 Corregir", "callback_data": "link_retry"},
                     ]
                 ],
@@ -291,23 +307,6 @@ def _looks_like_phone(text: str) -> bool:
     """Check if text looks like a phone number (digits, spaces, +)."""
     cleaned = text.replace(" ", "").replace("+", "").replace("-", "")
     return len(cleaned) >= 7 and cleaned.isdigit()
-
-
-def _find_doctor_by_phone(session: Session, phone: str) -> DoctorModel | None:
-    """Find a doctor by matching the last 8 digits of whatsapp_phone."""
-    doctors = session.scalars(
-        select(DoctorModel).where(DoctorModel.whatsapp_phone.is_not(None))
-    ).all()
-    return next(
-        (
-            d for d in doctors
-            if d.whatsapp_phone and (
-                phone.endswith(d.whatsapp_phone[-8:])
-                or d.whatsapp_phone.endswith(phone[-8:])
-            )
-        ),
-        None,
-    )
 
 
 # ── Confirmation helpers ─────────────────────────────────────────────────────
