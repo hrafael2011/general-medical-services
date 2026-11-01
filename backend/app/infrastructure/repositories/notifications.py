@@ -96,6 +96,31 @@ class NotificationRepository:
                 break
         return result
 
+    def reactivate_cancelled_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Devuelve a la cola los avisos cancelados de esos turnos.
+
+        Se reutiliza la fila —misma clave de idempotencia— para que re-aprobar
+        no genere un aviso duplicado. Solo toca `cancelled`: lo enviado no se
+        reenvía.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(NotificationEventModel).where(
+            NotificationEventModel.assignment_id.in_(assignment_ids),
+            NotificationEventModel.status == "cancelled",
+        )
+        events = list(self.session.scalars(stmt))
+        for event in events:
+            event.status = "pending"
+            event.retry_count = 0
+            event.error_code = None
+            event.error_message = None
+            event.scheduled_for = now
+            event.updated_at = now
+        self.session.flush()
+        return [event.id for event in events]
+
     def list_pending_for_assignments(
         self, assignment_ids: list[str]
     ) -> list[NotificationEventModel]:

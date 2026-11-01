@@ -67,6 +67,17 @@ class NotificationTriggers:
         self.due_hours_before_service = due_hours_before_service
         self.approval_grace_minutes = approval_grace_minutes
 
+    def _reactivate(self, assignments: list) -> None:
+        """Re-aprobar reabre lo que un desbloqueo había cancelado.
+
+        Sin esto, corregir un error y volver a aprobar deja a los médicos sin
+        enterarse de la versión buena: la fila cancelada sigue cancelada.
+        """
+        assignment_ids = [assignment.id for assignment in assignments]
+        self.notification_service.reactivate_for_assignments(assignment_ids)
+        if self.confirmation_service is not None:
+            self.confirmation_service.reactivate_for_assignments(assignment_ids)
+
     def _scheduled_for(self) -> datetime | None:
         """Hora de salida del aviso: el margen que da tiempo a arrepentirse."""
         if self.approval_grace_minutes <= 0:
@@ -108,6 +119,7 @@ class NotificationTriggers:
         assignments: list,
     ) -> int:
         """Queue initial_assignment notifications for all assignments."""
+        self._reactivate(assignments)
         count = 0
         for assignment in assignments:
             # El id se lee ANTES del try. Dentro del `except` la instancia puede
@@ -173,6 +185,7 @@ class NotificationTriggers:
         Follows the same pattern as on_calendar_approved but scoped
         to one week's assignments.
         """
+        self._reactivate(assignments)
         count = 0
         for assignment in assignments:
             # El id se lee ANTES del try: dentro del `except` la instancia puede
