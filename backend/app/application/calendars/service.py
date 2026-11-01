@@ -224,16 +224,18 @@ class CalendarService:
                 actor_id=actor_id, calendar=calendar, version=version
             )
 
-        should_notify = True
+        # Re-aprobar tras un desbloqueo SÍ avisa: corregir un error tiene que
+        # llegar a los médicos. Antes se callaba todo con el `__unlock__`, y la
+        # versión buena no le llegaba a nadie. El aviso se reutiliza (misma
+        # clave de idempotencia), así que re-aprobar no lo duplica.
         if version.reason and version.reason.startswith("__unlock__"):
-            should_notify = False
             # Restore original reason
             if "__orig__" in version.reason:
                 version.reason = version.reason.split("__orig__", 1)[1]
             else:
                 version.reason = None
 
-        if self.triggers is not None and should_notify:
+        if self.triggers is not None:
             assignments = self.repo.list_assignments(version.id)
             self.triggers.on_calendar_approved(
                 actor_id=actor_id,

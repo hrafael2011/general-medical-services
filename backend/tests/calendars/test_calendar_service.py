@@ -316,7 +316,7 @@ def test_approve_already_approved_raises(db_session) -> None:
     assert exc_info.value.code == "calendar_already_approved"
 
 
-def test_reapprove_unlocked_calendar_does_not_send_initial_notifications(db_session) -> None:
+def test_reapprove_unlocked_calendar_notifies_again(db_session) -> None:
     triggers = _FakeTriggers()
     service = CalendarService(
         CalendarRepository(db_session),
@@ -361,7 +361,9 @@ def test_reapprove_unlocked_calendar_does_not_send_initial_notifications(db_sess
         notes=None,
     )
 
-    assert len(triggers.calls) == 1
+    # Re-aprobar tras corregir tiene que avisar: si no, la versión buena no le
+    # llega a nadie. El aviso se reutiliza, así que no se duplica.
+    assert len(triggers.calls) == 2
 
 
 # ---------------------------------------------------------------------------
