@@ -77,6 +77,9 @@ class NotificationTriggers:
         self.notification_service.reactivate_for_assignments(
             assignment_ids, scheduled_for=self._scheduled_for()
         )
+        # La aprobación manda el aviso definitivo del turno: el «te asignaron»
+        # suelto diría casi lo mismo y el médico recibiría dos mensajes.
+        self.notification_service.cancel_added_for_assignments(assignment_ids)
         if self.confirmation_service is not None:
             self.confirmation_service.reactivate_for_assignments(assignment_ids)
 

@@ -32,6 +32,16 @@ Si apruebas la semana 1 hoy y la semana 2 doce horas después:
 El caso es real: las semanas se aprueban en momentos distintos, y con una ventana de 24 h esas
 horas quedan repartidas.
 
+### El número también estaba inflado
+
+Detectado el **2026-11-01** al revisar la semana 2: mostraba **41 avisos** para **21 turnos**.
+Un turno podía tener dos avisos en cola —el «te asignaron» suelto y el de la aprobación—, así que
+el contador sumaba mensajes, no turnos, y el médico recibía dos mensajes casi iguales.
+
+Se corrigió en la raíz (ver changelog 1.6.0 del spec de aprobación segura): aprobar cancela los
+avisos de asignación suelta pendientes. Con eso el número del grupo vuelve a coincidir con los
+turnos de la semana.
+
 ### Lo que ya existe y sirve
 
 - `GET /{calendar_id}/notifications/pending` → total y próxima hora.

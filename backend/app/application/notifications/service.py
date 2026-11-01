@@ -88,6 +88,10 @@ class NotificationService:
             assignment_ids, scheduled_for=scheduled_for
         )
 
+    def cancel_added_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Retira los «te asignaron» pendientes: la aprobación los reemplaza."""
+        return self.repo.cancel_added_for_assignments(assignment_ids)
+
     def process_pending(self) -> dict:
         """
         Process up to 50 pending notifications.

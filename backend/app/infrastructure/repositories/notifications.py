@@ -130,6 +130,28 @@ class NotificationRepository:
         self.session.flush()
         return [event.id for event in events]
 
+    def cancel_added_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Cancela los «te asignaron un turno» que aún no salieron.
+
+        Aprobar la semana manda el aviso definitivo; el de asignación suelta
+        diría casi lo mismo. Sin esto el médico recibe dos mensajes por el
+        mismo turno y el contador de la semana cuenta el doble.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(NotificationEventModel).where(
+            NotificationEventModel.assignment_id.in_(assignment_ids),
+            NotificationEventModel.status == "pending",
+            NotificationEventModel.notification_type == "service_assignment_added",
+        )
+        events = list(self.session.scalars(stmt))
+        for event in events:
+            event.status = "cancelled"
+            event.updated_at = now
+        self.session.flush()
+        return [event.id for event in events]
+
     def list_pending_for_assignments(
         self, assignment_ids: list[str]
     ) -> list[NotificationEventModel]:
