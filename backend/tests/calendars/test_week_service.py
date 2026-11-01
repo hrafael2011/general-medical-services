@@ -203,7 +203,11 @@ def test_approve_all_weeks_sets_calendar_approved():
 
 
 def test_approve_week_without_assignments_raises():
-    """A week without assigned doctors cannot be approved (week_empty guard)."""
+    """A week without assigned doctors cannot be approved.
+
+    Sin un solo turno no hay mensaje aparte: se rechaza como semana
+    incompleta, igual que un día o un área sin cubrir.
+    """
     repo = FakeWeekRepo()
     cal = CalendarModel(
         id=str(uuid4()), year=2026, month=5, status="draft", generation_mode="manual"
@@ -226,10 +230,10 @@ def test_approve_week_without_assignments_raises():
     repo.add_week(week)
 
     service = CalendarService(repo=repo, triggers=MagicMock(), audit=None)
-    with pytest.raises(CalendarServiceError, match="sin médicos asignados") as exc_info:
+    with pytest.raises(CalendarServiceError, match="ningún médico") as exc_info:
         service.approve_week(actor_id="user1", week_id=week.id, notes=None)
 
-    assert exc_info.value.code == "week_empty"
+    assert exc_info.value.code == "week_incomplete"
     assert week.status == "draft"
 
 

@@ -17,7 +17,7 @@ Contrato verificado contra la app real (FastAPI TestClient + seed E2E):
 7.  GET /api/audit?action_type=assignment_added&entity_type=assignment → 200;
     el evento contiene after_snapshot.override_justification
 8.  POST /api/calendars/{id}/weeks/{wid}/approve sobre una semana vacía
-    → 422 detail.code="week_empty" (guard)
+    → 422 detail.code="week_incomplete" (sin turnos no hay mensaje aparte)
 9.  POST .../approve sobre la semana del slot → 422 detail.code="week_incomplete":
     el seed solo cubre Emergencia y no tiene médico el domingo, así que la
     semana no se puede aprobar (regla de cobertura obligatoria).
@@ -157,7 +157,7 @@ def test_manual_flow_forced_warning_requires_justification(client, seed_ids):
     assert event["after_snapshot"]["override_justification"] == justification
     assert event["after_snapshot"]["doctor_id"] == monthly_id
 
-    # ── 8. Guard week_empty: aprobar una semana sin asignaciones → 422 ──────
+    # ── 8. Semana sin asignaciones → 422 week_incomplete ────────────────────
     resp = client.get(f"/api/calendars/{calendar_id}/weeks", headers=headers)
     assert resp.status_code == 200, resp.text
     weeks_resp = resp.json()
@@ -174,7 +174,7 @@ def test_manual_flow_forced_warning_requires_justification(client, seed_ids):
         headers=headers,
     )
     assert resp.status_code == 422, resp.text
-    assert resp.json()["detail"]["code"] == "week_empty"
+    assert resp.json()["detail"]["code"] == "week_incomplete"
 
     # ── 9. Cobertura obligatoria: la semana del slot está incompleta ────────
     # El seed solo asigna el área Emergencia y ningún médico cubre el domingo,

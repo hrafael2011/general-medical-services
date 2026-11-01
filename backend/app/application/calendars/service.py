@@ -468,19 +468,15 @@ class CalendarService:
                 f"La semana {week_id} ya está aprobada.",
             )
 
-        # Require at least one assignment to approve a week
         week_assignments = self.repo.list_assignments(week.calendar_version_id)
         assignments_in_week = [
             a for a in week_assignments
             if week.start_date <= a.service_date <= week.end_date
         ]
-        if not assignments_in_week:
-            raise CalendarServiceError(
-                "week_empty",
-                "No puedes aprobar una semana sin médicos asignados. "
-                "Asigna al menos un médico antes de aprobar.",
-            )
 
+        # Una semana sin turnos no tiene un mensaje propio: cae en la regla de
+        # cobertura y se listan los días (todos) y sus áreas vacías. Un solo
+        # texto para el operador, no dos según cuánto lleve asignado.
         # Los días de la semana que caen en el mes siguiente pertenecen a otro
         # calendario: no se reclaman aquí.
         calendar = self.repo.get_calendar_by_id(week.calendar_id)
@@ -496,6 +492,14 @@ class CalendarService:
                     "week_incomplete",
                     format_coverage_message(gaps),
                     details=[gap.to_detail() for gap in gaps],
+                )
+
+            # Catálogo sin áreas de cobertura diaria: sin huecos que listar, pero
+            # una semana sin un solo médico tampoco se aprueba.
+            if not assignments_in_week:
+                raise CalendarServiceError(
+                    "week_incomplete",
+                    "No se puede aprobar: la semana no tiene ningún médico asignado.",
                 )
 
         now = datetime.now(UTC)

@@ -239,3 +239,23 @@ def test_approve_version_passes_when_the_whole_month_is_covered():
     )
 
     assert result.status == "approved"
+
+
+def test_approve_week_rejects_a_completely_empty_week_with_the_full_detail():
+    """Sin un solo turno no hay un mensaje aparte: se listan los siete días."""
+    repo, _cal, _version, week = _calendar_with_week(
+        date(2026, 5, 4), date(2026, 5, 10), 2026, 5
+    )
+
+    service = CalendarService(repo=repo, audit=None, triggers=None)
+
+    with pytest.raises(CalendarServiceError) as exc_info:
+        service.approve_week(actor_id="user1", week_id=week.id)
+
+    error = exc_info.value
+    assert error.code == "week_incomplete"
+    assert len(error.details) == 7
+    assert error.details[0] == {
+        "date": "2026-05-04",
+        "areas": ["Emergencia", "Pista", "Disponible"],
+    }
