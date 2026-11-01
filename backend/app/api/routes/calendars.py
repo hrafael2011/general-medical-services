@@ -118,6 +118,7 @@ def get_calendar_service(
             ConfirmationRequestRepository(session),
         ),
         due_hours_before_service=settings.confirmation_due_hours_before_service,
+        approval_grace_minutes=settings.approval_grace_minutes,
     )
     mission_ranking_service = MissionRankingService(
         MissionRepository(session),
@@ -198,6 +199,7 @@ def get_assignment_service(
             ConfirmationRequestRepository(session),
         ),
         due_hours_before_service=settings.confirmation_due_hours_before_service,
+        approval_grace_minutes=settings.approval_grace_minutes,
     )
 
     mission_ranking_service = MissionRankingService(

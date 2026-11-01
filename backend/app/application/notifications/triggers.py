@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from backend.app.application.confirmations.service import ConfirmationRequestService
 from backend.app.application.notifications.service import NotificationService
@@ -59,11 +59,19 @@ class NotificationTriggers:
         doctor_repo: DoctorRepository,
         confirmation_service: ConfirmationRequestService | None = None,
         due_hours_before_service: int = 4,
+        approval_grace_minutes: int = 0,
     ) -> None:
         self.notification_service = notification_service
         self.doctor_repo = doctor_repo
         self.confirmation_service = confirmation_service
         self.due_hours_before_service = due_hours_before_service
+        self.approval_grace_minutes = approval_grace_minutes
+
+    def _scheduled_for(self) -> datetime | None:
+        """Hora de salida del aviso: el margen que da tiempo a arrepentirse."""
+        if self.approval_grace_minutes <= 0:
+            return None
+        return datetime.now(UTC) + timedelta(minutes=self.approval_grace_minutes)
 
     def _resolve_area(self, assignment) -> tuple[str, datetime | None]:
         """Return the area display name and the service start time.
@@ -125,6 +133,7 @@ class NotificationTriggers:
                     recipient_phone=phone,
                     payload={"message": message},
                     assignment_id=assignment_id,
+                    scheduled_for=self._scheduled_for(),
                     created_by=actor_id,
                 )
                 if self.confirmation_service is not None:
@@ -185,6 +194,7 @@ class NotificationTriggers:
                     recipient_phone=phone,
                     payload={"message": message},
                     assignment_id=assignment_id,
+                    scheduled_for=self._scheduled_for(),
                     created_by=actor_id,
                 )
                 if self.confirmation_service is not None:
