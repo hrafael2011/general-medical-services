@@ -241,11 +241,17 @@ export function CalendarGrid() {
 
   const unlockWeekMutation = useMutation({
     mutationFn: (weekId: string) => calendarsApi.unlockWeek(calendarId!, weekId),
-    onSuccess: () => {
+    onSuccess: (week) => {
       qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendars"] });
-      addToast("success", "Semana desbloqueada.");
+      const cancelled = week.cancelled_notifications ?? 0;
+      addToast(
+        "success",
+        cancelled > 0
+          ? `Semana desbloqueada. Se cancelaron ${cancelled} avisos que aún no habían salido.`
+          : "Semana desbloqueada.",
+      );
     },
     onError: (err) =>
       addToast("error", err instanceof ApiError ? err.message : "Error al desbloquear semana."),

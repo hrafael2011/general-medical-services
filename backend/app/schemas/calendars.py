@@ -39,6 +39,7 @@ class CalendarVersionRead(BaseModel):
     created_by: str | None
     reason: str | None
     created_at: datetime
+    cancelled_notifications: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -183,6 +184,7 @@ class WeekRead(BaseModel):
     doctor_assignment_counts: list[DoctorAssignmentCountRead] = Field(default_factory=list)
     approved_by: str | None = None
     approved_at: str | None = None
+    cancelled_notifications: int = 0
 
     model_config = {"from_attributes": True}
 

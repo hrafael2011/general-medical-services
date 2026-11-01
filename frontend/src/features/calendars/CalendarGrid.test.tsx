@@ -67,8 +67,10 @@ vi.mock("../../api/doctors", () => ({
   },
 }));
 
+const { addToastMock } = vi.hoisted(() => ({ addToastMock: vi.fn() }));
+
 vi.mock("../../components/Toast", () => ({
-  useToast: () => ({ addToast: vi.fn() }),
+  useToast: () => ({ addToast: addToastMock }),
 }));
 
 beforeEach(() => {
@@ -323,5 +325,32 @@ describe("CalendarGrid", () => {
     expect(await screen.findByText("Semanas")).toBeInTheDocument();
     const approveButtons = screen.queryAllByRole("button", { name: /aprobar/i });
     expect(approveButtons).toHaveLength(0);
+  });
+
+  it("dice cuántos avisos se cancelaron al desbloquear una semana", async () => {
+    vi.mocked(calendarsApi.unlockWeek).mockResolvedValueOnce({
+      id: "w1",
+      week_number: 1,
+      label: "Semana 1 (May 4 - May 10)",
+      start_date: "2026-05-04",
+      end_date: "2026-05-10",
+      status: "draft",
+      assignment_count: 5,
+      approved_by: null,
+      approved_at: null,
+      doctor_assignment_counts: [],
+      cancelled_notifications: 4,
+    });
+    renderGrid();
+
+    const row = (await screen.findByText("Semana 1 (May 4 - May 10)")).closest("tr")!;
+    await userEvent.click(within(row).getByRole("button", { name: /desbloquear/i }));
+
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith(
+        "success",
+        expect.stringContaining("4 avisos"),
+      ),
+    );
   });
 });

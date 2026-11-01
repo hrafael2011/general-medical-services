@@ -43,6 +43,8 @@ export interface CalendarVersionRead {
   created_by: string | null;
   reason: string | null;
   created_at: string;
+  /** Avisos que se retiraron de la cola al desbloquear (0 en cualquier otra respuesta). */
+  cancelled_notifications?: number;
 }
 
 export interface CalendarAssignmentRead {
@@ -84,6 +86,8 @@ export interface WeekRead {
   doctor_assignment_counts: { doctor_id: string; doctor_name: string; count: number }[];
   approved_by: string | null;
   approved_at: string | null;
+  /** Avisos que se retiraron de la cola al desbloquear (0 en cualquier otra respuesta). */
+  cancelled_notifications?: number;
 }
 
 export interface EligibleDoctorRead {

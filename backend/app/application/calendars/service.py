@@ -327,6 +327,8 @@ class CalendarService:
                     confirmation_count=cancelled["confirmations"],
                 )
 
+        version.cancelled_notifications = cancelled["notifications"]
+
         return version
 
     def new_version_after_approval(
@@ -587,5 +589,9 @@ class CalendarService:
                 notification_count=cancelled["notifications"],
                 confirmation_count=cancelled["confirmations"],
             )
+
+        # Atributo transitorio: lo lee la respuesta HTTP para decir cuántos
+        # avisos se retiraron. No se persiste.
+        week.cancelled_notifications = cancelled["notifications"]
 
         return week

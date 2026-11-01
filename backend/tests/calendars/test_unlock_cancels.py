@@ -87,6 +87,19 @@ def test_unlock_calendar_cancela_todas_las_asignaciones():
     assert [a.id for a in enviadas] == [dentro.id, fuera.id]
 
 
+def test_unlock_week_expone_cuantos_cancelo():
+    """La pantalla necesita el número para decir qué se deshizo."""
+    repo, week, _, _ = _approved_week()
+    triggers = MagicMock()
+    triggers.on_week_unapproved.return_value = {"notifications": 4, "confirmations": 4}
+
+    result = CalendarService(repo=repo, triggers=triggers).unlock_week(
+        actor_id="user1", week_id=week.id
+    )
+
+    assert result.cancelled_notifications == 4
+
+
 def test_unlock_week_sin_triggers_no_falla():
     """El servicio se usa en pruebas y en scripts sin disparadores."""
     repo, week, _, _ = _approved_week()
