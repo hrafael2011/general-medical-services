@@ -76,6 +76,10 @@ class ConfirmationRequestService:
                 return existing
             raise
 
+    def cancel_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Cancela las confirmaciones de turnos que ya no existen."""
+        return self.repo.cancel_pending_for_assignments(assignment_ids)
+
     def mark_received_by_token(
         self,
         response_token: str,
