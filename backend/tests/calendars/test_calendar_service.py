@@ -26,6 +26,10 @@ def _seed_assignment_parents(db_session) -> None:
     service_areas.id y doctor_id → doctors.id); SQLite no las validaba y los
     seeds con ids colgantes pasaban igual. Las filas se crean con flush
     explícito para que existan antes del INSERT del assignment.
+
+    El área se siembra **sin cobertura diaria obligatoria** a propósito: estas
+    pruebas miran el límite de aprobación y el re-aviso, no la regla de
+    cobertura, que tiene sus propias pruebas en test_approve_coverage.py.
     """
     now = datetime.now(UTC)
     if db_session.get(ServiceAreaModel, "area-001") is None:
@@ -34,7 +38,7 @@ def _seed_assignment_parents(db_session) -> None:
             code="area-001",
             display_name="Área 001",
             active=True,
-            required_for_daily_coverage=True,
+            required_for_daily_coverage=False,
             load_weight=1,
             created_at=now,
             updated_at=now,

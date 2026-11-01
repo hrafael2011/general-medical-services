@@ -66,6 +66,14 @@ class FakeWeekRepo:
     def list_assignments(self, version_id):
         return [a for a in self.assignments.values() if a.calendar_version_id == version_id]
 
+    def list_service_areas(self):
+        """Sin áreas requeridas: estas pruebas miran transiciones de estado.
+
+        La regla de cobertura tiene sus propias pruebas en
+        test_approve_coverage.py; aquí estorbaría en cada fixture.
+        """
+        return []
+
     def add_assignment(self, a):
         self.assignments[a.id] = a; return a
 

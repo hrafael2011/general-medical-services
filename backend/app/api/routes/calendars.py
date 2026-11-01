@@ -79,6 +79,8 @@ _ERROR_STATUS: dict[str, int] = {
     "week_already_approved": status.HTTP_409_CONFLICT,
     "week_not_approved": status.HTTP_409_CONFLICT,
     "week_empty": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "week_incomplete": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "calendar_incomplete": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "week_locked": status.HTTP_409_CONFLICT,
     "calendar_not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "manual_only": status.HTTP_403_FORBIDDEN,
@@ -88,10 +90,10 @@ _ERROR_STATUS: dict[str, int] = {
 
 def _http_exc(exc: CalendarServiceError) -> HTTPException:
     http_status = _ERROR_STATUS.get(exc.code, status.HTTP_422_UNPROCESSABLE_ENTITY)
-    return HTTPException(
-        status_code=http_status,
-        detail={"code": exc.code, "message": exc.message},
-    )
+    detail: dict = {"code": exc.code, "message": exc.message}
+    if exc.details is not None:
+        detail["details"] = exc.details
+    return HTTPException(status_code=http_status, detail=detail)
 
 
 # ---------------------------------------------------------------------------

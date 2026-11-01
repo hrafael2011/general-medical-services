@@ -11,6 +11,30 @@ import { useToast } from "../../components/Toast";
 import { ApiError } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
+/** Hueco de cobertura que devuelve el backend al rechazar una aprobación. */
+type CoverageGap = { date: string; areas: string[] };
+
+const WEEKDAY_NAMES = [
+  "domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado",
+];
+
+/** `2026-05-18` → `lunes 18/05`, igual que lo dice el mensaje del backend. */
+function formatGapDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  // Se construye en hora local a propósito: `new Date(iso)` interpreta UTC y
+  // puede devolver el día anterior.
+  const date = new Date(year, month - 1, day);
+  return `${WEEKDAY_NAMES[date.getDay()]} ${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
+}
+
+function coverageGapsFromError(err: unknown): CoverageGap[] | null {
+  if (!(err instanceof ApiError)) return null;
+  const detail = err.detail as { details?: CoverageGap[] } | null;
+  return Array.isArray(detail?.details) && detail.details.length > 0
+    ? detail.details
+    : null;
+}
+
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MONTHS_SHORT = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -128,6 +152,8 @@ export function CalendarGrid() {
   // Para reactivarla: restaurar generateMutation + botón "Generar calendario con reglas" (historial git).
   const [assignmentWarning, setAssignmentWarning] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  // Días y áreas sin médico que impidieron la última aprobación.
+  const [coverageGaps, setCoverageGaps] = useState<CoverageGap[] | null>(null);
   const [highlightTerm, setHighlightTerm] = useState("");
 
   const { data, isLoading, error } = useQuery({
@@ -233,10 +259,15 @@ export function CalendarGrid() {
       qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendars"] });
+      setCoverageGaps(null);
       addToast("success", "Semana aprobada.");
     },
-    onError: (err) =>
-      addToast("error", err instanceof ApiError ? err.message : "Error al aprobar semana."),
+    onError: (err) => {
+      // Si falta cobertura, el backend manda el detalle: se lista en un panel
+      // en vez de dejar solo el párrafo del toast.
+      setCoverageGaps(coverageGapsFromError(err));
+      addToast("error", err instanceof ApiError ? err.message : "Error al aprobar semana.");
+    },
   });
 
   const unlockWeekMutation = useMutation({
@@ -544,6 +575,41 @@ export function CalendarGrid() {
           >
             {cancelPendingMutation.isPending ? "Cancelando…" : "Cancelar envío"}
           </button>
+        </div>
+      )}
+
+      {/* Cobertura incompleta: qué días y qué áreas faltan para poder aprobar */}
+      {coverageGaps && coverageGaps.length > 0 && (
+        <div
+          data-testid="coverage-gaps"
+          style={{
+            marginTop: "1.5rem",
+            padding: "12px 14px",
+            borderRadius: 8,
+            border: "1px solid #fca5a5",
+            background: "#fef2f2",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <AlertTriangle size={16} color="#b91c1c" />
+            <strong style={{ fontSize: "0.9rem" }}>No se puede aprobar: faltan médicos</strong>
+            <button
+              className="btn-ghost"
+              style={{ marginLeft: "auto", fontSize: 12, padding: "2px 10px" }}
+              onClick={() => setCoverageGaps(null)}
+            >
+              Entendido
+            </button>
+          </div>
+          <ul style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: "0.85rem" }}>
+            {coverageGaps.map((gap) => (
+              <li key={gap.date} style={{ marginBottom: 2 }}>
+                <strong>{formatGapDate(gap.date)}</strong>
+                {" — "}
+                <span>{gap.areas.join(", ")}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

@@ -18,9 +18,11 @@ Contrato verificado contra la app real (FastAPI TestClient + seed E2E):
     el evento contiene after_snapshot.override_justification
 8.  POST /api/calendars/{id}/weeks/{wid}/approve sobre una semana vacía
     → 422 detail.code="week_empty" (guard)
-9.  POST .../approve sobre la semana del slot → 200 status="approved"
-10. GET /api/calendars/{id} → status="partial"; GET .../grid → la asignación
-    persiste con su justificación.
+9.  POST .../approve sobre la semana del slot → 422 detail.code="week_incomplete":
+    el seed solo cubre Emergencia y no tiene médico el domingo, así que la
+    semana no se puede aprobar (regla de cobertura obligatoria).
+10. GET /api/calendars/{id} → status="draft" (no se aprobó nada); GET .../grid
+    → la asignación persiste con su justificación.
 """
 from datetime import date, datetime
 
@@ -174,18 +176,25 @@ def test_manual_flow_forced_warning_requires_justification(client, seed_ids):
     assert resp.status_code == 422, resp.text
     assert resp.json()["detail"]["code"] == "week_empty"
 
-    # ── 9. Aprobar la semana que contiene el slot ───────────────────────────
+    # ── 9. Cobertura obligatoria: la semana del slot está incompleta ────────
+    # El seed solo asigna el área Emergencia y ningún médico cubre el domingo,
+    # así que aprobar la semana se rechaza y el detalle dice qué falta.
     resp = client.post(
         f"/api/calendars/{calendar_id}/weeks/{target_week['id']}/approve",
         headers=headers,
     )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["status"] == "approved"
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "week_incomplete"
+    assert detail["details"], detail
+    assert all(item["date"] and item["areas"] for item in detail["details"])
+    missing_areas = {area for item in detail["details"] for area in item["areas"]}
+    assert "Pista" in missing_areas, detail
 
-    # ── 10. Calendario partial y asignación persistente ─────────────────────
+    # ── 10. Nada se aprobó y la asignación sigue en la rejilla ──────────────
     resp = client.get(f"/api/calendars/{calendar_id}", headers=headers)
     assert resp.status_code == 200, resp.text
-    assert resp.json()["status"] == "partial"
+    assert resp.json()["status"] == "draft"
 
     resp = client.get(f"/api/calendars/{calendar_id}/grid", headers=headers)
     assert resp.status_code == 200, resp.text

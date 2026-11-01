@@ -1,14 +1,15 @@
 ---
 spec: cobertura-obligatoria-aprobacion
-version: 1.0.0
-status: proposed
+version: 1.1.0
+status: implemented
 created: 2026-11-01
 updated: 2026-11-01
 ---
 
 # Spec — Cobertura obligatoria para aprobar
 
-**Tareas de implementación:** pendiente de crear al aprobar el alcance.
+**Tareas de implementación:**
+[2026-11-01-cobertura-obligatoria-aprobacion-tasks.md](2026-11-01-cobertura-obligatoria-aprobacion-tasks.md)
 
 ## Goal
 
@@ -154,3 +155,4 @@ Archivos afectados:
 | Version | Fecha | Issue | Trigger | Resumen |
 |---|---|---|---|---|
 | 1.0.0 | 2026-11-01 | — | Revisión pedida por el usuario | Se documenta que aprobar no valida cobertura: una semana vacía se bloquea, pero un día o un área vacía no; y aprobar el calendario completo no valida nada. Se fija la regla día × área y su impacto en pruebas. |
+| 1.1.0 | 2026-11-01 | — | Implementación aprobada por el usuario | **R1–R7 implementados.** La regla vive en `domain/calendars/coverage.py`; `approve_week` la aplica al tramo de la semana dentro del mes y `approve_version` al mes completo. El rechazo es `422` con `week_incomplete` / `calendar_incomplete` y `details` estructurado; la pantalla lista los días y áreas en un panel. Solo 5 pruebas existentes rompieron (la estimación de 13 era alta) y el e2e del flujo manual ahora espera el rechazo, porque su seed no puede cubrir la semana. Se añadió un camino feliz de ruta con las 21 combinaciones. |

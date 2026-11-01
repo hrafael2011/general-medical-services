@@ -1,11 +1,18 @@
 import hashlib
 import uuid
+from calendar import monthrange
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.notifications.triggers import NotificationTriggers
+from backend.app.domain.calendars.coverage import (
+    CoverageGap,
+    RequiredArea,
+    find_coverage_gaps,
+    format_coverage_message,
+)
 from backend.app.domain.calendars.weeks import compute_weeks
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
@@ -29,6 +36,38 @@ class CalendarService:
         self.audit = audit
         self.triggers = triggers
         self.mission_ranking_service = mission_ranking_service
+
+    # --- Cobertura obligatoria ---
+
+    def _coverage_gaps(
+        self,
+        *,
+        assignments,
+        start_date: date,
+        end_date: date,
+    ) -> list[CoverageGap]:
+        """Huecos de cobertura en el rango, leyendo las áreas del catálogo."""
+        areas = self.repo.list_service_areas()
+        code_by_id = {area.id: area.code for area in areas}
+        required = [
+            RequiredArea(code=area.code, display_name=area.display_name)
+            for area in areas
+            if area.active and area.required_for_daily_coverage
+        ]
+        return find_coverage_gaps(
+            start_date=start_date,
+            end_date=end_date,
+            required_areas=required,
+            assignments=[
+                (a.service_date, code_by_id.get(a.service_area_id, a.service_area_id))
+                for a in assignments
+            ],
+        )
+
+    @staticmethod
+    def _month_bounds(year: int, month: int) -> tuple[date, date]:
+        last_day = monthrange(year, month)[1]
+        return date(year, month, 1), date(year, month, last_day)
 
     def create_calendar(
         self,
@@ -204,6 +243,20 @@ class CalendarService:
             raise CalendarServiceError(
                 "calendar_already_approved",
                 f"La versión {version_number} ya está aprobada.",
+            )
+
+        # Aprobar publica y avisa: no puede salir un mes con días o áreas vacías.
+        month_start, month_end = self._month_bounds(calendar.year, calendar.month)
+        gaps = self._coverage_gaps(
+            assignments=self.repo.list_assignments(version.id),
+            start_date=month_start,
+            end_date=month_end,
+        )
+        if gaps:
+            raise CalendarServiceError(
+                "calendar_incomplete",
+                format_coverage_message(gaps),
+                details=[gap.to_detail() for gap in gaps],
             )
 
         now = datetime.now(UTC)
@@ -428,6 +481,23 @@ class CalendarService:
                 "Asigna al menos un médico antes de aprobar.",
             )
 
+        # Los días de la semana que caen en el mes siguiente pertenecen a otro
+        # calendario: no se reclaman aquí.
+        calendar = self.repo.get_calendar_by_id(week.calendar_id)
+        if calendar is not None:
+            month_start, month_end = self._month_bounds(calendar.year, calendar.month)
+            gaps = self._coverage_gaps(
+                assignments=assignments_in_week,
+                start_date=max(week.start_date, month_start),
+                end_date=min(week.end_date, month_end),
+            )
+            if gaps:
+                raise CalendarServiceError(
+                    "week_incomplete",
+                    format_coverage_message(gaps),
+                    details=[gap.to_detail() for gap in gaps],
+                )
+
         now = datetime.now(UTC)
         self.repo.update_week_status(
             week_id=week_id,
@@ -440,7 +510,6 @@ class CalendarService:
         week.approved_at = now
 
         # Update calendar status
-        calendar = self.repo.get_calendar_by_id(week.calendar_id)
         if calendar is not None:
             all_weeks = self.repo.list_weeks(calendar.id)
             if all(w.status == "approved" for w in all_weeks):

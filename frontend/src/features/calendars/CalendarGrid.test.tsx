@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CalendarGrid } from "./CalendarGrid";
 import { calendarsApi } from "../../api/calendars";
+import { ApiError } from "../../api/client";
 
 vi.mock("../../api/calendars", () => ({
   calendarsApi: {
@@ -370,5 +371,29 @@ describe("CalendarGrid", () => {
     await waitFor(() =>
       expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1"),
     );
+  });
+
+  it("lista los días y áreas que faltan cuando la aprobación se rechaza", async () => {
+    vi.mocked(calendarsApi.approveWeek).mockRejectedValueOnce(
+      new ApiError(422, {
+        code: "week_incomplete",
+        message: "No se puede aprobar: faltan médicos en lunes 18/05 (Disponible).",
+        details: [
+          { date: "2026-05-18", areas: ["Disponible"] },
+          { date: "2026-05-19", areas: ["Emergencia", "Pista"] },
+        ],
+      }),
+    );
+    renderGrid();
+
+    const row = (await screen.findByText("Semana 3 (May 18 - May 24)")).closest("tr")!;
+    await userEvent.click(within(row).getByRole("button", { name: /aprobar/i }));
+
+    const panel = await screen.findByTestId("coverage-gaps");
+    expect(within(panel).getByText(/faltan médicos/i)).toBeInTheDocument();
+    expect(within(panel).getByText("lunes 18/05")).toBeInTheDocument();
+    expect(within(panel).getByText("Disponible")).toBeInTheDocument();
+    expect(within(panel).getByText("martes 19/05")).toBeInTheDocument();
+    expect(within(panel).getByText("Emergencia, Pista")).toBeInTheDocument();
   });
 });
