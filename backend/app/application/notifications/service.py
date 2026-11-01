@@ -77,9 +77,16 @@ class NotificationService:
         """Cancela los avisos aún no enviados de esos turnos."""
         return self.repo.cancel_pending_for_assignments(assignment_ids)
 
-    def reactivate_for_assignments(self, assignment_ids: list[str]) -> list[str]:
-        """Vuelve a encolar lo que se había cancelado (re-aprobación)."""
-        return self.repo.reactivate_cancelled_for_assignments(assignment_ids)
+    def reactivate_for_assignments(
+        self,
+        assignment_ids: list[str],
+        *,
+        scheduled_for=None,
+    ) -> list[str]:
+        """Vuelve a encolar lo que nunca salió: cancelado o descartado."""
+        return self.repo.reactivate_for_assignments(
+            assignment_ids, scheduled_for=scheduled_for
+        )
 
     def process_pending(self) -> dict:
         """

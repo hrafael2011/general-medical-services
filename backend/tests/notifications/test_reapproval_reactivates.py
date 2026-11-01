@@ -8,7 +8,7 @@ La fila cancelada se **reutiliza** en vez de crear otra: la clave de idempotenci
 por asignación sigue siendo la misma, así que no hay avisos duplicados.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from backend.app.infrastructure.db.models.confirmations import ConfirmationRequestModel
 from backend.app.infrastructure.db.models.notifications import NotificationEventModel
@@ -40,7 +40,7 @@ def test_reactiva_los_avisos_cancelados(db_session):
     db_session.add(event)
     db_session.flush()
 
-    ids = NotificationRepository(db_session).reactivate_cancelled_for_assignments(
+    ids = NotificationRepository(db_session).reactivate_for_assignments(
         [assignment.id]
     )
 
@@ -70,7 +70,7 @@ def test_no_toca_lo_ya_enviado(db_session):
     db_session.add(enviado)
     db_session.flush()
 
-    assert NotificationRepository(db_session).reactivate_cancelled_for_assignments(
+    assert NotificationRepository(db_session).reactivate_for_assignments(
         [assignment.id]
     ) == []
     db_session.refresh(enviado)
@@ -125,3 +125,70 @@ def test_no_reactiva_una_confirmacion_ya_respondida(db_session):
     assert ConfirmationRequestRepository(db_session).reactivate_for_assignments(
         [assignment.id]
     ) == []
+
+
+def test_reactiva_los_avisos_que_nunca_llegaron_a_salir(db_session):
+    """`skipped` no es un envío: si nunca salió, la nueva aprobación lo repone.
+
+    Sin esto, un aviso descartado por falta de teléfono o de Telegram se queda
+    muerto para siempre: al re-aprobar no se crea otro (misma clave) y el
+    operador ve el contador en cero sin saber por qué.
+    """
+    doctor = _create_doctor(db_session)
+    assignment = _make_assignment(db_session, doctor_id=doctor.id)
+    now = datetime.now(UTC)
+    event = NotificationEventModel(
+        id="ev-saltado",
+        notification_type="initial_assignment",
+        idempotency_key=f"assign:{assignment.id}",
+        recipient_doctor_id=None,
+        recipient_phone=None,
+        payload={"message": "hola"},
+        assignment_id=assignment.id,
+        status="skipped",
+        retry_count=1,
+        error_code="no_recipient",
+        error_message="sin teléfono",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(event)
+    db_session.flush()
+
+    ids = NotificationRepository(db_session).reactivate_for_assignments([assignment.id])
+
+    assert ids == ["ev-saltado"]
+    db_session.refresh(event)
+    assert event.status == "pending"
+    assert event.error_code is None
+    assert event.error_message is None
+
+
+def test_reactivar_programa_la_salida_con_el_margen(db_session):
+    """Re-aprobar respeta la ventana: el aviso no sale en el acto."""
+    doctor = _create_doctor(db_session)
+    assignment = _make_assignment(db_session, doctor_id=doctor.id)
+    now = datetime.now(UTC)
+    event = NotificationEventModel(
+        id="ev-margen",
+        notification_type="initial_assignment",
+        idempotency_key=f"assign:{assignment.id}",
+        recipient_doctor_id=None,
+        recipient_phone="123",
+        payload={"message": "hola"},
+        assignment_id=assignment.id,
+        status="cancelled",
+        retry_count=0,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(event)
+    db_session.flush()
+
+    cuando = now + timedelta(hours=24)
+    NotificationRepository(db_session).reactivate_for_assignments(
+        [assignment.id], scheduled_for=cuando
+    )
+
+    db_session.refresh(event)
+    assert event.scheduled_for == cuando

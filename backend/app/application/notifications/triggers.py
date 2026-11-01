@@ -74,7 +74,9 @@ class NotificationTriggers:
         enterarse de la versión buena: la fila cancelada sigue cancelada.
         """
         assignment_ids = [assignment.id for assignment in assignments]
-        self.notification_service.reactivate_for_assignments(assignment_ids)
+        self.notification_service.reactivate_for_assignments(
+            assignment_ids, scheduled_for=self._scheduled_for()
+        )
         if self.confirmation_service is not None:
             self.confirmation_service.reactivate_for_assignments(assignment_ids)
 

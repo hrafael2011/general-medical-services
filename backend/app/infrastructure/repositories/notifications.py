@@ -96,19 +96,28 @@ class NotificationRepository:
                 break
         return result
 
-    def reactivate_cancelled_for_assignments(self, assignment_ids: list[str]) -> list[str]:
-        """Devuelve a la cola los avisos cancelados de esos turnos.
+    def reactivate_for_assignments(
+        self,
+        assignment_ids: list[str],
+        *,
+        scheduled_for: datetime | None = None,
+    ) -> list[str]:
+        """Devuelve a la cola los avisos que nunca llegaron a salir.
 
-        Se reutiliza la fila —misma clave de idempotencia— para que re-aprobar
-        no genere un aviso duplicado. Solo toca `cancelled`: lo enviado no se
-        reenvía.
+        Cubre `cancelled` (se deshizo la aprobación) y `skipped` (nunca se pudo
+        enviar: sin teléfono o sin Telegram). Un aviso descartado no es un
+        envío, así que la nueva aprobación lo repone; de lo contrario se queda
+        muerto para siempre, porque la clave de idempotencia impide crear otro.
+
+        Lo enviado (`sent`) no se reenvía y lo que está en vuelo (`sending`) no
+        se toca. Se reutiliza la fila para no duplicar el aviso.
         """
         if not assignment_ids:
             return []
         now = datetime.now(UTC)
         stmt = select(NotificationEventModel).where(
             NotificationEventModel.assignment_id.in_(assignment_ids),
-            NotificationEventModel.status == "cancelled",
+            NotificationEventModel.status.in_(["cancelled", "skipped"]),
         )
         events = list(self.session.scalars(stmt))
         for event in events:
@@ -116,7 +125,7 @@ class NotificationRepository:
             event.retry_count = 0
             event.error_code = None
             event.error_message = None
-            event.scheduled_for = now
+            event.scheduled_for = scheduled_for
             event.updated_at = now
         self.session.flush()
         return [event.id for event in events]
