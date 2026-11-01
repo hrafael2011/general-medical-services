@@ -212,6 +212,28 @@ class NotificationTriggers:
                 continue
         return count
 
+    def on_week_unapproved(self, *, actor_id: str, assignments: list) -> dict[str, int]:
+        """Deshace lo que encoló `on_week_approved`.
+
+        Solo alcanza a lo que no ha salido: un aviso ya enviado no se puede
+        recoger, y uno en vuelo podría duplicarse.
+        """
+        assignment_ids = [assignment.id for assignment in assignments]
+        notification_ids = self.notification_service.cancel_for_assignments(assignment_ids)
+        confirmation_ids: list[str] = []
+        if self.confirmation_service is not None:
+            confirmation_ids = self.confirmation_service.cancel_for_assignments(assignment_ids)
+        logger.info(
+            "Unapproval by %s cancelled %d notifications and %d confirmations",
+            actor_id,
+            len(notification_ids),
+            len(confirmation_ids),
+        )
+        return {
+            "notifications": len(notification_ids),
+            "confirmations": len(confirmation_ids),
+        }
+
     def on_calendar_assignment_added_after_approval(
         self,
         *,
