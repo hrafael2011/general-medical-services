@@ -96,6 +96,26 @@ class NotificationRepository:
                 break
         return result
 
+    def cancel_pending_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Marca `cancelled` los avisos que aún no han salido.
+
+        Nunca toca `sending` (el worker puede tenerlo en vuelo) ni `sent`
+        (lo enviado no se recupera). Devuelve los ids cancelados.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(NotificationEventModel).where(
+            NotificationEventModel.assignment_id.in_(assignment_ids),
+            NotificationEventModel.status == "pending",
+        )
+        events = list(self.session.scalars(stmt))
+        for event in events:
+            event.status = "cancelled"
+            event.updated_at = now
+        self.session.flush()
+        return [event.id for event in events]
+
     def list_all(
         self,
         status: str | None = None,
