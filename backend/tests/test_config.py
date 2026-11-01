@@ -205,3 +205,10 @@ def test_environment_variables_override_dotenv_file(monkeypatch, tmp_path):
     assert settings.secret_key == "production-secret"
 
     get_settings.cache_clear()
+
+
+def test_margen_de_aprobacion_por_defecto():
+    """Aprobar no debe enviar en el acto: hay una ventana para arrepentirse."""
+    from backend.app.core.config import Settings
+
+    assert Settings.model_fields["approval_grace_minutes"].default == 15

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     confirmation_due_hours_before_service: int = 4
     confirmation_escalation_hours_before_service: int = 8
     confirmation_reminder_hours_before_service: int = 12
+    # Minutos entre aprobar y enviar. Da tiempo a deshacer un clic equivocado.
+    approval_grace_minutes: int = 15
     token_audience: str = "medical-shifts-app"
     token_issuer: str = "medical-shifts-system"
 
