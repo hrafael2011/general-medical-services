@@ -263,6 +263,10 @@ class NotificationTriggers:
         assignment,
         service_area_name: str,
     ) -> int:
+        # Sin esto, la confirmación sigue viva y escala por un turno que ya no
+        # existe. El aviso de "removido" se encola igual más abajo.
+        if self.confirmation_service is not None:
+            self.confirmation_service.cancel_for_assignments([assignment.id])
         message = render_service_assignment_removed(
             service_date=str(assignment.service_date),
             service_area=service_area_name,
