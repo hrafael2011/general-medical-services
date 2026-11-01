@@ -14,7 +14,10 @@ como método en los servicios existentes, y `NotificationTriggers` la orquesta p
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0, pytest, React + TypeScript, vitest.
 
-**Estado:** ✅ Fases 1 y 2 implementadas. Backend y frontend verdes.
+**Estado:** ✅ Fases 1, 2 y 3 implementadas. Backend y frontend verdes.
+
+**Alcance cubierto:** P1, P2 y P3 del spec — el ciclo completo: deshacer cancela, hay margen para
+deshacer, y corregir sí avisa. Quedan P4–P7.
 
 **Alcance de este documento:** solo **Fase 1 (P1)**. Las fases 2 (margen de 15 minutos) y 3
 (corregir sí avisa) se detallan cuando esta cierre: ambas dependen de la semántica de cancelación
@@ -1087,11 +1090,121 @@ git add frontend/src/api/calendars.ts frontend/src/features/calendars/CalendarGr
 git commit -m "feat(calendars): show the scheduled send and let the user cancel it"
 ```
 
-## Fase 3 — pendiente de detallar
+## Fase 3 — Que corregir sí avise (P3)
 
-- **D3**: re-aprobar tras corregir vuelve a avisar. Depende de una decisión que la Fase 1 deja
-  planteada: qué hacer con una fila `cancelled` cuando se vuelve a aprobar la misma asignación
-  (reutilizarla, o emitir una nueva con otra clave).
+El arreglo D3. Al terminar, desbloquear, corregir y volver a aprobar **sí** llega a los médicos.
+
+**La decisión que dejó planteada la Fase 1:** cuando se vuelve a aprobar una asignación cuya fila
+quedó `cancelled`, se **reutiliza la fila** (misma clave de idempotencia) en vez de emitir una
+nueva. Así no hay avisos duplicados y el médico recibe uno solo, el bueno.
+
+### Task 3.1 — Reactivar lo cancelado (repositorios y servicios)
+
+**Files:**
+- Modify: `backend/app/infrastructure/repositories/notifications.py`
+- Modify: `backend/app/infrastructure/repositories/confirmations.py`
+- Modify: `backend/app/application/notifications/service.py`
+- Modify: `backend/app/application/confirmations/service.py`
+- Test: `backend/tests/notifications/test_reapproval_reactivates.py`
+
+- [x] **Step 1: Escribir los tests que fallan**
+
+Cuatro casos: reactiva el aviso cancelado y le pone `retry_count = 0`; **no** toca uno `sent`;
+reactiva la confirmación cancelada y limpia `escalated_at`; **no** reabre una `confirmed`.
+
+- [x] **Step 2: Ejecutar y ver que fallan**
+
+Run: `pytest backend/tests/notifications/test_reapproval_reactivates.py -q`
+Expected: 4 failed con `AttributeError`
+
+- [x] **Step 3: Implementar los repositorios**
+
+```python
+    def reactivate_cancelled_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Devuelve a la cola los avisos cancelados de esos turnos.
+
+        Se reutiliza la fila —misma clave de idempotencia— para que re-aprobar
+        no genere un aviso duplicado. Solo toca `cancelled`: lo enviado no se
+        reenvía.
+        """
+```
+
+Y en confirmaciones, `reactivate_for_assignments`, que devuelve a `pending` solo las `cancelled` y
+limpia `escalated_at`.
+
+- [x] **Step 4: Exponerlos en los servicios**
+
+`NotificationService.reactivate_for_assignments` y
+`ConfirmationRequestService.reactivate_for_assignments`, ambos delegando en el repositorio.
+
+- [x] **Step 5: Ejecutar y ver que pasan**
+
+Run: `pytest backend/tests/notifications/test_reapproval_reactivates.py -q`
+Expected: 4 passed
+
+- [x] **Step 6: Commit**
+
+```bash
+git add backend/app/infrastructure/repositories/notifications.py backend/app/infrastructure/repositories/confirmations.py backend/app/application/notifications/service.py backend/app/application/confirmations/service.py backend/tests/notifications/test_reapproval_reactivates.py
+git commit -m "feat(notifications): reactivate cancelled notifications on re-approval"
+```
+
+### Task 3.2 — Re-aprobar vuelve a avisar (D3)
+
+**Files:**
+- Modify: `backend/app/application/notifications/triggers.py`
+- Modify: `backend/app/application/calendars/service.py`
+- Test: `backend/tests/calendars/test_calendar_service.py`
+
+- [x] **Step 1: Cambiar la expectativa del test que fijaba el comportamiento viejo**
+
+`test_reapprove_unlocked_calendar_does_not_send_initial_notifications` pasa a llamarse
+`test_reapprove_unlocked_calendar_notifies_again`, y la última aserción cambia de
+`len(triggers.calls) == 1` a `== 2`.
+
+- [x] **Step 2: Ejecutar y ver que falla**
+
+Run: `pytest backend/tests/calendars/test_calendar_service.py -q`
+Expected: FAIL — sigue en 1 llamada
+
+- [x] **Step 3: Reactivar desde los disparadores**
+
+En `NotificationTriggers`:
+
+```python
+    def _reactivate(self, assignments: list) -> None:
+        """Re-aprobar reabre lo que un desbloqueo había cancelado."""
+        assignment_ids = [assignment.id for assignment in assignments]
+        self.notification_service.reactivate_for_assignments(assignment_ids)
+        if self.confirmation_service is not None:
+            self.confirmation_service.reactivate_for_assignments(assignment_ids)
+```
+
+Y llamarlo al principio de `on_calendar_approved` y de `on_week_approved`.
+
+- [x] **Step 4: Quitar la supresión de `approve_version`**
+
+Se elimina el `should_notify = False` que callaba todo con `__unlock__`. El bloque que restaura el
+motivo original se conserva; la llamada a `on_calendar_approved` pasa a ser incondicional.
+
+- [x] **Step 5: Ejecutar y ver que pasa**
+
+Run: `pytest backend/tests/calendars/ backend/tests/notifications/ -q`
+Expected: passed
+
+- [x] **Step 6: Commit**
+
+```bash
+git add backend/app/application/notifications/triggers.py backend/app/application/calendars/service.py backend/tests/calendars/test_calendar_service.py
+git commit -m "fix(calendars): notify the real changes when a calendar is re-approved"
+```
+
+### Desviaciones de la Fase 3
+
+| # | Lo que decía el plan | Lo que hizo falta |
+|---|---|---|
+| 10 | El test de re-aprobación se podía escribir desde cero | Se renombró el test existente en vez de duplicarlo: ya montaba el escenario completo (crear, aprobar, desbloquear, re-aprobar) |
+| 11 | — | `reactivate_cancelled_for_assignments` fija `scheduled_for = ahora`: el margen ya se consumió en la primera aprobación y el operador acaba de confirmar la decisión |
 
 ## Criterios de aceptación
 
@@ -1135,3 +1248,5 @@ Registradas al implementar, para que el siguiente no repita el tropiezo.
 | 2.2 | B2 | `feat(notifications): hold approved notifications for the grace window` |
 | 2.3 | B4 | `feat(calendars): expose and cancel the scheduled notification batch` |
 | 2.4 | B3, B5 | `feat(calendars): show the scheduled send and let the user cancel it` |
+| 3.1 | — | `feat(notifications): reactivate cancelled notifications on re-approval` |
+| 3.2 | D3 | `fix(calendars): notify the real changes when a calendar is re-approved` |
