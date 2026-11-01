@@ -25,6 +25,8 @@ vi.mock("../../api/calendars", () => ({
     ]),
     approveWeek: vi.fn(),
     unlockWeek: vi.fn(),
+    pendingNotifications: vi.fn().mockResolvedValue({ count: 0, next_send_at: null }),
+    cancelPendingNotifications: vi.fn().mockResolvedValue({ cancelled: 0 }),
     exportWeeklyPDF: vi.fn().mockResolvedValue(new Blob()),
     exportFullCalendarPDF: vi.fn().mockResolvedValue(new Blob()),
     generate: vi.fn().mockResolvedValue({
@@ -351,6 +353,22 @@ describe("CalendarGrid", () => {
         "success",
         expect.stringContaining("4 avisos"),
       ),
+    );
+  });
+
+  it("muestra cuántos avisos salen y deja cancelarlos antes de que se envíen", async () => {
+    vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
+      count: 12,
+      next_send_at: "2026-05-04T14:15:00Z",
+    });
+    vi.mocked(calendarsApi.cancelPendingNotifications).mockResolvedValue({ cancelled: 12 });
+    renderGrid();
+
+    expect(await screen.findByText(/12 avisos programados/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /cancelar envío/i }));
+
+    await waitFor(() =>
+      expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1"),
     );
   });
 });

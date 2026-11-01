@@ -246,6 +246,17 @@ export const calendarsApi = {
       method: "POST",
     }),
 
+  /** Avisos aprobados que aún no han salido, con la hora del próximo. */
+  pendingNotifications: (calendarId: string) =>
+    apiFetch<{ count: number; next_send_at: string | null }>(
+      `/calendars/${calendarId}/notifications/pending`,
+    ),
+
+  cancelPendingNotifications: (calendarId: string) =>
+    apiFetch<{ cancelled: number }>(`/calendars/${calendarId}/notifications/cancel`, {
+      method: "POST",
+    }),
+
   exportWeeklyPDF: (calendarId: string, weekId: string) =>
     apiFetch<Blob>(
       `/reports/calendar/${calendarId}/weeks/${weekId}/pdf`,

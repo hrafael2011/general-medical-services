@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Download, FileDown, Loader2, Trash2 } from "lucide-react";
 import { calendarsApi, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
@@ -257,6 +257,26 @@ export function CalendarGrid() {
       addToast("error", err instanceof ApiError ? err.message : "Error al desbloquear semana."),
   });
 
+  // Aprobar deja los avisos programados: mientras no salgan, se pueden retirar.
+  const { data: pending } = useQuery({
+    queryKey: ["pending-notifications", calendarId],
+    queryFn: () => calendarsApi.pendingNotifications(calendarId!),
+    enabled: !!calendarId,
+  });
+
+  const cancelPendingMutation = useMutation({
+    mutationFn: () => calendarsApi.cancelPendingNotifications(calendarId!),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["pending-notifications", calendarId] });
+      addToast("success", `Se cancelaron ${result.cancelled} avisos.`);
+    },
+    onError: (err) =>
+      addToast(
+        "error",
+        err instanceof ApiError ? err.message : "No se pudo cancelar el envío.",
+      ),
+  });
+
   const exportWeekPdfMutation = useMutation({
     mutationFn: (weekId: string) => calendarsApi.exportWeeklyPDF(calendarId!, weekId),
     onSuccess: (blob) => {
@@ -485,6 +505,45 @@ export function CalendarGrid() {
       {data.gaps.length > 0 && (
         <div style={{ marginTop: 12, padding: "10px 14px", background: "#fff7ed", borderRadius: 6, border: "1px solid #fed7aa" }}>
           <strong style={{ fontSize: 13 }}>Huecos sin resolver: {data.gaps.length}</strong>
+        </div>
+      )}
+
+      {/* Avisos aprobados que aún no han salido — todavía se pueden retirar */}
+      {pending && pending.count > 0 && (
+        <div
+          style={{
+            marginTop: "1.5rem",
+            padding: "12px 14px",
+            borderRadius: 8,
+            border: "1px solid #fcd34d",
+            background: "#fffbeb",
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <Clock size={16} color="#92400e" />
+          <span style={{ fontSize: "0.9rem" }}>
+            <strong>{pending.count} avisos programados</strong>
+            {pending.next_send_at && (
+              <>
+                {" — salen a las "}
+                {new Date(pending.next_send_at).toLocaleTimeString("es-DO", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </>
+            )}
+          </span>
+          <button
+            className="btn-ghost"
+            style={{ fontSize: 12, padding: "2px 10px" }}
+            disabled={cancelPendingMutation.isPending}
+            onClick={() => cancelPendingMutation.mutate()}
+          >
+            {cancelPendingMutation.isPending ? "Cancelando…" : "Cancelar envío"}
+          </button>
         </div>
       )}
 
