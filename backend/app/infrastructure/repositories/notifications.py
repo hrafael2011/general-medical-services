@@ -96,6 +96,25 @@ class NotificationRepository:
                 break
         return result
 
+    def list_pending_for_assignments(
+        self, assignment_ids: list[str]
+    ) -> list[NotificationEventModel]:
+        """Avisos programados que aún no han salido, de esos turnos.
+
+        Ordenados por hora de salida: el primero es el próximo en irse.
+        """
+        if not assignment_ids:
+            return []
+        stmt = (
+            select(NotificationEventModel)
+            .where(
+                NotificationEventModel.assignment_id.in_(assignment_ids),
+                NotificationEventModel.status == "pending",
+            )
+            .order_by(NotificationEventModel.scheduled_for)
+        )
+        return list(self.session.scalars(stmt))
+
     def cancel_pending_for_assignments(self, assignment_ids: list[str]) -> list[str]:
         """Marca `cancelled` los avisos que aún no han salido.
 

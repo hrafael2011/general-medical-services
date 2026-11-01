@@ -10,9 +10,11 @@ from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.application.calendars.service import CalendarService
 from backend.app.core.config import settings
+from backend.app.infrastructure.db.models.calendars import CalendarVersionModel
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.notifications import NotificationRepository
 from backend.app.schemas.calendars import (
     ApproveCalendarRequest,
     ApproveWeekRequest,
@@ -21,6 +23,7 @@ from backend.app.schemas.calendars import (
     CalendarGridResponse,
     CalendarRead,
     CalendarVersionRead,
+    CancelPendingRead,
     CreateCalendarRequest,
     DaySlot,
     DoctorAssignmentCountRead,
@@ -31,6 +34,7 @@ from backend.app.schemas.calendars import (
     EvaluationRequest,
     EvaluationResponse,
     HardBlockItem,
+    PendingNotificationsRead,
     ReplaceAssignmentRequest,
     UnavailableDoctorRead,
     UnresolvedGapRead,
@@ -41,6 +45,17 @@ from backend.app.schemas.generation import GenerationResponse, GenerationSlotRes
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 
 router = APIRouter(prefix="/calendars", tags=["calendars"])
+
+
+def _latest_version(repo: CalendarRepository, calendar_id: str) -> CalendarVersionModel:
+    """La versión vigente del calendario (la más reciente)."""
+    versions = repo.list_versions(calendar_id)
+    if not versions:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No hay versiones para el calendario {calendar_id}.",
+        )
+    return versions[0]
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +554,40 @@ def unlock_calendar(
         raise _http_exc(exc) from exc
     session.commit()
     return CalendarVersionRead.model_validate(version)
+
+
+@router.get(
+    "/{calendar_id}/notifications/pending", response_model=PendingNotificationsRead
+)
+def list_pending_notifications(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PendingNotificationsRead:
+    """Cuántos avisos están programados y cuándo sale el próximo."""
+    calendar_repo = CalendarRepository(session)
+    version = _latest_version(calendar_repo, calendar_id)
+    assignment_ids = [a.id for a in calendar_repo.list_assignments(version.id)]
+    events = NotificationRepository(session).list_pending_for_assignments(assignment_ids)
+    return PendingNotificationsRead(
+        count=len(events),
+        next_send_at=events[0].scheduled_for if events else None,
+    )
+
+
+@router.post("/{calendar_id}/notifications/cancel", response_model=CancelPendingRead)
+def cancel_pending_notifications(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CancelPendingRead:
+    """Retira el envío programado sin deshacer la aprobación."""
+    calendar_repo = CalendarRepository(session)
+    version = _latest_version(calendar_repo, calendar_id)
+    assignment_ids = [a.id for a in calendar_repo.list_assignments(version.id)]
+    cancelled = NotificationRepository(session).cancel_pending_for_assignments(assignment_ids)
+    session.commit()
+    return CancelPendingRead(cancelled=len(cancelled))
 
 
 @router.get(

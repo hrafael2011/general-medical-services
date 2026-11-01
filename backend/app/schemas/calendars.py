@@ -193,6 +193,17 @@ class ApproveWeekRequest(BaseModel):
     notes: str | None = None
 
 
+class PendingNotificationsRead(BaseModel):
+    """Lo que el operador necesita para decidir si cancela el envío."""
+
+    count: int
+    next_send_at: datetime | None
+
+
+class CancelPendingRead(BaseModel):
+    cancelled: int
+
+
 # --- Equilibrio / Pattern tracking ---
 
 
