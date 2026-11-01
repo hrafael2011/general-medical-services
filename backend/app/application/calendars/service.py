@@ -519,6 +519,14 @@ class CalendarService:
         assignments_hash = hashlib.md5(hash_input.encode()).hexdigest()
 
         now = datetime.now(UTC)
+        # Deshacer debe deshacer: lo que esta semana encoló y aún no ha salido
+        # se cancela aquí, mientras seguimos sabiendo a qué semana pertenece.
+        cancelled = {"notifications": 0, "confirmations": 0}
+        if self.triggers is not None:
+            cancelled = self.triggers.on_week_unapproved(
+                actor_id=actor_id,
+                assignments=week_assignments,
+            )
         self.repo.update_week_status(
             week_id=week_id,
             status="draft",
