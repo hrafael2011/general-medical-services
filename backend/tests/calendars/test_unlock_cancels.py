@@ -73,6 +73,20 @@ def test_unlock_week_cancela_solo_lo_de_la_semana():
     assert [a.id for a in enviadas] == [dentro.id]
 
 
+def test_unlock_calendar_cancela_todas_las_asignaciones():
+    repo, week, dentro, fuera = _approved_week()
+    triggers = MagicMock()
+    triggers.on_week_unapproved.return_value = {"notifications": 2, "confirmations": 2}
+
+    CalendarService(repo=repo, triggers=triggers).unlock_calendar(
+        actor_id="user1", calendar_id=week.calendar_id
+    )
+
+    triggers.on_week_unapproved.assert_called_once()
+    enviadas = triggers.on_week_unapproved.call_args.kwargs["assignments"]
+    assert [a.id for a in enviadas] == [dentro.id, fuera.id]
+
+
 def test_unlock_week_sin_triggers_no_falla():
     """El servicio se usa en pruebas y en scripts sin disparadores."""
     repo, week, _, _ = _approved_week()

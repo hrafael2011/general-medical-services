@@ -71,10 +71,15 @@ class _FakeMissionRankingService:
 class _FakeTriggers:
     def __init__(self) -> None:
         self.calls: list[dict] = []
+        self.cancelled: list[dict] = []
 
     def on_calendar_approved(self, **kwargs):
         self.calls.append(kwargs)
         return len(kwargs.get("assignments", []))
+
+    def on_week_unapproved(self, **kwargs):
+        self.cancelled.append(kwargs)
+        return {"notifications": 0, "confirmations": 0}
 
 
 # ---------------------------------------------------------------------------

@@ -289,6 +289,15 @@ class CalendarService:
             )
         )
         snap_hash = hashlib.md5(snap_data.encode()).hexdigest()
+
+        # Mismo criterio que `unlock_week`: lo que el calendario encoló y aún
+        # no ha salido se cancela antes de devolverlo a borrador.
+        cancelled = {"notifications": 0, "confirmations": 0}
+        if self.triggers is not None:
+            cancelled = self.triggers.on_week_unapproved(
+                actor_id=actor_id,
+                assignments=current_assignments,
+            )
         original_reason = version.reason
         version.reason = f"__unlock__{snap_hash}"
         if original_reason:
