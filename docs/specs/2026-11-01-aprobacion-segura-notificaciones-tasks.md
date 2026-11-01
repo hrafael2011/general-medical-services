@@ -14,7 +14,7 @@ como método en los servicios existentes, y `NotificationTriggers` la orquesta p
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0, pytest, React + TypeScript, vitest.
 
-**Estado:** ✅ Fase 1 implementada. Backend y frontend verdes.
+**Estado:** ✅ Fases 1 y 2 implementadas. Backend y frontend verdes.
 
 **Alcance de este documento:** solo **Fase 1 (P1)**. Las fases 2 (margen de 15 minutos) y 3
 (corregir sí avisa) se detallan cuando esta cierre: ambas dependen de la semántica de cancelación
@@ -775,15 +775,323 @@ git commit -m "feat(calendars): tell the user how many notifications were cancel
 
 ---
 
-## Fase 2 y 3 — pendientes de detallar
+## Fase 2 — El margen para arrepentirse (P2)
 
-Se escriben cuando la Fase 1 esté verde y verificada:
+Los seis arreglos B1–B6. Al terminar, aprobar no envía nada de inmediato: deja los avisos
+programados, la pantalla lo dice, y hay un botón para cancelarlos sin desbloquear nada.
 
-- **Fase 2 (P2)** — el margen de 15 minutos: `approval_grace_minutes`, `scheduled_for` al encolar,
-  y el banner con cuenta atrás.
-- **Fase 3 (P3)** — D3: re-aprobar tras corregir vuelve a avisar. Depende de una decisión que la
-  Fase 1 deja planteada: qué hacer con una fila `cancelled` cuando se vuelve a aprobar la misma
-  asignación (reutilizarla, o emitir una nueva con otra clave).
+**Decisión B6 (el desfase del cron):** el worker corre cada 10 minutos. Con un margen de 15, el
+envío real cae entre 15 y 25 minutos después de aprobar. Es aceptable: el margen existe para
+arrepentirse, no para ser exacto al minuto. Queda escrito aquí para que nadie lo confunda con un
+fallo.
+
+### Task 2.1 — Configuración del margen (B1)
+
+**Files:**
+- Modify: `backend/app/core/config.py`
+- Test: `backend/tests/test_config.py`
+
+- [x] **Step 1: Escribir el test que falla**
+
+```python
+def test_margen_de_aprobacion_por_defecto():
+    from backend.app.core.config import Settings
+
+    assert Settings().approval_grace_minutes == 15
+```
+
+- [x] **Step 2: Ejecutar y ver que falla**
+
+Run: `pytest backend/tests/test_config.py -x -q`
+Expected: FAIL con `AttributeError` o `ValidationError` sobre `approval_grace_minutes`
+
+- [x] **Step 3: Implementar**
+
+En `backend/app/core/config.py`, junto a los demás tiempos:
+
+```python
+    # Minutos entre aprobar y enviar. Da tiempo a deshacer un clic equivocado.
+    approval_grace_minutes: int = 15
+```
+
+- [x] **Step 4: Ejecutar y ver que pasa**
+
+Run: `pytest backend/tests/test_config.py -q`
+Expected: passed
+
+- [x] **Step 5: Commit**
+
+```bash
+git add backend/app/core/config.py backend/tests/test_config.py
+git commit -m "feat(config): add the approval grace window"
+```
+
+### Task 2.2 — Encolar con hora de salida (B2)
+
+**Files:**
+- Modify: `backend/app/application/notifications/triggers.py`
+- Modify: `backend/app/api/routes/calendars.py`
+- Test: `backend/tests/notifications/test_approval_grace.py`
+
+- [x] **Step 1: Escribir el test que falla**
+
+```python
+"""Aprobar no debe enviar en el acto: deja el aviso programado."""
+
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
+
+from backend.app.application.notifications.triggers import NotificationTriggers
+
+
+def test_on_week_approved_programa_el_envio():
+    notifications = MagicMock()
+    notifications.queue.return_value = MagicMock(id="ev1", payload={})
+    triggers = NotificationTriggers(
+        notification_service=notifications,
+        doctor_repo=MagicMock(),
+        approval_grace_minutes=15,
+    )
+    triggers._resolve_area = MagicMock(return_value=("Emergencia", None))
+    assignment = MagicMock(id="a1", doctor_id="doc1", service_date="2026-05-05")
+
+    antes = datetime.now(UTC)
+    triggers.on_week_approved(actor_id="user1", assignments=[assignment], week=MagicMock())
+
+    programado = notifications.queue.call_args.kwargs["scheduled_for"]
+    assert antes + timedelta(minutes=14) < programado < antes + timedelta(minutes=16)
+```
+
+- [x] **Step 2: Ejecutar y ver que falla**
+
+Run: `pytest backend/tests/notifications/test_approval_grace.py -x -q`
+Expected: FAIL — `TypeError` por el argumento nuevo, o `KeyError: 'scheduled_for'`
+
+- [x] **Step 3: Implementar**
+
+En `NotificationTriggers.__init__`, un parámetro nuevo:
+
+```python
+        approval_grace_minutes: int = 0,
+```
+
+y guárdalo:
+
+```python
+        self.approval_grace_minutes = approval_grace_minutes
+```
+
+Añade el ayudante:
+
+```python
+    def _scheduled_for(self) -> datetime | None:
+        """Hora de salida del aviso: el margen que da tiempo a arrepentirse."""
+        if self.approval_grace_minutes <= 0:
+            return None
+        return datetime.now(UTC) + timedelta(minutes=self.approval_grace_minutes)
+```
+
+En `on_calendar_approved` y en `on_week_approved`, añade a la llamada de `queue`:
+
+```python
+                    scheduled_for=self._scheduled_for(),
+```
+
+- [x] **Step 4: Pasar la configuración en las dos rutas**
+
+En `backend/app/api/routes/calendars.py`, en las dos construcciones de `NotificationTriggers`
+(líneas ~111 y ~191):
+
+```python
+        approval_grace_minutes=settings.approval_grace_minutes,
+```
+
+- [x] **Step 5: Ejecutar y ver que pasa**
+
+Run: `pytest backend/tests/notifications/ backend/tests/calendars/ -q`
+Expected: passed
+
+- [x] **Step 6: Commit**
+
+```bash
+git add backend/app/application/notifications/triggers.py backend/app/api/routes/calendars.py backend/tests/notifications/test_approval_grace.py
+git commit -m "feat(notifications): hold approved notifications for the grace window"
+```
+
+### Task 2.3 — Consultar y cancelar el envío sin desbloquear (B4)
+
+**Files:**
+- Modify: `backend/app/infrastructure/repositories/notifications.py`
+- Modify: `backend/app/schemas/calendars.py`
+- Modify: `backend/app/api/routes/calendars.py`
+- Test: `backend/tests/calendars/test_pending_notifications_route.py`
+
+- [x] **Step 1: Escribir el test que falla**
+
+Dos casos: con avisos programados devuelve el número y la hora del próximo; tras cancelar,
+devuelve cero.
+
+```python
+def test_pending_y_cancel(client, db_session, calendario_aprobado_con_avisos):
+    calendar_id, _ = calendario_aprobado_con_avisos
+
+    pending = client.get(f"/api/calendars/{calendar_id}/notifications/pending")
+    assert pending.status_code == 200
+    assert pending.json()["count"] > 0
+
+    cancel = client.post(f"/api/calendars/{calendar_id}/notifications/cancel")
+    assert cancel.status_code == 200
+    assert cancel.json()["cancelled"] > 0
+
+    assert client.get(f"/api/calendars/{calendar_id}/notifications/pending").json()["count"] == 0
+```
+
+> La fixture `calendario_aprobado_con_avisos` se monta reutilizando `_create_doctor` /
+> `_make_assignment` de `backend/tests/notifications/test_triggers.py`, más dos
+> `NotificationEventModel` en `pending` con `scheduled_for` a futuro.
+
+- [x] **Step 2: Ejecutar y ver que falla**
+
+Run: `pytest backend/tests/calendars/test_pending_notifications_route.py -x -q`
+Expected: FAIL con 404
+
+- [x] **Step 3: Implementar el repositorio**
+
+En `NotificationRepository`:
+
+```python
+    def list_pending_for_assignments(
+        self, assignment_ids: list[str]
+    ) -> list[NotificationEventModel]:
+        """Avisos programados que aún no han salido, de esos turnos."""
+        if not assignment_ids:
+            return []
+        stmt = (
+            select(NotificationEventModel)
+            .where(
+                NotificationEventModel.assignment_id.in_(assignment_ids),
+                NotificationEventModel.status == "pending",
+            )
+            .order_by(NotificationEventModel.scheduled_for)
+        )
+        return list(self.session.scalars(stmt))
+```
+
+- [x] **Step 4: Implementar las rutas**
+
+En `backend/app/schemas/calendars.py`:
+
+```python
+class PendingNotificationsRead(BaseModel):
+    count: int
+    next_send_at: datetime | None
+
+
+class CancelPendingRead(BaseModel):
+    cancelled: int
+```
+
+En `backend/app/api/routes/calendars.py`, con la misma dependencia de permiso que `unlock`:
+
+```python
+@router.get("/{calendar_id}/notifications/pending", response_model=PendingNotificationsRead)
+def list_pending_notifications(calendar_id: str, session=Depends(get_db_session), _=Depends(...)):
+    version = _current_version(session, calendar_id)
+    assignment_ids = [a.id for a in CalendarRepository(session).list_assignments(version.id)]
+    events = NotificationRepository(session).list_pending_for_assignments(assignment_ids)
+    return PendingNotificationsRead(
+        count=len(events),
+        next_send_at=events[0].scheduled_for if events else None,
+    )
+
+
+@router.post("/{calendar_id}/notifications/cancel", response_model=CancelPendingRead)
+def cancel_pending_notifications(calendar_id: str, session=Depends(get_db_session), _=Depends(...)):
+    version = _current_version(session, calendar_id)
+    assignment_ids = [a.id for a in CalendarRepository(session).list_assignments(version.id)]
+    cancelled = NotificationRepository(session).cancel_pending_for_assignments(assignment_ids)
+    session.commit()
+    return CancelPendingRead(cancelled=len(cancelled))
+```
+
+- [x] **Step 5: Ejecutar y ver que pasa**
+
+Run: `pytest backend/tests/calendars/ -q`
+Expected: passed
+
+- [x] **Step 6: Commit**
+
+```bash
+git add backend/app/infrastructure/repositories/notifications.py backend/app/schemas/calendars.py backend/app/api/routes/calendars.py backend/tests/calendars/test_pending_notifications_route.py
+git commit -m "feat(calendars): expose and cancel the scheduled notification batch"
+```
+
+### Task 2.4 — Banner con cuenta atrás y "Cancelar envío" (B3, B5)
+
+**Files:**
+- Modify: `frontend/src/api/calendars.ts`
+- Modify: `frontend/src/features/calendars/CalendarGrid.tsx`
+- Test: `frontend/src/features/calendars/CalendarGrid.test.tsx`
+
+- [x] **Step 1: Escribir el test que falla**
+
+```tsx
+it("muestra cuándo salen los avisos y permite cancelarlos", async () => {
+  vi.mocked(calendarsApi.pendingNotifications).mockResolvedValueOnce({
+    count: 12,
+    next_send_at: "2026-05-04T14:15:00Z",
+  });
+  renderGrid();
+
+  expect(await screen.findByText(/12 avisos programados/i)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /cancelar envío/i }));
+  await waitFor(() => expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1"));
+});
+```
+
+- [x] **Step 2: Ejecutar y ver que falla**
+
+Run: `npm test -- CalendarGrid` en `frontend/`
+Expected: FAIL
+
+- [x] **Step 3: Implementar**
+
+Cliente en `frontend/src/api/calendars.ts`:
+
+```ts
+pendingNotifications: (calendarId: string) =>
+  apiFetch<{ count: number; next_send_at: string | null }>(
+    `/calendars/${calendarId}/notifications/pending`,
+  ),
+
+cancelPendingNotifications: (calendarId: string) =>
+  apiFetch<{ cancelled: number }>(
+    `/calendars/${calendarId}/notifications/cancel`,
+    { method: "POST" },
+  ),
+```
+
+Banner en `CalendarGrid.tsx`, encima de la tabla de semanas: se muestra solo si `count > 0`;
+texto «N avisos programados — salen a las HH:MM» y botón «Cancelar envío» que ejecuta la mutación
+y muestra «Se cancelaron N avisos» en el toast.
+
+- [x] **Step 4: Ejecutar y ver que pasa**
+
+Run: `npm test -- CalendarGrid` y `npx tsc -b`
+Expected: passed, sin errores de tipos
+
+- [x] **Step 5: Commit**
+
+```bash
+git add frontend/src/api/calendars.ts frontend/src/features/calendars/CalendarGrid.tsx frontend/src/features/calendars/CalendarGrid.test.tsx
+git commit -m "feat(calendars): show the scheduled send and let the user cancel it"
+```
+
+## Fase 3 — pendiente de detallar
+
+- **D3**: re-aprobar tras corregir vuelve a avisar. Depende de una decisión que la Fase 1 deja
+  planteada: qué hacer con una fila `cancelled` cuando se vuelve a aprobar la misma asignación
+  (reutilizarla, o emitir una nueva con otra clave).
 
 ## Criterios de aceptación
 
@@ -803,6 +1111,14 @@ Registradas al implementar, para que el siguiente no repita el tropiezo.
 | 5 | — | `_FakeTriggers` en `test_calendar_service.py` necesitó `on_week_unapproved`, porque la interfaz de disparadores creció |
 | 6 | `week.cancelled_notifications > 0` en el frontend | El campo va como opcional (`cancelled_notifications?: number`) porque solo lo trae la respuesta del desbloqueo; el componente usa `?? 0` |
 
+### Desviaciones de la Fase 2
+
+| # | Lo que decía el plan | Lo que hizo falta |
+|---|---|---|
+| 7 | `Settings().approval_grace_minutes` en el test | Se comprueba `Settings.model_fields["approval_grace_minutes"].default`: instanciar `Settings()` deja que un `.env` local cambie el valor y el test se vuelve frágil |
+| 8 | — | `test_on_week_approved_queues_notification_per_assignment` comparaba las llamadas a `queue` sin `scheduled_for`; hubo que añadirlo (`None`) a las dos esperadas |
+| 9 | Las rutas nuevas usan el servicio | Se apoyan en `CalendarRepository` y `NotificationRepository` directamente, con un ayudante `_latest_version` en el módulo de rutas |
+
 ## Progreso
 
 | Task | Arreglo | Commit |
@@ -815,3 +1131,7 @@ Registradas al implementar, para que el siguiente no repita el tropiezo.
 | 1.6 | A5 | `feat(audit): record how many notifications an unapproval cancelled` |
 | 1.7 | D2 | `fix(notifications): cancel the confirmation of a removed assignment` |
 | 1.8 | A6 | `feat(calendars): tell the user how many notifications were cancelled` |
+| 2.1 | B1 | `feat(config): add the approval grace window` |
+| 2.2 | B2 | `feat(notifications): hold approved notifications for the grace window` |
+| 2.3 | B4 | `feat(calendars): expose and cancel the scheduled notification batch` |
+| 2.4 | B3, B5 | `feat(calendars): show the scheduled send and let the user cancel it` |

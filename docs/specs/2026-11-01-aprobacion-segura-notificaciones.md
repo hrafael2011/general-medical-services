@@ -1,6 +1,6 @@
 ---
 spec: aprobacion-segura-notificaciones
-version: 1.1.0
+version: 1.2.0
 status: proposed
 created: 2026-11-01
 updated: 2026-11-01
@@ -177,3 +177,4 @@ tras corregir un error, los médicos **no se enteran de la versión buena**.
 |---|---|---|---|---|
 | 1.0.0 | 2026-11-01 | — | Aprobación por error del 2026-10-27 | Se documenta que desbloquear no cancela los avisos, que no existe estado de cancelación, y que re-aprobar tras desbloquear no notifica. Se propone la lista de arreglos priorizada. |
 | 1.1.0 | 2026-11-01 | — | Implementación de P1 | **P1 (A1–A6, D2) queda implementado**: desbloquear semana o calendario cancela los avisos `pending` y sus confirmaciones, sin tocar `sending` ni `sent`; quitar un turno aprobado cancela su confirmación; todo queda auditado; la pantalla informa cuántos se cancelaron. P2–P7 siguen pendientes. |
+| 1.2.0 | 2026-11-01 | — | Implementación de P2 | **P2 (B1–B6) queda implementado**: aprobar encola con `scheduled_for = ahora + approval_grace_minutes` (15 por defecto); la pantalla muestra «N avisos programados — salen a las HH:MM» con un botón «Cancelar envío» que no deshace la aprobación; endpoints `GET …/notifications/pending` y `POST …/notifications/cancel`. El envío real cae entre 15 y 25 minutos por el cron de 10. P3–P7 siguen pendientes. |
