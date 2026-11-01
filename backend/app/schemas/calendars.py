@@ -193,11 +193,31 @@ class ApproveWeekRequest(BaseModel):
     notes: str | None = None
 
 
+class PendingNotificationGroup(BaseModel):
+    """Los avisos de una semana, con su propia hora de salida.
+
+    Cada aprobación programa sus avisos en un momento distinto; agrupar por
+    semana deja ver, por ejemplo, que la 2 sale doce horas después de la 1.
+    """
+
+    week_id: str
+    week_label: str
+    count: int
+    next_send_at: datetime | None
+
+
 class PendingNotificationsRead(BaseModel):
     """Lo que el operador necesita para decidir si cancela el envío."""
 
     count: int
     next_send_at: datetime | None
+    groups: list[PendingNotificationGroup] = []
+
+
+class CancelPendingRequest(BaseModel):
+    """Sin `week_id` se cancelan todos los avisos pendientes del calendario."""
+
+    week_id: str | None = None
 
 
 class CancelPendingRead(BaseModel):

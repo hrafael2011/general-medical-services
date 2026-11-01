@@ -90,6 +90,20 @@ export interface WeekRead {
   cancelled_notifications?: number;
 }
 
+/** Los avisos de una semana, con su propia hora de salida. */
+export interface PendingNotificationGroup {
+  week_id: string;
+  week_label: string;
+  count: number;
+  next_send_at: string | null;
+}
+
+export interface PendingNotificationsRead {
+  count: number;
+  next_send_at: string | null;
+  groups: PendingNotificationGroup[];
+}
+
 export interface EligibleDoctorRead {
   id: string;
   full_name: string;
@@ -248,13 +262,14 @@ export const calendarsApi = {
 
   /** Avisos aprobados que aún no han salido, con la hora del próximo. */
   pendingNotifications: (calendarId: string) =>
-    apiFetch<{ count: number; next_send_at: string | null }>(
+    apiFetch<PendingNotificationsRead>(
       `/calendars/${calendarId}/notifications/pending`,
     ),
 
-  cancelPendingNotifications: (calendarId: string) =>
+  cancelPendingNotifications: (calendarId: string, weekId?: string) =>
     apiFetch<{ cancelled: number }>(`/calendars/${calendarId}/notifications/cancel`, {
       method: "POST",
+      body: JSON.stringify(weekId ? { week_id: weekId } : {}),
     }),
 
   exportWeeklyPDF: (calendarId: string, weekId: string) =>

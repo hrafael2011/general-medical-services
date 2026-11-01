@@ -26,7 +26,7 @@ vi.mock("../../api/calendars", () => ({
     ]),
     approveWeek: vi.fn(),
     unlockWeek: vi.fn(),
-    pendingNotifications: vi.fn().mockResolvedValue({ count: 0, next_send_at: null }),
+    pendingNotifications: vi.fn().mockResolvedValue({ count: 0, next_send_at: null, groups: [] }),
     cancelPendingNotifications: vi.fn().mockResolvedValue({ cancelled: 0 }),
     exportWeeklyPDF: vi.fn().mockResolvedValue(new Blob()),
     exportFullCalendarPDF: vi.fn().mockResolvedValue(new Blob()),
@@ -371,6 +371,7 @@ describe("CalendarGrid", () => {
     vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
       count: 1,
       next_send_at: new Date(Date.now() + (23 * 60 + 41) * 60_000).toISOString(),
+      groups: [],
     });
     renderGrid();
 
@@ -382,6 +383,7 @@ describe("CalendarGrid", () => {
     vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
       count: 12,
       next_send_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+      groups: [],
     });
     vi.mocked(calendarsApi.cancelPendingNotifications).mockResolvedValue({ cancelled: 12 });
     renderGrid();
@@ -390,7 +392,33 @@ describe("CalendarGrid", () => {
     await userEvent.click(screen.getByRole("button", { name: /cancelar envío/i }));
 
     await waitFor(() =>
-      expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1"),
+      expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1", undefined),
+    );
+  });
+
+  it("muestra un bloque por semana y cancela solo la que se pide", async () => {
+    const enTresHoras = new Date(Date.now() + 3 * 60 * 60_000).toISOString();
+    const enQuinceHoras = new Date(Date.now() + 15 * 60 * 60_000).toISOString();
+    vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
+      count: 2,
+      next_send_at: enTresHoras,
+      groups: [
+        { week_id: "w1", week_label: "1TA SEMANA", count: 1, next_send_at: enTresHoras },
+        { week_id: "w2", week_label: "2TA SEMANA", count: 1, next_send_at: enQuinceHoras },
+      ],
+    });
+    renderGrid();
+
+    expect(await screen.findByText("1TA SEMANA")).toBeInTheDocument();
+    expect(screen.getByText("2TA SEMANA")).toBeInTheDocument();
+    expect(screen.getByText(/2 avisos programados en total/i)).toBeInTheDocument();
+
+    const botones = screen.getAllByRole("button", { name: /cancelar/i });
+    expect(botones).toHaveLength(2);
+    await userEvent.click(botones[1]);
+
+    await waitFor(() =>
+      expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1", "w2"),
     );
   });
 

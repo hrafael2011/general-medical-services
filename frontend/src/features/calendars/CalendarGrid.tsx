@@ -313,7 +313,9 @@ export function CalendarGrid() {
   }, [hasScheduledNotice, pending?.next_send_at]);
 
   const cancelPendingMutation = useMutation({
-    mutationFn: () => calendarsApi.cancelPendingNotifications(calendarId!),
+    // Sin semana, cancela todo el calendario.
+    mutationFn: (weekId?: string) =>
+      calendarsApi.cancelPendingNotifications(calendarId!, weekId),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["pending-notifications", calendarId] });
       addToast("success", `Se cancelaron ${result.cancelled} avisos.`);
@@ -572,26 +574,73 @@ export function CalendarGrid() {
           }}
         >
           <Clock size={16} color="#92400e" />
-          <span style={{ fontSize: "0.9rem" }}>
-            <strong>
-              {pending.count} {pending.count === 1 ? "aviso programado" : "avisos programados"}
-            </strong>
-            {pending.next_send_at &&
-              (() => {
-                const left = formatCountdown(
-                  new Date(pending.next_send_at).getTime() - nowTick,
-                );
-                return left ? ` — se envía en ${left}` : " — enviando…";
-              })()}
-          </span>
-          <button
-            className="btn-ghost"
-            style={{ fontSize: 12, padding: "2px 10px" }}
-            disabled={cancelPendingMutation.isPending}
-            onClick={() => cancelPendingMutation.mutate()}
-          >
-            {cancelPendingMutation.isPending ? "Cancelando…" : "Cancelar envío"}
-          </button>
+          {(pending.groups ?? []).length > 1 ? (
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "0.9rem", marginBottom: 6 }}>
+                <strong>
+                  {pending.count} avisos programados en total
+                </strong>
+              </div>
+              {(pending.groups ?? []).map((group) => (
+                <div
+                  key={`${group.week_id}-${group.week_label}`}
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "center",
+                    fontSize: "0.85rem",
+                    padding: "2px 0",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <strong style={{ minWidth: 130 }}>{group.week_label}</strong>
+                  <span>
+                    {group.count} {group.count === 1 ? "aviso" : "avisos"}
+                  </span>
+                  <span>
+                    {group.next_send_at &&
+                      (() => {
+                        const left = formatCountdown(
+                          new Date(group.next_send_at).getTime() - nowTick,
+                        );
+                        return left ? `se envía en ${left}` : "enviando…";
+                      })()}
+                  </span>
+                  <button
+                    className="btn-ghost"
+                    style={{ fontSize: 12, padding: "2px 10px" }}
+                    disabled={cancelPendingMutation.isPending}
+                    onClick={() => cancelPendingMutation.mutate(group.week_id || undefined)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <span style={{ fontSize: "0.9rem" }}>
+                <strong>
+                  {pending.count} {pending.count === 1 ? "aviso programado" : "avisos programados"}
+                </strong>
+                {pending.next_send_at &&
+                  (() => {
+                    const left = formatCountdown(
+                      new Date(pending.next_send_at).getTime() - nowTick,
+                    );
+                    return left ? ` — se envía en ${left}` : " — enviando…";
+                  })()}
+              </span>
+              <button
+                className="btn-ghost"
+                style={{ fontSize: 12, padding: "2px 10px" }}
+                disabled={cancelPendingMutation.isPending}
+                onClick={() => cancelPendingMutation.mutate(undefined)}
+              >
+                {cancelPendingMutation.isPending ? "Cancelando…" : "Cancelar envío"}
+              </button>
+            </>
+          )}
         </div>
       )}
 
