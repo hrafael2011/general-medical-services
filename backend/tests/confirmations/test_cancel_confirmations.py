@@ -11,7 +11,6 @@ from backend.app.infrastructure.db.models.confirmations import ConfirmationReque
 from backend.app.infrastructure.repositories.confirmations import (
     ConfirmationRequestRepository,
 )
-
 from backend.tests.notifications.test_triggers import _create_doctor, _make_assignment
 
 

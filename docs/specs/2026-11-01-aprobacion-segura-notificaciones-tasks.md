@@ -14,7 +14,7 @@ como método en los servicios existentes, y `NotificationTriggers` la orquesta p
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0, pytest, React + TypeScript, vitest.
 
-**Estado:** ⬜ Sin empezar.
+**Estado:** ✅ Fase 1 implementada. Backend y frontend verdes.
 
 **Alcance de este documento:** solo **Fase 1 (P1)**. Las fases 2 (margen de 15 minutos) y 3
 (corregir sí avisa) se detallan cuando esta cierre: ambas dependen de la semántica de cancelación
@@ -33,7 +33,7 @@ y sin confirmaciones fantasma, y queda auditado.
 - Modify: `backend/app/infrastructure/repositories/notifications.py`
 - Test: `backend/tests/notifications/test_cancel_notifications.py`
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```python
 """Cancelar avisos que todavía no han salido.
@@ -90,12 +90,12 @@ def test_sin_asignaciones_no_consulta(db_session):
     assert NotificationRepository(db_session).cancel_pending_for_assignments([]) == []
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/notifications/test_cancel_notifications.py -x -q`
 Expected: FAIL con `AttributeError: 'NotificationRepository' object has no attribute 'cancel_pending_for_assignments'`
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 En `backend/app/infrastructure/repositories/notifications.py`, junto a `list_pending`:
 
@@ -121,12 +121,12 @@ En `backend/app/infrastructure/repositories/notifications.py`, junto a `list_pen
         return [event.id for event in events]
 ```
 
-- [ ] **Step 4: Ejecutar y ver que pasa**
+- [x] **Step 4: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/notifications/test_cancel_notifications.py -q`
 Expected: 2 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/infrastructure/repositories/notifications.py backend/tests/notifications/test_cancel_notifications.py
@@ -142,7 +142,7 @@ git commit -m "feat(notifications): allow cancelling unsent events"
 - Modify: `backend/app/application/confirmations/service.py`
 - Test: `backend/tests/confirmations/test_cancel_confirmations.py`
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```python
 """Una confirmación de un turno cancelado no puede seguir viva: escalaría por un
@@ -194,12 +194,12 @@ def test_cancela_pendientes_y_recibidas(db_session, doctor_factory):
 > `DoctorModel(id=..., name=..., rank_id=None, department_id=None, active=True, ...)` siguiendo
 > `backend/tests/doctors/` para los campos obligatorios.
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/confirmations/test_cancel_confirmations.py -x -q`
 Expected: FAIL con `AttributeError: ... 'cancel_pending_for_assignments'`
 
-- [ ] **Step 3: Implementar el repositorio**
+- [x] **Step 3: Implementar el repositorio**
 
 En `backend/app/infrastructure/repositories/confirmations.py`:
 
@@ -224,7 +224,7 @@ En `backend/app/infrastructure/repositories/confirmations.py`:
         return [request.id for request in requests]
 ```
 
-- [ ] **Step 4: Exponerlo en el servicio**
+- [x] **Step 4: Exponerlo en el servicio**
 
 En `backend/app/application/confirmations/service.py`, junto a los métodos de creación:
 
@@ -234,12 +234,12 @@ En `backend/app/application/confirmations/service.py`, junto a los métodos de c
         return self.repo.cancel_pending_for_assignments(assignment_ids)
 ```
 
-- [ ] **Step 5: Ejecutar y ver que pasa**
+- [x] **Step 5: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/confirmations/test_cancel_confirmations.py -q`
 Expected: 1 passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/infrastructure/repositories/confirmations.py backend/app/application/confirmations/service.py backend/tests/confirmations/test_cancel_confirmations.py
@@ -255,7 +255,7 @@ git commit -m "feat(confirmations): cancel requests for unsent assignments"
 - Modify: `backend/app/application/notifications/triggers.py`
 - Test: `backend/tests/notifications/test_triggers_unapproval.py`
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```python
 """Deshacer la aprobación debe deshacer el aviso."""
@@ -285,12 +285,12 @@ def test_on_week_unapproved_cancela_avisos_y_confirmaciones():
     assert result == {"notifications": 2, "confirmations": 1}
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/notifications/test_triggers_unapproval.py -x -q`
 Expected: FAIL con `AttributeError: 'NotificationTriggers' object has no attribute 'on_week_unapproved'`
 
-- [ ] **Step 3: Implementar en el servicio**
+- [x] **Step 3: Implementar en el servicio**
 
 En `backend/app/application/notifications/service.py`, después de `queue`:
 
@@ -300,7 +300,7 @@ En `backend/app/application/notifications/service.py`, después de `queue`:
         return self.repo.cancel_pending_for_assignments(assignment_ids)
 ```
 
-- [ ] **Step 4: Implementar en los disparadores**
+- [x] **Step 4: Implementar en los disparadores**
 
 En `backend/app/application/notifications/triggers.py`, junto a `on_week_approved`:
 
@@ -328,12 +328,12 @@ En `backend/app/application/notifications/triggers.py`, junto a `on_week_approve
         }
 ```
 
-- [ ] **Step 5: Ejecutar y ver que pasa**
+- [x] **Step 5: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/notifications/test_triggers_unapproval.py -q`
 Expected: 1 passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/application/notifications/service.py backend/app/application/notifications/triggers.py backend/tests/notifications/test_triggers_unapproval.py
@@ -348,7 +348,7 @@ git commit -m "feat(notifications): orchestrate cancellation on unapproval"
 - Modify: `backend/app/application/calendars/service.py:484-553`
 - Test: `backend/tests/calendars/test_unlock_cancels.py`
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 Se apoya en el `FakeWeekRepo` de `backend/tests/calendars/test_week_service.py`.
 
@@ -408,12 +408,12 @@ def test_unlock_week_cancela_solo_lo_de_la_semana():
     assert [a.id for a in enviadas] == [dentro.id]
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/calendars/test_unlock_cancels.py -x -q`
 Expected: FAIL — `on_week_unapproved` no se llama
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 En `unlock_week`, justo después del bloque que calcula `assignments_hash` (línea ~519) y antes
 de `self.repo.update_week_status(...)`:
@@ -429,17 +429,17 @@ de `self.repo.update_week_status(...)`:
             )
 ```
 
-- [ ] **Step 4: Ejecutar y ver que pasa**
+- [x] **Step 4: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/calendars/test_unlock_cancels.py -q`
 Expected: 1 passed
 
-- [ ] **Step 5: Comprobar que no rompió nada**
+- [x] **Step 5: Comprobar que no rompió nada**
 
 Run: `pytest backend/tests/calendars/ -q`
 Expected: todo passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/application/calendars/service.py backend/tests/calendars/test_unlock_cancels.py
@@ -454,7 +454,7 @@ git commit -m "fix(calendars): cancel unsent notifications when a week is unlock
 - Modify: `backend/app/application/calendars/service.py:253-313`
 - Test: `backend/tests/calendars/test_unlock_cancels.py`
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```python
 def test_unlock_calendar_cancela_todas_las_asignaciones():
@@ -470,12 +470,12 @@ def test_unlock_calendar_cancela_todas_las_asignaciones():
     assert [a.id for a in enviadas] == [dentro.id, fuera.id]
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/calendars/test_unlock_cancels.py::test_unlock_calendar_cancela_todas_las_asignaciones -x -q`
 Expected: FAIL — `on_week_unapproved` no se llama
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 En `unlock_calendar`, después de `snap_hash = ...` y antes de `version.status = "draft"`:
 
@@ -488,12 +488,12 @@ En `unlock_calendar`, después de `snap_hash = ...` y antes de `version.status =
             )
 ```
 
-- [ ] **Step 4: Ejecutar y ver que pasa**
+- [x] **Step 4: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/calendars/test_unlock_cancels.py -q`
 Expected: 2 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/application/calendars/service.py backend/tests/calendars/test_unlock_cancels.py
@@ -509,7 +509,7 @@ git commit -m "fix(calendars): cancel unsent notifications when a calendar is un
 - Modify: `backend/app/application/calendars/service.py`
 - Test: `backend/tests/audit/test_notifications_cancelled_audit.py`
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```python
 """Sin rastro no se puede investigar qué pasó cuando alguien deshizo una aprobación."""
@@ -536,12 +536,12 @@ def test_registra_la_cancelacion(db_session):
     assert event.after["confirmations"] == 2
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/audit/test_notifications_cancelled_audit.py -x -q`
 Expected: FAIL con `AttributeError: ... 'log_notifications_cancelled'`
 
-- [ ] **Step 3: Implementar la auditoría**
+- [x] **Step 3: Implementar la auditoría**
 
 En `backend/app/application/audit/service.py`, junto a `log_calendar_unlocked`:
 
@@ -568,7 +568,7 @@ En `backend/app/application/audit/service.py`, junto a `log_calendar_unlocked`:
         )
 ```
 
-- [ ] **Step 4: Llamarla desde las dos operaciones**
+- [x] **Step 4: Llamarla desde las dos operaciones**
 
 En `unlock_week`, después de `self.repo.session.flush()` (línea ~551):
 
@@ -599,12 +599,12 @@ En `unlock_calendar`, después de `self.repo.session.flush()` (línea ~304):
 > `unlock_week` necesita una referencia al calendario: la variable `calendar` ya existe en ese
 > método (línea ~533); reutilizarla. Si es `None`, no registrar auditoría.
 
-- [ ] **Step 5: Ejecutar y ver que pasa**
+- [x] **Step 5: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/audit/ backend/tests/calendars/ -q`
 Expected: todo passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/application/audit/service.py backend/app/application/calendars/service.py backend/tests/audit/test_notifications_cancelled_audit.py
@@ -619,7 +619,7 @@ git commit -m "feat(audit): record how many notifications an unapproval cancelle
 - Modify: `backend/app/application/notifications/triggers.py:237-256`
 - Test: `backend/tests/notifications/test_triggers_unapproval.py`
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```python
 def test_quitar_un_turno_cancela_su_confirmacion():
@@ -640,12 +640,12 @@ def test_quitar_un_turno_cancela_su_confirmacion():
     confirmations.cancel_for_assignments.assert_called_once_with(["a1"])
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/notifications/test_triggers_unapproval.py::test_quitar_un_turno_cancela_su_confirmacion -x -q`
 Expected: FAIL — no se llama `cancel_for_assignments`
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Al principio de `on_calendar_assignment_removed_after_approval`:
 
@@ -656,12 +656,12 @@ Al principio de `on_calendar_assignment_removed_after_approval`:
             self.confirmation_service.cancel_for_assignments([assignment.id])
 ```
 
-- [ ] **Step 4: Ejecutar y ver que pasa**
+- [x] **Step 4: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/notifications/ -q`
 Expected: todo passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/application/notifications/triggers.py backend/tests/notifications/test_triggers_unapproval.py
@@ -679,7 +679,7 @@ git commit -m "fix(notifications): cancel the confirmation of a removed assignme
 - Modify: `frontend/src/features/calendars/CalendarGrid.tsx`
 - Test: `frontend/src/features/calendars/CalendarGrid.test.tsx`
 
-- [ ] **Step 1: Escribir el test de backend que falla**
+- [x] **Step 1: Escribir el test de backend que falla**
 
 ```python
 def test_unlock_week_expone_cuantos_cancelo():
@@ -694,12 +694,12 @@ def test_unlock_week_expone_cuantos_cancelo():
     assert result.cancelled_notifications == 4
 ```
 
-- [ ] **Step 2: Ejecutar y ver que falla**
+- [x] **Step 2: Ejecutar y ver que falla**
 
 Run: `pytest backend/tests/calendars/test_unlock_cancels.py -x -q`
 Expected: FAIL con `AttributeError: ... 'cancelled_notifications'`
 
-- [ ] **Step 3: Exponer el dato**
+- [x] **Step 3: Exponer el dato**
 
 En `CalendarService.unlock_week`, antes del `return week`:
 
@@ -719,12 +719,12 @@ En `backend/app/schemas/calendars.py`, añadir a `WeekRead` y a `CalendarVersion
     cancelled_notifications: int = 0
 ```
 
-- [ ] **Step 4: Ejecutar y ver que pasa**
+- [x] **Step 4: Ejecutar y ver que pasa**
 
 Run: `pytest backend/tests/calendars/ -q`
 Expected: todo passed
 
-- [ ] **Step 5: Escribir el test de frontend que falla**
+- [x] **Step 5: Escribir el test de frontend que falla**
 
 En `frontend/src/features/calendars/CalendarGrid.test.tsx`, un caso que desbloquee una semana y
 espere un mensaje con el número:
@@ -737,12 +737,12 @@ it("dice cuántos avisos se cancelaron al desbloquear", async () => {
 });
 ```
 
-- [ ] **Step 6: Ejecutar y ver que falla**
+- [x] **Step 6: Ejecutar y ver que falla**
 
 Run: `npm test -- CalendarGrid` (dentro de `frontend/`)
 Expected: FAIL — no aparece el texto
 
-- [ ] **Step 7: Implementar**
+- [x] **Step 7: Implementar**
 
 En `frontend/src/api/calendars.ts`, añadir `cancelled_notifications: number;` a los tipos de semana
 y versión. En el manejador de desbloqueo de `CalendarGrid.tsx`, tras la mutación:
@@ -756,17 +756,17 @@ addToast(
 );
 ```
 
-- [ ] **Step 8: Ejecutar y ver que pasa**
+- [x] **Step 8: Ejecutar y ver que pasa**
 
 Run: `npm test -- CalendarGrid`
 Expected: todo passed
 
-- [ ] **Step 9: Verificación completa**
+- [x] **Step 9: Verificación completa**
 
 Run: `pytest backend/tests -q` y `npm test` en `frontend/`
 Expected: todo passed, sin regresiones
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add backend/app/schemas/calendars.py backend/app/application/calendars/service.py frontend/src/api/calendars.ts frontend/src/features/calendars/CalendarGrid.tsx frontend/src/features/calendars/CalendarGrid.test.tsx
@@ -789,3 +789,29 @@ Se escriben cuando la Fase 1 esté verde y verificada:
 
 Los del spec, que esta fase debe cumplir: **AC1**, **AC2** y **AC6**. AC3–AC5 son de las fases
 2 y 3.
+
+## Desviaciones del plan
+
+Registradas al implementar, para que el siguiente no repita el tropiezo.
+
+| # | Lo que decía el plan | Lo que hizo falta |
+|---|---|---|
+| 1 | Crear el doctor a mano en los tests de confirmaciones | Se reutilizan `_create_doctor` y `_make_assignment` de `backend/tests/notifications/test_triggers.py`: ya montan la cadena de FKs que PostgreSQL exige |
+| 2 | `from ..notifications...` (import relativo) | `backend/tests/confirmations/` no tiene `__init__.py`, así que el import es absoluto: `from backend.tests.notifications.test_triggers import ...` |
+| 3 | `AuditService(db_session)` | `AuditService` recibe un `AuditRepository`: `AuditService(AuditRepository(db_session))` |
+| 4 | El evento de auditoría se lee en `.after` | El campo real es `after_snapshot` |
+| 5 | — | `_FakeTriggers` en `test_calendar_service.py` necesitó `on_week_unapproved`, porque la interfaz de disparadores creció |
+| 6 | `week.cancelled_notifications > 0` en el frontend | El campo va como opcional (`cancelled_notifications?: number`) porque solo lo trae la respuesta del desbloqueo; el componente usa `?? 0` |
+
+## Progreso
+
+| Task | Arreglo | Commit |
+|---|---|---|
+| 1.1 | A3 | `feat(notifications): allow cancelling unsent events` |
+| 1.2 | A4 | `feat(confirmations): cancel requests for unsent assignments` |
+| 1.3 | — | `feat(notifications): orchestrate cancellation on unapproval` |
+| 1.4 | A1 | `fix(calendars): cancel unsent notifications when a week is unlocked` |
+| 1.5 | A2 | `fix(calendars): cancel unsent notifications when a calendar is unlocked` |
+| 1.6 | A5 | `feat(audit): record how many notifications an unapproval cancelled` |
+| 1.7 | D2 | `fix(notifications): cancel the confirmation of a removed assignment` |
+| 1.8 | A6 | `feat(calendars): tell the user how many notifications were cancelled` |

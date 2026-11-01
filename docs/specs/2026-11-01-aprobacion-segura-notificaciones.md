@@ -1,6 +1,6 @@
 ---
 spec: aprobacion-segura-notificaciones
-version: 1.0.0
+version: 1.1.0
 status: proposed
 created: 2026-11-01
 updated: 2026-11-01
@@ -176,3 +176,4 @@ tras corregir un error, los médicos **no se enteran de la versión buena**.
 | Version | Fecha | Issue | Trigger | Resumen |
 |---|---|---|---|---|
 | 1.0.0 | 2026-11-01 | — | Aprobación por error del 2026-10-27 | Se documenta que desbloquear no cancela los avisos, que no existe estado de cancelación, y que re-aprobar tras desbloquear no notifica. Se propone la lista de arreglos priorizada. |
+| 1.1.0 | 2026-11-01 | — | Implementación de P1 | **P1 (A1–A6, D2) queda implementado**: desbloquear semana o calendario cancela los avisos `pending` y sus confirmaciones, sin tocar `sending` ni `sent`; quitar un turno aprobado cancela su confirmación; todo queda auditado; la pantalla informa cuántos se cancelaron. P2–P7 siguen pendientes. |
