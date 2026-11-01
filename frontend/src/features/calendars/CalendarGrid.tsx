@@ -1,5 +1,5 @@
 // frontend/src/features/calendars/CalendarGrid.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, Download, FileDown, Loader2, Trash2 } from "lucide-react";
@@ -7,6 +7,7 @@ import { calendarsApi, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
+import { formatCountdown } from "./countdown";
 import { useToast } from "../../components/Toast";
 import { ApiError } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -259,6 +260,9 @@ export function CalendarGrid() {
       qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendars"] });
+      // Aprobar deja avisos en cola: hay que releerlos para que el banner
+      // aparezca en el acto, no al recargar.
+      qc.invalidateQueries({ queryKey: ["pending-notifications", calendarId] });
       setCoverageGaps(null);
       addToast("success", "Semana aprobada.");
     },
@@ -293,7 +297,20 @@ export function CalendarGrid() {
     queryKey: ["pending-notifications", calendarId],
     queryFn: () => calendarsApi.pendingNotifications(calendarId!),
     enabled: !!calendarId,
+    // La cola se procesa cada 30 s: al releer cada minuto, el banner
+    // desaparece solo cuando los avisos salen.
+    refetchInterval: 60_000,
   });
+
+  // Reloj propio para que la cuenta atrás baje sola sin esperar al servidor.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const hasScheduledNotice = (pending?.count ?? 0) > 0 && !!pending?.next_send_at;
+  useEffect(() => {
+    if (!hasScheduledNotice) return;
+    setNowTick(Date.now());
+    const id = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, [hasScheduledNotice, pending?.next_send_at]);
 
   const cancelPendingMutation = useMutation({
     mutationFn: () => calendarsApi.cancelPendingNotifications(calendarId!),
@@ -556,16 +573,16 @@ export function CalendarGrid() {
         >
           <Clock size={16} color="#92400e" />
           <span style={{ fontSize: "0.9rem" }}>
-            <strong>{pending.count} avisos programados</strong>
-            {pending.next_send_at && (
-              <>
-                {" — salen a las "}
-                {new Date(pending.next_send_at).toLocaleTimeString("es-DO", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </>
-            )}
+            <strong>
+              {pending.count} {pending.count === 1 ? "aviso programado" : "avisos programados"}
+            </strong>
+            {pending.next_send_at &&
+              (() => {
+                const left = formatCountdown(
+                  new Date(pending.next_send_at).getTime() - nowTick,
+                );
+                return left ? ` — se envía en ${left}` : " — enviando…";
+              })()}
           </span>
           <button
             className="btn-ghost"

@@ -54,7 +54,7 @@ tras corregir un error, los médicos **no se enteran de la versión buena**.
 |---|---|---|
 | 1 | Desbloquear **cancela** los avisos no enviados | Deshacer debe deshacer |
 | 2 | Nunca se toca un aviso `sent` ni `sending` | Lo enviado no se recupera; lo que está en vuelo puede duplicarse |
-| 3 | La aprobación encola con 15 minutos de margen, configurable | Da tiempo real a arrepentirse |
+| 3 | La aprobación encola con **24 horas** de margen, configurable | Da tiempo real a arrepentirse. Ver [ventana de 24 h](2026-11-01-ventana-24h-cuenta-atras.md) |
 | 4 | `scheduled_for` es el mecanismo; no se toca el worker | Ya funciona |
 | 5 | Las confirmaciones de turnos cancelados se cancelan | Hoy quedan `pending` y escalan por un turno que no existe |
 | 6 | Toda cancelación queda auditada | Sin rastro no se puede investigar |
@@ -69,7 +69,7 @@ tras corregir un error, los médicos **no se enteran de la versión buena**.
 - **R4** — Al cancelar un aviso se cancela su confirmación asociada.
 - **R5** — Al quitar una asignación aprobada se cancela su confirmación pendiente.
 - **R6** — `approve_week` y `approve_calendar` encolan con `scheduled_for = ahora + margen`.
-- **R7** — El margen es configurable (`approval_grace_minutes`, por defecto 15).
+- **R7** — El margen es configurable (`approval_grace_minutes`, por defecto 1440 = 24 h).
 - **R8** — Es posible cancelar el envío antes de la hora programada, con o sin desbloquear.
 - **R9** — La pantalla muestra el estado "Programada" mientras el envío no ha salido.
 - **R10** — La pantalla dice cuántos avisos se cancelaron.
@@ -99,7 +99,7 @@ tras corregir un error, los médicos **no se enteran de la versión buena**.
 | B3 | Banner con cuenta atrás y "Cancelar envío" | UI |
 | B4 | Endpoint para cancelar sin desbloquear | API |
 | B5 | Estado visible "Programada" | UI |
-| B6 | Ajustar el desfase del cron: el envío real cae entre 15 y 25 min | decisión |
+| B6 | Desfase del cron: la cola se procesa cada 30 s, así que el envío cae dentro del primer medio minuto tras el plazo | decisión |
 
 ### P3 — Que corregir sí avise
 
@@ -178,4 +178,5 @@ tras corregir un error, los médicos **no se enteran de la versión buena**.
 | 1.0.0 | 2026-11-01 | — | Aprobación por error del 2026-10-27 | Se documenta que desbloquear no cancela los avisos, que no existe estado de cancelación, y que re-aprobar tras desbloquear no notifica. Se propone la lista de arreglos priorizada. |
 | 1.1.0 | 2026-11-01 | — | Implementación de P1 | **P1 (A1–A6, D2) queda implementado**: desbloquear semana o calendario cancela los avisos `pending` y sus confirmaciones, sin tocar `sending` ni `sent`; quitar un turno aprobado cancela su confirmación; todo queda auditado; la pantalla informa cuántos se cancelaron. P2–P7 siguen pendientes. |
 | 1.2.0 | 2026-11-01 | — | Implementación de P2 | **P2 (B1–B6) queda implementado**: aprobar encola con `scheduled_for = ahora + approval_grace_minutes` (15 por defecto); la pantalla muestra «N avisos programados — salen a las HH:MM» con un botón «Cancelar envío» que no deshace la aprobación; endpoints `GET …/notifications/pending` y `POST …/notifications/cancel`. El envío real cae entre 15 y 25 minutos por el cron de 10. P3–P7 siguen pendientes. |
+| 1.4.0 | 2026-11-01 | — | Ajuste pedido por el usuario | El margen pasa de 15 minutos a **24 horas** (1440). El banner de avisos se refresca al aprobar y muestra cuenta atrás en vez de una hora fija. Detalle en [2026-11-01-ventana-24h-cuenta-atras.md](2026-11-01-ventana-24h-cuenta-atras.md). |
 | 1.3.0 | 2026-11-01 | — | Implementación de P3 | **D3 queda implementado**: se elimina la supresión que callaba todo tras un `__unlock__`. Re-aprobar reactiva las filas `cancelled` (se reutilizan, no se duplican) y los médicos reciben la versión buena. Quedan P4–P7. |

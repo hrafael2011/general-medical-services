@@ -357,10 +357,31 @@ describe("CalendarGrid", () => {
     );
   });
 
+  it("refresca el contador de avisos al aprobar una semana", async () => {
+    renderGrid();
+    const row = (await screen.findByText("Semana 3 (May 18 - May 24)")).closest("tr")!;
+    await userEvent.click(within(row).getByRole("button", { name: /aprobar/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(calendarsApi.pendingNotifications).mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it("dice cuánto falta para que salgan los avisos", async () => {
+    vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
+      count: 1,
+      next_send_at: new Date(Date.now() + (23 * 60 + 41) * 60_000).toISOString(),
+    });
+    renderGrid();
+
+    expect(await screen.findByText(/1 aviso programado/i)).toBeInTheDocument();
+    expect(screen.getByText(/23 h 41 min/)).toBeInTheDocument();
+  });
+
   it("muestra cuántos avisos salen y deja cancelarlos antes de que se envíen", async () => {
     vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
       count: 12,
-      next_send_at: "2026-05-04T14:15:00Z",
+      next_send_at: new Date(Date.now() + 60 * 60_000).toISOString(),
     });
     vi.mocked(calendarsApi.cancelPendingNotifications).mockResolvedValue({ cancelled: 12 });
     renderGrid();
