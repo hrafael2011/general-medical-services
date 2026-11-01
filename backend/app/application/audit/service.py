@@ -328,6 +328,28 @@ class AuditService:
             },
         )
 
+    def log_notifications_cancelled(
+        self,
+        *,
+        actor_id: str,
+        calendar,
+        scope: str,
+        notification_count: int,
+        confirmation_count: int,
+    ) -> AuditEventModel:
+        """Registra cuántos avisos se retiraron al deshacer una aprobación."""
+        return self._create(
+            actor_id=actor_id,
+            action_type="notifications_cancelled",
+            entity_type="calendar",
+            entity_id=calendar.id,
+            after={
+                "scope": scope,
+                "notifications": notification_count,
+                "confirmations": confirmation_count,
+            },
+        )
+
     def log_calendar_deleted(self, *, actor_id: str, calendar) -> AuditEventModel:
         return self._create(
             actor_id=actor_id,

@@ -318,6 +318,14 @@ class CalendarService:
                 calendar=calendar,
                 version=version,
             )
+            if cancelled["notifications"] or cancelled["confirmations"]:
+                self.audit.log_notifications_cancelled(
+                    actor_id=actor_id,
+                    calendar=calendar,
+                    scope="calendar",
+                    notification_count=cancelled["notifications"],
+                    confirmation_count=cancelled["confirmations"],
+                )
 
         return version
 
@@ -566,5 +574,18 @@ class CalendarService:
                     version.reason += f"__orig__{original_reason}"
 
         self.repo.session.flush()
+
+        if (
+            self.audit is not None
+            and calendar is not None
+            and (cancelled["notifications"] or cancelled["confirmations"])
+        ):
+            self.audit.log_notifications_cancelled(
+                actor_id=actor_id,
+                calendar=calendar,
+                scope="week",
+                notification_count=cancelled["notifications"],
+                confirmation_count=cancelled["confirmations"],
+            )
 
         return week
