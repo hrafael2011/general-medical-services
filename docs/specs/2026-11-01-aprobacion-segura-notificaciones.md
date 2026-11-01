@@ -8,7 +8,8 @@ updated: 2026-11-01
 
 # Spec — Aprobación segura y avisos reversibles
 
-**Tareas de implementación:** pendiente de crear tras aprobar el alcance.
+**Tareas de implementación:** [2026-11-01-aprobacion-segura-notificaciones-tasks.md](2026-11-01-aprobacion-segura-notificaciones-tasks.md)
+(Fase 1 detallada; fases 2 y 3 se escriben al cerrar la 1).
 
 ## Goal
 
