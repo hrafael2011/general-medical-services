@@ -96,6 +96,101 @@ class NotificationRepository:
                 break
         return result
 
+    def reactivate_for_assignments(
+        self,
+        assignment_ids: list[str],
+        *,
+        scheduled_for: datetime | None = None,
+    ) -> list[str]:
+        """Devuelve a la cola los avisos que nunca llegaron a salir.
+
+        Cubre `cancelled` (se deshizo la aprobación) y `skipped` (nunca se pudo
+        enviar: sin teléfono o sin Telegram). Un aviso descartado no es un
+        envío, así que la nueva aprobación lo repone; de lo contrario se queda
+        muerto para siempre, porque la clave de idempotencia impide crear otro.
+
+        Lo enviado (`sent`) no se reenvía y lo que está en vuelo (`sending`) no
+        se toca. Se reutiliza la fila para no duplicar el aviso.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(NotificationEventModel).where(
+            NotificationEventModel.assignment_id.in_(assignment_ids),
+            NotificationEventModel.status.in_(["cancelled", "skipped"]),
+        )
+        events = list(self.session.scalars(stmt))
+        for event in events:
+            event.status = "pending"
+            event.retry_count = 0
+            event.error_code = None
+            event.error_message = None
+            event.scheduled_for = scheduled_for
+            event.updated_at = now
+        self.session.flush()
+        return [event.id for event in events]
+
+    def cancel_added_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Cancela los «te asignaron un turno» que aún no salieron.
+
+        Aprobar la semana manda el aviso definitivo; el de asignación suelta
+        diría casi lo mismo. Sin esto el médico recibe dos mensajes por el
+        mismo turno y el contador de la semana cuenta el doble.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(NotificationEventModel).where(
+            NotificationEventModel.assignment_id.in_(assignment_ids),
+            NotificationEventModel.status == "pending",
+            NotificationEventModel.notification_type == "service_assignment_added",
+        )
+        events = list(self.session.scalars(stmt))
+        for event in events:
+            event.status = "cancelled"
+            event.updated_at = now
+        self.session.flush()
+        return [event.id for event in events]
+
+    def list_pending_for_assignments(
+        self, assignment_ids: list[str]
+    ) -> list[NotificationEventModel]:
+        """Avisos programados que aún no han salido, de esos turnos.
+
+        Ordenados por hora de salida: el primero es el próximo en irse.
+        """
+        if not assignment_ids:
+            return []
+        stmt = (
+            select(NotificationEventModel)
+            .where(
+                NotificationEventModel.assignment_id.in_(assignment_ids),
+                NotificationEventModel.status == "pending",
+            )
+            .order_by(NotificationEventModel.scheduled_for)
+        )
+        return list(self.session.scalars(stmt))
+
+    def cancel_pending_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Marca `cancelled` los avisos que aún no han salido.
+
+        Nunca toca `sending` (el worker puede tenerlo en vuelo) ni `sent`
+        (lo enviado no se recupera). Devuelve los ids cancelados.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(NotificationEventModel).where(
+            NotificationEventModel.assignment_id.in_(assignment_ids),
+            NotificationEventModel.status == "pending",
+        )
+        events = list(self.session.scalars(stmt))
+        for event in events:
+            event.status = "cancelled"
+            event.updated_at = now
+        self.session.flush()
+        return [event.id for event in events]
+
     def list_all(
         self,
         status: str | None = None,

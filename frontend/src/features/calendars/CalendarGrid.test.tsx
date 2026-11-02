@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CalendarGrid } from "./CalendarGrid";
 import { calendarsApi } from "../../api/calendars";
+import { ApiError } from "../../api/client";
 
 vi.mock("../../api/calendars", () => ({
   calendarsApi: {
@@ -25,6 +26,8 @@ vi.mock("../../api/calendars", () => ({
     ]),
     approveWeek: vi.fn(),
     unlockWeek: vi.fn(),
+    pendingNotifications: vi.fn().mockResolvedValue({ count: 0, next_send_at: null, groups: [] }),
+    cancelPendingNotifications: vi.fn().mockResolvedValue({ cancelled: 0 }),
     exportWeeklyPDF: vi.fn().mockResolvedValue(new Blob()),
     exportFullCalendarPDF: vi.fn().mockResolvedValue(new Blob()),
     generate: vi.fn().mockResolvedValue({
@@ -67,8 +70,10 @@ vi.mock("../../api/doctors", () => ({
   },
 }));
 
+const { addToastMock } = vi.hoisted(() => ({ addToastMock: vi.fn() }));
+
 vi.mock("../../components/Toast", () => ({
-  useToast: () => ({ addToast: vi.fn() }),
+  useToast: () => ({ addToast: addToastMock }),
 }));
 
 beforeEach(() => {
@@ -323,5 +328,121 @@ describe("CalendarGrid", () => {
     expect(await screen.findByText("Semanas")).toBeInTheDocument();
     const approveButtons = screen.queryAllByRole("button", { name: /aprobar/i });
     expect(approveButtons).toHaveLength(0);
+  });
+
+  it("dice cuántos avisos se cancelaron al desbloquear una semana", async () => {
+    vi.mocked(calendarsApi.unlockWeek).mockResolvedValueOnce({
+      id: "w1",
+      week_number: 1,
+      label: "Semana 1 (May 4 - May 10)",
+      start_date: "2026-05-04",
+      end_date: "2026-05-10",
+      status: "draft",
+      assignment_count: 5,
+      approved_by: null,
+      approved_at: null,
+      doctor_assignment_counts: [],
+      cancelled_notifications: 4,
+    });
+    renderGrid();
+
+    const row = (await screen.findByText("Semana 1 (May 4 - May 10)")).closest("tr")!;
+    await userEvent.click(within(row).getByRole("button", { name: /desbloquear/i }));
+
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith(
+        "success",
+        expect.stringContaining("4 avisos"),
+      ),
+    );
+  });
+
+  it("refresca el contador de avisos al aprobar una semana", async () => {
+    renderGrid();
+    const row = (await screen.findByText("Semana 3 (May 18 - May 24)")).closest("tr")!;
+    await userEvent.click(within(row).getByRole("button", { name: /aprobar/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(calendarsApi.pendingNotifications).mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it("dice cuánto falta para que salgan los avisos", async () => {
+    vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
+      count: 1,
+      next_send_at: new Date(Date.now() + (23 * 60 + 41) * 60_000).toISOString(),
+      groups: [],
+    });
+    renderGrid();
+
+    expect(await screen.findByText(/1 aviso programado/i)).toBeInTheDocument();
+    expect(screen.getByText(/23 h 41 min/)).toBeInTheDocument();
+  });
+
+  it("muestra cuántos avisos salen y deja cancelarlos antes de que se envíen", async () => {
+    vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
+      count: 12,
+      next_send_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+      groups: [],
+    });
+    vi.mocked(calendarsApi.cancelPendingNotifications).mockResolvedValue({ cancelled: 12 });
+    renderGrid();
+
+    expect(await screen.findByText(/12 avisos programados/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /cancelar envío/i }));
+
+    await waitFor(() =>
+      expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1", undefined),
+    );
+  });
+
+  it("muestra un bloque por semana y cancela solo la que se pide", async () => {
+    const enTresHoras = new Date(Date.now() + 3 * 60 * 60_000).toISOString();
+    const enQuinceHoras = new Date(Date.now() + 15 * 60 * 60_000).toISOString();
+    vi.mocked(calendarsApi.pendingNotifications).mockResolvedValue({
+      count: 2,
+      next_send_at: enTresHoras,
+      groups: [
+        { week_id: "w1", week_label: "1TA SEMANA", count: 1, next_send_at: enTresHoras },
+        { week_id: "w2", week_label: "2TA SEMANA", count: 1, next_send_at: enQuinceHoras },
+      ],
+    });
+    renderGrid();
+
+    expect(await screen.findByText("1TA SEMANA")).toBeInTheDocument();
+    expect(screen.getByText("2TA SEMANA")).toBeInTheDocument();
+    expect(screen.getByText(/2 avisos programados en total/i)).toBeInTheDocument();
+
+    const botones = screen.getAllByRole("button", { name: /cancelar/i });
+    expect(botones).toHaveLength(2);
+    await userEvent.click(botones[1]);
+
+    await waitFor(() =>
+      expect(calendarsApi.cancelPendingNotifications).toHaveBeenCalledWith("c1", "w2"),
+    );
+  });
+
+  it("lista los días y áreas que faltan cuando la aprobación se rechaza", async () => {
+    vi.mocked(calendarsApi.approveWeek).mockRejectedValueOnce(
+      new ApiError(422, {
+        code: "week_incomplete",
+        message: "No se puede aprobar: faltan médicos en lunes 18/05 (Disponible).",
+        details: [
+          { date: "2026-05-18", areas: ["Disponible"] },
+          { date: "2026-05-19", areas: ["Emergencia", "Pista"] },
+        ],
+      }),
+    );
+    renderGrid();
+
+    const row = (await screen.findByText("Semana 3 (May 18 - May 24)")).closest("tr")!;
+    await userEvent.click(within(row).getByRole("button", { name: /aprobar/i }));
+
+    const panel = await screen.findByTestId("coverage-gaps");
+    expect(within(panel).getByText(/faltan médicos/i)).toBeInTheDocument();
+    expect(within(panel).getByText("lunes 18/05")).toBeInTheDocument();
+    expect(within(panel).getByText("Disponible")).toBeInTheDocument();
+    expect(within(panel).getByText("martes 19/05")).toBeInTheDocument();
+    expect(within(panel).getByText("Emergencia, Pista")).toBeInTheDocument();
   });
 });

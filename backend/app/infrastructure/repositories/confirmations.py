@@ -60,6 +60,47 @@ class ConfirmationRequestRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def cancel_pending_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Cancela las confirmaciones que aún esperan respuesta.
+
+        `confirmed` y `declined` son hechos consumados: no se tocan. Devuelve
+        los ids cancelados.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(ConfirmationRequestModel).where(
+            ConfirmationRequestModel.assignment_id.in_(assignment_ids),
+            ConfirmationRequestModel.status.in_(["pending", "received"]),
+        )
+        requests = list(self.session.scalars(stmt))
+        for request in requests:
+            request.status = "cancelled"
+            request.updated_at = now
+        self.session.flush()
+        return [request.id for request in requests]
+
+    def reactivate_for_assignments(self, assignment_ids: list[str]) -> list[str]:
+        """Devuelve a `pending` las confirmaciones canceladas de esos turnos.
+
+        Solo las canceladas: una confirmación ya respondida es un hecho y no se
+        reabre.
+        """
+        if not assignment_ids:
+            return []
+        now = datetime.now(UTC)
+        stmt = select(ConfirmationRequestModel).where(
+            ConfirmationRequestModel.assignment_id.in_(assignment_ids),
+            ConfirmationRequestModel.status == "cancelled",
+        )
+        requests = list(self.session.scalars(stmt))
+        for request in requests:
+            request.status = "pending"
+            request.escalated_at = None
+            request.updated_at = now
+        self.session.flush()
+        return [request.id for request in requests]
+
     def mark_response(
         self,
         request: ConfirmationRequestModel,

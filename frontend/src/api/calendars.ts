@@ -43,6 +43,8 @@ export interface CalendarVersionRead {
   created_by: string | null;
   reason: string | null;
   created_at: string;
+  /** Avisos que se retiraron de la cola al desbloquear (0 en cualquier otra respuesta). */
+  cancelled_notifications?: number;
 }
 
 export interface CalendarAssignmentRead {
@@ -84,6 +86,22 @@ export interface WeekRead {
   doctor_assignment_counts: { doctor_id: string; doctor_name: string; count: number }[];
   approved_by: string | null;
   approved_at: string | null;
+  /** Avisos que se retiraron de la cola al desbloquear (0 en cualquier otra respuesta). */
+  cancelled_notifications?: number;
+}
+
+/** Los avisos de una semana, con su propia hora de salida. */
+export interface PendingNotificationGroup {
+  week_id: string;
+  week_label: string;
+  count: number;
+  next_send_at: string | null;
+}
+
+export interface PendingNotificationsRead {
+  count: number;
+  next_send_at: string | null;
+  groups: PendingNotificationGroup[];
 }
 
 export interface EligibleDoctorRead {
@@ -240,6 +258,18 @@ export const calendarsApi = {
   unlockWeek: (calendarId: string, weekId: string) =>
     apiFetch<WeekRead>(`/calendars/${calendarId}/weeks/${weekId}/unlock`, {
       method: "POST",
+    }),
+
+  /** Avisos aprobados que aún no han salido, con la hora del próximo. */
+  pendingNotifications: (calendarId: string) =>
+    apiFetch<PendingNotificationsRead>(
+      `/calendars/${calendarId}/notifications/pending`,
+    ),
+
+  cancelPendingNotifications: (calendarId: string, weekId?: string) =>
+    apiFetch<{ cancelled: number }>(`/calendars/${calendarId}/notifications/cancel`, {
+      method: "POST",
+      body: JSON.stringify(weekId ? { week_id: weekId } : {}),
     }),
 
   exportWeeklyPDF: (calendarId: string, weekId: string) =>

@@ -26,6 +26,10 @@ def _seed_assignment_parents(db_session) -> None:
     service_areas.id y doctor_id → doctors.id); SQLite no las validaba y los
     seeds con ids colgantes pasaban igual. Las filas se crean con flush
     explícito para que existan antes del INSERT del assignment.
+
+    El área se siembra **sin cobertura diaria obligatoria** a propósito: estas
+    pruebas miran el límite de aprobación y el re-aviso, no la regla de
+    cobertura, que tiene sus propias pruebas en test_approve_coverage.py.
     """
     now = datetime.now(UTC)
     if db_session.get(ServiceAreaModel, "area-001") is None:
@@ -34,7 +38,7 @@ def _seed_assignment_parents(db_session) -> None:
             code="area-001",
             display_name="Área 001",
             active=True,
-            required_for_daily_coverage=True,
+            required_for_daily_coverage=False,
             load_weight=1,
             created_at=now,
             updated_at=now,
@@ -71,10 +75,15 @@ class _FakeMissionRankingService:
 class _FakeTriggers:
     def __init__(self) -> None:
         self.calls: list[dict] = []
+        self.cancelled: list[dict] = []
 
     def on_calendar_approved(self, **kwargs):
         self.calls.append(kwargs)
         return len(kwargs.get("assignments", []))
+
+    def on_week_unapproved(self, **kwargs):
+        self.cancelled.append(kwargs)
+        return {"notifications": 0, "confirmations": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +320,7 @@ def test_approve_already_approved_raises(db_session) -> None:
     assert exc_info.value.code == "calendar_already_approved"
 
 
-def test_reapprove_unlocked_calendar_does_not_send_initial_notifications(db_session) -> None:
+def test_reapprove_unlocked_calendar_notifies_again(db_session) -> None:
     triggers = _FakeTriggers()
     service = CalendarService(
         CalendarRepository(db_session),
@@ -356,7 +365,9 @@ def test_reapprove_unlocked_calendar_does_not_send_initial_notifications(db_sess
         notes=None,
     )
 
-    assert len(triggers.calls) == 1
+    # Re-aprobar tras corregir tiene que avisar: si no, la versión buena no le
+    # llega a nadie. El aviso se reutiliza, así que no se duplica.
+    assert len(triggers.calls) == 2
 
 
 # ---------------------------------------------------------------------------

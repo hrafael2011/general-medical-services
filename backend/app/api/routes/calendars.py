@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,9 +10,11 @@ from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.calendars.generation_service import GenerationService
 from backend.app.application.calendars.service import CalendarService
 from backend.app.core.config import settings
+from backend.app.infrastructure.db.models.calendars import CalendarVersionModel
 from backend.app.infrastructure.db.models.user import UserModel
 from backend.app.infrastructure.db.session import get_db_session
 from backend.app.infrastructure.repositories.calendars import CalendarRepository
+from backend.app.infrastructure.repositories.notifications import NotificationRepository
 from backend.app.schemas.calendars import (
     ApproveCalendarRequest,
     ApproveWeekRequest,
@@ -21,6 +23,8 @@ from backend.app.schemas.calendars import (
     CalendarGridResponse,
     CalendarRead,
     CalendarVersionRead,
+    CancelPendingRead,
+    CancelPendingRequest,
     CreateCalendarRequest,
     DaySlot,
     DoctorAssignmentCountRead,
@@ -31,6 +35,8 @@ from backend.app.schemas.calendars import (
     EvaluationRequest,
     EvaluationResponse,
     HardBlockItem,
+    PendingNotificationGroup,
+    PendingNotificationsRead,
     ReplaceAssignmentRequest,
     UnavailableDoctorRead,
     UnresolvedGapRead,
@@ -41,6 +47,73 @@ from backend.app.schemas.generation import GenerationResponse, GenerationSlotRes
 from backend.app.infrastructure.db.models.doctors import DoctorModel
 
 router = APIRouter(prefix="/calendars", tags=["calendars"])
+
+
+def _latest_version(repo: CalendarRepository, calendar_id: str) -> CalendarVersionModel:
+    """La versión vigente del calendario (la más reciente)."""
+    versions = repo.list_versions(calendar_id)
+    if not versions:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No hay versiones para el calendario {calendar_id}.",
+        )
+    return versions[0]
+
+
+def _group_by_week(
+    repo: CalendarRepository,
+    version: CalendarVersionModel,
+    assignments: list,
+    events: list,
+) -> list[PendingNotificationGroup]:
+    """Reparte los avisos pendientes por la semana a la que cae su turno.
+
+    La semana se deduce por la fecha, no por `calendar_week_id`: esa columna
+    está vacía en los turnos hechos a mano. Los avisos que no caen en ninguna
+    semana van a un grupo «Otros» para no perderlos de vista.
+    """
+    weeks = repo.list_weeks_by_version(version.id)
+    date_by_assignment = {a.id: a.service_date for a in assignments}
+
+    grouped: dict[str, list] = {}
+    others: list = []
+    for event in events:
+        service_date = date_by_assignment.get(event.assignment_id)
+        week = next(
+            (
+                w for w in weeks
+                if service_date is not None and w.start_date <= service_date <= w.end_date
+            ),
+            None,
+        )
+        if week is None:
+            others.append(event)
+        else:
+            grouped.setdefault(week.id, []).append(event)
+
+    groups = [
+        PendingNotificationGroup(
+            week_id=week_id,
+            week_label=next(w.label for w in weeks if w.id == week_id),
+            count=len(bucket),
+            next_send_at=bucket[0].scheduled_for,
+        )
+        for week_id, bucket in grouped.items()
+    ]
+    if others:
+        groups.append(
+            PendingNotificationGroup(
+                week_id="",
+                week_label="Otros",
+                count=len(others),
+                next_send_at=others[0].scheduled_for,
+            )
+        )
+
+    # Los avisos ya vienen ordenados por hora de salida; el grupo hereda la del
+    # primero, así que ordenar por ella deja primero el que sale antes.
+    groups.sort(key=lambda g: g.next_send_at or datetime.max.replace(tzinfo=UTC))
+    return groups
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +136,8 @@ _ERROR_STATUS: dict[str, int] = {
     "week_not_found": status.HTTP_404_NOT_FOUND,
     "week_already_approved": status.HTTP_409_CONFLICT,
     "week_not_approved": status.HTTP_409_CONFLICT,
-    "week_empty": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "week_incomplete": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "calendar_incomplete": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "week_locked": status.HTTP_409_CONFLICT,
     "calendar_not_deleted": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "manual_only": status.HTTP_403_FORBIDDEN,
@@ -73,10 +147,10 @@ _ERROR_STATUS: dict[str, int] = {
 
 def _http_exc(exc: CalendarServiceError) -> HTTPException:
     http_status = _ERROR_STATUS.get(exc.code, status.HTTP_422_UNPROCESSABLE_ENTITY)
-    return HTTPException(
-        status_code=http_status,
-        detail={"code": exc.code, "message": exc.message},
-    )
+    detail: dict = {"code": exc.code, "message": exc.message}
+    if exc.details is not None:
+        detail["details"] = exc.details
+    return HTTPException(status_code=http_status, detail=detail)
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +192,7 @@ def get_calendar_service(
             ConfirmationRequestRepository(session),
         ),
         due_hours_before_service=settings.confirmation_due_hours_before_service,
+        approval_grace_minutes=settings.approval_grace_minutes,
     )
     mission_ranking_service = MissionRankingService(
         MissionRepository(session),
@@ -198,6 +273,7 @@ def get_assignment_service(
             ConfirmationRequestRepository(session),
         ),
         due_hours_before_service=settings.confirmation_due_hours_before_service,
+        approval_grace_minutes=settings.approval_grace_minutes,
     )
 
     mission_ranking_service = MissionRankingService(
@@ -537,6 +613,62 @@ def unlock_calendar(
         raise _http_exc(exc) from exc
     session.commit()
     return CalendarVersionRead.model_validate(version)
+
+
+@router.get(
+    "/{calendar_id}/notifications/pending", response_model=PendingNotificationsRead
+)
+def list_pending_notifications(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PendingNotificationsRead:
+    """Cuántos avisos están programados, por semana, y cuándo sale cada uno."""
+    calendar_repo = CalendarRepository(session)
+    version = _latest_version(calendar_repo, calendar_id)
+    assignments = calendar_repo.list_assignments(version.id)
+    events = NotificationRepository(session).list_pending_for_assignments(
+        [a.id for a in assignments]
+    )
+    return PendingNotificationsRead(
+        count=len(events),
+        next_send_at=events[0].scheduled_for if events else None,
+        groups=_group_by_week(calendar_repo, version, assignments, events),
+    )
+
+
+@router.post("/{calendar_id}/notifications/cancel", response_model=CancelPendingRead)
+def cancel_pending_notifications(
+    calendar_id: str,
+    current_user: Annotated[UserModel, Depends(require_permission("manage_calendars"))],
+    session: Annotated[Session, Depends(get_db_session)],
+    payload: CancelPendingRequest = CancelPendingRequest(),
+) -> CancelPendingRead:
+    """Retira el envío programado sin deshacer la aprobación.
+
+    Con `week_id` se cancela solo esa semana; sin él, todo el calendario.
+    """
+    calendar_repo = CalendarRepository(session)
+    version = _latest_version(calendar_repo, calendar_id)
+    assignments = calendar_repo.list_assignments(version.id)
+    if payload.week_id:
+        week = calendar_repo.get_week_by_id(payload.week_id)
+        if week is None or week.calendar_version_id != version.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "week_not_found",
+                    "message": f"Semana {payload.week_id} no encontrada en este calendario.",
+                },
+            )
+        assignments = [
+            a for a in assignments if week.start_date <= a.service_date <= week.end_date
+        ]
+    cancelled = NotificationRepository(session).cancel_pending_for_assignments(
+        [a.id for a in assignments]
+    )
+    session.commit()
+    return CancelPendingRead(cancelled=len(cancelled))
 
 
 @router.get(

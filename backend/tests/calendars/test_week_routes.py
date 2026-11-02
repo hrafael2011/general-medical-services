@@ -141,12 +141,21 @@ def _create_doctor(session, *, doctor_id: str, name: str) -> DoctorModel:
     return doctor
 
 
-def _seed_service_area(session, area_id: str) -> None:
+def _seed_service_area(
+    session,
+    area_id: str,
+    *,
+    required_for_daily_coverage: bool = False,
+) -> None:
     """Garantiza que exista el área que referencia el assignment.
 
     PostgreSQL valida la FK calendar_assignments.service_area_id →
     service_areas.id; SQLite no la validaba y los assignments con área
     inexistente pasaban igual.
+
+    Por defecto el área nace **sin** cobertura diaria obligatoria: estas rutas
+    se prueban con un turno suelto, y con la regla activa un solo turno nunca
+    cubre la semana. La regla tiene su propia prueba más abajo.
     """
     if session.get(ServiceAreaModel, area_id) is not None:
         return
@@ -156,7 +165,7 @@ def _seed_service_area(session, area_id: str) -> None:
         code=area_id,
         display_name=area_id,
         active=True,
-        required_for_daily_coverage=True,
+        required_for_daily_coverage=required_for_daily_coverage,
         load_weight=1,
         created_at=now,
         updated_at=now,
@@ -315,3 +324,84 @@ def test_unlock_week_endpoint(client, session):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "draft"
+
+
+def test_approve_week_rejects_incomplete_coverage(client, session):
+    """Un área requerida sin médico bloquea la aprobación y se detalla en 422."""
+    cal, ver = _create_calendar_version(session, calendar_id="cal-cov")
+    _create_week(
+        session,
+        id="w-cov",
+        calendar_id=cal.id,
+        version_id=ver.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=date(2026, 5, 4),
+        end_date=date(2026, 5, 10),
+        status="draft",
+    )
+    _create_doctor(session, doctor_id="doc-cov", name="Dr. Cobertura")
+    # El área sí exige cobertura diaria; el único turno es del martes.
+    _seed_service_area(session, "area-req", required_for_daily_coverage=True)
+    _create_assignment(
+        session,
+        version_id=ver.id,
+        doctor_id="doc-cov",
+        service_date=date(2026, 5, 5),
+        area_id="area-req",
+    )
+    session.flush()
+
+    response = client.post(
+        "/api/calendars/cal-cov/weeks/w-cov/approve",
+        json={"notes": None},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "week_incomplete"
+    assert "faltan médicos" in detail["message"]
+    assert {"date": "2026-05-04", "areas": ["area-req"]} in detail["details"]
+    assert len(detail["details"]) == 6  # lunes, miércoles..domingo
+
+
+def test_approve_week_passes_with_full_coverage(client, session):
+    """Con las 21 combinaciones día × área cubiertas, la semana se aprueba."""
+    from datetime import timedelta
+
+    cal, ver = _create_calendar_version(session, calendar_id="cal-full")
+    _create_week(
+        session,
+        id="w-full",
+        calendar_id=cal.id,
+        version_id=ver.id,
+        week_number=1,
+        label="1RA SEMANA",
+        start_date=date(2026, 5, 4),
+        end_date=date(2026, 5, 10),
+        status="draft",
+    )
+    _create_doctor(session, doctor_id="doc-full", name="Dr. Completo")
+    areas = ["area-emergencia", "area-pista", "area-disponible"]
+    for area_id in areas:
+        _seed_service_area(session, area_id, required_for_daily_coverage=True)
+    day = date(2026, 5, 4)
+    while day <= date(2026, 5, 10):
+        for area_id in areas:
+            _create_assignment(
+                session,
+                version_id=ver.id,
+                doctor_id="doc-full",
+                service_date=day,
+                area_id=area_id,
+            )
+        day += timedelta(days=1)
+    session.flush()
+
+    response = client.post(
+        "/api/calendars/cal-full/weeks/w-full/approve",
+        json={"notes": None},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "approved"

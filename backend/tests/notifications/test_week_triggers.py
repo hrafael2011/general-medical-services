@@ -90,6 +90,7 @@ def test_on_week_approved_queues_notification_per_assignment():
             recipient_phone="111111111",
             payload=ANY,
             assignment_id="a1",
+            scheduled_for=None,
             created_by="user1",
         ),
         call(
@@ -99,6 +100,7 @@ def test_on_week_approved_queues_notification_per_assignment():
             recipient_phone="222222222",
             payload=ANY,
             assignment_id="a2",
+            scheduled_for=None,
             created_by="user1",
         ),
     ])

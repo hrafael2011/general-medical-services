@@ -1,11 +1,18 @@
 import hashlib
 import uuid
+from calendar import monthrange
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from backend.app.application.audit.service import AuditService
 from backend.app.application.calendars.errors import CalendarServiceError
 from backend.app.application.notifications.triggers import NotificationTriggers
+from backend.app.domain.calendars.coverage import (
+    CoverageGap,
+    RequiredArea,
+    find_coverage_gaps,
+    format_coverage_message,
+)
 from backend.app.domain.calendars.weeks import compute_weeks
 from backend.app.infrastructure.db.models.calendars import (
     CalendarModel,
@@ -29,6 +36,38 @@ class CalendarService:
         self.audit = audit
         self.triggers = triggers
         self.mission_ranking_service = mission_ranking_service
+
+    # --- Cobertura obligatoria ---
+
+    def _coverage_gaps(
+        self,
+        *,
+        assignments,
+        start_date: date,
+        end_date: date,
+    ) -> list[CoverageGap]:
+        """Huecos de cobertura en el rango, leyendo las áreas del catálogo."""
+        areas = self.repo.list_service_areas()
+        code_by_id = {area.id: area.code for area in areas}
+        required = [
+            RequiredArea(code=area.code, display_name=area.display_name)
+            for area in areas
+            if area.active and area.required_for_daily_coverage
+        ]
+        return find_coverage_gaps(
+            start_date=start_date,
+            end_date=end_date,
+            required_areas=required,
+            assignments=[
+                (a.service_date, code_by_id.get(a.service_area_id, a.service_area_id))
+                for a in assignments
+            ],
+        )
+
+    @staticmethod
+    def _month_bounds(year: int, month: int) -> tuple[date, date]:
+        last_day = monthrange(year, month)[1]
+        return date(year, month, 1), date(year, month, last_day)
 
     def create_calendar(
         self,
@@ -206,6 +245,20 @@ class CalendarService:
                 f"La versión {version_number} ya está aprobada.",
             )
 
+        # Aprobar publica y avisa: no puede salir un mes con días o áreas vacías.
+        month_start, month_end = self._month_bounds(calendar.year, calendar.month)
+        gaps = self._coverage_gaps(
+            assignments=self.repo.list_assignments(version.id),
+            start_date=month_start,
+            end_date=month_end,
+        )
+        if gaps:
+            raise CalendarServiceError(
+                "calendar_incomplete",
+                format_coverage_message(gaps),
+                details=[gap.to_detail() for gap in gaps],
+            )
+
         now = datetime.now(UTC)
 
         version.status = "approved"
@@ -224,16 +277,18 @@ class CalendarService:
                 actor_id=actor_id, calendar=calendar, version=version
             )
 
-        should_notify = True
+        # Re-aprobar tras un desbloqueo SÍ avisa: corregir un error tiene que
+        # llegar a los médicos. Antes se callaba todo con el `__unlock__`, y la
+        # versión buena no le llegaba a nadie. El aviso se reutiliza (misma
+        # clave de idempotencia), así que re-aprobar no lo duplica.
         if version.reason and version.reason.startswith("__unlock__"):
-            should_notify = False
             # Restore original reason
             if "__orig__" in version.reason:
                 version.reason = version.reason.split("__orig__", 1)[1]
             else:
                 version.reason = None
 
-        if self.triggers is not None and should_notify:
+        if self.triggers is not None:
             assignments = self.repo.list_assignments(version.id)
             self.triggers.on_calendar_approved(
                 actor_id=actor_id,
@@ -289,6 +344,15 @@ class CalendarService:
             )
         )
         snap_hash = hashlib.md5(snap_data.encode()).hexdigest()
+
+        # Mismo criterio que `unlock_week`: lo que el calendario encoló y aún
+        # no ha salido se cancela antes de devolverlo a borrador.
+        cancelled = {"notifications": 0, "confirmations": 0}
+        if self.triggers is not None:
+            cancelled = self.triggers.on_week_unapproved(
+                actor_id=actor_id,
+                assignments=current_assignments,
+            )
         original_reason = version.reason
         version.reason = f"__unlock__{snap_hash}"
         if original_reason:
@@ -309,6 +373,16 @@ class CalendarService:
                 calendar=calendar,
                 version=version,
             )
+            if cancelled["notifications"] or cancelled["confirmations"]:
+                self.audit.log_notifications_cancelled(
+                    actor_id=actor_id,
+                    calendar=calendar,
+                    scope="calendar",
+                    notification_count=cancelled["notifications"],
+                    confirmation_count=cancelled["confirmations"],
+                )
+
+        version.cancelled_notifications = cancelled["notifications"]
 
         return version
 
@@ -394,18 +468,39 @@ class CalendarService:
                 f"La semana {week_id} ya está aprobada.",
             )
 
-        # Require at least one assignment to approve a week
         week_assignments = self.repo.list_assignments(week.calendar_version_id)
         assignments_in_week = [
             a for a in week_assignments
             if week.start_date <= a.service_date <= week.end_date
         ]
-        if not assignments_in_week:
-            raise CalendarServiceError(
-                "week_empty",
-                "No puedes aprobar una semana sin médicos asignados. "
-                "Asigna al menos un médico antes de aprobar.",
+
+        # Una semana sin turnos no tiene un mensaje propio: cae en la regla de
+        # cobertura y se listan los días (todos) y sus áreas vacías. Un solo
+        # texto para el operador, no dos según cuánto lleve asignado.
+        # Los días de la semana que caen en el mes siguiente pertenecen a otro
+        # calendario: no se reclaman aquí.
+        calendar = self.repo.get_calendar_by_id(week.calendar_id)
+        if calendar is not None:
+            month_start, month_end = self._month_bounds(calendar.year, calendar.month)
+            gaps = self._coverage_gaps(
+                assignments=assignments_in_week,
+                start_date=max(week.start_date, month_start),
+                end_date=min(week.end_date, month_end),
             )
+            if gaps:
+                raise CalendarServiceError(
+                    "week_incomplete",
+                    format_coverage_message(gaps),
+                    details=[gap.to_detail() for gap in gaps],
+                )
+
+            # Catálogo sin áreas de cobertura diaria: sin huecos que listar, pero
+            # una semana sin un solo médico tampoco se aprueba.
+            if not assignments_in_week:
+                raise CalendarServiceError(
+                    "week_incomplete",
+                    "No se puede aprobar: la semana no tiene ningún médico asignado.",
+                )
 
         now = datetime.now(UTC)
         self.repo.update_week_status(
@@ -419,7 +514,6 @@ class CalendarService:
         week.approved_at = now
 
         # Update calendar status
-        calendar = self.repo.get_calendar_by_id(week.calendar_id)
         if calendar is not None:
             all_weeks = self.repo.list_weeks(calendar.id)
             if all(w.status == "approved" for w in all_weeks):
@@ -519,6 +613,14 @@ class CalendarService:
         assignments_hash = hashlib.md5(hash_input.encode()).hexdigest()
 
         now = datetime.now(UTC)
+        # Deshacer debe deshacer: lo que esta semana encoló y aún no ha salido
+        # se cancela aquí, mientras seguimos sabiendo a qué semana pertenece.
+        cancelled = {"notifications": 0, "confirmations": 0}
+        if self.triggers is not None:
+            cancelled = self.triggers.on_week_unapproved(
+                actor_id=actor_id,
+                assignments=week_assignments,
+            )
         self.repo.update_week_status(
             week_id=week_id,
             status="draft",
@@ -549,5 +651,22 @@ class CalendarService:
                     version.reason += f"__orig__{original_reason}"
 
         self.repo.session.flush()
+
+        if (
+            self.audit is not None
+            and calendar is not None
+            and (cancelled["notifications"] or cancelled["confirmations"])
+        ):
+            self.audit.log_notifications_cancelled(
+                actor_id=actor_id,
+                calendar=calendar,
+                scope="week",
+                notification_count=cancelled["notifications"],
+                confirmation_count=cancelled["confirmations"],
+            )
+
+        # Atributo transitorio: lo lee la respuesta HTTP para decir cuántos
+        # avisos se retiraron. No se persiste.
+        week.cancelled_notifications = cancelled["notifications"]
 
         return week

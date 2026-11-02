@@ -1,15 +1,40 @@
 // frontend/src/features/calendars/CalendarGrid.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Download, FileDown, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Download, FileDown, Loader2, Trash2 } from "lucide-react";
 import { calendarsApi, DaySlot, WeekRead } from "../../api/calendars";
 import { doctorsApi, DoctorRead, RankRead } from "../../api/doctors";
 import type { ServiceAreaRead } from "../../api/doctors";
 import { AssignDoctorModal } from "./AssignDoctorModal";
+import { formatCountdown } from "./countdown";
 import { useToast } from "../../components/Toast";
 import { ApiError } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+
+/** Hueco de cobertura que devuelve el backend al rechazar una aprobación. */
+type CoverageGap = { date: string; areas: string[] };
+
+const WEEKDAY_NAMES = [
+  "domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado",
+];
+
+/** `2026-05-18` → `lunes 18/05`, igual que lo dice el mensaje del backend. */
+function formatGapDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  // Se construye en hora local a propósito: `new Date(iso)` interpreta UTC y
+  // puede devolver el día anterior.
+  const date = new Date(year, month - 1, day);
+  return `${WEEKDAY_NAMES[date.getDay()]} ${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
+}
+
+function coverageGapsFromError(err: unknown): CoverageGap[] | null {
+  if (!(err instanceof ApiError)) return null;
+  const detail = err.detail as { details?: CoverageGap[] } | null;
+  return Array.isArray(detail?.details) && detail.details.length > 0
+    ? detail.details
+    : null;
+}
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -128,6 +153,8 @@ export function CalendarGrid() {
   // Para reactivarla: restaurar generateMutation + botón "Generar calendario con reglas" (historial git).
   const [assignmentWarning, setAssignmentWarning] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  // Días y áreas sin médico que impidieron la última aprobación.
+  const [coverageGaps, setCoverageGaps] = useState<CoverageGap[] | null>(null);
   const [highlightTerm, setHighlightTerm] = useState("");
 
   const { data, isLoading, error } = useQuery({
@@ -233,22 +260,71 @@ export function CalendarGrid() {
       qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendars"] });
+      // Aprobar deja avisos en cola: hay que releerlos para que el banner
+      // aparezca en el acto, no al recargar.
+      qc.invalidateQueries({ queryKey: ["pending-notifications", calendarId] });
+      setCoverageGaps(null);
       addToast("success", "Semana aprobada.");
     },
-    onError: (err) =>
-      addToast("error", err instanceof ApiError ? err.message : "Error al aprobar semana."),
+    onError: (err) => {
+      // Si falta cobertura, el backend manda el detalle: se lista en un panel
+      // en vez de dejar solo el párrafo del toast.
+      setCoverageGaps(coverageGapsFromError(err));
+      addToast("error", err instanceof ApiError ? err.message : "Error al aprobar semana.");
+    },
   });
 
   const unlockWeekMutation = useMutation({
     mutationFn: (weekId: string) => calendarsApi.unlockWeek(calendarId!, weekId),
-    onSuccess: () => {
+    onSuccess: (week) => {
       qc.invalidateQueries({ queryKey: ["calendar-weeks", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendar-grid", calendarId] });
       qc.invalidateQueries({ queryKey: ["calendars"] });
-      addToast("success", "Semana desbloqueada.");
+      const cancelled = week.cancelled_notifications ?? 0;
+      addToast(
+        "success",
+        cancelled > 0
+          ? `Semana desbloqueada. Se cancelaron ${cancelled} avisos que aún no habían salido.`
+          : "Semana desbloqueada.",
+      );
     },
     onError: (err) =>
       addToast("error", err instanceof ApiError ? err.message : "Error al desbloquear semana."),
+  });
+
+  // Aprobar deja los avisos programados: mientras no salgan, se pueden retirar.
+  const { data: pending } = useQuery({
+    queryKey: ["pending-notifications", calendarId],
+    queryFn: () => calendarsApi.pendingNotifications(calendarId!),
+    enabled: !!calendarId,
+    // La cola se procesa cada 30 s: al releer cada minuto, el banner
+    // desaparece solo cuando los avisos salen.
+    refetchInterval: 60_000,
+  });
+
+  // Reloj propio para que la cuenta atrás baje sola sin esperar al servidor.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const hasScheduledNotice = (pending?.count ?? 0) > 0 && !!pending?.next_send_at;
+  useEffect(() => {
+    if (!hasScheduledNotice) return;
+    setNowTick(Date.now());
+    const id = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, [hasScheduledNotice, pending?.next_send_at]);
+
+  const cancelPendingMutation = useMutation({
+    // Sin semana, cancela todo el calendario.
+    mutationFn: (weekId?: string) =>
+      calendarsApi.cancelPendingNotifications(calendarId!, weekId),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["pending-notifications", calendarId] });
+      addToast("success", `Se cancelaron ${result.cancelled} avisos.`);
+    },
+    onError: (err) =>
+      addToast(
+        "error",
+        err instanceof ApiError ? err.message : "No se pudo cancelar el envío.",
+      ),
   });
 
   const exportWeekPdfMutation = useMutation({
@@ -479,6 +555,127 @@ export function CalendarGrid() {
       {data.gaps.length > 0 && (
         <div style={{ marginTop: 12, padding: "10px 14px", background: "#fff7ed", borderRadius: 6, border: "1px solid #fed7aa" }}>
           <strong style={{ fontSize: 13 }}>Huecos sin resolver: {data.gaps.length}</strong>
+        </div>
+      )}
+
+      {/* Avisos aprobados que aún no han salido — todavía se pueden retirar */}
+      {pending && pending.count > 0 && (
+        <div
+          style={{
+            marginTop: "1.5rem",
+            padding: "12px 14px",
+            borderRadius: 8,
+            border: "1px solid #fcd34d",
+            background: "#fffbeb",
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <Clock size={16} color="#92400e" />
+          {(pending.groups ?? []).length > 1 ? (
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "0.9rem", marginBottom: 6 }}>
+                <strong>
+                  {pending.count} avisos programados en total
+                </strong>
+              </div>
+              {(pending.groups ?? []).map((group) => (
+                <div
+                  key={`${group.week_id}-${group.week_label}`}
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "center",
+                    fontSize: "0.85rem",
+                    padding: "2px 0",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <strong style={{ minWidth: 130 }}>{group.week_label}</strong>
+                  <span>
+                    {group.count} {group.count === 1 ? "aviso" : "avisos"}
+                  </span>
+                  <span>
+                    {group.next_send_at &&
+                      (() => {
+                        const left = formatCountdown(
+                          new Date(group.next_send_at).getTime() - nowTick,
+                        );
+                        return left ? `se envía en ${left}` : "enviando…";
+                      })()}
+                  </span>
+                  <button
+                    className="btn-ghost"
+                    style={{ fontSize: 12, padding: "2px 10px" }}
+                    disabled={cancelPendingMutation.isPending}
+                    onClick={() => cancelPendingMutation.mutate(group.week_id || undefined)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <span style={{ fontSize: "0.9rem" }}>
+                <strong>
+                  {pending.count} {pending.count === 1 ? "aviso programado" : "avisos programados"}
+                </strong>
+                {pending.next_send_at &&
+                  (() => {
+                    const left = formatCountdown(
+                      new Date(pending.next_send_at).getTime() - nowTick,
+                    );
+                    return left ? ` — se envía en ${left}` : " — enviando…";
+                  })()}
+              </span>
+              <button
+                className="btn-ghost"
+                style={{ fontSize: 12, padding: "2px 10px" }}
+                disabled={cancelPendingMutation.isPending}
+                onClick={() => cancelPendingMutation.mutate(undefined)}
+              >
+                {cancelPendingMutation.isPending ? "Cancelando…" : "Cancelar envío"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Cobertura incompleta: qué días y qué áreas faltan para poder aprobar */}
+      {coverageGaps && coverageGaps.length > 0 && (
+        <div
+          data-testid="coverage-gaps"
+          style={{
+            marginTop: "1.5rem",
+            padding: "12px 14px",
+            borderRadius: 8,
+            border: "1px solid #fca5a5",
+            background: "#fef2f2",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <AlertTriangle size={16} color="#b91c1c" />
+            <strong style={{ fontSize: "0.9rem" }}>No se puede aprobar: faltan médicos</strong>
+            <button
+              className="btn-ghost"
+              style={{ marginLeft: "auto", fontSize: 12, padding: "2px 10px" }}
+              onClick={() => setCoverageGaps(null)}
+            >
+              Entendido
+            </button>
+          </div>
+          <ul style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: "0.85rem" }}>
+            {coverageGaps.map((gap) => (
+              <li key={gap.date} style={{ marginBottom: 2 }}>
+                <strong>{formatGapDate(gap.date)}</strong>
+                {" — "}
+                <span>{gap.areas.join(", ")}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

@@ -39,6 +39,7 @@ class CalendarVersionRead(BaseModel):
     created_by: str | None
     reason: str | None
     created_at: datetime
+    cancelled_notifications: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -183,12 +184,44 @@ class WeekRead(BaseModel):
     doctor_assignment_counts: list[DoctorAssignmentCountRead] = Field(default_factory=list)
     approved_by: str | None = None
     approved_at: str | None = None
+    cancelled_notifications: int = 0
 
     model_config = {"from_attributes": True}
 
 
 class ApproveWeekRequest(BaseModel):
     notes: str | None = None
+
+
+class PendingNotificationGroup(BaseModel):
+    """Los avisos de una semana, con su propia hora de salida.
+
+    Cada aprobación programa sus avisos en un momento distinto; agrupar por
+    semana deja ver, por ejemplo, que la 2 sale doce horas después de la 1.
+    """
+
+    week_id: str
+    week_label: str
+    count: int
+    next_send_at: datetime | None
+
+
+class PendingNotificationsRead(BaseModel):
+    """Lo que el operador necesita para decidir si cancela el envío."""
+
+    count: int
+    next_send_at: datetime | None
+    groups: list[PendingNotificationGroup] = []
+
+
+class CancelPendingRequest(BaseModel):
+    """Sin `week_id` se cancelan todos los avisos pendientes del calendario."""
+
+    week_id: str | None = None
+
+
+class CancelPendingRead(BaseModel):
+    cancelled: int
 
 
 # --- Equilibrio / Pattern tracking ---

@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from backend.app.application.confirmations.service import ConfirmationRequestService
 from backend.app.application.notifications.service import NotificationService
@@ -59,11 +59,35 @@ class NotificationTriggers:
         doctor_repo: DoctorRepository,
         confirmation_service: ConfirmationRequestService | None = None,
         due_hours_before_service: int = 4,
+        approval_grace_minutes: int = 0,
     ) -> None:
         self.notification_service = notification_service
         self.doctor_repo = doctor_repo
         self.confirmation_service = confirmation_service
         self.due_hours_before_service = due_hours_before_service
+        self.approval_grace_minutes = approval_grace_minutes
+
+    def _reactivate(self, assignments: list) -> None:
+        """Re-aprobar reabre lo que un desbloqueo había cancelado.
+
+        Sin esto, corregir un error y volver a aprobar deja a los médicos sin
+        enterarse de la versión buena: la fila cancelada sigue cancelada.
+        """
+        assignment_ids = [assignment.id for assignment in assignments]
+        self.notification_service.reactivate_for_assignments(
+            assignment_ids, scheduled_for=self._scheduled_for()
+        )
+        # La aprobación manda el aviso definitivo del turno: el «te asignaron»
+        # suelto diría casi lo mismo y el médico recibiría dos mensajes.
+        self.notification_service.cancel_added_for_assignments(assignment_ids)
+        if self.confirmation_service is not None:
+            self.confirmation_service.reactivate_for_assignments(assignment_ids)
+
+    def _scheduled_for(self) -> datetime | None:
+        """Hora de salida del aviso: el margen que da tiempo a arrepentirse."""
+        if self.approval_grace_minutes <= 0:
+            return None
+        return datetime.now(UTC) + timedelta(minutes=self.approval_grace_minutes)
 
     def _resolve_area(self, assignment) -> tuple[str, datetime | None]:
         """Return the area display name and the service start time.
@@ -100,6 +124,7 @@ class NotificationTriggers:
         assignments: list,
     ) -> int:
         """Queue initial_assignment notifications for all assignments."""
+        self._reactivate(assignments)
         count = 0
         for assignment in assignments:
             # El id se lee ANTES del try. Dentro del `except` la instancia puede
@@ -125,6 +150,7 @@ class NotificationTriggers:
                     recipient_phone=phone,
                     payload={"message": message},
                     assignment_id=assignment_id,
+                    scheduled_for=self._scheduled_for(),
                     created_by=actor_id,
                 )
                 if self.confirmation_service is not None:
@@ -164,6 +190,7 @@ class NotificationTriggers:
         Follows the same pattern as on_calendar_approved but scoped
         to one week's assignments.
         """
+        self._reactivate(assignments)
         count = 0
         for assignment in assignments:
             # El id se lee ANTES del try: dentro del `except` la instancia puede
@@ -185,6 +212,7 @@ class NotificationTriggers:
                     recipient_phone=phone,
                     payload={"message": message},
                     assignment_id=assignment_id,
+                    scheduled_for=self._scheduled_for(),
                     created_by=actor_id,
                 )
                 if self.confirmation_service is not None:
@@ -211,6 +239,28 @@ class NotificationTriggers:
                 )
                 continue
         return count
+
+    def on_week_unapproved(self, *, actor_id: str, assignments: list) -> dict[str, int]:
+        """Deshace lo que encoló `on_week_approved`.
+
+        Solo alcanza a lo que no ha salido: un aviso ya enviado no se puede
+        recoger, y uno en vuelo podría duplicarse.
+        """
+        assignment_ids = [assignment.id for assignment in assignments]
+        notification_ids = self.notification_service.cancel_for_assignments(assignment_ids)
+        confirmation_ids: list[str] = []
+        if self.confirmation_service is not None:
+            confirmation_ids = self.confirmation_service.cancel_for_assignments(assignment_ids)
+        logger.info(
+            "Unapproval by %s cancelled %d notifications and %d confirmations",
+            actor_id,
+            len(notification_ids),
+            len(confirmation_ids),
+        )
+        return {
+            "notifications": len(notification_ids),
+            "confirmations": len(confirmation_ids),
+        }
 
     def on_calendar_assignment_added_after_approval(
         self,
@@ -241,6 +291,10 @@ class NotificationTriggers:
         assignment,
         service_area_name: str,
     ) -> int:
+        # Sin esto, la confirmación sigue viva y escala por un turno que ya no
+        # existe. El aviso de "removido" se encola igual más abajo.
+        if self.confirmation_service is not None:
+            self.confirmation_service.cancel_for_assignments([assignment.id])
         message = render_service_assignment_removed(
             service_date=str(assignment.service_date),
             service_area=service_area_name,
