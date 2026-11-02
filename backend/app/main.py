@@ -196,7 +196,13 @@ def create_app() -> FastAPI:
     if is_production:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["https://general-medical-services.vercel.app"],
+            # El panel se sirve en dos direcciones: la de Vercel y el dominio
+            # propio. Si el navegador abre una que no esté aquí, el preflight
+            # se rechaza y la pantalla solo dice «error de conexión».
+            allow_origins=[
+                "https://general-medical-services.vercel.app",
+                "https://guardias-medicas.rafenixcore.com",
+            ],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

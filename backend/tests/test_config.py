@@ -76,6 +76,8 @@ class TestCORSLockedInProduction:
     """CORS must be strict in production and permissive in non-production."""
 
     PRODUCTION_ORIGIN = "https://general-medical-services.vercel.app"
+    # Dominio propio del panel: el navegador lo usa en lugar del de Vercel.
+    PRODUCTION_CUSTOM_ORIGIN = "https://guardias-medicas.rafenixcore.com"
     EXTERNAL_ORIGIN = "https://evil-site.com"
 
     def test_production_allows_vercel_origin(self):
@@ -127,6 +129,19 @@ class TestCORSLockedInProduction:
 
         assert response.status_code == 500
         assert response.headers.get("access-control-allow-origin") == self.PRODUCTION_ORIGIN
+
+    def test_production_accepts_the_custom_domain(self):
+        """El panel se abre en el dominio propio; el backend debe aceptarlo."""
+        with _with_env("production"):
+            client = TestClient(create_app())
+            response = client.get(
+                "/api/health", headers={"Origin": self.PRODUCTION_CUSTOM_ORIGIN}
+            )
+
+        assert (
+            response.headers.get("access-control-allow-origin")
+            == self.PRODUCTION_CUSTOM_ORIGIN
+        )
 
     def test_non_production_allows_all_origins(self):
         # Contrato real: fuera de production/staging, create_app() monta
